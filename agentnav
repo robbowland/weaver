@@ -6,6 +6,7 @@
 #   agentnav edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
 #   agentnav nvim <agent-pane> [file] internal: start the nvim bound to one agent
 #   agentnav ls                       dashboard of every agent in this zellij session
+#   agentnav next                     jump to the agent that has needed you longest
 #
 # Must stay bash 3.2 compatible (macOS /bin/bash): no mapfile, no ${x,,}, no
 # GNU-only flags.
@@ -168,6 +169,13 @@ nvim_follow() {
 	return $rc
 }
 
+# Tell the agent's nvim to re-check files (after a Bash command, say).
+nvim_checktime() {
+	sock_path "$1"
+	[ -S "$SOCK" ] || return 1
+	bounded /dev/null nvim --server "$SOCK" --remote-expr "v:lua.AgentChecktime()"
+}
+
 toplevel() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 
 # All panes as a JSON array, into PANES. Retried: list-panes has once been
@@ -185,38 +193,78 @@ list_panes() {
 # ---------------------------------------------------------------- hook
 
 # The hook event (stdin) plus the stored state ($st), as one US-separated line.
+# key identifies a tool call (name + input), so the PostToolUse of an approved
+# tool can be matched to the PermissionRequest that asked for it.
 JQ_HOOK='
 def line: tostring | gsub("[\u0000-\u001f]+"; " ");
+def one($n): line | gsub("\\s+"; " ") | sub("^ "; "") | .[0:$n];
+def summary:
+  ((.tool_input | objects) // {}) as $i
+  | (($i.file_path // $i.notebook_path) // null) as $fp
+  | if .tool_name == "Bash" then "Bash: " + ($i.command // "" | tostring)
+    elif .tool_name == "AskUserQuestion" then "question: " + ((($i.questions // []) | arrays | .[0].question?) // "" | tostring)
+    elif $fp then (.tool_name // "") + ": " + ($fp | tostring | split("/") | last)
+    else (.tool_name // "") end;
 ((try ($st | fromjson) catch {}) | if type == "object" then . else {} end) as $s
 | [ .hook_event_name // "",
     .cwd // "",
     .session_id // "",
     ((.tool_input | objects | .file_path // .notebook_path) // ""),
-    ((.prompt // "") | line | gsub("\\s+"; " ") | sub("^ "; "") | .[0:120]),
+    (.prompt // "" | one(120)),
     .tool_name // "",
     .notification_type // "",
     (now | floor),
+    (if .hook_event_name == "PermissionRequest" or .hook_event_name == "PreToolUse" then summary
+     elif .hook_event_name == "Notification" then (.message // "")
+     elif .hook_event_name == "StopFailure" then "error: " + (.error // "" | tostring)
+     else "" end | one(100)),
+    (if .tool_name then .tool_name + ":" + (.tool_input | tojson | .[0:300]) else "" end),
+    (.last_assistant_message // "" | one(400)),
     $s.cwd // "", $s.root // "", $s.file // "", $s.prompt // "",
-    $s.state // "", $s.session_id // "", $s.start_cwd // ""
+    $s.state // "", $s.session_id // "", $s.start_cwd // "", $s.since // "",
+    $s.waiting // "", $s.pending // "", $s.last_message // "", ($s.seen // false),
+    $s.marked_root // "", $s.marker // "", $s.project_root // ""
   ] | map(line) | join("\u001f")'
 
+# Ring the bell (terminalSequence is written by Claude Code to the agent's
+# terminal): zellij marks the tab until the pane is focused.
+BELL_JSON='{"terminalSequence":"\u0007"}'
+
 cmd_hook() {
+	local rc mode=sync
+	[ "${1:-}" = --async ] && mode=async
 	[ -n "${ZELLIJ_PANE_ID:-}" ] || exit 0
 	[ -t 0 ] && exit 0
 	if [ -n "${AGENTNAV_DEBUG:-}" ]; then
-		mkdir -p "$STATE_DIR" && (hook_run) >/dev/null 2>>"$STATE_DIR/hook.log"
+		mkdir -p "$STATE_DIR" && (hook_run "$mode") >/dev/null 2>>"$STATE_DIR/hook.log"
 	else
-		(hook_run) >/dev/null 2>&1
+		(hook_run "$mode") >/dev/null 2>&1
 	fi
+	rc=$?
+	[ $rc = 10 ] && [ "${AGENTNAV_BELL:-1}" != 0 ] && printf '%s\n' "$BELL_JSON"
 	exit 0
 }
 
+# Set or clear a Worktrunk branch marker in DIR, in the background.
+wt_marker() {
+	command -v wt >/dev/null 2>&1 || return 0
+	if [ -n "$2" ]; then
+		(wt -C "$1" config state marker set "$2") </dev/null >/dev/null 2>&1 &
+	else
+		(wt -C "$1" config state marker clear) </dev/null >/dev/null 2>&1 &
+	fi
+}
+
 # Kept to one jq and one mv (plus git, nvim and zellij only when needed): the
-# hook runs on every agent event and must stay fast.
+# hook runs on every agent event and must stay fast. Mode "async" is the
+# all-tools PostToolUse hook that runs in the background: it only clears a
+# needs-you whose approved tool has finished, and reloads nvim after Bash.
+# Exits 10 when the agent has just started needing you (ring the bell).
 hook_run() {
-	local pane=$ZELLIJ_PANE_ID parsed J out moved=0 nv
-	local event cwd sid file prompt tool ntype now o_cwd o_root o_file o_prompt o_state o_sid o_start
-	local root="" d state ev_file="" start
+	local mode=$1 pane=$ZELLIJ_PANE_ID parsed J out moved=0 rc=0
+	local event cwd sid file prompt tool ntype now waiting_new key last_new
+	local o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen o_marked o_marker o_proj
+	local root="" d state ev_file="" start since waiting pending last seen marked marker proj mark_dir
 	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR" || return
 	state_file "$pane"
 	lock
@@ -225,7 +273,9 @@ hook_run() {
 		drop_lock
 		return
 	}
-	IFS=$US read -r event cwd sid file prompt tool ntype now o_cwd o_root o_file o_prompt o_state o_sid o_start <<<"$parsed"
+	IFS=$US read -r event cwd sid file prompt tool ntype now waiting_new key last_new \
+		o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen \
+		o_marked o_marker o_proj <<<"$parsed"
 	if [ -z "$event" ]; then
 		# Empty or eventless input: keep the stored state rather than blank it.
 		drop_lock
@@ -233,10 +283,23 @@ hook_run() {
 	fi
 	NOW=$now
 
+	if [ "$mode" = async ]; then
+		read_nvim_pane "$pane"
+		if [ "$o_state" = needs-you ] && [ -n "$o_pending" ] && [ "$key" = "$o_pending" ]; then
+			# The tool you approved (or the question you answered) has finished.
+			async_write
+		else
+			drop_lock
+		fi
+		[ "$tool" = Bash ] && [ -n "$NV" ] && nvim_checktime "$pane"
+		return 0
+	fi
+
 	# A new Claude session in this pane (not a resume or compaction) starts
 	# afresh; otherwise the root is never reset to the start directory.
 	if [ -n "$sid" ] && [ "$sid" != "$o_sid" ]; then
-		o_cwd="" o_root="" o_file="" o_prompt="" o_state="" o_start=""
+		o_cwd="" o_root="" o_file="" o_prompt="" o_state="" o_start="" o_since=""
+		o_waiting="" o_pending="" o_last="" o_seen=false o_proj=""
 	fi
 	start=${o_start:-$cwd}
 
@@ -267,50 +330,122 @@ hook_run() {
 		fi
 	fi
 
-	# Only a permission or question dialog needs you. The idle reminder Claude
-	# Code sends 60s after a turn ends means it is done; other notices (e.g.
-	# auth_success) leave the state alone. No type at all: assume it needs you.
+	waiting=$o_waiting pending=$o_pending
 	case $event in
+	PermissionRequest | PreToolUse)
+		# A permission dialog, or (PreToolUse on AskUserQuestion) a question.
+		state=needs-you waiting=$waiting_new pending=$key
+		;;
 	Notification)
+		# Only dialogs need you. The idle reminder Claude Code sends 60s after
+		# a turn ends means it is done; other notices leave the state alone.
+		# No type at all: assume it needs you.
 		case $ntype in
-		permission_prompt | elicitation_dialog | "") state=needs-you ;;
-		idle_prompt) state=done ;;
+		permission_prompt | elicitation_* | agent_needs_input | "")
+			state=needs-you
+			[ "$o_state" = needs-you ] && [ -n "$o_waiting" ] || waiting=$waiting_new
+			;;
+		idle_prompt | agent_completed)
+			state=done
+			[ "$o_state" = needs-you ] && state=needs-you
+			;;
 		*) state=${o_state:-working} ;;
 		esac
 		;;
-	StopFailure) state=needs-you ;;
+	PostToolUse | PostToolUseFailure)
+		state=working
+		if [ "$o_state" = needs-you ] && [ -n "$o_pending" ] && [ "$key" != "$o_pending" ]; then
+			# Another tool finished while one still waits for you.
+			state=needs-you
+		fi
+		;;
+	StopFailure) state=needs-you waiting=$waiting_new pending="" ;;
 	Stop) state=done ;;
 	SessionStart) state=idle ;;
 	SessionEnd) state=ended ;;
 	*) state=working ;;
 	esac
+	[ "$state" = needs-you ] || waiting="" pending=""
+	[ "$o_state" != needs-you ] && [ "$state" = needs-you ] && rc=10
+	since=$o_since
+	if [ "$state" != "$o_state" ] || [ -z "$since" ]; then
+		since=$now seen=false
+	else
+		seen=$o_seen
+	fi
+	last=${last_new:-$o_last}
 	[ -n "$prompt" ] || prompt=$o_prompt
 	[ -n "$ev_file" ] && file=$ev_file || file=$o_file
 
-	case $pane in '' | *[!0-9]*) json_str "$pane" ;; *) J=$pane ;; esac
-	out="{\"pane\":$J"
-	json_str "$cwd" && out="$out,\"cwd\":$J"
-	json_str "$root" && out="$out,\"root\":$J"
-	json_str "$start" && out="$out,\"start_cwd\":$J"
-	out="$out,\"state\":\"$state\",\"ts\":${now:-0}"
-	json_str "$sid" && out="$out,\"session_id\":$J"
-	json_str "$file" && out="$out,\"file\":$J"
-	json_str "$prompt" && out="$out,\"prompt\":$J"
-	read_nvim_pane "$pane"
-	nv=$NV
-	out="$out,\"nvim_pane\":${nv:-null}}"
-	if printf '%s\n' "$out" >"$LOCK"; then commit_lock; else drop_lock; fi
+	# Worktrunk branch markers, like its own Claude Code plugin sets for the
+	# session's start directory, but on the worktree the agent is really in.
+	proj=$o_proj
+	if [ -z "$proj" ] && [ -n "${CLAUDE_PROJECT_DIR:-$start}" ]; then
+		proj=$(toplevel "${CLAUDE_PROJECT_DIR:-$start}") || proj=-
+	fi
+	case $state in working) marker='🤖' ;; ended) marker='' ;; *) marker='💬' ;; esac
+	mark_dir=""
+	if [ "${AGENTNAV_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
+		mark_dir=$root
+	fi
+	if [ "$mark_dir" != "$o_marked" ] || { [ -n "$mark_dir" ] && [ "$marker" != "$o_marker" ]; }; then
+		[ -n "$o_marked" ] && [ "$o_marked" != "$mark_dir" ] && wt_marker "$o_marked" ""
+		[ -n "$mark_dir" ] && wt_marker "$mark_dir" "$marker"
+	fi
+	marked=$mark_dir
 
-	[ -n "$nv" ] || return 0
+	write_state
+
+	[ -n "$NV" ] || return $rc
 	if [ -n "$ev_file" ]; then
 		nvim_follow "$pane" "$root" "$ev_file"
 	elif [ "$root" != "$o_root" ]; then
 		nvim_follow "$pane" "$root" ""
 	fi
 	if [ "$root" != "$o_root" ]; then
-		bounded /dev/null zellij action rename-pane --pane-id "terminal_$nv" "nvim: ${root##*/}"
+		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${root##*/}"
 	fi
-	return 0
+	return $rc
+}
+
+# The async hook's one change: needs-you back to working. Everything else is
+# carried over from the stored state.
+async_write() {
+	state=working since=$now seen=false waiting="" pending=""
+	cwd=$o_cwd root=$o_root start=$o_start sid=$o_sid file=$o_file prompt=$o_prompt
+	last=$o_last marked=$o_marked marker=$o_marker proj=$o_proj
+	write_state
+}
+
+# Write the state file from the hook's variables (and release the lock).
+write_state() {
+	case $pane in '' | *[!0-9]*) json_str "$pane" ;; *) J=$pane ;; esac
+	out="{\"pane\":$J"
+	json_str "$cwd" && out="$out,\"cwd\":$J"
+	json_str "$root" && out="$out,\"root\":$J"
+	json_str "$start" && out="$out,\"start_cwd\":$J"
+	json_str "$proj" && out="$out,\"project_root\":$J"
+	out="$out,\"state\":\"$state\",\"ts\":${now:-0},\"since\":${since:-0}"
+	json_str "$sid" && out="$out,\"session_id\":$J"
+	json_str "$file" && out="$out,\"file\":$J"
+	json_str "$prompt" && out="$out,\"prompt\":$J"
+	json_str "$waiting" && out="$out,\"waiting\":$J"
+	json_str "$pending" && out="$out,\"pending\":$J"
+	json_str "$last" && out="$out,\"last_message\":$J"
+	[ "$seen" = true ] && out="$out,\"seen\":true" || out="$out,\"seen\":false"
+	json_str "$marked" && out="$out,\"marked_root\":$J"
+	json_str "$marker" && out="$out,\"marker\":$J"
+	read_nvim_pane "$pane"
+	out="$out,\"nvim_pane\":${NV:-null}}"
+	if printf '%s\n' "$out" >"$LOCK"; then commit_lock; else drop_lock; fi
+}
+
+# Mark an agent seen (you jumped to it), so a "done" no longer stands out.
+mark_seen() {
+	state_file "$1"
+	[ -f "$SF" ] || return 0
+	lock
+	if jq '.seen = true' "$SF" >"$LOCK"; then commit_lock; else drop_lock; fi
 }
 
 # ---------------------------------------------------------------- nvim
@@ -408,6 +543,7 @@ cmd_edit() {
 		[ -d "$cwd" ] || cwd=$PWD
 		open_left_of "$target" "$cwd" "nvim: ${cwd##*/}" nvim
 	else
+		mark_seen "$agent"
 		state_file "$agent"
 		info=$(jq -r '[.root // .cwd // "", .file // ""] | map(tostring) | join("\u001f")' "$SF") ||
 			die "cannot read $SF"
@@ -444,8 +580,8 @@ cmd_edit() {
 
 # ---------------------------------------------------------------- ls
 
-# Live agents in this session, one US-separated line each:
-# rank, pane, tab, state, root, ts, prompt. Also prints "gc<US>file" for state
+# Live agents in this session, one US-separated line each: pane, tab, state,
+# root, ts, since, seen, prompt, waiting. Also prints "gc<US>file" for state
 # files whose pane no longer exists.
 JQ_ROWS='
 ($panes | map(select(.is_plugin | not))) as $all
@@ -454,11 +590,19 @@ JQ_ROWS='
 | ($byid[$s.pane | tostring]) as $p
 | if $p == null then ["gc", input_filename]
   elif ($p.exited or $s.state == "ended") then empty
-  else [({"needs-you": 0, "done": 1, "working": 2, "idle": 3}[$s.state] // 4),
-        $s.pane, $p.tab_id, $s.state, ($s.root // $s.cwd // ""), ($s.ts // 0),
-        ($s.prompt // "")]
+  else [$s.pane, $p.tab_id, $s.state, ($s.root // $s.cwd // ""), ($s.ts // 0),
+        ($s.since // $s.ts // 0), ($s.seen // false), ($s.prompt // ""), ($s.waiting // "")]
   end
 | map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")'
+
+# The agents as JQ_ROWS lines, into AGENT_ROWS (gc lines included).
+agent_rows() {
+	AGENT_ROWS=""
+	session_files json
+	[ ${#FOUND[@]} -gt 0 ] || return 0
+	list_panes
+	AGENT_ROWS=$(jq -rn --argjson panes "$PANES" "$JQ_ROWS" "${FOUND[@]}") || AGENT_ROWS=""
+}
 
 # repo/branch and "N files (M new)" for ROOT, into REPO_BRANCH and FILES.
 git_info() {
@@ -488,70 +632,117 @@ EOF
 	return 0
 }
 
-# Rows for the dashboard: pane<TAB>tab<TAB>display, best first, after a
-# header row. Prints nothing when there are no agents.
+# 75s -> 1m, 2h ...
+age() {
+	if [ "$1" -lt 60 ]; then
+		AGE="${1}s"
+	elif [ "$1" -lt 3600 ]; then
+		AGE="$(($1 / 60))m"
+	else
+		AGE="$(($1 / 3600))h"
+	fi
+}
+
+# Claude Code shows "esc to interrupt" while it works. A "working" agent that
+# has been quiet for 30s without it was most likely interrupted with Esc, which
+# fires no Stop hook.
+interrupted() {
+	zellij action dump-screen --pane-id "terminal_$1" 2>/dev/null | grep -q 'esc to interrupt' && return 1
+	return 0
+}
+
+# Rows for the dashboard: pane<TAB>tab<TAB>display, best first, after a header
+# row; ANSI colours when COLOR=1. Prints nothing when there are no agents.
+# Order: needs you (longest waiting first), done and not yet seen, done,
+# working, interrupted, idle.
 ls_rows() {
-	local panes now lines line rank pane tab state root ts prompt icon w=11 i n=0
-	local -a k_rank k_pane k_tab k_icon k_rb k_age k_files k_prompt
-	session_files json
-	[ ${#FOUND[@]} -gt 0 ] || return 0
-	list_panes
-	panes=$PANES
-	lines=$(jq -rn --argjson panes "$panes" "$JQ_ROWS" "${FOUND[@]}") || return 0
+	local now pane tab state root ts since seen prompt waiting icon text rank sortkey w=11 i n=0
+	local red="" green="" dim="" off=""
+	local -a k_rank k_key k_pane k_tab k_icon k_rb k_age k_files k_text
+	[ "${COLOR:-}" = 1 ] && red=$'\033[31m' green=$'\033[32m' dim=$'\033[2m' off=$'\033[0m'
+	agent_rows
+	[ -n "$AGENT_ROWS" ] || return 0
 	now=$(date +%s)
-	while IFS=$US read -r rank pane tab state root ts prompt; do
-		[ -n "$rank" ] || continue
-		if [ "$rank" = gc ]; then
-			rm -f "$pane" "${pane%.json}.nvim"
+	while IFS=$US read -r pane tab state root ts since seen prompt waiting; do
+		[ -n "$pane" ] || continue
+		if [ "$pane" = gc ]; then
+			rm -f "$tab" "${tab%.json}.nvim"
 			continue
 		fi
+		[ "$state" = working ] && [ $((now - ts)) -gt 30 ] && interrupted "$pane" && state=interrupted
+		text=$prompt
 		case $state in
-		needs-you) icon='!' ;; done) icon='✓' ;; working) icon='●' ;; *) icon='○' ;;
+		needs-you) rank=0 icon="${red}!${off}" text="${red}${waiting:-$prompt}${off}" ;;
+		done)
+			if [ "$seen" = true ]; then
+				rank=2 icon="${dim}✓${off}"
+			else
+				rank=1 icon="${green}✓${off}"
+			fi
+			;;
+		working) rank=3 icon='●' ;;
+		interrupted) rank=4 icon='○' text="interrupted? $prompt" ;;
+		*) rank=5 icon="${dim}○${off}" ;;
 		esac
 		git_info "$root"
-		k_rank[n]=$rank k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon
-		k_rb[n]=$REPO_BRANCH k_files[n]=$FILES k_prompt[n]=$prompt
-		k_age[n]="$(((now - ts) / 60))m"
+		age $((now - since))
+		sortkey=$REPO_BRANCH
+		[ $rank = 0 ] && sortkey=$(printf '%012d' "$since")
+		k_rank[n]=$rank k_key[n]=$sortkey k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon
+		k_rb[n]=$REPO_BRANCH k_files[n]=$FILES k_text[n]=$text k_age[n]=$AGE
 		[ ${#REPO_BRANCH} -gt $w ] && w=${#REPO_BRANCH}
 		n=$((n + 1))
 	done <<EOF
-$lines
+$AGENT_ROWS
 EOF
 	[ $n -gt 0 ] || return 0
 	[ $w -gt 48 ] && w=48
 	i=0
 	{
-		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "LAST PROMPT"
+		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "LAST PROMPT / WAITING ON"
 		while [ $i -lt $n ]; do
-			printf '%s\t%s\t%s\t%s\t%s  %-*.*s  %5s  %-16s  %s\n' "${k_rank[i]}" "${k_rb[i]}" \
+			printf '%s\t%s\t%s\t%s\t%s  %-*.*s  %5s  %-16s  %s\n' "${k_rank[i]}" "${k_key[i]}" \
 				"${k_pane[i]}" "${k_tab[i]}" "${k_icon[i]}" "$w" "$w" "${k_rb[i]}" \
-				"${k_age[i]}" "${k_files[i]}" "${k_prompt[i]}"
+				"${k_age[i]}" "${k_files[i]}" "${k_text[i]}"
 			i=$((i + 1))
 		done
 	} | sort -t "$TAB" -k1,1n -k2,2 | cut -f3-
 }
 
 cmd_preview() {
-	local pane=${1#terminal_} root
+	local pane=${1#terminal_} info root state waiting prompt last
 	pane=${pane%%[!0-9]*}
 	state_file "$pane"
-	root=$(jq -r '.root // .cwd // ""' "$SF" 2>/dev/null)
+	info=$(jq -r '[.root // .cwd // "", .state // "", .waiting // "", .prompt // "", .last_message // ""]
+		| map(tostring) | join("\u001f")' "$SF" 2>/dev/null)
+	IFS=$US read -r root state waiting prompt last <<<"$info"
 	printf '\033[1m%s\033[0m\n' "$root"
-	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 15
+	[ -n "$waiting" ] && printf '\033[31mneeds you: %s\033[0m\n' "$waiting"
+	[ -n "$prompt" ] && printf 'prompt: %s\n' "$prompt"
+	[ -n "$last" ] && printf '\033[2mreply: %s\033[0m\n' "$last"
+	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 12
 	printf '\033[2m%s\033[0m\n' "────────────────────────────────────────"
-	zellij action dump-screen --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 40
+	zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 40
+}
+
+# Jump to pane PANE in tab TAB and count it as seen.
+jump_to() {
+	zellij action go-to-tab-by-id "$2" >/dev/null 2>&1 || true
+	zellij action focus-pane-id "terminal_$1" >/dev/null 2>&1 || true
+	mark_seen "$1"
 }
 
 cmd_ls() {
-	local rows out key sel pane tab q
+	local rows out key sel pane tab q fzf=0
 	need_session
-	rows=$(ls_rows)
+	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
+	rows=$(COLOR=$fzf ls_rows)
 	if [ -z "$rows" ]; then
 		echo "no agents in zellij session $SESSION"
-		[ -t 1 ] && command -v fzf >/dev/null 2>&1 && sleep 1.5
+		[ $fzf = 1 ] && sleep 1.5
 		return 0
 	fi
-	if ! command -v fzf >/dev/null 2>&1 || [ ! -t 1 ]; then
+	if [ $fzf = 0 ]; then
 		printf '%s\n' "$rows" | cut -f3-
 		return 0
 	fi
@@ -560,8 +751,8 @@ cmd_ls() {
 	out=$(printf '%s\n' "$rows" | SHELL=/bin/sh fzf --delimiter "$TAB" --with-nth 3.. --reverse \
 		--no-sort --ansi --prompt 'agents> ' --expect ctrl-e --header-lines 1 \
 		--header 'enter: jump   ctrl-e: jump + nvim   ctrl-r: reload' \
-		--preview "$q _preview {1}" --preview-window 'down,60%,border-top' \
-		--bind "ctrl-r:reload($q _rows)")
+		--preview "$q _preview {1}" --preview-window 'down,60%,border-top,wrap' \
+		--bind "ctrl-r:reload(COLOR=1 $q _rows)")
 	[ -n "$out" ] || return 0
 	key=${out%%"$NL"*}
 	sel=${out#*"$NL"}
@@ -569,10 +760,36 @@ cmd_ls() {
 	pane=${sel%%"$TAB"*}
 	sel=${sel#*"$TAB"}
 	tab=${sel%%"$TAB"*}
-	zellij action go-to-tab-by-id "$tab" >/dev/null 2>&1 || true
-	zellij action focus-pane-id "terminal_$pane" >/dev/null 2>&1 || true
+	jump_to "$pane" "$tab"
 	[ "$key" = ctrl-e ] && exec "$SELF" edit "$pane"
 	return 0
+}
+
+# Jump to the agent that has needed you longest; failing that, the one that
+# finished longest ago and you haven't looked at yet.
+cmd_next() {
+	local pane tab state root ts since seen prompt waiting class best="" best_tab="" best_class=9 best_since=""
+	need_session
+	agent_rows
+	while IFS=$US read -r pane tab state root ts since seen prompt waiting; do
+		case $pane in '' | gc) continue ;; esac
+		case $state in
+		needs-you) class=0 ;;
+		done) [ "$seen" = true ] && continue || class=1 ;;
+		*) continue ;;
+		esac
+		if [ $class -lt $best_class ] || { [ $class = $best_class ] && [ "$since" -lt "$best_since" ]; }; then
+			best=$pane best_tab=$tab best_class=$class best_since=$since
+		fi
+	done <<EOF
+$AGENT_ROWS
+EOF
+	if [ -z "$best" ]; then
+		echo "agentnav: no agent needs you"
+		[ -t 1 ] && sleep 1
+		return 0
+	fi
+	jump_to "$best" "$best_tab"
 }
 
 # ---------------------------------------------------------------- main
@@ -583,6 +800,7 @@ usage: agentnav <command>
   hook                       Claude Code hook (reads the event JSON on stdin)
   edit [--full] [pane-id]    open or jump to the nvim for the focused agent
   ls                         dashboard of the agents in this zellij session
+  next                       jump to the agent that has needed you longest
   nvim <agent-pane> [file]   internal: start the nvim bound to an agent
 EOF
 }
@@ -590,10 +808,11 @@ EOF
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
-hook) cmd_hook ;;
+hook) cmd_hook "$@" ;;
 edit) cmd_edit "$@" ;;
 nvim) cmd_nvim "$@" ;;
 ls) cmd_ls ;;
+next) cmd_next ;;
 _rows) need_session && ls_rows ;;
 _preview) need_session && cmd_preview "$@" ;;
 -h | --help | help) usage ;;

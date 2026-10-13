@@ -104,14 +104,53 @@ show_or_apply() {
 	cat "$new" >"$f" || die "cannot write $f (backup: $f.bak.$TS)"
 }
 
+# The agentnav block in a zellij config: from its "// agentnav:" comment through
+# the brace closing the block after it, leading whitespace stripped.
+AWK_BLOCK='
+	/^[[:space:]]*\/\/ agentnav:/ { inblock = 1 }
+	inblock {
+		line = $0
+		sub(/^[[:space:]]+/, "", line)
+		print line
+		if (line !~ /^\/\//) {
+			depth += gsub(/[{]/, "{") - gsub(/[}]/, "}")
+			started = 1
+		}
+		if (started && depth <= 0) exit
+	}'
+
 configure_zellij() {
 	local f=$1 tmp
-	if [ -f "$f" ] && grep -q 'Run "agentnav"' "$f"; then
-		say "zellij: $f already has the agentnav keybindings"
-		return
-	fi
 	tmp=$(mktemp "${TMPDIR:-/tmp}/agentnav.XXXXXX")
-	if [ -f "$f" ] && grep -Eq '^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]' "$f"; then
+	if [ -f "$f" ] && grep -q 'Run "agentnav"' "$f"; then
+		if [ "$(awk "$AWK_BLOCK" "$f")" = "$(sed 's/^[[:space:]]*//' "$SRC/config/zellij-keybinds.kdl")" ]; then
+			say "zellij: $f already has the current agentnav keybindings"
+			rm -f "$tmp"
+			return
+		fi
+		if ! grep -q '^[[:space:]]*// agentnav:' "$f"; then
+			warn "zellij: $f has agentnav keybindings without the '// agentnav:' comment; update them by hand from $SRC/config/zellij-keybinds.kdl"
+			rm -f "$tmp"
+			return
+		fi
+		# Replace the old block with the current one, at the same indentation.
+		awk -v snip="$SRC/config/zellij-keybinds.kdl" '
+			!done && /^[[:space:]]*\/\/ agentnav:/ {
+				ind = $0
+				sub(/[^[:space:]].*/, "", ind)
+				while ((getline l < snip) > 0) print (l == "" ? "" : ind l)
+				skip = 1
+				done = 1
+				next
+			}
+			skip {
+				depth += gsub(/[{]/, "{") - gsub(/[}]/, "}")
+				if ($0 ~ /[{}]/) started = 1
+				if (started && depth <= 0) skip = 0
+				next
+			}
+			{ print }' "$f" >"$tmp"
+	elif [ -f "$f" ] && grep -Eq '^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]' "$f"; then
 		# Insert just inside the first top-level keybinds block.
 		awk -v snip="$SRC/config/zellij-keybinds.kdl" '
 			!done && /^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]/ {
@@ -147,11 +186,14 @@ configure_zellij() {
 }
 
 # Append an agentnav entry to each hook event that does not already run it.
+# Append each agentnav hook entry unless the event already has one with the same
+# matcher and commands; other entries are never touched.
 JQ_HOOKS='
-def has_agentnav: any(.[]?.hooks[]?.command? // empty; test("(^|/)agentnav hook( |$)"));
+def sig: (.matcher // "") + "\u0001" + ([.hooks[]?.command? // empty] | join("\u0001"));
 reduce ($add[0].hooks | to_entries[]) as $e (.;
-  if (.hooks[$e.key] | has_agentnav) then .
-  else .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value) end)'
+  reduce $e.value[] as $entry (.;
+    if any((.hooks[$e.key] // [])[]; sig == ($entry | sig)) then .
+    else .hooks[$e.key] = ((.hooks[$e.key] // []) + [$entry]) end))'
 
 configure_claude() {
 	local f=$CLAUDE_SETTINGS tmp
