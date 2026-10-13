@@ -7,16 +7,16 @@
 # Each run gets a fresh scratch directory (printed at the end, never deleted)
 # holding a git repo with two worktrees, the state dir and the zellij config.
 # nvim uses your own config, so plugin interplay (noice, gitsigns, diffview)
-# and hit-enter prompts are exercised too. Your real agentnav state and
+# and hit-enter prompts are exercised too. Your real weaver state and
 # zellij sessions are not touched.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=${HERE%/test}
-AT=$(mktemp -d "${TMPDIR:-/tmp}/agentnav-test.XXXXXX") || exit 1
+AT=$(mktemp -d "${TMPDIR:-/tmp}/weaver-test.XXXXXX") || exit 1
 # Physical path: git reports roots that way (macOS /var is a symlink).
 AT=$(cd "$AT" && pwd -P)
-SESSION="agentnav-test-$$"
+SESSION="weaver-test-$$"
 export AT
 
 # Scratch repo: main checkout plus two worktrees.
@@ -30,11 +30,11 @@ mkdir -p "$T"
 		git worktree add -q -b feat-a ../repo-wt-a && git worktree add -q -b feat-b ../repo-wt-b
 ) || exit 1
 
-# agentnav from this checkout, first on PATH.
+# weaver from this checkout, first on PATH.
 mkdir -p "$AT/bin" "$AT/state"
-ln -s "$ROOT/agentnav" "$AT/bin/agentnav"
+ln -s "$ROOT/weaver" "$AT/bin/weaver"
 
-# zellij shim, also first on PATH (agentnav calls zellij through PATH too).
+# zellij shim, also first on PATH (weaver calls zellij through PATH too).
 # When the named session is gone, `zellij action` silently picks another
 # running session: never let a test act on one of yours.
 REAL_ZELLIJ=$(command -v zellij) || exit 1

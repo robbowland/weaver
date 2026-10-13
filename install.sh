@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install agentnav; with --configure, also wire it into zellij and Claude Code.
+# Install weaver; with --configure, also wire it into zellij and Claude Code.
 #
-#   ./install.sh                  copy to ~/.local/share/agentnav, link ~/.local/bin/agentnav
+#   ./install.sh                  copy to ~/.local/share/weaver, link ~/.local/bin/weaver
 #   ./install.sh --configure      also add the zellij keybindings and Claude Code hooks
 #     --zellij-config FILE        zellij config to edit; repeatable (default: $ZELLIJ_CONFIG_FILE,
 #                                 else ~/.config/zellij/config.kdl). FILE.in templates are
@@ -14,7 +14,7 @@ set -eu
 NL='
 '
 SRC=$(cd "$(dirname "$0")" && pwd -P)
-DEST="${XDG_DATA_HOME:-$HOME/.local/share}/agentnav"
+DEST="${XDG_DATA_HOME:-$HOME/.local/share}/weaver"
 BIN="$HOME/.local/bin"
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
 TS=$(date +%Y%m%d-%H%M%S)
@@ -52,39 +52,54 @@ check_deps() {
 	done
 	[ -z "$missing" ] || die "missing dependencies:$missing"
 	command -v fzf >/dev/null 2>&1 ||
-		warn "fzf not found: 'agentnav ls' will print a table instead of the interactive dashboard"
+		warn "fzf not found: 'weaver ls' will print a table instead of the interactive dashboard"
 	v=$(zellij --version 2>/dev/null)
 	v=${v##* }
 	major=${v%%.*} rest=${v#*.}
 	minor=${rest%%.*}
 	case "$major.$minor" in [0-9]*.[0-9]*) ;; *) die "cannot parse the zellij version '$v'" ;; esac
 	if [ "$major" -eq 0 ] && [ "$minor" -lt 45 ]; then
-		die "zellij $v is too old: agentnav needs 0.45 or newer"
+		die "zellij $v is too old: weaver needs 0.45 or newer"
 	fi
 }
 
 install_files() {
 	if [ $dry = 1 ]; then
-		say "would install $SRC into $DEST and link $BIN/agentnav"
+		say "would install $SRC into $DEST and link $BIN/weaver"
 		return
 	fi
 	if [ "$SRC" != "$(cd "$DEST" 2>/dev/null && pwd -P)" ]; then
 		mkdir -p "$DEST/nvim" "$DEST/config"
-		cp "$SRC/agentnav" "$SRC/install.sh" "$DEST/"
-		cp "$SRC/nvim/agentnav.lua" "$DEST/nvim/"
+		cp "$SRC/weaver" "$SRC/install.sh" "$DEST/"
+		cp "$SRC/nvim/weaver.lua" "$DEST/nvim/"
 		cp "$SRC/config/zellij-keybinds.kdl" "$SRC/config/claude-hooks.json" "$DEST/config/"
-		chmod 755 "$DEST/agentnav" "$DEST/install.sh"
+		chmod 755 "$DEST/weaver" "$DEST/install.sh"
 	fi
 	mkdir -p "$BIN"
-	if [ -e "$BIN/agentnav" ] && [ ! -L "$BIN/agentnav" ]; then
-		die "$BIN/agentnav exists and is not a symlink; not replacing it"
+	if [ -e "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ]; then
+		die "$BIN/weaver exists and is not a symlink; not replacing it"
 	fi
-	ln -sfn "$DEST/agentnav" "$BIN/agentnav"
-	say "installed $DEST/agentnav, linked from $BIN/agentnav"
+	ln -sfn "$DEST/weaver" "$BIN/weaver"
+	say "installed $DEST/weaver, linked from $BIN/weaver"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
-	*) warn "$BIN is not on your PATH; zellij and Claude Code run 'agentnav' from PATH" ;;
+	*) warn "$BIN is not on your PATH; zellij and Claude Code run 'weaver' from PATH" ;;
 	esac
+}
+
+# weaver was called agentnav: remove that install, but only the copy and the
+# link install.sh made, never a file it did not create.
+remove_agentnav() {
+	local old="${XDG_DATA_HOME:-$HOME/.local/share}/agentnav"
+	if [ -L "$BIN/agentnav" ] && [ "$(readlink "$BIN/agentnav")" = "$old/agentnav" ]; then
+		if [ $dry = 1 ]; then
+			say "would remove the old agentnav install: $BIN/agentnav and $old"
+		else
+			rm -f "$BIN/agentnav"
+			rm -rf "$old"
+			say "removed the old agentnav install: $BIN/agentnav and $old"
+		fi
+	fi
 }
 
 # show_or_apply LABEL FILE NEW: print the diff; unless --dry-run, back FILE up
@@ -104,10 +119,11 @@ show_or_apply() {
 	cat "$new" >"$f" || die "cannot write $f (backup: $f.bak.$TS)"
 }
 
-# The agentnav block in a zellij config: from its "// agentnav:" comment through
-# the brace closing the block after it, leading whitespace stripped.
+# The weaver block in a zellij config: from its "// weaver:" comment (or
+# "// agentnav:", its old name) through the brace closing the block after it,
+# leading whitespace stripped.
 AWK_BLOCK='
-	/^[[:space:]]*\/\/ agentnav:/ { inblock = 1 }
+	/^[[:space:]]*\/\/ (weaver|agentnav):/ { inblock = 1 }
 	inblock {
 		line = $0
 		sub(/^[[:space:]]+/, "", line)
@@ -121,21 +137,21 @@ AWK_BLOCK='
 
 configure_zellij() {
 	local f=$1 tmp
-	tmp=$(mktemp "${TMPDIR:-/tmp}/agentnav.XXXXXX")
-	if [ -f "$f" ] && grep -q 'Run "agentnav"' "$f"; then
+	tmp=$(mktemp "${TMPDIR:-/tmp}/weaver.XXXXXX")
+	if [ -f "$f" ] && grep -Eq 'Run "(weaver|agentnav)"' "$f"; then
 		if [ "$(awk "$AWK_BLOCK" "$f")" = "$(sed 's/^[[:space:]]*//' "$SRC/config/zellij-keybinds.kdl")" ]; then
-			say "zellij: $f already has the current agentnav keybindings"
+			say "zellij: $f already has the current weaver keybindings"
 			rm -f "$tmp"
 			return
 		fi
-		if ! grep -q '^[[:space:]]*// agentnav:' "$f"; then
-			warn "zellij: $f has agentnav keybindings without the '// agentnav:' comment; update them by hand from $SRC/config/zellij-keybinds.kdl"
+		if ! grep -Eq '^[[:space:]]*// (weaver|agentnav):' "$f"; then
+			warn "zellij: $f has weaver keybindings without the '// weaver:' comment; update them by hand from $SRC/config/zellij-keybinds.kdl"
 			rm -f "$tmp"
 			return
 		fi
 		# Replace the old block with the current one, at the same indentation.
 		awk -v snip="$SRC/config/zellij-keybinds.kdl" '
-			!done && /^[[:space:]]*\/\/ agentnav:/ {
+			!done && /^[[:space:]]*\/\/ (weaver|agentnav):/ {
 				ind = $0
 				sub(/[^[:space:]].*/, "", ind)
 				while ((getline l < snip) > 0) print (l == "" ? "" : ind l)
@@ -185,11 +201,15 @@ configure_zellij() {
 	rm -f "$tmp"
 }
 
-# Append an agentnav entry to each hook event that does not already run it.
-# Append each agentnav hook entry unless the event already has one with the same
-# matcher and commands; other entries are never touched.
+# Drop the entries of agentnav (weaver's old name), then append each weaver hook
+# entry unless the event already has one with the same matcher and commands;
+# other entries are never touched.
 JQ_HOOKS='
 def sig: (.matcher // "") + "\u0001" + ([.hooks[]?.command? // empty] | join("\u0001"));
+def agentnav: [.hooks[]?.command? // empty] | length > 0 and all(startswith("agentnav "));
+(if .hooks then .hooks |= with_entries(
+  if any(.value[]; agentnav) then (.value |= map(select(agentnav | not))) | select(.value | length > 0)
+  else . end) else . end) |
 reduce ($add[0].hooks | to_entries[]) as $e (.;
   reduce $e.value[] as $entry (.;
     if any((.hooks[$e.key] // [])[]; sig == ($entry | sig)) then .
@@ -197,12 +217,12 @@ reduce ($add[0].hooks | to_entries[]) as $e (.;
 
 configure_claude() {
 	local f=$CLAUDE_SETTINGS tmp
-	tmp=$(mktemp "${TMPDIR:-/tmp}/agentnav.XXXXXX")
+	tmp=$(mktemp "${TMPDIR:-/tmp}/weaver.XXXXXX")
 	if [ -f "$f" ]; then cat "$f"; else echo '{}'; fi |
 		jq --slurpfile add "$SRC/config/claude-hooks.json" "$JQ_HOOKS" >"$tmp" ||
 		die "cannot parse $f"
 	if [ -f "$f" ] && jq -e --slurpfile new "$tmp" '. == $new[0]' "$f" >/dev/null; then
-		say "claude: $f already runs agentnav on every event"
+		say "claude: $f already runs weaver on every event"
 	elif show_or_apply claude "$f" "$tmp"; then
 		jq empty "$f" || die "wrote invalid JSON to $f; the backup is $f.bak.$TS"
 	fi
@@ -211,6 +231,7 @@ configure_claude() {
 
 check_deps
 install_files
+remove_agentnav
 if [ $configure = 1 ]; then
 	[ -n "$zconfs" ] || zconfs="${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}$NL"
 	printf '%s' "$zconfs" | while IFS= read -r z; do
@@ -221,7 +242,7 @@ if [ $configure = 1 ]; then
 
 Done. To pick it up:
   - running zellij sessions reload their config file by themselves; restart zellij
-    only if Alt a / Alt e do nothing
+    only if Alt y / Alt v do nothing
   - restart any Claude Code sessions that are already running: they read hooks at start
 EOF
 fi

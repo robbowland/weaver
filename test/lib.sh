@@ -3,7 +3,7 @@
 : "${AT:?run the suites through test/run.sh}"
 
 T=$AT/t
-SD=$AT/state/agentnav
+SD=$AT/state/weaver
 SESSION=$(cat "$AT/session")
 export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
 pass=0 fail=0
@@ -35,17 +35,17 @@ hook() {
 		'{hook_event_name:$e, cwd:$c, session_id:$s}
 		+ (if $f != "" then {tool_name:"Edit", tool_input:{file_path:$f}} else {} end)
 		+ (if $p != "" then {prompt:$p} else {} end)' |
-		ZELLIJ_PANE_ID=$1 agentnav hook
+		ZELLIJ_PANE_ID=$1 weaver hook
 }
 # hookj PANE JSON [ARGS]: fake a hook event from raw JSON.
 hookj() {
 	local pane=$1 json=$2
 	shift 2
-	printf '%s' "$json" | ZELLIJ_PANE_ID=$pane agentnav hook "$@"
+	printf '%s' "$json" | ZELLIJ_PANE_ID=$pane weaver hook "$@"
 }
 st() { jq -r ".$2" "$SD/${SESSION}_$1.json"; }
 
-sock() { printf '/tmp/agentnav-%s/%s_%s.sock' "$(id -u)" "$SESSION" "$1"; }
+sock() { printf '/tmp/weaver-%s/%s_%s.sock' "$(id -u)" "$SESSION" "$1"; }
 # nvq AGENT EXPR: evaluate EXPR in the agent's nvim (3s timeout).
 nvq() {
 	perl -e 'alarm 3; exec @ARGV' nvim --server "$(sock "$1")" --remote-expr "$2" </dev/null || printf 'TIMEOUT'

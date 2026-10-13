@@ -42,7 +42,7 @@ ok "Stop never rings" "$out" ""
 # --- reload nvim after Bash (agent A has an nvim from 10-core.sh)
 nvq 0 "luaeval('(function() local o = AgentChecktime; _G.__ct = 0; AgentChecktime = function() _G.__ct = _G.__ct + 1; return o() end; return 1 end)()')" >/dev/null
 printf '{"hook_event_name":"PostToolUse","cwd":"%s","session_id":"sid-0","tool_name":"Bash","tool_input":{"command":"sed -i.bak s/a/b/ x"}}' "$T/repo" |
-	ZELLIJ_PANE_ID=0 agentnav hook --async
+	ZELLIJ_PANE_ID=0 weaver hook --async
 ok "Bash finished: agent's nvim told to re-check files" "$(nvq 0 "luaeval('_G.__ct')")" "1"
 nvsend 0 "<Esc>:e! $T/repo-wt-a/src/app.txt<CR>"
 sleep 0.5
@@ -54,7 +54,7 @@ ok "watcher reloads an outside change within 0.5s" "$(nvq 0 'getline(1)')" "watc
 out=$(hookj 1 "$(j PermissionRequest "$bash_input")")
 hook 2 UserPromptSubmit "$T/repo" "" "keep going"
 jq '.ts -= 120' "$SD/${SESSION}_2.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SESSION}_2.json"
-table=$(agentnav ls)
+table=$(weaver ls)
 ok "dashboard: needs-you row shows what it waits on" "$(printf '%s\n' "$table" | grep -c '^! .*Bash: git push --force')" "1"
 ok "dashboard: quiet working agent without Claude's footer is flagged" "$(printf '%s\n' "$table" | grep -c 'interrupted? keep going')" "1"
 hook 0 Stop "$T/repo"

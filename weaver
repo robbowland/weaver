@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# agentnav: keep track of Claude Code agents running in zellij panes, and open
+# weaver: keep track of Claude Code agents running in zellij panes, and open
 # neovim in the worktree each agent is really editing.
 #
-#   agentnav hook                     Claude Code hook for every event (JSON on stdin)
-#   agentnav edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
-#   agentnav nvim <agent-pane> [file] internal: start the nvim bound to one agent
-#   agentnav ls                       dashboard of every agent in this zellij session
-#   agentnav next                     jump to the agent that has needed you longest
+#   weaver hook                     Claude Code hook for every event (JSON on stdin)
+#   weaver edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
+#   weaver nvim <agent-pane> [file] internal: start the nvim bound to one agent
+#   weaver ls                       dashboard of every agent in this zellij session
+#   weaver next                     jump to the agent that has needed you longest
 #
 # Must stay bash 3.2 compatible (macOS /bin/bash): no mapfile, no ${x,,}, no
 # GNU-only flags.
 
 set -u
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agentnav"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/weaver"
 # /tmp rather than $TMPDIR: macOS caps unix socket paths at ~104 bytes.
-SOCK_DIR="/tmp/agentnav-${UID:-$(id -u)}"
+SOCK_DIR="/tmp/weaver-${UID:-$(id -u)}"
 SESSION="${ZELLIJ_SESSION_NAME:-}"
 SKEY="${SESSION//\//_}"
 US=$'\037' # field separator for jq output; never appears in paths or prompts
@@ -25,7 +25,7 @@ NL=$'\n'
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
 
 die() {
-	printf 'agentnav: %s\n' "$*" >&2
+	printf 'weaver: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -35,7 +35,7 @@ need_session() {
 
 state_file() { SF="$STATE_DIR/${SKEY}_$1.json"; }
 sock_path() { SOCK="$SOCK_DIR/${SKEY}_$1.sock"; }
-# The agent's nvim pane id lives in its own file, written only by `agentnav
+# The agent's nvim pane id lives in its own file, written only by `weaver
 # nvim`, so racing hooks can never lose it.
 nvim_file() { NVF="$STATE_DIR/${SKEY}_$1.nvim"; }
 read_nvim_pane() {
@@ -256,13 +256,13 @@ cmd_hook() {
 	[ "${1:-}" = --async ] && mode=async
 	[ -n "${ZELLIJ_PANE_ID:-}" ] || exit 0
 	[ -t 0 ] && exit 0
-	if [ -n "${AGENTNAV_DEBUG:-}" ]; then
+	if [ -n "${WEAVER_DEBUG:-}" ]; then
 		mkdir -p "$STATE_DIR" && (hook_run "$mode") >/dev/null 2>>"$STATE_DIR/hook.log"
 	else
 		(hook_run "$mode") >/dev/null 2>&1
 	fi
 	rc=$?
-	[ $rc = 10 ] && [ "${AGENTNAV_BELL:-1}" != 0 ] && printf '%s\n' "$BELL_JSON"
+	[ $rc = 10 ] && [ "${WEAVER_BELL:-1}" != 0 ] && printf '%s\n' "$BELL_JSON"
 	exit 0
 }
 
@@ -426,7 +426,7 @@ hook_run() {
 	# session's start directory, but on the worktree the agent is really in.
 	case $state in working) marker='🤖' ;; ended) marker='' ;; *) marker='💬' ;; esac
 	mark_dir=""
-	if [ "${AGENTNAV_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
+	if [ "${WEAVER_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
 		mark_dir=$root
 	fi
 	if [ "$mark_dir" != "$o_marked" ] || { [ -n "$mark_dir" ] && [ "$marker" != "$o_marker" ]; }; then
@@ -554,7 +554,7 @@ mark_seen() {
 # ---------------------------------------------------------------- nvim
 
 cmd_nvim() {
-	[ $# -ge 1 ] || die "usage: agentnav nvim <agent-pane-id> [file]"
+	[ $# -ge 1 ] || die "usage: weaver nvim <agent-pane-id> [file]"
 	local agent=${1#terminal_} file=${2:-} lua
 	need_session
 	mkdir -p "$SOCK_DIR" || die "cannot create $SOCK_DIR"
@@ -578,12 +578,12 @@ cmd_nvim() {
 		fi
 	fi
 
-	lua="$(script_dir)/nvim/agentnav.lua"
+	lua="$(script_dir)/nvim/weaver.lua"
 	# The ATTENTION dialog for a stale swap file would block this nvim and every
-	# remote call: open the startup file read-only instead (agentnav.lua reports
+	# remote call: open the startup file read-only instead (weaver.lua reports
 	# it and removes this autocmd).
 	exec nvim --listen "$SOCK" \
-		--cmd "augroup agentnav_start | autocmd SwapExists * let v:swapchoice = 'o' | let g:agentnav_swap = expand('<afile>') | augroup END" \
+		--cmd "augroup weaver_start | autocmd SwapExists * let v:swapchoice = 'o' | let g:weaver_swap = expand('<afile>') | augroup END" \
 		-c "luafile ${lua// /\\ }" -- ${file:+"$file"}
 }
 
@@ -604,7 +604,7 @@ cmd_edit() {
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--full) full=1 ;;
-		-*) die "usage: agentnav edit [--full] [pane-id]" ;;
+		-*) die "usage: weaver edit [--full] [pane-id]" ;;
 		*) target=${1#terminal_} ;;
 		esac
 		shift
@@ -896,7 +896,7 @@ cmd_next() {
 $AGENT_ROWS
 EOF
 	if [ -z "$best" ]; then
-		echo "agentnav: no agent needs you"
+		echo "weaver: no agent needs you"
 		[ -t 1 ] && sleep 1
 		return 0
 	fi
@@ -907,7 +907,7 @@ EOF
 
 usage() {
 	cat <<'EOF'
-usage: agentnav <command>
+usage: weaver <command>
   hook                       Claude Code hook (reads the event JSON on stdin)
   edit [--full] [pane-id]    open or jump to the nvim for the focused agent
   ls                         dashboard of the agents in this zellij session

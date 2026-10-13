@@ -1,4 +1,4 @@
--- agentnav.lua: keeps this nvim in sync with the Claude Code agent it is bound
+-- weaver.lua: keeps this nvim in sync with the Claude Code agent it is bound
 -- to. Loaded with `nvim -c "luafile …"`, after the user's own config.
 --
 -- The agent's hook calls AgentFollow(root, file) over the --listen socket. It
@@ -9,7 +9,7 @@ local uv = vim.uv or vim.loop
 local api = vim.api
 local fn = vim.fn
 local WARN = vim.log.levels.WARN
-local group = api.nvim_create_augroup('agentnav', { clear = true })
+local group = api.nvim_create_augroup('weaver', { clear = true })
 local following = true
 
 -- nvim-notify, noice and snacks replace vim.notify with a non-blocking UI
@@ -23,9 +23,9 @@ local function notify_replaced()
 end
 
 local function msg(text, level)
-  text = 'agentnav: ' .. text
+  text = 'weaver: ' .. text
   if notify_replaced() then
-    vim.notify(text, level or vim.log.levels.INFO, { title = 'agentnav' })
+    vim.notify(text, level or vim.log.levels.INFO, { title = 'weaver' })
     return
   end
   local width = vim.v.echospace
@@ -66,20 +66,20 @@ local MAX_WATCHED_DIRS = 64
 local DEBOUNCE_MS = 100
 
 local function stop_all()
-  for _, w in pairs(_G.__agentnav_watchers or {}) do
+  for _, w in pairs(_G.__weaver_watchers or {}) do
     w:stop()
     w:close()
   end
-  _G.__agentnav_watchers = {}
-  if _G.__agentnav_timer then
-    _G.__agentnav_timer:stop()
-    _G.__agentnav_timer:close()
-    _G.__agentnav_timer = nil
+  _G.__weaver_watchers = {}
+  if _G.__weaver_timer then
+    _G.__weaver_timer:stop()
+    _G.__weaver_timer:close()
+    _G.__weaver_timer = nil
   end
 end
 stop_all() -- when this file is sourced again
 
-local watchers = _G.__agentnav_watchers
+local watchers = _G.__weaver_watchers
 local check_queued = false
 
 local function queue_check()
@@ -134,8 +134,8 @@ api.nvim_create_autocmd({ 'BufReadPost', 'BufNewFile', 'BufWritePost', 'BufEnter
 
 api.nvim_create_autocmd('VimLeavePre', { group = group, callback = stop_all })
 
-_G.__agentnav_timer = uv.new_timer()
-_G.__agentnav_timer:start(3000, 3000, vim.schedule_wrap(checktime))
+_G.__weaver_timer = uv.new_timer()
+_G.__weaver_timer:start(3000, 3000, vim.schedule_wrap(checktime))
 
 api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
   group = group,
@@ -160,13 +160,13 @@ api.nvim_create_autocmd('FileChangedShell', {
     if vim.v.fcs_reason == 'deleted' then
       -- nvim re-fires this on every check while the file is gone: say it once.
       vim.v.fcs_choice = ''
-      if not vim.b[ev.buf].agentnav_deleted then
-        vim.b[ev.buf].agentnav_deleted = true
+      if not vim.b[ev.buf].weaver_deleted then
+        vim.b[ev.buf].weaver_deleted = true
         vim.schedule(function() msg('deleted on disk: ' .. name, WARN) end)
       end
       return
     end
-    vim.b[ev.buf].agentnav_deleted = nil
+    vim.b[ev.buf].weaver_deleted = nil
     if vim.bo[ev.buf].modified then
       vim.v.fcs_choice = ''
       vim.schedule(function() msg('kept your unsaved changes; ' .. name .. ' changed on disk', WARN) end)
@@ -325,7 +325,7 @@ end
 api.nvim_create_user_command('AgentFollow', function()
   following = not following
   msg('following ' .. (following and 'on' or 'off'))
-end, { desc = 'agentnav: toggle following the agent to its worktrees and files' })
+end, { desc = 'weaver: toggle following the agent to its worktrees and files' })
 
 -- Reviewing -------------------------------------------------------------------
 
@@ -353,14 +353,14 @@ local function repo_root()
   return first_line(git(fn.getcwd(), { 'rev-parse', '--show-toplevel' }))
 end
 
--- $AGENTNAV_BASE, else `git config branch.<branch>.agentnavbase`, else main/master.
+-- $WEAVER_BASE, else `git config branch.<branch>.weaverbase`, else main/master.
 local function base_ref(root)
-  local env = vim.env.AGENTNAV_BASE
+  local env = vim.env.WEAVER_BASE
   if env and env ~= '' then
     return env
   end
   local branch = first_line(git(root, { 'symbolic-ref', '--quiet', '--short', 'HEAD' }))
-  local base = branch and first_line(git(root, { 'config', 'branch.' .. branch .. '.agentnavbase' }))
+  local base = branch and first_line(git(root, { 'config', 'branch.' .. branch .. '.weaverbase' }))
   if base then
     return base
   end
@@ -421,7 +421,7 @@ local function agent_changes()
 end
 
 api.nvim_create_user_command('AgentChanges', agent_changes, {
-  desc = 'agentnav: quickfix list of the files changed on this branch',
+  desc = 'weaver: quickfix list of the files changed on this branch',
 })
 
 api.nvim_create_user_command('AgentReview', function()
@@ -438,13 +438,13 @@ api.nvim_create_user_command('AgentReview', function()
   else
     agent_changes()
   end
-end, { desc = 'agentnav: review the branch in diffview (or AgentChanges)' })
+end, { desc = 'weaver: review the branch in diffview (or AgentChanges)' })
 
--- Startup: `agentnav nvim` opened the initial file read-only if it had a swap
+-- Startup: `weaver nvim` opened the initial file read-only if it had a swap
 -- file; say so, and stop overriding the swap dialog for the user's own edits.
-pcall(api.nvim_del_augroup_by_name, 'agentnav_start')
-if vim.g.agentnav_swap then
-  local swapped = vim.g.agentnav_swap
-  vim.g.agentnav_swap = nil
+pcall(api.nvim_del_augroup_by_name, 'weaver_start')
+if vim.g.weaver_swap then
+  local swapped = vim.g.weaver_swap
+  vim.g.weaver_swap = nil
   vim.schedule(function() msg('swap file exists: opened ' .. short(swapped) .. ' read-only', WARN) end)
 end

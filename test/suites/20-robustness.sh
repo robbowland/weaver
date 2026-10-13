@@ -3,11 +3,11 @@
 # deleted files, diff reviews, symlinked paths. Runs after 10-core.sh.
 . "$(dirname "$0")/../lib.sh"
 
-rows() { agentnav ls | grep -c -E '^[!✓●○] '; }
+rows() { weaver ls | grep -c -E '^[!✓●○] '; }
 
 # The harness itself: zellij falls back to some other running session when the
 # named one is gone, so the test shim must refuse.
-ZELLIJ_SESSION_NAME=agentnav-no-such-session zellij action list-tabs >/dev/null 2>&1
+ZELLIJ_SESSION_NAME=weaver-no-such-session zellij action list-tabs >/dev/null 2>&1
 ok "test shim refuses actions on a session that isn't running" "$?" "1"
 capture_notify() {
 	nvq 0 "luaeval('(function() local o = vim.notify; _G.__cap = {}; vim.notify = function(m, ...) table.insert(_G.__cap, m); return o(m, ...) end; return 1 end)()')" >/dev/null
@@ -33,11 +33,11 @@ sleep 1
 ok "follow into swapped file: nvim responsive, read-only" "$(nvq 0 'fnamemodify(bufname("%"), ":t") . "|" . &readonly')" "swapme.txt|1"
 
 # Same at startup (agent B has no nvim yet).
-Z new-pane --close-on-exit -- "$AT/bin/agentnav" nvim 1 "$SW" >/dev/null
+Z new-pane --close-on-exit -- "$AT/bin/weaver" nvim 1 "$SW" >/dev/null
 sleep 4
 unstick 1
 ok "startup on swapped file: responsive, read-only" "$(nvq 1 'fnamemodify(bufname("%"), ":t") . "|" . &readonly')" "swapme.txt|1"
-ok "startup swap override removed afterwards" "$(nvq 1 'exists("#agentnav_start")')" "0"
+ok "startup swap override removed afterwards" "$(nvq 1 'exists("#weaver_start")')" "0"
 nvsend 1 '<Esc>:qa!<CR>'
 sleep 1
 
@@ -61,7 +61,7 @@ before=$(wins)
 hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/README.md"
 sleep 1
 ok "following leaves the diff tab's windows alone" "$(wins)" "$before"
-ok "...and says why" "$(nvq 0 "luaeval('_G.__cap[#_G.__cap]')")" "agentnav: not opening README.md: you are reviewing a diff"
+ok "...and says why" "$(nvq 0 "luaeval('_G.__cap[#_G.__cap]')")" "weaver: not opening README.md: you are reviewing a diff"
 nvsend 0 '<Esc>:DiffviewClose<CR>'
 sleep 1
 

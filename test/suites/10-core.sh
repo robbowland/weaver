@@ -61,7 +61,7 @@ sleep 0.5
 nvsend 0 ':lua vim.uv.sleep(15000)<CR>'
 sleep 0.5
 edit_json "$T/repo-wt-b" "$T/repo-wt-b/README.md" >"$AT/in-edit.json"
-timed_hook() { ms /bin/bash -c "ZELLIJ_PANE_ID=0 agentnav hook <'$AT/in-edit.json'"; }
+timed_hook() { ms /bin/bash -c "ZELLIJ_PANE_ID=0 weaver hook <'$AT/in-edit.json'"; }
 t1=$(timed_hook)
 t2=$(timed_hook)
 t3=$(timed_hook)

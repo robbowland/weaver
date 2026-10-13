@@ -51,7 +51,7 @@ ev Stop "$T/repo" ',"background_tasks":[{"id":"x1","type":"subagent","status":"r
 ok "Stop with a subagent in the background: still working" "$(st 0 state)|$(st 0 background)" "working|1"
 jq '.ts -= 120' "$SD/${SESSION}_0.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SESSION}_0.json"
 ok "dashboard: says so, not 'interrupted?'" \
-	"$(agentnav ls | grep -c '1 in background · implement both features')|$(agentnav ls | grep -c 'interrupted? implement both')" "1|0"
+	"$(weaver ls | grep -c '1 in background · implement both features')|$(weaver ls | grep -c 'interrupted? implement both')" "1|0"
 ev Notification "$T/repo" ',"notification_type":"idle_prompt","message":"Claude is waiting for your input"'
 ok "idle reminder meanwhile: still working" "$(st 0 state)" "working"
 ev UserPromptSubmit "$T/repo" ',"prompt":"<agent-message from=\"x1\"> [Subagent hand-back] done"'
