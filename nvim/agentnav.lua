@@ -58,12 +58,84 @@ end
 
 vim.o.autoread = true
 
-if _G.__agentnav_timer then
-  _G.__agentnav_timer:stop()
-  _G.__agentnav_timer:close()
+-- Watch the directories of open files and re-check 100ms after a change.
+-- Directory watches use FSEvents on macOS (no file handle per file, and they
+-- survive the rename-over-original that editors and formatters do). A slow
+-- timer, focus and buffer switches catch anything a watcher misses.
+local MAX_WATCHED_DIRS = 64
+local DEBOUNCE_MS = 100
+
+local function stop_all()
+  for _, w in pairs(_G.__agentnav_watchers or {}) do
+    w:stop()
+    w:close()
+  end
+  _G.__agentnav_watchers = {}
+  if _G.__agentnav_timer then
+    _G.__agentnav_timer:stop()
+    _G.__agentnav_timer:close()
+    _G.__agentnav_timer = nil
+  end
 end
+stop_all() -- when this file is sourced again
+
+local watchers = _G.__agentnav_watchers
+local check_queued = false
+
+local function queue_check()
+  if check_queued then
+    return
+  end
+  check_queued = true
+  vim.defer_fn(function()
+    check_queued = false
+    checktime()
+  end, DEBOUNCE_MS)
+end
+
+local function watch(buf)
+  if not api.nvim_buf_is_valid(buf) or vim.bo[buf].buftype ~= '' then
+    return
+  end
+  local name = api.nvim_buf_get_name(buf)
+  if name == '' then
+    return
+  end
+  local dir = fn.fnamemodify(name, ':p:h')
+  if watchers[dir] or fn.isdirectory(dir) == 0 or vim.tbl_count(watchers) >= MAX_WATCHED_DIRS then
+    return
+  end
+  local w = uv.new_fs_event()
+  if not w then
+    return
+  end
+  local ok = w:start(dir, {}, function(err)
+    if not err then
+      vim.schedule(queue_check)
+    end
+  end)
+  if not ok then
+    w:close()
+    return
+  end
+  watchers[dir] = w
+end
+
+for _, buf in ipairs(api.nvim_list_bufs()) do
+  if api.nvim_buf_is_loaded(buf) then
+    watch(buf)
+  end
+end
+
+api.nvim_create_autocmd({ 'BufReadPost', 'BufNewFile', 'BufWritePost', 'BufEnter' }, {
+  group = group,
+  callback = function(ev) watch(ev.buf) end,
+})
+
+api.nvim_create_autocmd('VimLeavePre', { group = group, callback = stop_all })
+
 _G.__agentnav_timer = uv.new_timer()
-_G.__agentnav_timer:start(1000, 1000, vim.schedule_wrap(checktime))
+_G.__agentnav_timer:start(3000, 3000, vim.schedule_wrap(checktime))
 
 api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
   group = group,
