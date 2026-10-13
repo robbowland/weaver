@@ -1,0 +1,604 @@
+#!/usr/bin/env bash
+# agentnav: keep track of Claude Code agents running in zellij panes, and open
+# neovim in the worktree each agent is really editing.
+#
+#   agentnav hook                     Claude Code hook for every event (JSON on stdin)
+#   agentnav edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
+#   agentnav nvim <agent-pane> [file] internal: start the nvim bound to one agent
+#   agentnav ls                       dashboard of every agent in this zellij session
+#
+# Must stay bash 3.2 compatible (macOS /bin/bash): no mapfile, no ${x,,}, no
+# GNU-only flags.
+
+set -u
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/agentnav"
+# /tmp rather than $TMPDIR: macOS caps unix socket paths at ~104 bytes.
+SOCK_DIR="/tmp/agentnav-${UID:-$(id -u)}"
+SESSION="${ZELLIJ_SESSION_NAME:-}"
+SKEY="${SESSION//\//_}"
+US=$'\037' # field separator for jq output; never appears in paths or prompts
+TAB=$'\t'
+NL=$'\n'
+
+case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
+
+die() {
+	printf 'agentnav: %s\n' "$*" >&2
+	exit 1
+}
+
+need_session() {
+	[ -n "$SESSION" ] || die "not inside a zellij session (ZELLIJ_SESSION_NAME is unset)"
+}
+
+state_file() { SF="$STATE_DIR/${SKEY}_$1.json"; }
+sock_path() { SOCK="$SOCK_DIR/${SKEY}_$1.sock"; }
+# The agent's nvim pane id lives in its own file, written only by `agentnav
+# nvim`, so racing hooks can never lose it.
+nvim_file() { NVF="$STATE_DIR/${SKEY}_$1.nvim"; }
+read_nvim_pane() {
+	NV=""
+	nvim_file "$1"
+	[ -f "$NVF" ] && read -r NV <"$NVF"
+	case $NV in *[!0-9]*) NV="" ;; esac
+}
+
+# This session's per-pane files with extension $1, into the array FOUND. Only
+# <session>_<digits>.$1 counts, so session "a" never claims session "a_b"'s files.
+session_files() {
+	local f p
+	FOUND=()
+	for f in "$STATE_DIR/${SKEY}"_*."$1"; do
+		p=${f#"$STATE_DIR/${SKEY}_"}
+		p=${p%."$1"}
+		case $p in '' | *[!0-9]*) continue ;; esac
+		FOUND[${#FOUND[@]}]=$f
+	done
+}
+
+# Directory holding the real script, following symlinks without GNU readlink -f.
+script_dir() {
+	local p=$SELF d
+	while [ -L "$p" ]; do
+		d=$(cd -P "${p%/*}" && pwd)
+		p=$(readlink "$p")
+		case $p in /*) ;; *) p="$d/$p" ;; esac
+	done
+	cd -P "${p%/*}" && pwd
+}
+
+# Serialise read-modify-write of state file $SF. The lock is $SF.lock, created
+# exclusively (noclobber); the new state is written into it and renamed over
+# $SF, which also releases the lock. A held lock is never truncated: one older
+# than the moment we started waiting, still there about a second later, was
+# left by a killed process and is removed. After ~2s we go ahead with a
+# private file rather than block the agent (risking a lost update, not a
+# corrupt file).
+lock() {
+	local i=0 mark=""
+	LOCK="$SF.lock"
+	set -C
+	until { : >"$LOCK"; } 2>/dev/null; do
+		i=$((i + 1))
+		if [ $i = 1 ]; then
+			mark="$SF.wait.$$"
+			: >|"$mark"
+		elif [ $((i % 50)) = 0 ] && [ "$LOCK" -ot "$mark" ]; then
+			rm -f "$LOCK"
+			continue
+		fi
+		if [ $i -ge 100 ]; then
+			LOCK="$SF.$$.tmp"
+			break
+		fi
+		sleep 0.02
+	done
+	set +C
+	[ -z "$mark" ] || rm -f "$mark"
+}
+commit_lock() { mv -f "$LOCK" "$SF"; }
+drop_lock() { rm -f "$LOCK"; }
+
+# JSON string literal for $1, into J. Inputs never contain control characters.
+json_str() {
+	local s=${1//\\/\\\\}
+	s=${s//\"/\\\"}
+	J="\"$s\""
+}
+
+# bounded OUT CMD... runs CMD with stdout to OUT and stdin/stderr on /dev/null,
+# killed after 2s so a busy nvim or zellij can never block the caller. Returns
+# CMD's status, or 142 if it was killed. (A killed nvim client exits 1, so its
+# own status can't tell us; the killer reports firing with status 3.)
+bounded() {
+	local out=$1 pid killer rc
+	shift
+	"$@" </dev/null >"$out" 2>/dev/null &
+	pid=$!
+	(
+		trap 'kill $s 2>/dev/null; exit 0' TERM
+		sleep 2 &
+		s=$!
+		wait $s
+		trap '' TERM
+		kill "$pid"
+		exit 3
+	) </dev/null >/dev/null 2>&1 &
+	killer=$!
+	wait "$pid" 2>/dev/null
+	rc=$?
+	kill "$killer" 2>/dev/null
+	wait "$killer" 2>/dev/null
+	[ $? = 3 ] && return 142
+	return $rc
+}
+
+# The arguments of v:lua.F(...) are Vimscript expressions: in a single-quoted
+# Vim string a quote is doubled and a backslash is literal.
+follow_expr() {
+	local r=${1//\'/\'\'} f=${2//\'/\'\'}
+	EXPR="v:lua.AgentFollow('$r','$f')"
+}
+
+# nvim_follow AGENT-PANE ROOT FILE tells the agent's nvim to follow it.
+# Returns 0 on success, 128+ when nvim did not answer in time (stuck at a
+# prompt, or busy), and anything else when nothing is listening.
+#
+# With NOW set (the hook), a timeout is remembered: calls are skipped for 15s
+# so a stuck nvim costs the agent one 2s wait per 15s, not 2s on every event.
+nvim_follow() {
+	local stalled t=0 rc
+	sock_path "$1"
+	[ -S "$SOCK" ] || return 1
+	stalled="$SOCK.stalled"
+	if [ -n "${NOW:-}" ] && [ -f "$stalled" ]; then
+		read -r t <"$stalled"
+		case $t in '' | *[!0-9]*) t=0 ;; esac
+		[ $((NOW - t)) -lt 15 ] && return 128
+	fi
+	follow_expr "$2" "$3"
+	bounded /dev/null nvim --server "$SOCK" --remote-expr "$EXPR"
+	rc=$?
+	if [ $rc -ge 128 ]; then
+		[ -n "${NOW:-}" ] && printf '%s\n' "$NOW" >"$stalled"
+	elif [ -f "$stalled" ]; then
+		rm -f "$stalled"
+	fi
+	return $rc
+}
+
+toplevel() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
+
+# All panes as a JSON array, into PANES. Retried: list-panes has once been
+# seen returning output that was not JSON.
+list_panes() {
+	local i
+	for i in 1 2 3; do
+		PANES=$(zellij action list-panes -a -j 2>/dev/null) &&
+			printf '%s' "$PANES" | jq -e 'type == "array"' >/dev/null 2>&1 && return 0
+		sleep 0.1
+	done
+	die "zellij action list-panes failed"
+}
+
+# ---------------------------------------------------------------- hook
+
+# The hook event (stdin) plus the stored state ($st), as one US-separated line.
+JQ_HOOK='
+def line: tostring | gsub("[\u0000-\u001f]+"; " ");
+((try ($st | fromjson) catch {}) | if type == "object" then . else {} end) as $s
+| [ .hook_event_name // "",
+    .cwd // "",
+    .session_id // "",
+    ((.tool_input | objects | .file_path // .notebook_path) // ""),
+    ((.prompt // "") | line | gsub("\\s+"; " ") | sub("^ "; "") | .[0:120]),
+    .tool_name // "",
+    .notification_type // "",
+    (now | floor),
+    $s.cwd // "", $s.root // "", $s.file // "", $s.prompt // "",
+    $s.state // "", $s.session_id // "", $s.start_cwd // ""
+  ] | map(line) | join("\u001f")'
+
+cmd_hook() {
+	[ -n "${ZELLIJ_PANE_ID:-}" ] || exit 0
+	[ -t 0 ] && exit 0
+	if [ -n "${AGENTNAV_DEBUG:-}" ]; then
+		mkdir -p "$STATE_DIR" && (hook_run) >/dev/null 2>>"$STATE_DIR/hook.log"
+	else
+		(hook_run) >/dev/null 2>&1
+	fi
+	exit 0
+}
+
+# Kept to one jq and one mv (plus git, nvim and zellij only when needed): the
+# hook runs on every agent event and must stay fast.
+hook_run() {
+	local pane=$ZELLIJ_PANE_ID parsed J out moved=0 nv
+	local event cwd sid file prompt tool ntype now o_cwd o_root o_file o_prompt o_state o_sid o_start
+	local root="" d state ev_file="" start
+	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR" || return
+	state_file "$pane"
+	lock
+	if [ -f "$SF" ]; then set -- --rawfile st "$SF"; else set -- --arg st ""; fi
+	parsed=$(jq -r "$@" "$JQ_HOOK") || {
+		drop_lock
+		return
+	}
+	IFS=$US read -r event cwd sid file prompt tool ntype now o_cwd o_root o_file o_prompt o_state o_sid o_start <<<"$parsed"
+	if [ -z "$event" ]; then
+		# Empty or eventless input: keep the stored state rather than blank it.
+		drop_lock
+		return
+	fi
+	NOW=$now
+
+	# A new Claude session in this pane (not a resume or compaction) starts
+	# afresh; otherwise the root is never reset to the start directory.
+	if [ -n "$sid" ] && [ "$sid" != "$o_sid" ]; then
+		o_cwd="" o_root="" o_file="" o_prompt="" o_state="" o_start=""
+	fi
+	start=${o_start:-$cwd}
+
+	# Where the agent is really working: the repo of the file it just edited
+	# (the nearest existing parent, since new files may be in new directories)...
+	if [ "$event" = PostToolUse ] && [ -n "$file" ]; then
+		case $file in /*) ;; *) file="$cwd/$file" ;; esac
+		ev_file=$file
+		d=${file%/*}
+		while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
+		root=$(toplevel "${d:-/}") || root=""
+	fi
+	# ...else the repo of a new cwd. Claude Code snaps cwd back to the start
+	# directory after any command that cd's outside it, so a change back to the
+	# start directory only counts when a worktree tool made it...
+	if [ -z "$root" ]; then
+		if [ "$cwd" != "$o_cwd" ]; then
+			case $tool in
+			EnterWorktree | ExitWorktree) moved=1 start=$cwd ;;
+			*) [ "$cwd" != "$start" ] && moved=1 ;;
+			esac
+		fi
+		if [ $moved = 1 ] || [ -z "$o_root" ]; then
+			root=$(toplevel "$cwd") || root=$cwd
+		else
+			# ...else wherever it was before.
+			root=$o_root
+		fi
+	fi
+
+	# Only a permission or question dialog needs you. The idle reminder Claude
+	# Code sends 60s after a turn ends means it is done; other notices (e.g.
+	# auth_success) leave the state alone. No type at all: assume it needs you.
+	case $event in
+	Notification)
+		case $ntype in
+		permission_prompt | elicitation_dialog | "") state=needs-you ;;
+		idle_prompt) state=done ;;
+		*) state=${o_state:-working} ;;
+		esac
+		;;
+	StopFailure) state=needs-you ;;
+	Stop) state=done ;;
+	SessionStart) state=idle ;;
+	SessionEnd) state=ended ;;
+	*) state=working ;;
+	esac
+	[ -n "$prompt" ] || prompt=$o_prompt
+	[ -n "$ev_file" ] && file=$ev_file || file=$o_file
+
+	case $pane in '' | *[!0-9]*) json_str "$pane" ;; *) J=$pane ;; esac
+	out="{\"pane\":$J"
+	json_str "$cwd" && out="$out,\"cwd\":$J"
+	json_str "$root" && out="$out,\"root\":$J"
+	json_str "$start" && out="$out,\"start_cwd\":$J"
+	out="$out,\"state\":\"$state\",\"ts\":${now:-0}"
+	json_str "$sid" && out="$out,\"session_id\":$J"
+	json_str "$file" && out="$out,\"file\":$J"
+	json_str "$prompt" && out="$out,\"prompt\":$J"
+	read_nvim_pane "$pane"
+	nv=$NV
+	out="$out,\"nvim_pane\":${nv:-null}}"
+	if printf '%s\n' "$out" >"$LOCK"; then commit_lock; else drop_lock; fi
+
+	[ -n "$nv" ] || return 0
+	if [ -n "$ev_file" ]; then
+		nvim_follow "$pane" "$root" "$ev_file"
+	elif [ "$root" != "$o_root" ]; then
+		nvim_follow "$pane" "$root" ""
+	fi
+	if [ "$root" != "$o_root" ]; then
+		bounded /dev/null zellij action rename-pane --pane-id "terminal_$nv" "nvim: ${root##*/}"
+	fi
+	return 0
+}
+
+# ---------------------------------------------------------------- nvim
+
+cmd_nvim() {
+	[ $# -ge 1 ] || die "usage: agentnav nvim <agent-pane-id> [file]"
+	local agent=${1#terminal_} file=${2:-} lua
+	need_session
+	mkdir -p "$SOCK_DIR" || die "cannot create $SOCK_DIR"
+	[ -O "$SOCK_DIR" ] || die "$SOCK_DIR is not owned by you"
+	chmod 700 "$SOCK_DIR"
+	sock_path "$agent"
+	rm -f "$SOCK"
+
+	state_file "$agent"
+	nvim_file "$agent"
+	if [ -n "${ZELLIJ_PANE_ID:-}" ]; then
+		mkdir -p "$STATE_DIR"
+		printf '%s\n' "$ZELLIJ_PANE_ID" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
+		if [ -f "$SF" ]; then
+			lock
+			if jq --arg nv "$ZELLIJ_PANE_ID" '.nvim_pane = ($nv | tonumber? // $nv)' "$SF" >"$LOCK"; then
+				commit_lock
+			else
+				drop_lock
+			fi
+		fi
+	fi
+
+	lua="$(script_dir)/nvim/agentnav.lua"
+	# The ATTENTION dialog for a stale swap file would block this nvim and every
+	# remote call: open the startup file read-only instead (agentnav.lua reports
+	# it and removes this autocmd).
+	exec nvim --listen "$SOCK" \
+		--cmd "augroup agentnav_start | autocmd SwapExists * let v:swapchoice = 'o' | let g:agentnav_swap = expand('<afile>') | augroup END" \
+		-c "luafile ${lua// /\\ }" -- ${file:+"$file"}
+}
+
+# ---------------------------------------------------------------- edit
+
+# Open a new pane running CMD... beside pane TARGET, then move it to the left.
+open_left_of() {
+	local target=$1 cwd=$2 name=$3 id
+	shift 3
+	zellij action focus-pane-id "terminal_$target" >/dev/null 2>&1 || true
+	id=$(zellij action new-pane --direction right --close-on-exit --cwd "$cwd" --name "$name" -- "$@") ||
+		die "zellij action new-pane failed"
+	zellij action move-pane ${id:+--pane-id "$id"} left || true
+}
+
+cmd_edit() {
+	local full=0 target="" panes agent="" info root file nv cwd rc f p d
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--full) full=1 ;;
+		-*) die "usage: agentnav edit [--full] [pane-id]" ;;
+		*) target=${1#terminal_} ;;
+		esac
+		shift
+	done
+	need_session
+	list_panes
+	panes=$PANES
+
+	# The tiled pane we were on keeps is_focused while this floating pane is
+	# open, but is_focused is per tab, so look only in our own tab.
+	if [ -z "$target" ]; then
+		target=$(printf '%s' "$panes" | jq -r --arg me "${ZELLIJ_PANE_ID:-}" '
+			map(select(.is_plugin | not)) as $t
+			| ($t | map(select((.id | tostring) == $me)) | .[0].tab_id) as $tab
+			| $t | map(select(.tab_id == $tab and .is_focused and (.is_floating | not)
+				and (.id | tostring) != $me)) | .[0].id // empty')
+		[ -n "$target" ] || die "cannot find the focused pane"
+	fi
+
+	state_file "$target"
+	if [ -f "$SF" ]; then
+		agent=$target
+	else
+		# Pressed on an agent's nvim: act for that agent.
+		session_files nvim
+		for f in ${FOUND[@]+"${FOUND[@]}"}; do
+			read -r p <"$f" || continue
+			if [ "$p" = "$target" ]; then
+				agent=${f#"$STATE_DIR/${SKEY}_"}
+				agent=${agent%.nvim}
+				break
+			fi
+		done
+	fi
+
+	if [ -z "$agent" ]; then
+		cwd=$(printf '%s' "$panes" | jq -r --arg p "$target" \
+			'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].pane_cwd // empty')
+		[ -d "$cwd" ] || cwd=$PWD
+		open_left_of "$target" "$cwd" "nvim: ${cwd##*/}" nvim
+	else
+		state_file "$agent"
+		info=$(jq -r '[.root // .cwd // "", .file // ""] | map(tostring) | join("\u001f")' "$SF") ||
+			die "cannot read $SF"
+		IFS=$US read -r root file <<<"$info"
+		read_nvim_pane "$agent"
+		nv=$NV
+		[ -d "$root" ] || root=$PWD
+		# git gives the root as a real path; the agent may have used a symlinked
+		# one (/tmp vs /private/tmp on macOS), so compare real paths.
+		if [ -n "$file" ] && [ -e "$file" ] && d=$(cd -P "${file%/*}" 2>/dev/null && pwd); then
+			file="$d/${file##*/}"
+		fi
+		case $file in "$root"/*) [ -e "$file" ] || file="" ;; *) file="" ;; esac
+
+		# Reuse the agent's nvim if its pane is alive and nvim answers. One that
+		# timed out is alive but stuck (e.g. at a hit-enter prompt): jump to it
+		# rather than open a second nvim for the same agent.
+		rc=1
+		if [ -n "$nv" ] &&
+			printf '%s' "$panes" | jq -e --arg p "$nv" \
+				'any(.[]; (.is_plugin | not) and (.id | tostring) == $p and (.exited | not))' >/dev/null; then
+			nvim_follow "$agent" "$root" "$file"
+			rc=$?
+		fi
+		if [ $rc = 0 ] || [ $rc -ge 128 ]; then
+			zellij action focus-pane-id "terminal_$nv" >/dev/null 2>&1 || true
+		else
+			open_left_of "$agent" "$root" "nvim: ${root##*/}" "$SELF" nvim "$agent" ${file:+"$file"}
+		fi
+	fi
+	[ $full = 1 ] && zellij action toggle-fullscreen
+	return 0
+}
+
+# ---------------------------------------------------------------- ls
+
+# Live agents in this session, one US-separated line each:
+# rank, pane, tab, state, root, ts, prompt. Also prints "gc<US>file" for state
+# files whose pane no longer exists.
+JQ_ROWS='
+($panes | map(select(.is_plugin | not))) as $all
+| ($all | map({key: (.id | tostring), value: .}) | from_entries) as $byid
+| inputs as $s
+| ($byid[$s.pane | tostring]) as $p
+| if $p == null then ["gc", input_filename]
+  elif ($p.exited or $s.state == "ended") then empty
+  else [({"needs-you": 0, "done": 1, "working": 2, "idle": 3}[$s.state] // 4),
+        $s.pane, $p.tab_id, $s.state, ($s.root // $s.cwd // ""), ($s.ts // 0),
+        ($s.prompt // "")]
+  end
+| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")'
+
+# repo/branch and "N files (M new)" for ROOT, into REPO_BRANCH and FILES.
+git_info() {
+	local root=$1 common branch="" n=0 m=0 line repo
+	REPO_BRANCH=${root##*/} FILES="-"
+	common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+	# Group worktrees under their repo: the parent of the shared .git dir
+	# (or the name of a bare repo.git).
+	case ${common##*/} in
+	.git | .bare) repo=${common%/*} repo=${repo##*/} ;;
+	*.git) repo=${common##*/} repo=${repo%.git} ;;
+	*) repo=${common%/*} repo=${repo##*/} ;;
+	esac
+	while IFS= read -r line; do
+		case $line in
+		"# branch.head "*) branch=${line#\# branch.head } ;;
+		"? "*) n=$((n + 1)) m=$((m + 1)) ;;
+		"1 A"* | "2 A"*) n=$((n + 1)) m=$((m + 1)) ;;
+		[12u]" "*) n=$((n + 1)) ;;
+		esac
+	done <<EOF
+$(git -C "$root" status --porcelain=v2 --branch 2>/dev/null)
+EOF
+	REPO_BRANCH="$repo/${branch:-?}"
+	if [ $n = 1 ]; then FILES="1 file"; else FILES="$n files"; fi
+	[ $m -gt 0 ] && FILES="$FILES ($m new)"
+	return 0
+}
+
+# Rows for the dashboard: pane<TAB>tab<TAB>display, best first, after a
+# header row. Prints nothing when there are no agents.
+ls_rows() {
+	local panes now lines line rank pane tab state root ts prompt icon w=11 i n=0
+	local -a k_rank k_pane k_tab k_icon k_rb k_age k_files k_prompt
+	session_files json
+	[ ${#FOUND[@]} -gt 0 ] || return 0
+	list_panes
+	panes=$PANES
+	lines=$(jq -rn --argjson panes "$panes" "$JQ_ROWS" "${FOUND[@]}") || return 0
+	now=$(date +%s)
+	while IFS=$US read -r rank pane tab state root ts prompt; do
+		[ -n "$rank" ] || continue
+		if [ "$rank" = gc ]; then
+			rm -f "$pane" "${pane%.json}.nvim"
+			continue
+		fi
+		case $state in
+		needs-you) icon='!' ;; done) icon='✓' ;; working) icon='●' ;; *) icon='○' ;;
+		esac
+		git_info "$root"
+		k_rank[n]=$rank k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon
+		k_rb[n]=$REPO_BRANCH k_files[n]=$FILES k_prompt[n]=$prompt
+		k_age[n]="$(((now - ts) / 60))m"
+		[ ${#REPO_BRANCH} -gt $w ] && w=${#REPO_BRANCH}
+		n=$((n + 1))
+	done <<EOF
+$lines
+EOF
+	[ $n -gt 0 ] || return 0
+	[ $w -gt 48 ] && w=48
+	i=0
+	{
+		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "LAST PROMPT"
+		while [ $i -lt $n ]; do
+			printf '%s\t%s\t%s\t%s\t%s  %-*.*s  %5s  %-16s  %s\n' "${k_rank[i]}" "${k_rb[i]}" \
+				"${k_pane[i]}" "${k_tab[i]}" "${k_icon[i]}" "$w" "$w" "${k_rb[i]}" \
+				"${k_age[i]}" "${k_files[i]}" "${k_prompt[i]}"
+			i=$((i + 1))
+		done
+	} | sort -t "$TAB" -k1,1n -k2,2 | cut -f3-
+}
+
+cmd_preview() {
+	local pane=${1#terminal_} root
+	pane=${pane%%[!0-9]*}
+	state_file "$pane"
+	root=$(jq -r '.root // .cwd // ""' "$SF" 2>/dev/null)
+	printf '\033[1m%s\033[0m\n' "$root"
+	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 15
+	printf '\033[2m%s\033[0m\n' "────────────────────────────────────────"
+	zellij action dump-screen --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 40
+}
+
+cmd_ls() {
+	local rows out key sel pane tab q
+	need_session
+	rows=$(ls_rows)
+	if [ -z "$rows" ]; then
+		echo "no agents in zellij session $SESSION"
+		[ -t 1 ] && command -v fzf >/dev/null 2>&1 && sleep 1.5
+		return 0
+	fi
+	if ! command -v fzf >/dev/null 2>&1 || [ ! -t 1 ]; then
+		printf '%s\n' "$rows" | cut -f3-
+		return 0
+	fi
+	q=$(printf '%q' "$SELF")
+	# fzf runs preview/reload through $SHELL, which may be fish.
+	out=$(printf '%s\n' "$rows" | SHELL=/bin/sh fzf --delimiter "$TAB" --with-nth 3.. --reverse \
+		--no-sort --ansi --prompt 'agents> ' --expect ctrl-e --header-lines 1 \
+		--header 'enter: jump   ctrl-e: jump + nvim   ctrl-r: reload' \
+		--preview "$q _preview {1}" --preview-window 'down,60%,border-top' \
+		--bind "ctrl-r:reload($q _rows)")
+	[ -n "$out" ] || return 0
+	key=${out%%"$NL"*}
+	sel=${out#*"$NL"}
+	[ -n "$sel" ] && [ "$sel" != "$out" ] || return 0
+	pane=${sel%%"$TAB"*}
+	sel=${sel#*"$TAB"}
+	tab=${sel%%"$TAB"*}
+	zellij action go-to-tab-by-id "$tab" >/dev/null 2>&1 || true
+	zellij action focus-pane-id "terminal_$pane" >/dev/null 2>&1 || true
+	[ "$key" = ctrl-e ] && exec "$SELF" edit "$pane"
+	return 0
+}
+
+# ---------------------------------------------------------------- main
+
+usage() {
+	cat <<'EOF'
+usage: agentnav <command>
+  hook                       Claude Code hook (reads the event JSON on stdin)
+  edit [--full] [pane-id]    open or jump to the nvim for the focused agent
+  ls                         dashboard of the agents in this zellij session
+  nvim <agent-pane> [file]   internal: start the nvim bound to an agent
+EOF
+}
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+case $cmd in
+hook) cmd_hook ;;
+edit) cmd_edit "$@" ;;
+nvim) cmd_nvim "$@" ;;
+ls) cmd_ls ;;
+_rows) need_session && ls_rows ;;
+_preview) need_session && cmd_preview "$@" ;;
+-h | --help | help) usage ;;
+*)
+	usage >&2
+	exit 2
+	;;
+esac

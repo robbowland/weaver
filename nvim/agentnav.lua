@@ -1,0 +1,352 @@
+-- agentnav.lua: keeps this nvim in sync with the Claude Code agent it is bound
+-- to. Loaded with `nvim -c "luafile …"`, after the user's own config.
+--
+-- The agent's hook calls AgentFollow(root, file) over the --listen socket. It
+-- must never block: work is scheduled, and messages are single echo lines that
+-- cannot raise a hit-enter prompt.
+
+local uv = vim.uv or vim.loop
+local api = vim.api
+local fn = vim.fn
+local WARN = vim.log.levels.WARN
+local group = api.nvim_create_augroup('agentnav', { clear = true })
+local following = true
+
+-- nvim-notify, noice and snacks replace vim.notify with a non-blocking UI
+-- (nvim-notify's is a callable table).
+local function notify_replaced()
+  if type(vim.notify) ~= 'function' then
+    return true
+  end
+  local info = debug.getinfo(vim.notify, 'S')
+  return not (info and info.source:match('vim/_[%w_/]*editor'))
+end
+
+local function msg(text, level)
+  text = 'agentnav: ' .. text
+  if notify_replaced() then
+    vim.notify(text, level or vim.log.levels.INFO, { title = 'agentnav' })
+    return
+  end
+  local width = vim.v.echospace
+  if width < 2 then
+    return
+  end
+  if fn.strdisplaywidth(text) > width then
+    local n = fn.strchars(text)
+    while n > 0 and fn.strdisplaywidth(fn.strcharpart(text, 0, n) .. '…') > width do
+      n = n - 1
+    end
+    text = fn.strcharpart(text, 0, n) .. '…'
+  end
+  api.nvim_echo({ { text, level == WARN and 'WarningMsg' or 'Normal' } }, false, {})
+end
+
+-- Not while typing a command, in the command-line window, or at a prompt.
+local function busy()
+  local mode = api.nvim_get_mode()
+  return mode.blocking or mode.mode:match('^[cr]') ~= nil or fn.getcmdwintype() ~= ''
+end
+
+local function checktime()
+  if not busy() then
+    vim.cmd('silent! checktime')
+  end
+end
+
+-- Reloading ---------------------------------------------------------------
+
+vim.o.autoread = true
+
+if _G.__agentnav_timer then
+  _G.__agentnav_timer:stop()
+  _G.__agentnav_timer:close()
+end
+_G.__agentnav_timer = uv.new_timer()
+_G.__agentnav_timer:start(1000, 1000, vim.schedule_wrap(checktime))
+
+api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
+  group = group,
+  callback = checktime,
+})
+
+-- A path for messages: relative to the cwd when it can be, and never long.
+local function short(path)
+  local p = fn.fnamemodify(path, ':~:.')
+  if #p > 40 then
+    p = '…/' .. fn.fnamemodify(path, ':h:t') .. '/' .. fn.fnamemodify(path, ':t')
+  end
+  return p
+end
+
+-- Decide here rather than let nvim ask: its W12 "file changed and buffer
+-- modified" dialog blocks this nvim and every remote call into it.
+api.nvim_create_autocmd('FileChangedShell', {
+  group = group,
+  callback = function(ev)
+    local name = short(ev.file)
+    if vim.v.fcs_reason == 'deleted' then
+      -- nvim re-fires this on every check while the file is gone: say it once.
+      vim.v.fcs_choice = ''
+      if not vim.b[ev.buf].agentnav_deleted then
+        vim.b[ev.buf].agentnav_deleted = true
+        vim.schedule(function() msg('deleted on disk: ' .. name, WARN) end)
+      end
+      return
+    end
+    vim.b[ev.buf].agentnav_deleted = nil
+    if vim.bo[ev.buf].modified then
+      vim.v.fcs_choice = ''
+      vim.schedule(function() msg('kept your unsaved changes; ' .. name .. ' changed on disk', WARN) end)
+    else
+      vim.v.fcs_choice = 'reload'
+    end
+  end,
+})
+
+api.nvim_create_autocmd('FileChangedShellPost', {
+  group = group,
+  callback = function(ev)
+    local name = short(ev.file)
+    vim.schedule(function() msg('reloaded ' .. name) end)
+  end,
+})
+
+-- Following -----------------------------------------------------------------
+
+local function same_path(a, b)
+  if a == '' or b == '' then
+    return false
+  end
+  return fn.resolve(fn.fnamemodify(a, ':p')) == fn.resolve(fn.fnamemodify(b, ':p'))
+end
+
+-- A normal file window in this tab: the current one unless it is a sidebar,
+-- terminal, quickfix or float.
+local function file_window()
+  local cur = api.nvim_get_current_win()
+  if vim.bo.buftype == '' and api.nvim_win_get_config(cur).relative == '' then
+    return cur
+  end
+  for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+    local buf = api.nvim_win_get_buf(win)
+    if vim.bo[buf].buftype == '' and api.nvim_win_get_config(win).relative == '' then
+      return win
+    end
+  end
+  return cur
+end
+
+local function jump_to_last_hunk(win, path)
+  vim.defer_fn(function()
+    if api.nvim_get_current_win() ~= win or busy() then
+      return
+    end
+    local buf = api.nvim_win_get_buf(win)
+    if vim.bo[buf].modified or not same_path(api.nvim_buf_get_name(buf), path) then
+      return
+    end
+    pcall(function() require('gitsigns').nav_hunk('last', { navigation_message = false }) end)
+  end, 300)
+end
+
+-- The agent's edits must not take over a diff review in this tab (two or more
+-- diff windows; a lone leftover 'diff' window doesn't count).
+local function reviewing_diff()
+  local n = 0
+  for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+    if vim.wo[win].diff then
+      n = n + 1
+    end
+  end
+  return n >= 2
+end
+
+-- :edit in WIN. A stale swap file would raise the ATTENTION dialog, which
+-- blocks this nvim and every remote call into it: open read-only instead.
+local function edit_in(win, path)
+  local au = api.nvim_create_autocmd('SwapExists', {
+    group = group,
+    once = true,
+    callback = function()
+      vim.v.swapchoice = 'o'
+      vim.schedule(function() msg('swap file exists: opened ' .. short(path) .. ' read-only', WARN) end)
+    end,
+  })
+  local ok, err = pcall(api.nvim_win_call, win, function()
+    vim.cmd('silent edit ' .. fn.fnameescape(path))
+  end)
+  pcall(api.nvim_del_autocmd, au)
+  return ok, err
+end
+
+local function follow(root, path)
+  if busy() then
+    vim.defer_fn(function() follow(root, path) end, 200)
+    return
+  end
+  if root ~= '' and fn.isdirectory(root) == 1 and not same_path(root, fn.getcwd()) then
+    vim.cmd('silent cd ' .. fn.fnameescape(root))
+    msg('following agent to ' .. fn.fnamemodify(root, ':t'))
+  end
+  vim.cmd('silent! checktime')
+  if path == '' or not following then
+    return
+  end
+  if reviewing_diff() then
+    msg('not opening ' .. short(path) .. ': you are reviewing a diff')
+    return
+  end
+  local win = file_window()
+  local buf = api.nvim_win_get_buf(win)
+  if not same_path(api.nvim_buf_get_name(buf), path) then
+    if vim.bo[buf].modified then
+      msg('not opening ' .. short(path) .. ': you have unsaved changes', WARN)
+      return
+    end
+    local ok, err = edit_in(win, path)
+    if not ok then
+      msg(tostring(err), WARN)
+      return
+    end
+  end
+  jump_to_last_hunk(win, path)
+end
+
+function _G.AgentFollow(root, path)
+  root, path = root or '', path or ''
+  vim.schedule(function() follow(root, path) end)
+  return 0
+end
+
+function _G.AgentChecktime()
+  vim.schedule(checktime)
+  return 0
+end
+
+api.nvim_create_user_command('AgentFollow', function()
+  following = not following
+  msg('following ' .. (following and 'on' or 'off'))
+end, { desc = 'agentnav: toggle opening the files the agent edits' })
+
+-- Reviewing -------------------------------------------------------------------
+
+-- stdout of git run in root, or nil if it failed.
+local function git(root, args)
+  local res = vim.system(vim.list_extend({ 'git', '-C', root }, args), { text = true }):wait()
+  return res.code == 0 and res.stdout or nil
+end
+
+local function first_line(out)
+  local line = out and out:match('^[^\n]*')
+  return line ~= '' and line or nil
+end
+
+-- Paths from `git … -z`, which (unlike plain output) never C-quotes them.
+local function paths(out)
+  local list = {}
+  for p in (out or ''):gmatch('[^%z]+') do
+    list[#list + 1] = p
+  end
+  return list
+end
+
+local function repo_root()
+  return first_line(git(fn.getcwd(), { 'rev-parse', '--show-toplevel' }))
+end
+
+-- $AGENTNAV_BASE, else `git config branch.<branch>.agentnavbase`, else main/master.
+local function base_ref(root)
+  local env = vim.env.AGENTNAV_BASE
+  if env and env ~= '' then
+    return env
+  end
+  local branch = first_line(git(root, { 'symbolic-ref', '--quiet', '--short', 'HEAD' }))
+  local base = branch and first_line(git(root, { 'config', 'branch.' .. branch .. '.agentnavbase' }))
+  if base then
+    return base
+  end
+  for _, ref in ipairs({ 'main', 'master' }) do
+    if git(root, { 'rev-parse', '--verify', '--quiet', ref .. '^{commit}' }) then
+      return ref
+    end
+  end
+end
+
+local function agent_changes()
+  local root = repo_root()
+  if not root then
+    msg('not in a git repository', WARN)
+    return
+  end
+  local base = base_ref(root)
+  local files, kind = {}, {}
+  local function add(out, k)
+    for _, f in ipairs(paths(out)) do
+      if not kind[f] then
+        kind[f] = k
+        files[#files + 1] = f
+      end
+    end
+  end
+  if base then
+    add(git(root, { 'diff', '-z', '--name-only', base .. '...HEAD' }), 'changed')
+  end
+  add(git(root, { 'diff', '-z', '--name-only', 'HEAD' }), 'changed')
+  add(git(root, { 'ls-files', '-z', '--others', '--exclude-standard' }), 'new')
+
+  -- Per-file stats from the merge base (or HEAD) to the working tree, so
+  -- committed and uncommitted changes both count.
+  local from = base and first_line(git(root, { 'merge-base', base, 'HEAD' })) or 'HEAD'
+  local stats = {}
+  for _, rec in ipairs(paths(git(root, { 'diff', '-z', '--numstat', '--no-renames', from }))) do
+    local added, removed, f = rec:match('^(%S+)\t(%S+)\t(.+)$')
+    if f then
+      stats[f] = '+' .. added .. ' -' .. removed
+    end
+  end
+
+  local items = {}
+  for _, f in ipairs(files) do
+    items[#items + 1] = {
+      filename = root .. '/' .. f,
+      lnum = 1,
+      text = kind[f] == 'new' and 'new file' or stats[f] or '',
+    }
+  end
+  fn.setqflist({}, ' ', { title = 'AgentChanges vs ' .. (base or 'HEAD'), items = items })
+  if #items == 0 then
+    msg('no changes vs ' .. (base or 'HEAD'))
+  else
+    vim.cmd('botright copen')
+  end
+end
+
+api.nvim_create_user_command('AgentChanges', agent_changes, {
+  desc = 'agentnav: quickfix list of the files changed on this branch',
+})
+
+api.nvim_create_user_command('AgentReview', function()
+  local root = repo_root()
+  local base = root and base_ref(root)
+  if base and fn.exists(':DiffviewOpen') ~= 2 then
+    pcall(require, 'diffview')
+  end
+  if base and fn.exists(':DiffviewOpen') == 2 then
+    -- -C: the repo of the cwd, not of the current buffer (which may still be in
+    -- the worktree the agent left). --imply-local: HEAD's side is the working
+    -- tree, so uncommitted work shows too.
+    vim.cmd.DiffviewOpen({ args = { '-C' .. fn.fnameescape(root), base .. '...HEAD', '--imply-local' } })
+  else
+    agent_changes()
+  end
+end, { desc = 'agentnav: review the branch in diffview (or AgentChanges)' })
+
+-- Startup: `agentnav nvim` opened the initial file read-only if it had a swap
+-- file; say so, and stop overriding the swap dialog for the user's own edits.
+pcall(api.nvim_del_augroup_by_name, 'agentnav_start')
+if vim.g.agentnav_swap then
+  local swapped = vim.g.agentnav_swap
+  vim.g.agentnav_swap = nil
+  vim.schedule(function() msg('swap file exists: opened ' .. short(swapped) .. ' read-only', WARN) end)
+end

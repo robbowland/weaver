@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|EnterWorktree|ExitWorktree",
+        "hooks": [{ "type": "command", "command": "agentnav hook" }]
+      }
+    ]
+  }
+}
