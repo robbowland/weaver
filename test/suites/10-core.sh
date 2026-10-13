@@ -80,6 +80,7 @@ key 1b56
 sleep 2
 
 hook 0 Stop "$T/repo"
+hook 2 PostToolUse "$T/repo" "$T/repo-wt-b/newdir/sub/new.txt" # C still busy
 key 1b79 # Alt y
 sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating) | .id')

@@ -73,7 +73,7 @@ feed() {
 	hook 0 Stop "$T/repo"
 	hook 1 SessionStart "$T/repo-wt-b"
 	hook 1 UserPromptSubmit "$T/repo-wt-b" "" "fix the readme"
-	hookj 1 "{\"hook_event_name\":\"Notification\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-1\",\"notification_type\":\"permission_prompt\",\"message\":\"Claude needs your permission to use Bash\"}"
+	hookj 1 "{\"hook_event_name\":\"Notification\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-1\",\"notification_type\":\"permission_prompt\",\"message\":\"Claude needs your permission to use Bash\"}" >/dev/null
 	hook 2 SessionStart "$T/repo"
 	hook 2 UserPromptSubmit "$T/repo" "" "add a new module"
 	hook 2 PostToolUse "$T/repo" "$T/repo-wt-b/newdir/sub/new.txt"
