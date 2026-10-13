@@ -252,17 +252,43 @@ local function edit_in(win, path)
   return ok, err
 end
 
+-- The tab whose working directory is ROOT.
+local function tab_for(root)
+  for _, tab in ipairs(api.nvim_list_tabpages()) do
+    if same_path(fn.getcwd(-1, api.nvim_tabpage_get_number(tab)), root) then
+      return tab
+    end
+  end
+end
+
+-- Each worktree gets its own tab with a tab-local cwd, so an agent (or its
+-- subagents) moving between worktrees switches tabs rather than re-rooting
+-- one window: each worktree keeps its windows, and pickers and :AgentReview
+-- see the tab's own repo.
 local function follow(root, path)
   if busy() then
     vim.defer_fn(function() follow(root, path) end, 200)
     return
   end
+  vim.cmd('silent! checktime')
+  if not following then
+    return
+  end
   if root ~= '' and fn.isdirectory(root) == 1 and not same_path(root, fn.getcwd()) then
-    vim.cmd('silent cd ' .. fn.fnameescape(root))
+    if reviewing_diff() then
+      msg('not following to ' .. fn.fnamemodify(root, ':t') .. ': you are reviewing a diff')
+      return
+    end
+    local tab = tab_for(root)
+    if tab then
+      api.nvim_set_current_tabpage(tab)
+    else
+      vim.cmd('tabnew')
+      vim.cmd('silent tcd ' .. fn.fnameescape(root))
+    end
     msg('following agent to ' .. fn.fnamemodify(root, ':t'))
   end
-  vim.cmd('silent! checktime')
-  if path == '' or not following then
+  if path == '' then
     return
   end
   if reviewing_diff() then
@@ -299,7 +325,7 @@ end
 api.nvim_create_user_command('AgentFollow', function()
   following = not following
   msg('following ' .. (following and 'on' or 'off'))
-end, { desc = 'agentnav: toggle opening the files the agent edits' })
+end, { desc = 'agentnav: toggle following the agent to its worktrees and files' })
 
 -- Reviewing -------------------------------------------------------------------
 

@@ -34,13 +34,17 @@ ok "...and nvim stays put" "$(nvst 0)" "repo-wt-a|README.md"
 hook 0 UserPromptSubmit "$T/repo-wt-b" "" "now feature b"
 sleep 0.7
 ok "agent moves to wt-b: nvim cds" "$(nvst 0 | cut -d'|' -f1)" "repo-wt-b"
+ok "...in a tab of its own" "$(tabcwds 0)" "repo-wt-a,repo-wt-b"
 ok "nvim pane renamed" "$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin|not) and .id==$NV) | .title")" "nvim: repo-wt-b"
 
-nvq 0 'nvim_buf_set_lines(0, 0, 1, v:false, ["MY UNSAVED EDIT"])' >/dev/null
 hook 0 PostToolUse "$T/repo-wt-b" "$T/repo-wt-b/README.md"
 sleep 0.7
+nvq 0 'nvim_buf_set_lines(0, 0, 1, v:false, ["MY UNSAVED EDIT"])' >/dev/null
+hook 0 PostToolUse "$T/repo-wt-b" "$T/repo-wt-b/src/app.txt"
+sleep 0.7
 ok "unsaved buffer not replaced" \
-	"$(nvq 0 'fnamemodify(bufname("%"), ":p:h:t") . "|" . getline(1) . "|" . &modified')" "repo-wt-a|MY UNSAVED EDIT|1"
+	"$(nvq 0 'fnamemodify(bufname("%"), ":p:h:t") . "/" . fnamemodify(bufname("%"), ":t") . "|" . getline(1) . "|" . &modified')" \
+	"repo-wt-b/README.md|MY UNSAVED EDIT|1"
 nvsend 0 '<Esc>:e!<CR>'
 sleep 0.5
 

@@ -53,6 +53,8 @@ nvq() {
 }
 nvsend() { nvim --server "$(sock "$1")" --remote-send "$2"; }
 nvst() { nvq "$1" 'fnamemodify(getcwd(), ":t") . "|" . fnamemodify(bufname("%"), ":t")'; }
+# The working directory of each tab in the agent's nvim, in order.
+tabcwds() { nvq "$1" 'join(map(range(1, tabpagenr("$")), {_, n -> fnamemodify(getcwd(-1, n), ":t")}), ",")'; }
 # A new nvim may sit at a startup hit-enter prompt from your own config;
 # dismiss it like you would.
 unstick() {
