@@ -34,6 +34,25 @@ mkdir -p "$T"
 mkdir -p "$AT/bin" "$AT/state"
 ln -s "$ROOT/agentnav" "$AT/bin/agentnav"
 
+# zellij shim, also first on PATH (agentnav calls zellij through PATH too).
+# When the named session is gone, `zellij action` silently picks another
+# running session: never let a test act on one of yours.
+REAL_ZELLIJ=$(command -v zellij) || exit 1
+cat >"$AT/bin/zellij" <<EOF
+#!/bin/bash
+case " \$* " in
+*" action "* | *" subscribe "* | *" pipe "*)
+	if ! "$REAL_ZELLIJ" list-sessions --no-formatting 2>/dev/null | grep -v EXITED |
+		awk '{print \$1}' | grep -qx -- "\${ZELLIJ_SESSION_NAME:-}"; then
+		echo "zellij test shim: session '\${ZELLIJ_SESSION_NAME:-}' is not running; refusing: zellij \$*" >&2
+		exit 1
+	fi
+	;;
+esac
+exec "$REAL_ZELLIJ" "\$@"
+EOF
+chmod +x "$AT/bin/zellij"
+
 # zellij config: defaults plus this checkout's keybindings.
 {
 	echo "keybinds {"
@@ -71,10 +90,19 @@ ZELLIJ_CONFIG_FILE="$AT/zellij.kdl" XDG_STATE_HOME="$AT/state" PATH="$AT/bin:$PA
 	zellij --config "$AT/zellij.kdl" --session "$SESSION" --new-session-with-layout "$AT/layout.kdl" &
 driver=$!
 
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-	ZELLIJ_SESSION_NAME=$SESSION zellij action list-panes -j >/dev/null 2>&1 && break
+up=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+	if zellij list-sessions --no-formatting 2>/dev/null | grep -v EXITED | awk '{print $1}' | grep -qx -- "$SESSION"; then
+		up=1
+		break
+	fi
 	sleep 0.5
 done
+if [ $up = 0 ]; then
+	echo "the test zellij session did not start; see $AT/screen.log" >&2
+	exit 1
+fi
+sleep 1
 
 if [ $# -eq 0 ]; then
 	set -- "$HERE"/suites/*.sh

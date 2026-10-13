@@ -4,6 +4,11 @@
 . "$(dirname "$0")/../lib.sh"
 
 rows() { agentnav ls | grep -c -E '^[!✓●○] '; }
+
+# The harness itself: zellij falls back to some other running session when the
+# named one is gone, so the test shim must refuse.
+ZELLIJ_SESSION_NAME=agentnav-no-such-session zellij action list-tabs >/dev/null 2>&1
+ok "test shim refuses actions on a session that isn't running" "$?" "1"
 capture_notify() {
 	nvq 0 "luaeval('(function() local o = vim.notify; _G.__cap = {}; vim.notify = function(m, ...) table.insert(_G.__cap, m); return o(m, ...) end; return 1 end)()')" >/dev/null
 }
