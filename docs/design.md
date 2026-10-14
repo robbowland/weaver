@@ -375,16 +375,18 @@ in the session (`weaver new`). Wherever a row is numbered (the sidebar, the
 home board, the floating dashboard) the number is the thread's `num` when any
 agent has one, else the row's place as before, and the digits go by it.
 
-`weaver sidebar`, at the left of every thread tab, lists every agent of the
-session in thread order (by `num`, then agents without one): number, glyph,
-name and age, and for one that needs you a faint second line with what it
-waits on. Its own tab's thread is inverted, the whole width, and the cursor
+`weaver sidebar`, at the left of every thread tab, lists the session in its
+tabs' order (`thread_order`: the threads by number, then the other tabs; home
+left out): number, glyph, name and age, and for one that needs you a faint
+second line with what it waits on; a tab without an agent is a faint `·` and
+its name. (Without the layout's order: by number, then by pane.) Its own tab's thread is inverted, the whole width, and the cursor
 sits on it. Under 16 columns it is a rail, number and glyph. j/k move;
 enter and 1-9 go to a thread (`weaver _goto PANE TAB`: focus_pane, mark_seen,
 push_status), and it keeps running. It is fzf with `--read0` (a needs-you row
 is two lines) on `<skey>.side.<pane>.sock`; `.keys` and `.cur` sit beside it.
-push_status writes the session's rows once (`$STATE_DIR/<skey>.rows`, from
-agent_rows) and reloads every sidebar from them (`weaver _side --cached`); a
+push_status writes the session's rows and order once (`$STATE_DIR/<skey>.rows`
+and `.order`, from agent_rows and thread_order) and reloads every sidebar from
+them (`weaver _side --cached`); a
 loop in each sidebar reloads it every 15 s so ages move on. Measured: about 18
 MB per sidebar (fzf 12.5, bash 2.3, the tick loop 3.3), no CPU at rest, a
 reload from the rows about 20 ms.
@@ -639,3 +641,6 @@ one colour.
   (zjstatus's `{tabs}`, current tab only, event-driven) rather than a command
   widget, which cannot know the current tab without asking zellij, which the
   widget never does (see the zjstatus decision above).
+- 2026-10-14: Inside `--border`, fzf's FZF_COLUMNS and FZF_LINES leave out
+  the border and the padding next to it (4 columns, 2 lines; measured on
+  0.74.5), so the dashboard adds them back to size itself.
