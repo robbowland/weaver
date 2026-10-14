@@ -3614,6 +3614,24 @@ agent_width() {
 	esac
 }
 
+# The agent's columns in a thread tab $1 columns wide, into AGENT_COLS:
+# $WEAVER_AGENT_WIDTH of it, but at least $WEAVER_AGENT_MIN_COLS (44: Claude
+# Code wraps mid-word below that) as long as nvim keeps 60. Columns given
+# outright are used as they are.
+agent_cols() {
+	local total=$1 min=${WEAVER_AGENT_MIN_COLS:-44}
+	agent_width
+	case $min in '' | *[!0-9]*) min=44 ;; esac
+	if [ -n "$AW_COLS" ]; then
+		AGENT_COLS=$AW_COLS
+		return 0
+	fi
+	AGENT_COLS=$((total * AW_PCT / 100))
+	[ $min -gt $((total - 60)) ] && min=$((total - 60))
+	[ $AGENT_COLS -lt $min ] && AGENT_COLS=$min
+	return 0
+}
+
 # Back to a thread's split once its nvim reopens beside the agent (which
 # halves the agent's pane): nvim on the left, the agent at $WEAVER_AGENT_WIDTH
 # on the right. Only when those two are the tab's only tiled panes, so panes
@@ -3633,7 +3651,8 @@ thread_width() {
 			  then "\($ap.pane_columns) \($tiled | map(.pane_columns) | add)" else "" end')
 		case $geo in *[0-9]" "[0-9]*) ;; *) return 0 ;; esac
 		aw=${geo% *} total=${geo#* }
-		if [ -n "$AW_COLS" ]; then target=$AW_COLS; else target=$((total * AW_PCT / 100)); fi
+		agent_cols "$total"
+		target=$AGENT_COLS
 		step=$((total / 20))
 		[ $step -ge 1 ] || step=1
 		d=$((aw - target))
@@ -3654,9 +3673,18 @@ thread_width() {
 # columns) with the focus, in the session's new-tab template. $1 the token,
 # $2 the agent, $3 the directory.
 thread_layout() {
-	local tok=$1 kind=$2 dir=$3 size self name ktok kkind split tpl
+	local tok=$1 kind=$2 dir=$3 size self name ktok kkind split tpl total
 	agent_width
 	size=$AW_SIZE
+	# At least the agent's minimum, in columns, on a narrow screen.
+	total=$(zellij action list-tabs -j 2>/dev/null | jq -r '[.[] | select(.active)] | .[0].viewport_columns // 0' 2>/dev/null)
+	case $total in '' | *[!0-9]*) total=0 ;; esac
+	if [ -n "$AW_PCT" ] && [ "$total" -gt 0 ]; then
+		agent_cols "$total"
+		# Still a percentage: a pane of fixed columns would keep them when
+		# the nvim beside it closes.
+		[ "$AGENT_COLS" -gt $((total * AW_PCT / 100)) ] && size="\"$(((AGENT_COLS * 100 + total - 1) / total))%\""
+	fi
 	kdl_str "$SELF"
 	self=$K
 	kdl_str "nvim: ${dir##*/}"

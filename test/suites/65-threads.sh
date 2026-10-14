@@ -104,6 +104,14 @@ ok "git: a worktree beside the repository" \
 	"$(git -C "$T/repo.plain-git" symbolic-ref --short HEAD 2>/dev/null)|$(th "$AG" worktree_created)" "plain-git|true"
 GIT_AG=$AG
 
+# A narrow agent is widened to its minimum when the tab opens.
+out=$(cd "$T/repo" && WEAVER_AGENT_MIN_COLS=70 weaver new --no-focus --here "wide agent" 2>&1)
+tab=$(tab_named wide-agent)
+TABS="$TABS $tab"
+thread_panes "$tab"
+a=$(columns "$AG")
+ok "new: the agent gets at least WEAVER_AGENT_MIN_COLS" "$([ "$a" -ge 69 ] && [ "$a" -le 72 ] && echo yes || echo "$a")" "yes"
+
 # --- refusals
 out=$(cd "$AT" && weaver new --no-focus "outside" 2>&1)
 ok "new: outside a repository with no repository used yet... the last one is used" \
@@ -208,6 +216,14 @@ ok "split: nvim back on the left, the agent a fifth of the width again" \
 	"yes|$nv,$AG"
 ok "split: the same agent, still running" \
 	"$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin | not) and .id == $AG) | .exited")|$(cat "$AT/args.claude.$AG")" "false|split again"
+# The agent's minimum (WEAVER_AGENT_MIN_COLS, 44 by default) wins over its
+# 20% when that is narrower: here 60 of 200 columns.
+Z close-pane --pane-id "terminal_$nv"
+sleep 0.5
+WEAVER_AGENT_MIN_COLS=60 weaver edit "$AG" >/dev/null 2>&1
+nv=$(nvim_pane "$AG")
+a=$(columns "$AG")
+ok "split: at least WEAVER_AGENT_MIN_COLS for the agent" "$([ "$a" -ge 56 ] && [ "$a" -le 64 ] && echo yes || echo "$a")" "yes"
 extra=$(Z new-pane --tab-id "$tab" --direction down --cwd "$T/repo" -- bash --noprofile --norc)
 extra=${extra#terminal_}
 sleep 0.3
