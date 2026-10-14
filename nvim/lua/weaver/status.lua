@@ -194,7 +194,7 @@ local GLYPH = {
   ['needs-you'] = { '!', 'WeaverBarAlert' },
   done = { '✓', 'WeaverBarOk' },
   idle = { '○', 'WeaverBarFaint' },
-  interrupted = { '○', 'WeaverBarFaint' },
+  interrupted = { '◌', 'WeaverBar' },
   ended = { '·', 'WeaverBarFaint' },
 }
 local WORD = { ['needs-you'] = 'needs you' }
