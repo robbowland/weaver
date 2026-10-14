@@ -344,6 +344,8 @@ printf 'form thread' | xxd -p | while read -r h; do key "$h"; done
 sleep 0.8
 fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating and ((.terminal_command // "") | test("weaver new")))] | .[0].id // empty')
 scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
+ok "form: the pane fits the form, borderless (fzf draws the frame)" \
+	"$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin | not) and .id == $fl) | \"\(.pane_columns) \(.pane_rows > 8 and .pane_rows < 16)\"")" "96 true"
 ok "form: the task, the branch it makes and where" \
 	"$(printf '%s' "$scr" | grep -c 'task  form thread')|$(printf '%s' "$scr" | grep -c 'branch *form-thread')|$(printf '%s' "$scr" | grep -c 'new worktree')" "1|1|1"
 key 1b62 # alt-b: the branch
@@ -391,7 +393,7 @@ key 0d
 sleep 1
 fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating)] | .[0].id // empty')
 ok "form: ctrl-e writes the task in \$EDITOR; the form shows its first line and the rest" \
-	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'task  long one *$|[+]1 more lines')" "2"
+	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'task  long one( |$)|[+]1 more lines')" "2"
 key 0d
 waitfor "[ -n \"\$(tab_named long-one)\" ]"
 tab=$(tab_named long-one)

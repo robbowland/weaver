@@ -3155,7 +3155,7 @@ form_header() {
 	fi
 	# The keys in a column of their own at the right edge, wherever the
 	# values end: fzf's width (its header's, less its border and margins).
-	w=${FZF_COLUMNS:-}
+	w=${FZF_COLUMNS:-${FORM_WIDTH:-}}
 	case $w in '' | *[!0-9]*)
 		w=$(stty size </dev/tty 2>/dev/null)
 		w=${w#* }
@@ -3168,6 +3168,12 @@ form_header() {
 		[ $pad -lt 1 ] && pad=1
 		printf '%s%6s%s  %s%*s %s%9s%s\n' "$C_GREY" "${R_L[i]}" "$C_OFF" "${R_C[i]}" "$pad" "" "$C_DIM" "${R_K[i]}" "$C_OFF"
 	done
+}
+
+# Fit the form's pane to form $1's header (for task $2) again: it has a row
+# more or less.
+form_refit() {
+	float_fit $(($(form_header "$1" "${2:-}" | wc -l) + 6)) "$FORM_COLS"
 }
 
 # The bases to offer, as "value<TAB>display" ("=" is the default: the
@@ -3195,6 +3201,7 @@ cmd_form() {
 	where)
 		if [ "$F_WHERE" = here ]; then F_WHERE=worktree; else F_WHERE=here; fi
 		form_save "$sf"
+		form_refit "$sf"
 		[ "$F_WHERE" = worktree ] && [ -z "$F_BASE" ] && fetch_start "$F_REPO" "$sf"
 		;;
 	base)
@@ -3204,10 +3211,12 @@ cmd_form() {
 			form_save "$sf"
 		fi
 		[ -n "$F_REPO" ] || return 0
+		float_fit "$FORM_PICK_ROWS" "$FORM_COLS"
 		# shellcheck disable=SC2086
-		out=$(form_bases | SHELL=/bin/sh fzf --reverse $FORM_FZF \
+		out=$(form_bases | SHELL=/bin/sh fzf --reverse $FORM_FZF --border-label ' base ' \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      base  ' --ghost 'where the new branch starts' \
 			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+		form_refit "$sf"
 		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
 		if [ "$sel" != "$out" ] && [ -n "$sel" ]; then
@@ -3233,7 +3242,7 @@ cmd_form() {
 		fi
 		form_branch "$q"
 		# shellcheck disable=SC2086
-		out=$(SHELL=/bin/sh fzf --disabled --reverse $FORM_FZF \
+		out=$(SHELL=/bin/sh fzf --disabled --reverse $FORM_FZF --border-label ' branch ' \
 			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FZF_COLORS" \
 			--header "        ${C_GREY}names the branch and its worktree; an existing branch continues${C_OFF}" \
 			--footer "${C_GREY}↵$C_OFF ${C_DIM}keep$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF" --bind 'enter:print-query' </dev/null) || return 0
@@ -3245,10 +3254,12 @@ cmd_form() {
 		fi
 		;;
 	repo)
+		float_fit "$FORM_PICK_ROWS" "$FORM_COLS"
 		# shellcheck disable=SC2086
-		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse $FORM_FZF \
+		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse $FORM_FZF --border-label ' repository ' \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      repo  ' --ghost 'a repository, or a path' \
 			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+		form_refit "$sf"
 		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
 		[ "$sel" != "$out" ] && [ -n "$sel" ] && d=${sel%%"$TAB"*} || d=${out%%"$NL"*}
@@ -3268,8 +3279,12 @@ cmd_form() {
 		if [ -f "$sf.task" ]; then { IFS= read -r first; } <"$sf.task"; fi
 		[ -f "$sf.task" ] && [ "${first:-}" = "$q" ] || printf '%s\n' "$q" >"$sf.task"
 		ed=${VISUAL:-${EDITOR:-vi}}
+		float_fit 30 "$FORM_COLS"
 		# $EDITOR may carry arguments ("code -w").
 		$ed "$sf.task" </dev/tty >/dev/tty
+		first=""
+		{ IFS= read -r first; } <"$sf.task" 2>/dev/null
+		form_refit "$sf" "$first"
 		;;
 	query)
 		first=$q
@@ -3280,9 +3295,13 @@ cmd_form() {
 	return 0
 }
 
+# The form's floating pane: its width, and its pickers' rows (the pane fits
+# to them while they are open). Its chrome is fzf's: a sharp border with a
+# label, the pane itself borderless (float_fit).
+FORM_COLS=96 FORM_ROWS=11 FORM_PICK_ROWS=24
 # The form's footer: its keys, in the dashboard's style.
 FORM_FOOTER="${C_GREY}↵$C_OFF ${C_DIM}start$C_OFF   $C_GREY^e$C_OFF ${C_DIM}write it in \$EDITOR$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}cancel$C_OFF"
-FORM_FZF="--no-info --no-separator --ansi --height 100%"
+FORM_FZF="--border sharp --border-label-pos 2 --no-info --no-separator --ansi --height 100% --highlight-line"
 
 # The form: fills TASK and the F_* fields from form file $1. Returns 130 when
 # you cancel. Its keys stay clear of zellij's (Ctrl b, g, h, n, o, p, q, s, t
@@ -3296,11 +3315,20 @@ new_form() {
 	[ "$F_WHERE" = worktree ] && [ -z "$F_BASE" ] && fetch_start "$F_REPO" "$sf"
 	while :; do
 		h=$(form_header "$sf" "$query" "$err")
+		# The pane, to the form: its rows, the prompt, the footer and fzf's
+		# border (the Alt N binding opens it close to that); its keys, to the
+		# pane's right edge.
+		FORM_ROWS=$(($(printf '%s\n' "$h" | wc -l) + 6))
+		float_fit "$FORM_ROWS" "$FORM_COLS"
+		if [ -n "${FIT_COLS:-}" ] && [ "$FIT_COLS" != "${FORM_WIDTH:-}" ]; then
+			FORM_WIDTH=$FIT_COLS
+			h=$(form_header "$sf" "$query" "$err")
+		fi
 		form_sock "$sf"
 		mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
 		rm -f "$FORM_SOCK"
 		# shellcheck disable=SC2086
-		out=$(SHELL=/bin/sh fzf --listen "$FORM_SOCK" --disabled --reverse $FORM_FZF \
+		out=$(SHELL=/bin/sh fzf --listen "$FORM_SOCK" --disabled --reverse $FORM_FZF --border-label ' new thread ' \
 			--prompt '      task  ' --ghost 'what should the agent do?' --query "$query" \
 			--header "$h" --footer "$FORM_FOOTER" \
 			--color "$FZF_COLORS" \
