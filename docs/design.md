@@ -387,4 +387,6 @@ worktree themselves. The branch always stays.
 - 2026-10-14: The form is one fzf, its fields kept in a file that `weaver
   _form` updates from fzf's key bindings (`execute`, `transform-header`), so
   every field is a key away and enter starts at once; bash 3.2 has no `read
-  -i` for prefilled fields.
+  -i` for prefilled fields. Its keys (tab, shift-tab, ctrl-r, alt-b, ctrl-e)
+  avoid zellij's mode keys (Ctrl b, g, h, n, o, p, q, s, t never reach a pane)
+  and fzf's line editing.

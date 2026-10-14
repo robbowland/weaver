@@ -50,9 +50,9 @@ repository of the pane you were on (else the one you used last):
 | --- | --- |
 | `enter` | Start the thread |
 | `tab` | New worktree, or this checkout (for a quick question) |
-| `ctrl-b` | Edit the branch name (from the task by default); an existing branch continues in its own worktree |
+| `alt-b` | Edit the branch name (from the task by default); an existing branch continues in its own worktree |
 | `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
-| `ctrl-o` | Claude Code or Codex |
+| `shift-tab` | Claude Code or Codex |
 | `ctrl-e` | Write a long task in `$EDITOR` |
 | `esc` | Cancel |
 

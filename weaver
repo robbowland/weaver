@@ -64,6 +64,8 @@ C_GREY=$'\033[38;2;153;153;153m'
 C_DIM=$'\033[38;2;97;97;97m'
 C_BOLD=$'\033[1m'
 C_OFF=$'\033[0m'
+# fzf in Micrographics: the current line pure-inverted, greys for the chrome.
+FZF_COLORS='fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161'
 
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
 
@@ -2165,8 +2167,6 @@ EOF2
 # agent's pane id for the nvim beside it.
 THREADS_NEW="$STATE_DIR/new"
 
-FORM_COLOR='fg:-1,bg:-1,hl:#ffffff,fg+:#ffffff,bg+:#303030,hl+:#ffffff,info:#616161,prompt:#999999,pointer:#ffffff,marker:#39d97a,spinner:#616161,header:#999999,footer:#616161,ghost:#616161,border:#303030,gutter:-1'
-
 # KDL string literal for $1, into K.
 kdl_str() {
 	local s=${1//\\/\\\\}
@@ -2341,17 +2341,17 @@ form_header() {
 		form_row where "new worktree" "new worktree" 'tab'
 		form_branch "$task"
 		if [ -z "$BRANCH" ]; then
-			form_row branch "from the task" "${C_GREY}from the task${C_OFF}" '^b'
+			form_row branch "from the task" "${C_GREY}from the task${C_OFF}" 'alt-b'
 		elif [ -n "$F_REPO" ] && git -C "$F_REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
-			form_row branch "$BRANCH  exists: continue on it" "$BRANCH  ${C_GREY}exists: continue on it${C_OFF}" '^b'
+			form_row branch "$BRANCH  exists: continue on it" "$BRANCH  ${C_GREY}exists: continue on it${C_OFF}" 'alt-b'
 		else
-			form_row branch "$BRANCH" "$BRANCH" '^b'
+			form_row branch "$BRANCH" "$BRANCH" 'alt-b'
 		fi
 	fi
 	if agent_installed "$F_AGENT"; then
-		form_row agent "$F_AGENT" "$F_AGENT" '^o'
+		form_row agent "$F_AGENT" "$F_AGENT" 'shift-tab'
 	else
-		form_row agent "$F_AGENT  not installed" "$F_AGENT  ${C_GREY}not installed${C_OFF}" '^o'
+		form_row agent "$F_AGENT  not installed" "$F_AGENT  ${C_GREY}not installed${C_OFF}" 'shift-tab'
 	fi
 	[ "$R_W" -gt 60 ] && R_W=60
 	for ((i = 0; i < R_N; i++)); do
@@ -2383,7 +2383,7 @@ cmd_form() {
 		fi
 		form_branch "$q"
 		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
-			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FORM_COLOR" \
+			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FZF_COLORS" \
 			--header "        ${C_GREY}names the branch and its worktree; an existing branch continues${C_OFF}" \
 			--footer 'enter keep   esc back' --bind 'enter:print-query' </dev/null) || return 0
 		if [ -n "$out" ] && git check-ref-format --branch "$out" >/dev/null 2>&1; then
@@ -2396,7 +2396,7 @@ cmd_form() {
 	repo)
 		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse --no-info --no-separator --ansi --height 100% \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      repo  ' --ghost 'a repository, or a path' \
-			--color "$FORM_COLOR" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
+			--color "$FZF_COLORS" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
 		[ "$sel" != "$out" ] && [ -n "$sel" ] && d=${sel%%"$TAB"*} || d=${out%%"$NL"*}
 		case $d in "~") d=$HOME ;; "~/"*) d="$HOME/${d#\~/}" ;; esac
@@ -2425,7 +2425,8 @@ cmd_form() {
 }
 
 # The form: fills TASK and the F_* fields from form file $1. Returns 130 when
-# you cancel.
+# you cancel. Its keys stay clear of zellij's (Ctrl b, g, h, n, o, p, q, s, t
+# switch modes) and of fzf's line editing.
 new_form() {
 	local sf=$1 q h out rc err="" query=$TASK hd first
 	q=$(printf '%q' "$SELF")
@@ -2435,11 +2436,11 @@ new_form() {
 		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
 			--prompt '      task  ' --ghost 'what should the agent do?' --query "$query" \
 			--header "$h" --footer 'enter start   ^e write it in $EDITOR   esc cancel' \
-			--color "$FORM_COLOR" \
+			--color "$FZF_COLORS" \
 			--bind "change:transform-header($hd)" \
 			--bind "tab:execute-silent($q _form where $(printf '%q' "$sf"))+transform-header($hd)" \
-			--bind "ctrl-o:execute-silent($q _form agent $(printf '%q' "$sf"))+transform-header($hd)" \
-			--bind "ctrl-b:execute($q _form branch $(printf '%q' "$sf") {q})+transform-header($hd)" \
+			--bind "btab:execute-silent($q _form agent $(printf '%q' "$sf"))+transform-header($hd)" \
+			--bind "alt-b:execute($q _form branch $(printf '%q' "$sf") {q})+transform-header($hd)" \
 			--bind "ctrl-r:execute($q _form repo $(printf '%q' "$sf"))+transform-header($hd)" \
 			--bind "ctrl-e:execute($q _form editor $(printf '%q' "$sf") {q})+transform-query($q _form query $(printf '%q' "$sf") {q})+transform-header($hd)" \
 			--bind 'enter:print-query' </dev/null)
@@ -2478,7 +2479,7 @@ thread_check() {
 	else
 		form_branch "$TASK"
 		if [ -z "$BRANCH" ]; then
-			CHECK_ERR="name the branch (^b): the task has no letters to name it after"
+			CHECK_ERR="name the branch (alt-b): the task has no letters to name it after"
 		elif ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
 			CHECK_ERR="not a valid branch name: $BRANCH"
 		fi

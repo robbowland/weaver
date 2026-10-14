@@ -214,10 +214,21 @@ fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floati
 scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
 ok "form: the task, the branch it makes and where" \
 	"$(printf '%s' "$scr" | grep -c 'task  form thread')|$(printf '%s' "$scr" | grep -c 'branch *form-thread')|$(printf '%s' "$scr" | grep -c 'new worktree')" "1|1|1"
+key 1b62 # alt-b: the branch
+sleep 1
+printf -- '-x' | xxd -p | while read -r h; do key "$h"; done
+key 0d
+sleep 0.8
+key 1b5b5a # shift-tab: the agent
+sleep 0.8
+scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
+ok "form: alt-b edits the branch, shift-tab picks the agent" \
+	"$(printf '%s' "$scr" | grep -c 'branch *form-thread-x')|$(printf '%s' "$scr" | grep -c 'agent *codex')" "1|1"
+key 1b5b5a
 key 09
 sleep 0.8
 scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
-ok "form: tab switches to this checkout" "$(printf '%s' "$scr" | grep -c "this checkout")" "1"
+ok "form: tab switches to this checkout" "$(printf '%s' "$scr" | grep -c "this checkout")|$(printf '%s' "$scr" | grep -c 'agent *claude')" "1|1"
 key 0d
 waitfor "[ -n \"\$(tab_named form-thread)\" ]"
 tab=$(tab_named form-thread)
