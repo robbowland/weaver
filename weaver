@@ -2985,8 +2985,15 @@ side_rows() {
 	local -a k_key k_pane k_tab k_state k_seen k_name k_wait k_since k_num order
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
 	ls_utf8
-	ls_size
-	w=$LS_COLS
+	# Under fzf, the pane's own width (fzf's can lag behind a swap of the
+	# layout).
+	w=""
+	[ -n "${FZF_SOCK:-}" ] && w=$({ stty size </dev/tty; } 2>/dev/null) && w=${w#* }
+	case $w in '' | *[!0-9]* | 0)
+		ls_size
+		w=$LS_COLS
+		;;
+	esac
 	[ "$w" -lt 16 ] && rail=1
 	side_cache
 	if [ "${1:-}" = --cached ] && [ -f "$SIDE_ROWS" ]; then
@@ -3053,6 +3060,8 @@ EOF2
 		printf -v num '%*s ' "$numw" "${k_num[i]}"
 		line2=""
 		if [ -n "$rail" ]; then
+			# Two columns: number and glyph, touching.
+			[ "$w" -lt 3 ] && num=${num% }
 			pl="$num$GCHAR" out="$C_DIM$num$C_OFF$GLYPH"
 		elif [ "${k_state[i]}" = tab ]; then
 			# A tab without an agent: its name, faint; a long one (a path)
