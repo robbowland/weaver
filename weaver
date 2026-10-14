@@ -1058,6 +1058,59 @@ focus_pane() {
 	return 1
 }
 
+# The tab pane $1 is in, its size (zellij's viewport: without the status
+# bars) and whether the pane floats, into VIEW_COLS, VIEW_ROWS and VIEW_FLOAT
+# (1, or empty). From $PANES when it is set (else list-panes) and list-tabs;
+# WEAVER_VIEW ("COLS ROWS FLOAT") stands in for both, for a process that
+# already asked. Returns 1 when zellij does not say.
+pane_view() {
+	local p=${1#terminal_} info tab="" fl=""
+	VIEW_COLS="" VIEW_ROWS="" VIEW_FLOAT=""
+	if [ -n "${WEAVER_VIEW:-}" ]; then
+		read -r VIEW_COLS VIEW_ROWS VIEW_FLOAT <<<"$WEAVER_VIEW"
+	else
+		[ -n "$p" ] || return 1
+		[ -n "${PANES:-}" ] || list_panes || return 1
+		info=$(printf '%s' "$PANES" | jq -r --arg p "$p" \
+			'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0] // empty | "\(.tab_id) \(.is_floating)"' 2>/dev/null)
+		read -r tab fl <<<"$info"
+		case $tab in '' | *[!0-9]*) return 1 ;; esac
+		[ "$fl" = true ] && VIEW_FLOAT=1
+		info=$(zellij action list-tabs -j 2>/dev/null | jq -r --argjson t "$tab" \
+			'.[] | select(.tab_id == $t) | "\(.viewport_columns) \(.viewport_rows)"' 2>/dev/null)
+		read -r VIEW_COLS VIEW_ROWS <<<"$info"
+	fi
+	case $VIEW_COLS$VIEW_ROWS in '' | *[!0-9]*)
+		VIEW_COLS="" VIEW_ROWS=""
+		return 1
+		;;
+	esac
+	return 0
+}
+
+# Fit the floating pane this runs in ($ZELLIJ_PANE_ID) to ROWS x COLS cells:
+# at most 85% of the tab's rows and 90% of its columns (at least 3 x 20),
+# centred, borderless (whatever draws in it draws its own border). Into
+# FIT_ROWS and FIT_COLS, the size it took. Does nothing in a pane that does
+# not float, or when zellij does not answer.
+float_fit() {
+	local rows=$1 cols=$2 p=${ZELLIJ_PANE_ID:-} max
+	FIT_ROWS="" FIT_COLS=""
+	case $rows$cols in '' | *[!0-9]*) return 0 ;; esac
+	[ -n "$p" ] && pane_view "$p" && [ -n "$VIEW_FLOAT" ] || return 0
+	max=$((VIEW_ROWS * 85 / 100))
+	[ "$rows" -gt "$max" ] && rows=$max
+	[ "$rows" -lt 3 ] && rows=3
+	max=$((VIEW_COLS * 90 / 100))
+	[ "$cols" -gt "$max" ] && cols=$max
+	[ "$cols" -lt 20 ] && cols=20
+	zellij action change-floating-pane-coordinates -p "terminal_$p" -b true \
+		-x $(((VIEW_COLS - cols) / 2)) -y $(((VIEW_ROWS - rows) / 2)) --width "$cols" --height "$rows" \
+		</dev/null >/dev/null 2>&1 || return 0
+	FIT_ROWS=$rows FIT_COLS=$cols
+	return 0
+}
+
 # Set or clear a Worktrunk branch marker in DIR, in the background.
 wt_marker() {
 	command -v wt >/dev/null 2>&1 || return 0
