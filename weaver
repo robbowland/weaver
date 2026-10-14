@@ -3157,7 +3157,7 @@ form_header() {
 	# values end: fzf's width (its header's, less its border and margins).
 	w=${FZF_COLUMNS:-${FORM_WIDTH:-}}
 	case $w in '' | *[!0-9]*)
-		w=$(stty size </dev/tty 2>/dev/null)
+		w=$({ stty size </dev/tty; } 2>/dev/null)
 		w=${w#* }
 		;;
 	esac
@@ -4069,7 +4069,7 @@ read_yes() {
 # sits in its middle (a third of the way down).
 card_place() {
 	local size rows=0 cols=0 top
-	size=$(stty size <"$1" 2>/dev/null)
+	size=$({ stty size <"$1"; } 2>/dev/null)
 	rows=${size% *} cols=${size#* }
 	case $rows$cols in '' | *[!0-9]*) return 0 ;; esac
 	top=$(((rows - $2) / 3))
