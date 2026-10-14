@@ -1,5 +1,5 @@
 // weaver's own session layout (`weaver`): the home board first; `weaver new`
-// adds thread tabs with the sidebar. Your layouts/weaver.kdl replaces it.
+// adds thread tabs. Your layouts/weaver.kdl replaces it.
 layout {
     default_tab_template {
         children
