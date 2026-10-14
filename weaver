@@ -1623,7 +1623,7 @@ edit_lock() {
 edit_unlock() { rm -rf "$EDIT_LOCK"; }
 
 cmd_edit() {
-	local full=0 target="" agent="" info root file nv cwd f p d sid turn state
+	local full=0 target="" agent="" info root file nv cwd f p d sid turn state i
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--full) full=1 ;;
@@ -1688,10 +1688,19 @@ cmd_edit() {
 			open_left_of "$agent" "$root" "nvim: ${root##*/}" "$SELF" nvim "$agent" ${file:+"$file"}
 			# A thread's tab gets its split back.
 			[ -f "$STATE_DIR/${SKEY}_$agent.thread" ] && [ -n "$NEWPANE" ] && thread_width "$agent" "$NEWPANE"
-			read_nvim_pane "$agent"
+			# The new nvim records itself (pane and pid) as it starts; give it
+			# a moment, still holding the lock, so a second press finds it.
+			# Only if it is slow, record its pane ourselves, without the pid
+			# (never over its own record: that would lose the pid).
+			for ((i = 0; i < 15; i++)); do
+				read_nvim_pane "$agent"
+				[ -z "$NEWPANE" ] || [ "$NV" = "$NEWPANE" ] && break
+				sleep 0.1
+			done
 			if [ -n "$NEWPANE" ] && [ "$NV" != "$NEWPANE" ]; then
 				nvim_file "$agent"
-				printf '%s\n\n' "$NEWPANE" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
+				printf '%s\n\n' "$NEWPANE" >"$NVF.$$" && (set -C && cat "$NVF.$$" >"$NVF") 2>/dev/null
+				rm -f "$NVF.$$"
 			fi
 			edit_unlock
 		fi
