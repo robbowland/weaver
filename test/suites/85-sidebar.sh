@@ -58,6 +58,11 @@ ok "outside the weaver session, tab names are left alone" "$(tabname "$TAB2")" "
 echo weaver >"$SD/${SESSION}.layout"
 weaver status --push
 ok "in the weaver session, a thread's tab names it for the status bar" "$(tabname "$TAB2")" "1 Refine the dashboard · repo/main"
+PLAIN=$(Z new-tab --name plain --cwd "$T/repo" -- bash --noprofile --norc)
+sleep 0.5
+ok "in the weaver session, a tab without an agent is a faint row of its own" \
+	"$(FZF_COLUMNS=26 FZF_LINES=20 weaver _side | tr '\0' '\n' | cut -f4- | strip | grep -c '^ *·  plain')" "1"
+Z close-tab-by-id "$PLAIN" >/dev/null 2>&1
 rm -f "$SD/${SESSION}.layout"
 Z rename-tab-by-id "$TAB2" two
 focus "$SB"

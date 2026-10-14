@@ -2968,7 +2968,7 @@ glyph_of() {
 		;;
 	working | starting) GCHAR=$G_WORK GLYPH=$G_WORK ;;
 	interrupted) GCHAR=$G_INT GLYPH="$C_GREY$G_INT$C_OFF" ;;
-	tab) GCHAR="·" GLYPH="$C_DIM·$C_OFF" ;;
+	tab) GCHAR="·" GLYPH="${C_DIM}·$C_OFF" ;;
 	*) GCHAR=$G_IDLE GLYPH="$C_DIM$G_IDLE$C_OFF" ;;
 	esac
 }
