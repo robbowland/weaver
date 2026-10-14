@@ -92,4 +92,24 @@ Z close-pane --pane-id "terminal_$HM"
 sleep 1.5
 ok "home: its processes go with its pane" "$(pgrep -f "$AT/bin/weaver home" | wc -l | tr -d ' ')" "0"
 
+# --- home's keys: n on an empty board opens the form; q goes back, as Alt y
+mkdir -p "$T/aside"
+mv "$SD/${SESSION}"_*.json "$SD/${SESSION}"_*.thread "$T/aside/"
+BACK=$(Z list-tabs -j | jq -r '.[] | select(.active) | .tab_id')
+HT=$(Z new-tab --name home --cwd "$T/repo" -- weaver home)
+sleep 2.5
+HP=$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin|not) and .tab_id == $HT) | .id" | head -n 1)
+key 6e # n
+sleep 2.5
+ok "home: n on an empty board opens the new-thread form" \
+	"$(Z dump-screen --pane-id "terminal_$HP" | grep -c 'what should the agent do')" "1"
+key 1b # esc: the form cancels, the board comes back
+sleep 2.5
+printf '%s\n' "$BACK" >"$SD/${SESSION}.last"
+key 71 # q
+sleep 1.5
+ok "home: q goes back to the tab you came from" "$(Z list-tabs -j | jq -r '.[] | select(.active) | .tab_id')" "$BACK"
+Z close-tab-by-id "$HT" >/dev/null 2>&1
+mv "$T/aside/"* "$SD/"
+
 done_suite

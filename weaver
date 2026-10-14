@@ -2804,7 +2804,7 @@ ls_footer() {
 	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
 		set -- $search
 	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-1}" = 0 ]; then
-		set -- 'n new thread' 'q quit'
+		if [ -n "${LS_HOME:-}" ]; then set -- 'n new thread'; else set -- 'n new thread' 'q quit'; fi
 		end="" w=0
 	else
 		set -- $browse
@@ -2843,8 +2843,12 @@ cmd_ls() {
 	if [ -n "${LS_HOME:-}" ]; then
 		jump_act="execute-silent($q _goto {2} {3})"
 		edit_act="execute-silent($q _goto {2} {3}; $q edit {2})"
-		new_act="execute($q new --from {2})+reload($q _rows)"
-		quit_act=ignore
+		# fzf skips any action whose template names a field, such as {2}, on
+		# an empty board: this one prints the field for the action it returns.
+		new_act="transform:if [ \"\$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute($q new)+reload($q _rows)'; else printf '%s2})+reload(%s _rows)\\n' 'execute($q new --from {' '$q'; fi"
+		# q and esc: back to the thread you came from, as Alt y does.
+		quit_act="execute-silent($q go home)"
+		export LS_HOME
 	else
 		jump_act="print(jump)+accept"
 		edit_act="print(ctrl-e)+accept"
@@ -2897,7 +2901,7 @@ cmd_ls() {
 			--bind "?:transform($q _view help)" \
 			--bind "ctrl-r:reload($q _rows)+refresh-preview" \
 			--bind "/:show-input+unbind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)" \
-			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo $quit_act; else echo 'hide-input+rebind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)'; fi}")
+			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo '$quit_act'; else echo 'hide-input+rebind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)'; fi}")
 		rc=$?
 		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
 		if [ -n "${LS_HOME:-}" ]; then
