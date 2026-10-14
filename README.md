@@ -72,6 +72,9 @@ branch and says so. The nvim on the left is
 the agent's own weaver nvim, so following, the bar, reviews and `Alt v` all
 work from the first prompt.
 
+If you quit a thread's nvim, `Alt v` brings it back on the left with the
+agent at its width again (when nothing else is in the tab).
+
 `weaver close` (`x` in the dashboard) closes an agent, its nvim and its
 thread's tab, after asking; panes you added to the tab stay. For a worktree
 weaver made, and only when nothing would be lost (nothing uncommitted, and

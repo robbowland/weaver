@@ -190,6 +190,34 @@ ok "base: no remote: the local main, and it says so" \
 TABS="$TABS $(tab_named x) $(tab_named no-remote-here)"
 git -C "$T/up" remote remove origin
 
+# --- Alt v brings a thread's split back when it reopens its nvim
+out=$(cd "$T/repo" && weaver new --no-focus --here "split again" 2>&1)
+tab=$(tab_named split-again)
+TABS="$TABS $tab"
+thread_panes "$tab"
+waitfor "[ -f '$SD/${SESSION}_$AG.nvim' ]"
+Z close-pane --pane-id "terminal_$NVP"
+sleep 0.5
+ok "split: with its nvim closed the agent has the tab" "$(columns "$AG")" "200"
+t=$(ms weaver edit "$AG")
+nv=$(nvim_pane "$AG")
+a=$(columns "$AG") n=$(columns "$nv")
+echo "  (Alt v reopening a thread's nvim with its split: ${t}ms)"
+ok "split: nvim back on the left, the agent a fifth of the width again" \
+	"$([ "$a" -ge 36 ] && [ "$a" -le 44 ] && [ "$n" -gt "$a" ] && echo yes)|$(Z list-panes -a -j | jq -r "[.[] | select((.is_plugin | not) and (.id == $nv or .id == $AG))] | sort_by(.pane_x) | map(.id | tostring) | join(\",\")")" \
+	"yes|$nv,$AG"
+ok "split: the same agent, still running" \
+	"$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin | not) and .id == $AG) | .exited")|$(cat "$AT/args.claude.$AG")" "false|split again"
+extra=$(Z new-pane --tab-id "$tab" --direction down --cwd "$T/repo" -- bash --noprofile --norc)
+extra=${extra#terminal_}
+sleep 0.3
+Z close-pane --pane-id "terminal_$nv"
+sleep 0.5
+before=$(columns "$extra")
+weaver edit "$AG" >/dev/null 2>&1
+ok "split: with a pane you added, as before: nothing of yours resized" \
+	"$(tabpanes "$tab" | jq length)|$(columns "$extra")" "3|$before"
+
 # --- closing
 tab=$(tab_named fix-the-flaky-test)
 thread_panes "$tab"

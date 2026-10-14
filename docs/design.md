@@ -535,3 +535,14 @@ lines as fit; `?` the keys.
   `wnew` does, rather than from a possibly stale local `main`. The fetch is
   started when the form opens so enter seldom waits; offline it falls back
   instead of failing.
+- 2026-10-14: `Alt v` reopening a thread's nvim restores the split with
+  `zellij action resize -p <agent> decrease left` steps. Measured on zellij
+  0.45.1: `new-pane --direction left` puts the pane on the right anyway;
+  `override-layout --layout-string … --retain-existing-terminal-panes
+  --apply-only-to-active-tab` changed nothing; each resize step moves the
+  border by 5% of the tab (10 of 200 columns) and costs about 12 ms. So the
+  number of steps comes from the measured widths, then one more measurement
+  checks it: 50% to 20% is six steps, about 100 ms on top of the ~190 ms
+  reopen. Only when the agent and its nvim are the tab's only tiled panes; the
+  agent is never touched otherwise. `open_left_of` now goes to the agent's
+  tab first, so `weaver edit <pane>` from another tab opens nvim there.
