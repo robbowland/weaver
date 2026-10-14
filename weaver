@@ -1933,7 +1933,7 @@ push_status() {
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
 		[ -S "$s" ] || continue
 		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $(printf '%q' "$SELF") _rows)+refresh-preview" \
-			http://localhost >/dev/null 2>&1 || rm -f "$s"
+			http://localhost >/dev/null 2>&1 || rm -f "$s" "${s%.sock}.keys" "${s%.sock}.view"
 	done
 	return 0
 }
@@ -2556,6 +2556,10 @@ cmd_ls() {
 	# Hooks reload this dashboard through its socket as agents change.
 	base="$SOCK_DIR/${SKEY}.fzf.$$"
 	sock="$base.sock"
+	# Its files go with it, also when its pane is closed under it.
+	trap 'rm -f "$sock" "$base.keys" "$base.view"' EXIT
+	trap 'exit 129' HUP
+	trap 'exit 143' TERM
 	ls_utf8
 	while :; do
 		rm -f "$sock" "$base.keys" "$base.view"
