@@ -1662,7 +1662,10 @@ claude_live() {
 
 # Every state file in this session, as US-separated rows: pane, tab, state,
 # root, since, seen, prompt, waiting, background, title, subagents, pid,
-# proc_start, state file. A state is refined by the agent's Claude Code session
+# proc_start, state file, then for the dashboard: turn, last message, tasks
+# done, tasks, last file (base name), session id, tab name, agent, background
+# tasks, the thread's task and name (from its .thread file), and the turn's
+# roots (RS-separated). A state is refined by the agent's Claude Code session
 # file when that is newer: a dialog you already answered (a long tool you
 # approved) shows as working, a dialog the hooks missed as needs-you, and an
 # agent stopped with Esc (which fires no hook) as interrupted. Rows "gone"
@@ -1671,9 +1674,11 @@ JQ_ROWS='
 ($panes | map(select(.is_plugin | not))) as $all
 | ($all | map({key: (.id | tostring), value: .}) | from_entries) as $byid
 | ($claude | map({key: (.pid | tostring), value: .}) | from_entries) as $live
-| (reduce inputs as $l ({}; .[input_filename] += $l + "\n")) | to_entries[]
+| (reduce inputs as $l ({}; .[input_filename] += $l + "\n")) as $in
+| $in | to_entries[] | select(.key | endswith(".json"))
 | .key as $f
 | (try (.value | fromjson) catch null) as $s
+| (try ($in[($f | rtrimstr(".json")) + ".thread"] // "" | fromjson) catch null) as $t
 | if ($s | type) != "object" then ["corrupt", $f]
   else ($byid[$s.pane | tostring]) as $p
   | if $p == null then ["gone", $f, ($s.pid // ""), ($s.proc_start // ""), ($s.state // "")]
@@ -1694,10 +1699,21 @@ JQ_ROWS='
          ($s.seen // false), ($s.prompt // ""),
          (if $st == "needs-you" and $st0 != "needs-you" then ($c.waitingFor // "input") else ($s.waiting // "") end),
          ($s.background // 0), ($s.title // ""), (($s.subagents // []) | length),
-         ($s.pid // ""), ($s.proc_start // ""), $f]
+         ($s.pid // ""), ($s.proc_start // ""), $f,
+         ($s.turn // 0), ($s.last_message // ""),
+         ([($s.tasks // []) | arrays | .[] | objects | select(.done == true)] | length),
+         (($s.tasks // []) | arrays | length),
+         (($s.file // "") | tostring | split("/") | last // ""), ($s.session_id // ""),
+         ($p.tab_name // ""), ($s.agent // ""), ($s.background_tasks // ""),
+         (($t | objects | .task) // ""), (($t | objects | .name) // ""),
+         [($s.turn_roots // []) | arrays | .[] | tostring]]
     end
   end
-| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")'
+| (if (.[-1] | type) == "array" then .[-1] else [] end) as $roots
+| (if (.[-1] | type) == "array" then .[:-1] else . end)
+| map(tostring | gsub("[\u0000-\u001f]+"; " "))
+  + (if ($roots | length) > 0 then [$roots | map(gsub("[\u0000-\u001f]+"; " ")) | join("\u001e")] else [] end)
+| join("\u001f")'
 
 # Is our list of panes the whole truth? Only when it includes the pane we run
 # in (or we run outside a pane): never garbage-collect on a partial answer.
@@ -1731,8 +1747,12 @@ forget() {
 agent_rows() {
 	local rows line kind f pid start st trusted=0 now
 	AGENT_ROWS=""
+	local -a files
 	session_files json
 	[ ${#FOUND[@]} -gt 0 ] || return 0
+	files=("${FOUND[@]}")
+	session_files thread
+	[ ${#FOUND[@]} -gt 0 ] && files=("${files[@]}" "${FOUND[@]}")
 	list_panes || return 0
 	panes_trusted && trusted=1
 	claude_live
@@ -1740,7 +1760,7 @@ agent_rows() {
 	# A file removed meanwhile (an agent cleaned up) makes jq fail at the end,
 	# after it has printed the others: keep them.
 	rows=$(jq -rRn --argjson panes "$PANES" --argjson claude "$CLAUDE_LIVE" --argjson now "$now" \
-		"$JQ_ROWS" "${FOUND[@]}" 2>/dev/null)
+		"$JQ_ROWS" "${files[@]}" 2>/dev/null)
 	while IFS= read -r line; do
 		[ -n "$line" ] || continue
 		case $line in
@@ -1752,7 +1772,7 @@ agent_rows() {
 			forget "$f" "$pid"
 			;;
 		*)
-			IFS=$US read -r _ _ _ _ _ _ _ _ _ _ _ pid start f <<<"$line"
+			IFS=$US read -r _ _ _ _ _ _ _ _ _ _ _ pid start f _ <<<"$line"
 			if [ -n "$pid" ] && ! agent_alive "$pid" "$start"; then
 				# Killed without a SessionEnd: it is not coming back.
 				forget "$f" "$pid"
@@ -1918,32 +1938,34 @@ cmd_status() {
 
 # ---------------------------------------------------------------- ls
 
-# repo/branch and "N files (M new)" for ROOT, into REPO_BRANCH and FILES.
-git_info() {
-	local root=$1 common branch="" n=0 m=0 line repo
-	REPO_BRANCH=${root##*/} FILES="-"
-	common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
-	# Group worktrees under their repo: the parent of the shared .git dir
-	# (or the name of a bare repo.git).
-	case ${common##*/} in
-	.git | .bare) repo=${common%/*} repo=${repo##*/} ;;
-	*.git) repo=${common##*/} repo=${repo%.git} ;;
-	*) repo=${common%/*} repo=${repo##*/} ;;
+# The dashboard: every agent of the session under a heading per group, best
+# first. The groups match the status bar's counts, and each state has a shape
+# that reads without colour (the nvim bar uses the same):
+#
+#   NEEDS YOU  !  needs you, longest waiting first      (red)
+#   DONE       ✓  done and not yet seen, oldest first   (green)
+#   WORKING    ●  working, longest working first
+#   IDLE       ✓  done and seen, ○ idle, ◌ interrupted; most recent first
+
+G_NEED='!' G_DONE='✓' G_WORK='●' G_IDLE='○' G_INT='◌'
+
+# Character counts and cuts need a UTF-8 locale.
+ls_utf8() {
+	case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in
+	*[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) ;;
+	*) LC_ALL=en_US.UTF-8 ;;
 	esac
-	while IFS= read -r line; do
-		case $line in
-		"# branch.head "*) branch=${line#\# branch.head } ;;
-		"? "*) n=$((n + 1)) m=$((m + 1)) ;;
-		"1 A"* | "2 A"*) n=$((n + 1)) m=$((m + 1)) ;;
-		[12u]" "*) n=$((n + 1)) ;;
-		esac
-	done <<EOF2
-$(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain=v2 --branch 2>/dev/null)
-EOF2
-	REPO_BRANCH="$repo/${branch:-?}"
-	if [ $n = 1 ]; then FILES="1 file"; else FILES="$n files"; fi
-	[ $m -gt 0 ] && FILES="$FILES ($m new)"
-	return 0
+}
+
+# TEXT cut to N characters (… at the cut) and padded to N, into FIT.
+fit() {
+	local s=$1 n=$2
+	if [ "$n" -le 0 ]; then
+		FIT=""
+		return
+	fi
+	[ ${#s} -gt "$n" ] && s="${s:0:$((n - 1))}…"
+	printf -v FIT '%s%*s' "$s" $((n - ${#s})) ''
 }
 
 # 75s -> 1m, 2h ...
@@ -1959,108 +1981,493 @@ age() {
 	fi
 }
 
-# Rows for the dashboard: pane<TAB>tab<TAB>display, best first, after a header
-# row; Micrographics colours when COLOR=1. Prints nothing when there are no
-# agents. Order: needs you (longest waiting first), done and not yet seen,
-# done, working, interrupted, idle.
+# The repository and branch checked out at ROOT, read from its .git files
+# without running git: W_REPO (the main checkout's directory name, so
+# worktrees group under their repo), W_BRANCH (a short commit when detached;
+# empty outside a repository) and W_GITDIR (the checkout's own git dir).
+where_of() {
+	local root=$1 gd common line up=0
+	W_REPO=${root##*/} W_BRANCH="" W_GITDIR=""
+	if [ -d "$root/.git" ]; then
+		gd=$root/.git
+		common=$gd
+	elif [ -f "$root/.git" ]; then
+		line=""
+		{ IFS= read -r line <"$root/.git"; } 2>/dev/null
+		gd=${line#gitdir: }
+		case $gd in /*) ;; *) gd=$root/$gd ;; esac
+		common=$gd
+		if [ -f "$gd/commondir" ]; then
+			line=""
+			{ IFS= read -r line <"$gd/commondir"; } 2>/dev/null
+			case $line in /*) common=$line ;; ?*) common=$gd/$line ;; esac
+		fi
+	else
+		return 0
+	fi
+	while :; do
+		case $common in
+		*/..) common=${common%/..} up=$((up + 1)) ;;
+		*/. | */) common=${common%.} common=${common%/} ;;
+		*) break ;;
+		esac
+	done
+	while [ $up -gt 0 ]; do common=${common%/*} up=$((up - 1)); done
+	case ${common##*/} in
+	.git | .bare) W_REPO=${common%/*} W_REPO=${W_REPO##*/} ;;
+	*.git) W_REPO=${common##*/} W_REPO=${W_REPO%.git} ;;
+	esac
+	W_GITDIR=$gd
+	line=""
+	{ IFS= read -r line <"$gd/HEAD"; } 2>/dev/null
+	case $line in
+	"ref: refs/heads/"*) W_BRANCH=${line#ref: refs/heads/} ;;
+	"") ;;
+	*) W_BRANCH=${line:0:7} ;;
+	esac
+}
+
+# How many files the agent's last turn changed, from the end snapshots of
+# turn TURN of session SID in ROOTS (RS-separated), into TURN_FILES (empty
+# when there is none). Each snapshot commit is asked about once; the answer
+# is kept under $STATE_DIR/turns/<commit>.
+turn_files() {
+	local sid=$1 turn=$2 r sha line t c total="" IFS=$RS
+	TURN_FILES=""
+	[ -n "$sid" ] && [ "$turn" != 0 ] || return 0
+	for r in $3; do
+		[ -n "$r" ] || continue
+		where_of "$r"
+		[ -n "$W_GITDIR" ] || continue
+		sha=""
+		{ IFS= read -r sha <"$W_GITDIR/refs/worktree/weaver/sessions/$sid"; } 2>/dev/null
+		case $sha in '' | *[!0-9a-f]*) continue ;; esac
+		line=""
+		{ IFS= read -r line <"$STATE_DIR/turns/$sha"; } 2>/dev/null
+		if [ -z "$line" ]; then
+			# The commit's turn and point (trailers), then its files.
+			line=$(git -C "$r" show --no-renames --name-only \
+				--format='%(trailers:key=Weaver-Turn,valueonly,separator=) %(trailers:key=Weaver-Point,valueonly,separator=)' \
+				"$sha" -- 2>/dev/null | awk 'NR == 1 { h = $1 " " $2; next } NF { n++ } END { print h, n + 0 }')
+			case $line in [0-9]*" "[a-z]*" "[0-9]*) ;; *) continue ;; esac
+			mkdir -p "$STATE_DIR/turns" &&
+				printf '%s\n' "$line" >"$STATE_DIR/turns/$sha.$$" && mv -f "$STATE_DIR/turns/$sha.$$" "$STATE_DIR/turns/$sha"
+		fi
+		IFS=' ' read -r t _ c <<<"$line"
+		[ "$t" = "$turn" ] || continue
+		case $line in *" end "*) ;; *) continue ;; esac
+		total=$((${total:-0} + c))
+	done
+	TURN_FILES=$total
+}
+
+# The width of the dashboard's list, into LS_WIDTH: fzf's, less the preview
+# when that is on the right. Before fzf has drawn (FZF_COLUMNS is 0 at its
+# start), the terminal's, with the preview where fzf will put it: on the right
+# when it gets 72 columns there (cmd_ls's --preview-window).
+ls_width() {
+	local cols=${FZF_COLUMNS:-0} left=${FZF_PREVIEW_LEFT:-0} size
+	case $cols$left in *[!0-9]*) cols=0 left=0 ;; esac
+	if [ "$left" -gt 0 ]; then
+		LS_WIDTH=$((left - 2))
+		return 0
+	fi
+	if [ "$cols" -eq 0 ]; then
+		size=$(stty size </dev/tty 2>/dev/null)
+		cols=${size#* }
+		case $cols in '' | *[!0-9]*) cols=${COLUMNS:-100} ;; esac
+		case $cols in '' | *[!0-9]*) cols=100 ;; esac
+		[ $((cols * 45 / 100 - 2)) -ge 72 ] && cols=$((cols - cols * 45 / 100))
+	fi
+	LS_WIDTH=$cols
+}
+
+# The dashboard's lines. LS_MODE=fzf (the default for `weaver _rows`): TAB-
+# separated items for fzf, the title first (fzf's header line), then
+#   id  pane  tab  prev  next  label  display
+# where id is a<pane> for an agent, h<group> for a heading, g<group> for the
+# gap above one and e for the empty board; prev and next are the list
+# positions of the agents around a heading or gap, for the cursor to skip it;
+# label is the resume card's title. Browsing (fzf's input hidden) shows the
+# headings and numbers the first nine agents (their positions go to
+# $FZF_SOCK's .keys file, for the 1-9 keys); searching lists the agents alone.
+# LS_MODE=plain: the board as text. Width: $FZF_COLUMNS, else $COLUMNS, else
+# 100. Micrographics colours when COLOR=1.
 ls_rows() {
-	local now pane tab state root since seen prompt waiting bg title nsub icon text rank sortkey w=11 i n=0
-	local red="" green="" grey="" dim="" off="" roots=$NL
-	local -a k_rank k_key k_pane k_tab k_icon k_rb k_age k_files k_text k_root
-	[ "${COLOR:-}" = 1 ] && red=$C_RED green=$C_GREEN grey=$C_GREY dim=$C_DIM off=$C_OFF
+	local mode=${LS_MODE:-fzf} width now i j k n=0 g c sep="  "
+	local pane tab state root since seen prompt waiting bg title nsub turn last tdone ttotal file sid
+	local tabname agent bgtasks ttask tname troots name fact glyph key where
+	local red="" green="" grey="" dim="" bold="" off=""
+	local wn=0 wf=0 ww=0 cn cf cw pre lead age_w=3 out="" keys="" title_l title_r gap
+	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root order
+	local -a counts=(0 0 0 0) heads=("NEEDS YOU" "DONE" "WORKING" "IDLE")
+	ls_utf8
+	# Colours for fzf, and on request (COLOR=1).
+	[ "${COLOR:-$([ "$mode" = fzf ] && echo 1)}" = 1 ] &&
+		red=$C_RED green=$C_GREEN grey=$C_GREY dim=$C_DIM bold=$C_BOLD off=$C_OFF
+	if [ "$mode" = fzf ]; then
+		ls_width
+		# fzf takes the pointer and marker columns, and one for a scrollbar.
+		width=$((LS_WIDTH - 3))
+	else
+		width=${COLUMNS:-100}
+		case $width in '' | *[!0-9]*) width=100 ;; esac
+	fi
+	[ $width -lt 40 ] && width=40
 	agent_rows
-	[ -n "$AGENT_ROWS" ] || return 0
 	now=$(date +%s)
-	while IFS=$US read -r pane tab state root since seen prompt waiting bg title nsub _; do
+	while IFS=$US read -r pane tab state root since seen prompt waiting bg title nsub _ _ _ \
+		turn last tdone ttotal file sid tabname agent bgtasks ttask tname troots; do
 		[ -n "$pane" ] || continue
 		case $bg in '' | *[!0-9]*) bg=0 ;; esac
 		case $nsub in '' | *[!0-9]*) nsub=0 ;; esac
-		text=$prompt
-		[ -n "$title" ] && text="$title${prompt:+ · $prompt}"
+		case $since in '' | *[!0-9]*) since=$now ;; esac
+		name=${title:-${ttask:-$prompt}}
+		[ -n "$name" ] || name="new ${agent:-claude} session"
+		fact=""
 		case $state in
-		needs-you) rank=0 icon="${red}!${off}" text="${red}${waiting:-$prompt}${off}" ;;
-		done)
-			if [ "$seen" = true ]; then
-				rank=2 icon="${dim}✓${off}"
-			else
-				rank=1 icon="${green}✓${off}"
-			fi
-			;;
+		needs-you) g=0 glyph="$red$G_NEED$off" fact="${waiting:-input}" ;;
 		working)
-			rank=3 icon='●'
+			g=2 glyph=$G_WORK
 			if [ "$bg" != 0 ]; then
-				text="${grey}${bg} in background ·${off} $text"
+				fact="$bg in background"
 			elif [ "$nsub" != 0 ]; then
-				text="${grey}${nsub} subagent$([ "$nsub" = 1 ] || echo s) ·${off} $text"
+				fact="$nsub subagent$([ "$nsub" = 1 ] || echo s)"
+			elif [ "${ttotal:-0}" != 0 ]; then
+				fact="$tdone/$ttotal tasks"
+			elif [ -n "$file" ]; then
+				fact="editing $file"
 			fi
 			;;
-		interrupted) rank=4 icon="${grey}○${off}" text="${grey}interrupted ·${off} $text" ;;
-		*) rank=5 icon="${dim}○${off}" ;;
+		done)
+			if [ "$seen" = true ]; then g=3 glyph="$dim$G_DONE$off"; else g=1 glyph="$green$G_DONE$off"; fi
+			turn_files "$sid" "$turn" "${troots:-$root}"
+			case $TURN_FILES in
+			'' | 0) fact=$last ;;
+			1) fact="1 file${last:+ · $last}" ;;
+			*) fact="$TURN_FILES files${last:+ · $last}" ;;
+			esac
+			;;
+		interrupted) g=3 glyph="$grey$G_INT$off" fact=interrupted ;;
+		*)
+			g=3 glyph="$dim$G_IDLE$off"
+			[ "${turn:-0}" = 0 ] && fact="no prompt yet"
+			;;
 		esac
-		git_info "$root"
+		where_of "$root"
+		where=$W_REPO${W_BRANCH:+/$W_BRANCH}
 		age $((now - since))
-		sortkey=$REPO_BRANCH
-		[ $rank = 0 ] && sortkey=$(printf '%012d' "$since")
-		k_rank[n]=$rank k_key[n]=$sortkey k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon k_root[n]=$root
-		k_rb[n]=$REPO_BRANCH k_files[n]=$FILES k_text[n]=$text k_age[n]=$AGE
-		case $roots in *"$NL$root$NL"*) roots="$roots$root$NL$root$NL" ;; *) roots="$roots$root$NL" ;; esac
-		[ ${#REPO_BRANCH} -gt $w ] && w=${#REPO_BRANCH}
+		# Needs you, done and working: longest first; idle: latest first.
+		if [ $g = 3 ]; then key=$((10000000000 - since)); else key=$since; fi
+		printf -v key '%d%011d%08d' "$g" "$key" "$pane"
+		r_group[n]=$g r_key[n]=$key r_pane[n]=$pane r_tab[n]=$tab r_glyph[n]=$glyph
+		r_name[n]=$name r_fact[n]=$fact r_where[n]=$where r_age[n]=$AGE r_root[n]=$root
+		r_label[n]="$name · $where${turn:+ · turn $turn}"
+		counts[g]=$((counts[g] + 1))
+		[ ${#name} -gt $wn ] && wn=${#name}
+		[ ${#fact} -gt $wf ] && wf=${#fact}
 		n=$((n + 1))
 	done <<EOF2
 $AGENT_ROWS
 EOF2
-	[ $n -gt 0 ] || return 0
-	[ $w -gt 48 ] && w=48
+	# Best first: an insertion sort (a handful of rows).
 	i=0
-	{
-		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "TITLE · LAST PROMPT / WAITING ON"
-		while [ $i -lt $n ]; do
-			# Two agents in one worktree mix their per-turn diffs: say so.
-			case $roots in *"$NL${k_root[i]}$NL${k_root[i]}$NL"*) k_text[i]="${grey}[shared worktree]${off} ${k_text[i]}" ;; esac
-			printf '%s\t%s\t%s\t%s\t%s  %-*.*s  %5s  %-16s  %s\n' "${k_rank[i]}" "${k_key[i]}" \
-				"${k_pane[i]}" "${k_tab[i]}" "${k_icon[i]}" "$w" "$w" "${k_rb[i]}" \
-				"${k_age[i]}" "${k_files[i]}" "${k_text[i]}"
+	while [ $i -lt $n ]; do
+		j=${#order[@]}
+		while [ $j -gt 0 ] && [[ ${r_key[order[j - 1]]} > ${r_key[i]} ]]; do
+			order[j]=${order[j - 1]}
+			j=$((j - 1))
+		done
+		order[j]=$i
+		i=$((i + 1))
+	done
+	# Two agents in one worktree mix their per-turn diffs: say so (×2).
+	i=0
+	while [ $i -lt $n ]; do
+		c=0 j=0
+		while [ $j -lt $n ]; do
+			[ "${r_root[j]}" = "${r_root[i]}" ] && c=$((c + 1))
+			j=$((j + 1))
+		done
+		[ $c -gt 1 ] && r_where[i]="${r_where[i]} ×$c"
+		[ ${#r_where[i]} -gt $ww ] && ww=${#r_where[i]}
+		i=$((i + 1))
+	done
+
+	# Columns: key and glyph, name, fact, where (when there is room), age.
+	# fzf searches only what follows the TAB after the glyph (--nth 2,
+	# --tabstop 1): headings and gaps have nothing there, so a search shows
+	# the agents alone.
+	if [ "$mode" = fzf ]; then pre=5 sep=" $TAB"; else pre=3; fi
+	cw=0
+	[ $width -ge 96 ] && [ $ww -gt 0 ] && cw=$((ww + 2 > 30 ? 30 : ww + 2))
+	k=$((width - pre - age_w - cw))
+	# The name comes first: at least 24 columns (less only if no name needs
+	# them), 45% of the room once there is plenty, but never past 40 characters.
+	cn=$((k * 45 / 100))
+	[ $cn -lt 24 ] && cn=24
+	[ $cn -gt 42 ] && cn=42
+	[ $wn -gt 0 ] && [ $((wn + 2)) -lt $cn ] && cn=$((wn + 2))
+	cf=$((k - cn))
+	if [ $cf -lt 10 ]; then
+		cn=$k cf=0
+	fi
+	# No wider than the facts need: repo/branch and age stay close by.
+	[ $cf -gt $((wf + 2)) ] && cf=$((wf + 2))
+	[ $wf = 0 ] && cf=0
+	width=$((pre + cn + cf + cw + age_w))
+
+	# The title: the thread count, and the status bar's counts at the right.
+	if [ $n = 0 ]; then title_l="weaver"; elif [ $n = 1 ]; then title_l="weaver · 1 thread"; else title_l="weaver · $n threads"; fi
+	title_r=""
+	[ ${counts[0]} -gt 0 ] && title_r="$title_r$G_NEED ${counts[0]}  "
+	[ ${counts[1]} -gt 0 ] && title_r="$title_r$G_DONE ${counts[1]}  "
+	[ ${counts[2]} -gt 0 ] && title_r="$title_r$G_WORK ${counts[2]}  "
+	title_r=${title_r%  }
+	k=$((width - ${#title_l} - ${#title_r} - (pre > 3 ? 2 : 0)))
+	[ $k -lt 2 ] && k=2
+	printf -v gap '%*s' $k ''
+	# In the status bar's colours.
+	title_r=${title_r/"$G_NEED "/"$red$G_NEED$off "}
+	title_r=${title_r/"$G_DONE "/"$green$G_DONE$off "}
+	title_r=${title_r/"$G_WORK "/"$grey$G_WORK$off "}
+	title_l="$bold${title_l%% · *}$off${title_l#weaver}"
+	title_l=${title_l/ · /"$dim · $off"}
+	if [ "$mode" = fzf ]; then
+		printf 't\t\t\t\t\t\t%s\nt2\t\t\t\t\t\t\n' "$title_l$gap$title_r"
+	else
+		printf '%s\n\n' "$title_l$gap$title_r"
+	fi
+	if [ $n = 0 ]; then
+		if [ "$mode" = fzf ]; then
+			printf 'e\t\t\t\t\t\t%s\n' "${grey}No threads yet.$off  ${dim}n$off starts one."
+		else
+			printf '%s\n' "No agents in zellij session $SESSION."
+		fi
+		return 0
+	fi
+
+	# Positions first (headings and gaps take one each), so each heading and
+	# gap knows the agents around it.
+	local -a l_id l_pane l_tab l_text l_label l_isagent
+	local m=0 last_g=-1 a=0 prevp nextp
+	for i in "${order[@]}"; do
+		g=${r_group[i]}
+		if [ "$g" != "$last_g" ]; then
+			if [ $last_g != -1 ]; then
+				l_id[m]="g$g" l_text[m]="" l_isagent[m]=0
+				m=$((m + 1))
+			fi
+			l_id[m]="h$g" l_text[m]="$grey${heads[g]}$off $dim${counts[g]}$off" l_isagent[m]=0
+			[ "$mode" = fzf ] || l_text[m]="${heads[g]} ${counts[g]}"
+			m=$((m + 1))
+			last_g=$g
+		fi
+		a=$((a + 1))
+		lead=""
+		if [ "$mode" = fzf ]; then
+			if [ $a -le 9 ]; then lead="$dim$a$off "; else lead="  "; fi
+			[ $a -le 9 ] && keys="${keys}pos($((m + 1)))+print(jump)+accept$NL"
+		fi
+		fit "${r_name[i]}" $((cn - 2))
+		out="$lead${r_glyph[i]}$sep$FIT  "
+		if [ $cf -gt 0 ]; then
+			fit "${r_fact[i]}" $((cf - 2))
+			out="$out$grey$FIT$off  "
+		fi
+		if [ $cw -gt 0 ]; then
+			fit "${r_where[i]}" $((cw - 2))
+			out="$out$dim$FIT$off  "
+		fi
+		printf -v FIT '%*s' $age_w "${r_age[i]}"
+		out="$out$dim$FIT$off"
+		l_id[m]="a${r_pane[i]}" l_pane[m]=${r_pane[i]} l_tab[m]=${r_tab[i]} l_text[m]=$out
+		l_label[m]=${r_label[i]} l_isagent[m]=1
+		m=$((m + 1))
+	done
+	if [ "$mode" != fzf ]; then
+		i=0
+		while [ $i -lt $m ]; do
+			case ${l_id[i]} in g*) printf '\n' ;; *) printf '%s\n' "${l_text[i]}" ;; esac
 			i=$((i + 1))
 		done
-	} | sort -t "$TAB" -k1,1n -k2,2 | cut -f3-
+		return 0
+	fi
+	# 1-9: fzf actions that pick the first nine agents.
+	[ -n "${FZF_SOCK:-}" ] &&
+		printf '%s' "$keys" >"${FZF_SOCK%.sock}.keys.$$" && mv -f "${FZF_SOCK%.sock}.keys.$$" "${FZF_SOCK%.sock}.keys"
+	i=0
+	while [ $i -lt $m ]; do
+		if [ "${l_isagent[i]}" = 1 ]; then
+			printf '%s\t%s\t%s\t\t\t%s\t%s\n' "${l_id[i]}" "${l_pane[i]}" "${l_tab[i]}" "${l_label[i]}" "${l_text[i]}"
+		else
+			prevp="" nextp=""
+			j=$((i - 1))
+			while [ $j -ge 0 ]; do [ "${l_isagent[j]}" = 1 ] && prevp=$((j + 1)) && break; j=$((j - 1)); done
+			j=$((i + 1))
+			while [ $j -lt $m ]; do [ "${l_isagent[j]}" = 1 ] && nextp=$((j + 1)) && break; j=$((j + 1)); done
+			printf '%s\t\t\t%s\t%s\t\t%s\t\n' "${l_id[i]}" "$prevp" "$nextp" "${l_text[i]}"
+		fi
+		i=$((i + 1))
+	done
 }
 
-# The resume card: what the agent was asked, what it waits on, what it last
-# said, its tasks, subagents and files, then its worktree and screen.
+# The dashboard's preview for agent PANE: its resume card under TITLE (name ·
+# repo/branch · turn), or (s, tab) its screen, or (?) the keys. The view
+# is kept next to the dashboard's socket.
 cmd_preview() {
-	local pane=${1#terminal_} root
+	local pane=${1#terminal_} title=${2:-} view=card f line root re_r='"root":"([^"]*)"' n=0
+	local head="" ab="" changed=0 new=0 lines=${FZF_PREVIEW_LINES:-40}
 	pane=${pane%%[!0-9]*}
+	[ -n "${FZF_SOCK:-}" ] && { IFS= read -r view <"${FZF_SOCK%.sock}.view"; } 2>/dev/null
+	case $view in
+	help)
+		ls_help
+		return 0
+		;;
+	screen)
+		[ -n "$pane" ] || return 0
+		zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null |
+			awk 'NF { last = NR } { l[NR] = $0 } END { s = last - '"$lines"' + 1; if (s < 1) s = 1; for (i = s; i <= last; i++) print l[i] }'
+		return 0
+		;;
+	esac
+	if [ -z "$pane" ]; then
+		ls_intro
+		return 0
+	fi
 	state_file "$pane"
 	[ -f "$SF" ] || return 0
-	jq -r --argjson now "$(date +%s)" --arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" \
-		--arg dim "$C_DIM" --arg bold "$C_BOLD" --arg off "$C_OFF" '
+	[ -n "$title" ] &&
+		printf '%s%s%s%s%s%s\n' "$C_BOLD" "${title%% · *}" "$C_OFF" "$C_DIM" "${title#"${title%% · *}"}" "$C_OFF"
+	line=""
+	{ IFS= read -r line <"$SF"; } 2>/dev/null
+	[[ $line =~ $re_r ]] && root=${BASH_REMATCH[1]}
+	# Other agents in the same worktree: their turn diffs mix.
+	session_files json
+	for f in "${FOUND[@]}"; do
+		[ "$f" = "$SF" ] && continue
+		line=""
+		{ IFS= read -r line <"$f"; } 2>/dev/null
+		[[ $line =~ $re_r ]] && [ "${BASH_REMATCH[1]}" = "$root" ] && n=$((n + 1))
+	done
+	# The worktree in one line: branch, ahead/behind, changes.
+	if [ -n "${root:-}" ] && [ -d "$root" ]; then
+		while IFS= read -r line; do
+			case $line in
+			"# branch.head "*) head=${line#\# branch.head } ;;
+			"# branch.ab "*)
+				line=${line#\# branch.ab }
+				case $line in "+0 -0") ;; *) ab=$line ;; esac
+				;;
+			"? "*) new=$((new + 1)) ;;
+			[12u]" "*) changed=$((changed + 1)) ;;
+			esac
+		done <<EOF2
+$(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain=v2 --branch 2>/dev/null)
+EOF2
+	fi
+	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" \
+		--arg head "$head" --arg ab "$ab" --argjson changed "$changed" --argjson new "$new" --argjson shared "$n" \
+		--arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" '
 		def age: if . < 60 then "\(.)s" elif . < 3600 then "\(. / 60 | floor)m"
 			elif . < 172800 then "\(. / 3600 | floor)h" else "\(. / 86400 | floor)d" end;
 		def base: tostring | split("/") | last;
-		(.root // .cwd // "") as $root
+		def one: tostring | gsub("[\\t\\n\\r]+"; " ");
+		# Words into lines of at most $n characters (a longer word is cut).
+		def wrap($n): reduce (split(" ")[] | select(. != "")) as $x ([];
+			if length == 0 then [$x[0:$n]]
+			elif (.[-1] | length) + 1 + ($x | length) <= $n then .[-1] += " " + $x
+			else . + [$x[0:$n]] end);
+		# A field: its label, then the value wrapped under itself (at most $max lines).
+		def field($label; $text; $color; $lines):
+			($text | one) as $t
+			| if $t == "" then empty else
+				($t | wrap([$w - 11, 20] | max)) as $ls
+				| ($ls[0:$lines] | to_entries[]
+					| (if .key == 0 then $dim + ($label + "           ")[0:11] + $off else "           " end)
+					  + $color + .value + $off
+					  + (if .key == $lines - 1 and ($ls | length) > $lines then $dim + " …" + $off else "" end))
+			  end;
+		(.state // "idle") as $st
+		| (.seen // false) as $seen
 		| ($now - (.since // .ts // $now)) as $for
-		| [ $bold + (if (.title // "") != "" then .title else ($root | base) end) + $off
-		    + "  " + $grey + "turn \(.turn // 0) · \(.state // "?") for \($for | age)" + $off,
-		    $grey + $root + $off,
-		    (if .state == "needs-you" then $red + "waiting on: " + (.waiting // "you") + $off else empty end),
-		    (if .state == "working" and (.background_tasks // "") != "" then $grey + "in background: " + .background_tasks + $off else empty end),
-		    (if (.prompt // "") != "" then "asked: " + .prompt else empty end),
-		    (if (.last_message // "") != "" then $grey + "said: " + .last_message + $off else empty end),
+		| ($st | if . == "needs-you" then $red + "needs you" + $off
+			elif . == "done" then (if $seen then "done" else $green + "done" + $off end)
+			else . end) as $word
+		| [ $word + $dim + " · " + $off + ($for | age)
+			+ (if (.agent // "claude") != "claude" then $dim + " · " + $off + .agent else "" end),
+		    "",
+		    field("asked"; .prompt // ""; ""; 4),
+		    (if $st == "needs-you" then field("waits"; .waiting // "you"; ""; 3) else empty end),
+		    (if (.background // 0) > 0 then field("background"; .background_tasks // ""; ""; 2) else empty end),
+		    (if (.last_message // "") != "" and $st != "working" then field("said"; .last_message; $grey; 6) else empty end),
 		    (if ((.tasks // []) | length) > 0 then
-		       "tasks: " + ((.tasks // [])[-8:] | map((if .done then $green + "✓" + $off else "○" end) + " " + .subject) | join("  "))
+		       field("tasks"; (.tasks[-12:] | map((if .done then "✓ " else "○ " end) + .subject | one | gsub(" "; "\u00a0")) | join("\u00a0 ")); ""; 3)
 		     else empty end),
 		    (if ((.subagents // []) | length) > 0 then
-		       "subagents: " + ((.subagents // []) | map(.type + " " + (($now - (.since // $now)) | age)) | join(", "))
+		       field("subagents"; ((.subagents // []) | map(.type + " " + (($now - (.since // $now)) | age)) | join(" · ")); ""; 2)
 		     else empty end),
 		    (if ((.files // []) | length) > 0 then
-		       $grey + "files (\(.files | length)): " + ((.files // [])[-6:] | reverse | map(base) | join(", ")) + $off
-		     else empty end)
-		  ] | .[]' "$SF" 2>/dev/null
-	root=$(jq -r '.root // .cwd // ""' "$SF" 2>/dev/null)
-	printf '%s%s%s\n' "$C_DIM" "────────────────────────────────────────" "$C_OFF"
-	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 10
-	printf '%s%s%s\n' "$C_DIM" "────────────────────────────────────────" "$C_OFF"
-	zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 30
+		       field("files"; ((.files // [])[-6:] | reverse | map(base | gsub(" "; "\u00a0")) | join("\u00a0 "))
+		         + (if (.files | length) > 6 then "\u00a0 +\((.files | length) - 6)" else "" end); $grey; 2)
+		     else empty end),
+		    (if $head != "" then
+		       field("git"; $head + (if $ab != "" then " " + $ab else "" end)
+		         + (if $changed + $new == 0 then " · clean"
+		            else (if $changed > 0 then " · \($changed) changed" else "" end) + (if $new > 0 then " · \($new) new" else "" end) end); $dim; 1)
+		     else empty end),
+		    (if $shared > 0 then field("shared"; "\($shared + 1) agents work in this worktree: their turn diffs mix"; $dim; 2) else empty end)
+		  ] | .[] | gsub("\u00a0"; " ")' "$SF" 2>/dev/null
+}
+
+# The empty board's preview: how to start.
+ls_intro() {
+	local d=$C_DIM g=$C_GREY o=$C_OFF
+	cat <<EOF2
+No agents in this zellij session yet.
+
+${g}n$o       start a thread: a task, its worktree, and a tab with
+        nvim and the agent ${d}(weaver new)$o
+${g}Alt N$o   the same from anywhere in zellij
+
+${d}Or start claude or codex in any pane: weaver follows it
+through its hooks.$o
+EOF2
+}
+
+# The keys and glyphs, for the dashboard's ? view.
+ls_help() {
+	local d=$C_DIM g=$C_GREY o=$C_OFF
+	cat <<EOF2
+${g}keys$o
+  ${g}↵  1-9${o}      jump to the thread ${d}(1-9: that row)$o
+  ${g}j k  g G$o    move; first, last
+  $g/$o           search ${d}(esc: back)$o
+  ${g}n$o           new thread ${d}(weaver new)$o
+  ${g}x$o           close the thread: its tab and nvim ${d}(offers to remove a merged worktree)$o
+  ${g}e  ^e$o       jump and open its nvim
+  ${g}s  tab$o      resume card ↔ screen
+  ${g}^r$o          reload
+  $g?$o           this help ${d}(? again: back)$o
+  ${g}q  esc$o      close the dashboard
+
+${g}threads$o
+  $C_RED$G_NEED$o  needs you    $C_GREEN$G_DONE$o  done, not yet seen    $G_WORK  working
+  $d$G_DONE$o  done, seen   $d$G_IDLE$o  idle    $g$G_INT$o  interrupted
+
+  ${d}×2 after a branch: two agents share the worktree; their turn diffs mix.$o
+EOF2
+}
+
+# The dashboard's preview shows VIEW (screen, help); the same again goes back
+# to the card.
+cmd_view() {
+	local f cur=""
+	[ -n "${FZF_SOCK:-}" ] || return 0
+	f=${FZF_SOCK%.sock}.view
+	{ IFS= read -r cur <"$f"; } 2>/dev/null
+	if [ "$cur" = "$1" ]; then rm -f "$f"; else printf '%s\n' "$1" >"$f"; fi
 }
 
 # Jump to pane PANE in tab TAB and count it as seen.
@@ -2069,45 +2476,116 @@ jump_to() {
 	mark_seen "$1"
 }
 
+# The dashboard's footer: the keys that work now (browsing, or searching when
+# fzf's input shows), as many as fit the list's width, ? always last.
+ls_footer() {
+	local width k w item out="" end="" g=$C_GREY d=$C_DIM o=$C_OFF IFS='|'
+	local browse='↵ jump|1-9|n new|x close|/ search|s screen|e nvim' search='↵ jump|esc back|tab screen|^e nvim'
+	ls_utf8
+	ls_width
+	width=$((LS_WIDTH - 2)) w=0
+	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
+		set -- $search
+	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-}" = 1 ]; then
+		set -- 'n new thread' 'q quit'
+		end="${g}?$o ${d}help$o" w=6
+	else
+		set -- $browse
+		end="${g}?$o ${d}help$o" w=6
+	fi
+	for item in "$@"; do
+		[ $((w + ${#item} + 2)) -le $width ] || break
+		k=${item%% *}
+		if [ "$k" = "$item" ]; then out="$out$g$k$o  "; else out="$out$g$k$o $d${item#* }$o  "; fi
+		w=$((w + ${#item} + 2))
+	done
+	printf '%s\n' "$out$end"
+}
+
+# The dashboard's keys while browsing; searching (/) unbinds them so they type.
+LS_KEYS='j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9'
+
 cmd_ls() {
-	local rows out key sel pane tab q fzf=0 sock
+	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows
+	local foot size lines=40 items=0
 	need_session
 	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
-	rows=$(COLOR=$fzf ls_rows)
-	if [ -z "$rows" ]; then
-		echo "no agents in zellij session $SESSION"
-		[ $fzf = 1 ] && sleep 1.5
-		return 0
-	fi
 	if [ $fzf = 0 ]; then
-		printf '%s\n' "$rows" | cut -f3-
+		LS_MODE=plain ls_rows
 		return 0
 	fi
 	q=$(printf '%q' "$SELF")
+	[ -x /bin/dash ] && sh=/bin/dash
 	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
 	# Hooks reload this dashboard through its socket as agents change.
-	sock="$SOCK_DIR/${SKEY}.fzf.$$.sock"
-	rm -f "$sock"
-	# fzf runs preview/reload through $SHELL, which may be fish.
-	out=$(printf '%s\n' "$rows" | SHELL=/bin/sh fzf --listen "$sock" --track --id-nth 1 \
-		--delimiter "$TAB" --with-nth 3.. --reverse --no-sort --ansi --prompt 'agents> ' \
-		--expect ctrl-e --header-lines 1 \
-		--header 'enter: jump   ctrl-e: jump + nvim   ctrl-r: reload' \
-		--color 'fg:-1,bg:-1,hl:#ffffff,fg+:#ffffff,bg+:#303030,hl+:#ffffff,info:#616161,prompt:#999999,pointer:#ffffff,marker:#39d97a,spinner:#616161,header:#616161,border:#303030,gutter:-1' \
-		--preview "$q _preview {1}" --preview-window 'down,60%,border-top,wrap' \
-		--bind "ctrl-r:reload(COLOR=1 $q _rows)+refresh-preview")
-	rm -f "$sock"
-	[ -n "$out" ] || return 0
-	key=${out%%"$NL"*}
-	sel=${out#*"$NL"}
-	[ -n "$sel" ] && [ "$sel" != "$out" ] || return 0
-	pane=${sel%%"$TAB"*}
-	sel=${sel#*"$TAB"}
-	tab=${sel%%"$TAB"*}
-	jump_to "$pane" "$tab"
-	push_status
-	[ "$key" = ctrl-e ] && exec "$SELF" edit "$pane"
-	return 0
+	base="$SOCK_DIR/${SKEY}.fzf.$$"
+	sock="$base.sock"
+	ls_utf8
+	while :; do
+		rm -f "$sock" "$base.keys" "$base.view"
+		rows=$(FZF_SOCK=$sock ls_rows)
+		case $rows in *"${NL}a"[0-9]*) foot=$(ls_footer) ;; *) foot=$(LS_EMPTY=1 ls_footer) ;; esac
+		# Below a narrow list, the preview takes what the list leaves, at
+		# least 10 lines (fzf puts it on the right when it gets 72 columns).
+		size=$(stty size </dev/tty 2>/dev/null)
+		case ${size%% *} in '' | *[!0-9]*) ;; *) lines=${size%% *} ;; esac
+		items=$(printf '%s\n' "$rows" | wc -l)
+		size=$((lines - items - 2))
+		[ $size -lt 10 ] && size=10
+		[ $size -gt $((lines * 6 / 10)) ] && size=$((lines * 6 / 10))
+		# A heading or gap never keeps the cursor: it moves on to the agent
+		# beyond, in the direction it was going.
+		out=$(printf '%s\n' "$rows" | fzf --listen "$sock" --with-shell "$sh -c" \
+			--track --id-nth 1 --delimiter "$TAB" --with-nth 7.. --nth 2 --tabstop 1 --no-sort --ansi --layout reverse \
+			--no-input --header-lines 2 --highlight-line --pointer ' ' --marker ' ' --ellipsis '…' \
+			--no-scrollbar --footer "$foot" --footer-border none \
+			--color 'fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000' \
+			--color 'header:-1,footer:#616161,border:#616161,preview-border:#616161,preview-label:#ffffff,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161' \
+			--prompt '/ ' --ghost 'search threads' --info hidden --no-separator \
+			--preview "$q _preview {2} {6}" --preview-window "right,45%,border-left,wrap,<72(down,$size,border-top,wrap)" \
+			--bind "resize:reload($q _rows)" --bind "load:transform-footer($q _footer)" \
+			--bind "focus:transform:case {1} in a*) ;; *) case \$FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n \"\$t\" ] || t={5} ;; *) t={5}; [ -n \"\$t\" ] || t={4} ;; esac; [ -n \"\$t\" ] && echo \"pos(\$t)\" ;; esac" \
+			--bind 'j:down,k:up,g,home:first,G,end:last,q:abort' \
+			--bind "enter:transform:case {1} in a*) echo 'print(jump)+accept' ;; esac" \
+			--bind "1:transform(sed -n 1p '$base.keys'),2:transform(sed -n 2p '$base.keys'),3:transform(sed -n 3p '$base.keys')" \
+			--bind "4:transform(sed -n 4p '$base.keys'),5:transform(sed -n 5p '$base.keys'),6:transform(sed -n 6p '$base.keys')" \
+			--bind "7:transform(sed -n 7p '$base.keys'),8:transform(sed -n 8p '$base.keys'),9:transform(sed -n 9p '$base.keys')" \
+			--bind "n:print(new)+accept" \
+			--bind "x:transform:case {1} in a*) echo 'execute($q close {2})+reload($q _rows)' ;; esac" \
+			--bind "e,ctrl-e:transform:case {1} in a*) echo 'print(ctrl-e)+accept' ;; esac" \
+			--bind "s,tab:execute-silent($q _view screen)+refresh-preview" \
+			--bind "?:execute-silent($q _view help)+refresh-preview" \
+			--bind "ctrl-r:reload($q _rows)+refresh-preview" \
+			--bind "/:show-input+unbind($LS_KEYS)+transform-footer($q _footer)" \
+			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo abort; else echo 'hide-input+rebind($LS_KEYS)+transform-footer($q _footer)'; fi}")
+		rc=$?
+		rm -f "$sock" "$base.keys" "$base.view"
+		[ -n "$out" ] || return 0
+		key=${out%%"$NL"*}
+		sel=${out#*"$NL"}
+		[ "$sel" = "$out" ] && sel=""
+		pane="" tab=""
+		case $sel in
+		a*)
+			sel=${sel#*"$TAB"}
+			pane=${sel%%"$TAB"*}
+			sel=${sel#*"$TAB"}
+			tab=${sel%%"$TAB"*}
+			;;
+		esac
+		if [ "$key" = new ]; then
+			"$SELF" new ${pane:+--from "$pane"}
+			rc=$?
+			[ $rc = 0 ] && return 0
+			[ $rc = 130 ] || sleep 1.5
+			continue
+		fi
+		[ -n "$pane" ] || return 0
+		jump_to "$pane" "$tab"
+		push_status
+		[ "$key" = ctrl-e ] && exec "$SELF" edit "$pane"
+		return 0
+	done
 }
 
 # Jump to the agent that has needed you longest; failing that, the one that
@@ -3078,6 +3556,8 @@ snapshot) cmd_snapshot "$@" ;;
 gc) gc_states ;;
 _rows) need_session && ls_rows ;;
 _preview) need_session && cmd_preview "$@" ;;
+_view) cmd_view "$@" ;;
+_footer) ls_footer ;;
 _focus) need_session && focus_pane "$@" ;;
 -h | --help | help) usage ;;
 *)

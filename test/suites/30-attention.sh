@@ -120,7 +120,7 @@ claude_session "$P1" sid-live waiting "$(($(date +%s) * 1000))" "dialog open"
 ok "a dialog no hook reported: needs you" "$(weaver ls | grep -c '^! .*dialog open')" "1"
 jq -c '.ts -= 30' "$SD/${SESSION}_1.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SESSION}_1.json"
 claude_session "$P1" sid-live idle $((($(date +%s) - 10) * 1000))
-ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^○ .*interrupted')" "1"
+ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^◌ .*interrupted')" "1"
 kill "$P1"
 
 # --- the dashboard: what each agent waits on (looking at C: a done agent you

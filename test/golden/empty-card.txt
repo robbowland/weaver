@@ -1,0 +1,8 @@
+No agents in this zellij session yet.
+
+n       start a thread: a task, its worktree, and a tab with
+        nvim and the agent (weaver new)
+Alt N   the same from anywhere in zellij
+
+Or start claude or codex in any pane: weaver follows it
+through its hooks.

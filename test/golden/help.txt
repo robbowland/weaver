@@ -1,0 +1,17 @@
+keys
+  ↵  1-9      jump to the thread (1-9: that row)
+  j k  g G    move; first, last
+  /           search (esc: back)
+  n           new thread (weaver new)
+  x           close the thread: its tab and nvim (offers to remove a merged worktree)
+  e  ^e       jump and open its nvim
+  s  tab      resume card ↔ screen
+  ^r          reload
+  ?           this help (? again: back)
+  q  esc      close the dashboard
+
+threads
+  !  needs you    ✓  done, not yet seen    ●  working
+  ✓  done, seen   ○  idle    ◌  interrupted
+
+  ×2 after a branch: two agents share the worktree; their turn diffs mix.

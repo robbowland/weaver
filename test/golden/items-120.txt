@@ -1,0 +1,10 @@
+t						weaver · 3 threads                                                   ! 1  ✓ 1  ● 1
+t2						
+h0				2		NEEDS YOU 1	
+a0	0	0			Add a CLI flag · repo/feat-a · turn 3	1 ! 	Add a CLI flag        Bash: python app.py --name rob           repo/feat-a   4m
+g1			2	5			
+h1			2	5		DONE 1	
+a1	1	0			Add a README · repo/feat-b · turn 1	2 ✓ 	Add a README          2 files · Wrote README.md and GUIDE.md.  repo/feat-b   1m
+g2			5	8			
+h2			5	8		WORKING 1	
+a2	2	1			Refine the dashboard · repo/main · turn 4	3 ● 	Refine the dashboard  2 subagents                              repo/main    10m

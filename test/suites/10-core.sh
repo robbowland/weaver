@@ -71,14 +71,14 @@ key 1b79 # Alt y
 sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating) | .id')
 ok "dashboard order (needs-you, done, working)" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ *>? +[!✓●○] ' | awk '{print ($1==">") ? $2 : $1}' | tr -d '\n')" "!✓●"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ +[1-9] [!✓●○◌] ' | awk '{print $2}' | tr -d '\n')" "!✓●"
 ok "dashboard listens for live reloads" "$(ls /tmp/weaver-$(id -u)/ | grep -c "^${SESSION}\.fzf\..*\.sock$")" "1"
 hook 1 PermissionRequest "$T/repo-wt-b"
 hookj 1 "{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-1\"}" >/dev/null
 settle
 sleep 0.5
 ok "an agent finishing reloads the open dashboard" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ *>? +[!✓●○] ' | awk '{print ($1==">") ? $2 : $1}' | tr -d '\n')" "✓✓●"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ +[1-9] [!✓●○◌] ' | awk '{print $2}' | tr -d '\n')" "✓✓●"
 key 03 # ctrl-c: close it
 sleep 1
 ok "...and its socket goes with it" "$(ls /tmp/weaver-$(id -u)/ | grep -c "^${SESSION}\.fzf\..*\.sock$")" "0"
