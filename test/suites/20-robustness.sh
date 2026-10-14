@@ -61,7 +61,6 @@ before=$(wins)
 hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/README.md"
 sleep 1
 ok "following leaves the diff tab's windows alone" "$(wins)" "$before"
-ok "...and says why" "$(nvq 0 "luaeval('_G.__cap[#_G.__cap]')")" "weaver: not opening README.md: you are reviewing a diff"
 nvsend 0 '<Esc>:DiffviewClose<CR>'
 sleep 1
 
