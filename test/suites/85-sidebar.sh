@@ -68,6 +68,7 @@ ok "...and the sidebar stays" "$(Z list-panes -a -j | jq -r ".[] | select(.id ==
 Z close-pane --pane-id "terminal_$SB"
 sleep 1.5
 ok "sidebar: its files go with its pane" "$(ls /tmp/weaver-$(id -u)/ | grep -c "^${SESSION}\.side\.$SB\.")" "0"
+ok "...and so do its processes (its tick too)" "$(pgrep -f "$AT/bin/weaver sidebar" | wc -l | tr -d ' ')" "0"
 
 # --- the home board: the dashboard, numbered by thread, and it stays
 HM=$(Z new-pane --name home -- weaver home)
@@ -83,6 +84,7 @@ sleep 2.5
 ok "home: 2 goes to thread 2" "$(client)" "terminal_0"
 ok "...and the home board stays" "$(Z list-panes -a -j | jq -r ".[] | select(.id == $HM) | .exited")|$([ -S "$H" ] && echo listening)" "false|listening"
 Z close-pane --pane-id "terminal_$HM"
-sleep 0.5
+sleep 1.5
+ok "home: its processes go with its pane" "$(pgrep -f "$AT/bin/weaver home" | wc -l | tr -d ' ')" "0"
 
 done_suite

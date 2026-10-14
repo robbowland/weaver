@@ -2889,7 +2889,10 @@ cmd_ls() {
 		rc=$?
 		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
 		if [ -n "${LS_HOME:-}" ]; then
-			# The home board does not end: ctrl-c starts it again.
+			# The home board does not end: ctrl-c starts it again. Not
+			# without its terminal (the pane or the session closed).
+			[ $rc = 2 ] && return 0
+			{ : </dev/tty; } 2>/dev/null || return 0
 			sleep 0.2
 			continue
 		fi
@@ -2946,10 +2949,11 @@ side_cache_write() {
 	printf '%s' "$THREAD_ORDER" >"$SIDE_ORDER.$$" && mv -f "$SIDE_ORDER.$$" "$SIDE_ORDER"
 }
 # The weaver session's order (thread_order, from the layout's side) for the
-# PANES agent_rows just listed; empty where there is none.
+# PANES agent_rows just listed; empty outside the weaver session, whose tabs
+# are in no particular order.
 side_order() {
 	THREAD_ORDER=""
-	type thread_order >/dev/null 2>&1 && thread_order
+	type thread_order >/dev/null 2>&1 && type weaver_session >/dev/null 2>&1 && weaver_session && thread_order
 	return 0
 }
 
@@ -3124,7 +3128,7 @@ cmd_goto() {
 }
 
 cmd_sidebar() {
-	local q sh=/bin/sh sock base tick=""
+	local q sh=/bin/sh sock base tick="" parent rc
 	need_session
 	command -v fzf >/dev/null 2>&1 || die "the sidebar needs fzf"
 	q=$(printf '%q' "$SELF")
@@ -3140,9 +3144,12 @@ cmd_sidebar() {
 	trap 'rm -f "$sock" "$base".keys "$base".cur; [ -n "$tick" ] && kill "$tick" 2>/dev/null' EXIT
 	trap 'exit 129' HUP
 	trap 'exit 143' TERM
-	# The ages move on: a reload every 15 s, from the rows the hooks keep.
+	# The ages move on: a reload every 15 s, from the rows the hooks keep;
+	# not past the sidebar itself.
+	parent=$$
 	(
 		while sleep 15; do
+			kill -0 "$parent" 2>/dev/null || exit 0
 			[ -S "$sock" ] && curl -s -m 1 --unix-socket "$sock" -X POST -d "reload($q _side --cached)" \
 				http://localhost >/dev/null 2>&1
 		done
@@ -3164,7 +3171,11 @@ cmd_sidebar() {
 			--bind "4:transform(sed -n 4p '$base.keys'),5:transform(sed -n 5p '$base.keys'),6:transform(sed -n 6p '$base.keys')" \
 			--bind "7:transform(sed -n 7p '$base.keys'),8:transform(sed -n 8p '$base.keys'),9:transform(sed -n 9p '$base.keys')" \
 			>/dev/null
-		# ctrl-c: start again.
+		rc=$?
+		# ctrl-c starts it again; with its terminal gone (the pane or the
+		# session closed, under a shell that kept the hangup), it ends.
+		[ $rc = 2 ] && exit 0
+		{ : </dev/tty; } 2>/dev/null || exit 0
 		sleep 0.2
 	done
 }
