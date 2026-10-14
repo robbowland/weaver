@@ -1489,7 +1489,7 @@ cmd_snapshot() {
 
 cmd_nvim() {
 	[ $# -ge 1 ] || die "usage: weaver nvim <agent-pane-id> [file]"
-	local agent=${1#terminal_} file=${2:-} lua dir rc d i
+	local agent=${1#terminal_} file=${2:-} lua dir rc d i fresh=""
 	need_session
 	# The left pane of a new thread's tab: wait for the agent beside it to say
 	# which pane it is in.
@@ -1507,6 +1507,9 @@ cmd_nvim() {
 			exec nvim
 			;;
 		esac
+		# Its agent was just made: an nvim on its socket belongs to a
+		# session of the same name that was closed (pane ids start again).
+		fresh=1
 	fi
 	mkdir -p "$SOCK_DIR" || die "cannot create $SOCK_DIR"
 	[ -O "$SOCK_DIR" ] || die "$SOCK_DIR is not owned by you"
@@ -1514,7 +1517,7 @@ cmd_nvim() {
 	sock_path "$agent"
 	# Never take the socket of an nvim still serving this agent (answering, or
 	# alive but busy): go to it instead, and let this pane close.
-	if [ -S "$SOCK" ]; then
+	if [ -z "$fresh" ] && [ -S "$SOCK" ]; then
 		bounded /dev/null nvim --server "$SOCK" --remote-expr 1
 		rc=$?
 		if [ $rc = 0 ] || [ $rc -ge 128 ]; then

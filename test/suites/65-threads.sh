@@ -85,6 +85,22 @@ ok "here: in the checkout it was started from, no worktree made" \
 	"$(th "$AG" worktree)|$(th "$AG" here)|$(th "$AG" worktree_created)|$(th "$AG" branch)" "$T/repo-wt-b|true|false|feat-b"
 ok "here: no new branch" "$(git -C "$T/repo" branch --list "$name*" | wc -l | tr -d ' ')" "0"
 
+# A session started again under the same name numbers its panes from the
+# start: an nvim left on the socket of the new agent's pane id is a
+# stranger's, and the thread's own nvim takes the socket over.
+next=$(($(Z list-panes -a -j | jq '[.[] | select(.is_plugin | not) | .id] | max') + 2))
+fake_nvim "$next" 9999
+stale=$FAKE_NVIM_PID
+rm -f "$SD/${SESSION}_$next.nvim"
+out=$(cd "$T/repo" && weaver new --no-focus --here "stale socket" 2>&1)
+tab=$(tab_named stale-socket)
+TABS="$TABS $tab"
+thread_panes "$tab"
+waitfor "[ -f '$SD/${SESSION}_$AG.nvim' ]"
+ok "new: an nvim left by a closed session does not stop the thread's own" \
+	"$AG|$(nvim_pane "$AG")|$(tabpanes "$tab" | jq length)" "$next|$NVP|2"
+kill "$stale" 2>/dev/null
+
 # --- an existing branch continues in its own worktree; codex
 out=$(cd "$T/repo" && weaver new --no-focus --branch feat-a --agent codex "carry on with a" 2>&1)
 tab=$(tab_named feat-a)
