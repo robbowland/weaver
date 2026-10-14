@@ -112,6 +112,14 @@ thread_panes "$tab"
 a=$(columns "$AG")
 ok "new: the agent gets at least WEAVER_AGENT_MIN_COLS" "$([ "$a" -ge 69 ] && [ "$a" -le 72 ] && echo yes || echo "$a")" "yes"
 
+# WEAVER_CLAUDE names the command a claude thread runs.
+out=$(cd "$T/repo" && WEAVER_CLAUDE="$AT/bin/codex --from-env" weaver new --no-focus --here "other command" 2>&1)
+tab=$(tab_named other-command)
+TABS="$TABS $tab"
+thread_panes "$tab"
+waitfor "[ -f '$AT/args.codex.$AG' ]"
+ok "new: WEAVER_CLAUDE is the command a claude thread runs" "$(tr '\n' ' ' <"$AT/args.codex.$AG" 2>/dev/null)" "--from-env other command "
+
 # --- refusals
 out=$(cd "$AT" && weaver new --no-focus "outside" 2>&1)
 ok "new: outside a repository with no repository used yet... the last one is used" \

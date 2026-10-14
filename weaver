@@ -3290,7 +3290,18 @@ repo_of() {
 
 # Is agent $1 installed?
 agent_installed() {
-	case $1 in claude | codex) command -v "$1" >/dev/null 2>&1 ;; *) return 1 ;; esac
+	agent_cmd "$1" || return 1
+	command -v "${AGENT_CMD%% *}" >/dev/null 2>&1
+}
+
+# The command that runs agent $1, into AGENT_CMD: $WEAVER_CLAUDE or
+# $WEAVER_CODEX (words, e.g. "claude --model opus"), else its name.
+agent_cmd() {
+	case $1 in
+	claude) AGENT_CMD=${WEAVER_CLAUDE:-claude} ;;
+	codex) AGENT_CMD=${WEAVER_CODEX:-codex} ;;
+	*) return 1 ;;
+	esac
 }
 
 # Repositories used for threads, most recent first, at most 20.
@@ -4148,10 +4159,13 @@ thread_create() {
 	# Its stable number: the lowest free one (two at once must not share).
 	num_lock
 	thread_num
-	jq -nc --argjson num "$NUM" --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
+	# The command its agent runs, from here (the pane will not have this
+	# environment): $WEAVER_CLAUDE / $WEAVER_CODEX, else the agent's name.
+	agent_cmd "$F_AGENT"
+	jq -nc --arg cmd "$AGENT_CMD" --argjson num "$NUM" --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
 		--arg dir "$dir" --argjson here "$([ "$F_WHERE" = here ] && echo true || echo false)" \
 		--argjson created "$created" --arg agent "$F_AGENT" --argjson now "$(date +%s)" --arg base "$BASE" \
-		'{num: $num, name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
+		'{num: $num, cmd: $cmd, name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
 		  worktree_created: $created, agent: $agent, created: $now, base: $base}' >"$d/thread.json" || {
 		num_unlock
 		die "cannot write the thread record"
@@ -4270,13 +4284,16 @@ cmd_new() {
 # and start the agent with the task. Run again (zellij offers to rerun an
 # exited command): resume the agent's conversation, never send the task twice.
 cmd_agent_pane() {
-	local tok=${1:-} kind=${2:-claude} d task sid="" pane
+	local tok=${1:-} kind=${2:-claude} d task sid="" pane c
 	need_session
 	pane=${ZELLIJ_PANE_ID:-}
 	d="$THREADS_NEW/${SKEY}_$tok"
 	case $kind in claude | codex) ;; *) die "unknown agent: $kind" ;; esac
+	agent_cmd "$kind"
 	if [ -n "$tok" ] && [ -n "$pane" ] && [ -f "$d/task" ]; then
 		task=$(cat "$d/task")
+		c=$(jq -r '.cmd // empty' "$d/thread.json" 2>/dev/null)
+		[ -n "$c" ] && AGENT_CMD=$c
 		if [ -f "$d/thread.json" ]; then
 			jq -c --argjson pane "$pane" '. + {pane: $pane}' "$d/thread.json" >"$STATE_DIR/${SKEY}_$pane.thread.$$" &&
 				mv -f "$STATE_DIR/${SKEY}_$pane.thread.$$" "$STATE_DIR/${SKEY}_$pane.thread"
@@ -4285,12 +4302,16 @@ cmd_agent_pane() {
 		printf '%s\n' "$pane" >"$d/pane.$$" && mv -f "$d/pane.$$" "$d/pane"
 		# A task starting with "-" is not an option.
 		case $task in -*) task=" $task" ;; esac
-		exec "$kind" "$task"
+		# shellcheck disable=SC2086
+		exec $AGENT_CMD "$task"
 	fi
 	[ -n "$pane" ] && sid=$(jq -r '.session_id // empty' "$STATE_DIR/${SKEY}_$pane.json" 2>/dev/null)
+	c=$(jq -r '.cmd // empty' "$STATE_DIR/${SKEY}_$pane.thread" 2>/dev/null)
+	[ -n "$c" ] && AGENT_CMD=$c
+	# shellcheck disable=SC2086
 	case $kind in
-	claude) if [ -n "$sid" ]; then exec claude --resume "$sid"; else exec claude --continue; fi ;;
-	codex) if [ -n "$sid" ]; then exec codex resume "$sid"; else exec codex resume --last; fi ;;
+	claude) if [ -n "$sid" ]; then exec $AGENT_CMD --resume "$sid"; else exec $AGENT_CMD --continue; fi ;;
+	codex) if [ -n "$sid" ]; then exec $AGENT_CMD resume "$sid"; else exec $AGENT_CMD resume --last; fi ;;
 	esac
 }
 
