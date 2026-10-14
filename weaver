@@ -4003,9 +4003,10 @@ thread_width() {
 		geo=$(printf '%s' "$PANES" | jq -r --arg a "$agent" --arg n "$nv" '
 			map(select(.is_plugin | not)) as $t
 			| ($t | map(select((.id | tostring) == $a)) | .[0]) as $ap
-			| [$t[] | select(.tab_id == $ap.tab_id and (.is_floating | not))] as $tiled
+			| [$t[] | select(.tab_id == $ap.tab_id and (.is_floating | not))] as $all
+			| [$all[] | select((.terminal_command // "") | test(" sidebar$") | not)] as $tiled
 			| if $ap != null and ($tiled | length) == 2 and any($tiled[]; (.id | tostring) == $n)
-			  then "\($ap.pane_columns) \($tiled | map(.pane_columns) | add)" else "" end')
+			  then "\($ap.pane_columns) \($all | map(.pane_columns) | add)" else "" end')
 		case $geo in *[0-9]" "[0-9]*) ;; *) return 0 ;; esac
 		aw=${geo% *} total=${geo#* }
 		agent_cols "$total"
@@ -4058,6 +4059,10 @@ thread_layout() {
         args \"_agent\" $ktok $kkind
     }
 }"
+	if weaver_session; then
+		thread_layout_side "$size"
+		return
+	fi
 	tpl=$(zellij action dump-layout 2>/dev/null | awk "$AWK_TEMPLATE")
 	case $tpl in
 	*[![:space:]]*)
@@ -4071,6 +4076,47 @@ thread_layout() {
 	LAYOUT="layout {
 tab {
 $tpl
+}
+}"
+}
+
+# In the weaver session, a thread tab has the thread sidebar on its left:
+# SIDE_OPEN% of the width, or SIDE_RAIL% once it collapses (a swap layout, so
+# `next-swap-layout`, Alt [ and Alt ] toggle it with the panes kept). The
+# session's new-tab template (its status line) becomes a named tab template,
+# which the swap layout needs. Into LAYOUT; $1 the agent's size, and self,
+# name, ktok and kkind from thread_layout.
+SIDE_OPEN=13 SIDE_RAIL=3
+thread_layout_side() {
+	local size=$1 tpl
+	tpl=$(zellij action dump-layout 2>/dev/null | awk "$AWK_TEMPLATE" |
+		awk '!done && /^[[:space:]]*pane[[:space:]]*$/ { print "children"; done = 1; next } { print }')
+	case $tpl in *children*) ;; *) tpl=children ;; esac
+	LAYOUT="layout {
+tab_template name=\"weaver_thread\" {
+$tpl
+}
+swap_tiled_layout name=\"rail\" {
+    weaver_thread {
+        pane split_direction=\"vertical\" {
+            pane size=\"$SIDE_RAIL%\"
+            pane
+            pane size=$size
+        }
+    }
+}
+weaver_thread {
+    pane split_direction=\"vertical\" {
+        pane size=\"$SIDE_OPEN%\" name=\"threads\" command=$self {
+            args \"sidebar\"
+        }
+        pane name=$name command=$self close_on_exit=true {
+            args \"nvim\" \"--thread\" $ktok
+        }
+        pane size=$size focus=true command=$self {
+            args \"_agent\" $ktok $kkind
+        }
+    }
 }
 }"
 }
@@ -4099,18 +4145,25 @@ thread_create() {
 	d="$THREADS_NEW/${SKEY}_$tok"
 	mkdir -p "$d" || die "cannot create $d"
 	printf '%s' "$TASK" >"$d/task"
-	jq -nc --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
+	# Its stable number: the lowest free one (two at once must not share).
+	num_lock
+	thread_num
+	jq -nc --argjson num "$NUM" --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
 		--arg dir "$dir" --argjson here "$([ "$F_WHERE" = here ] && echo true || echo false)" \
 		--argjson created "$created" --arg agent "$F_AGENT" --argjson now "$(date +%s)" --arg base "$BASE" \
-		'{name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
-		  worktree_created: $created, agent: $agent, created: $now, base: $base}' >"$d/thread.json" ||
+		'{num: $num, name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
+		  worktree_created: $created, agent: $agent, created: $now, base: $base}' >"$d/thread.json" || {
+		num_unlock
 		die "cannot write the thread record"
+	}
+	num_unlock
 	thread_layout "$tok" "$F_AGENT" "$dir"
 	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
 		rm -rf "$d"
 		[ "$created" = true ] && die "zellij could not open the tab for $name (its new worktree stays: $dir)"
 		die "zellij could not open the tab for $name"
 	}
+	weaver_session && thread_place "$tab" "$NUM"
 	remember_repo "$F_REPO"
 	tildify "$dir"
 	printf 'weaver: thread %s in %s (tab %s)\n' "$name" "$TILDE" "${tab:-?}"
@@ -4339,14 +4392,15 @@ worktree_removable() {
 }
 
 # Panes of this session whose directory is in $1, into USERS: not those in
-# $2 (a space-separated list), and not the floating panes of tab $3 (they
-# close with it).
+# $2 (a space-separated list), not the floating panes of tab $3 (they close
+# with it), and not thread sidebars (they use no files).
 worktree_users() {
 	USERS=$(printf '%s' "$PANES" | jq -r --arg d "$1" --arg skip " $2 " --arg tab "${3:-}" '
 		[.[] | (.id | tostring) as $i
 		| select((.is_plugin | not) and (.exited | not)
 			and ($skip | contains(" " + $i + " ") | not)
 			and ((.is_floating and (.tab_id | tostring) == $tab) | not)
+			and ((.terminal_command // "") | test(" sidebar$") | not)
 			and ((.pane_cwd // "") as $c | $c == $d or ($c | startswith($d + "/"))))
 		| $i] | join(" ")')
 }
@@ -4393,7 +4447,7 @@ card_place() {
 # weaver close [--yes] [--remove-worktree] [pane]
 cmd_close() {
 	local yes=0 rmwt=0 target="" nv tab others name what="" n="" st pid start title kind remove=0 detach=0 info
-	local keep="" removable=0 out goes
+	local keep="" removable=0 out goes sides=""
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--yes | -y) yes=1 ;;
@@ -4426,7 +4480,13 @@ cmd_close() {
 	# The tab's other panes, which close must leave alone (and which keep it open).
 	others=$(printf '%s' "$PANES" | jq -r --arg t "$tab" --arg a "$AGENT" --arg nv "${nv:-x}" '
 		[.[] | select((.is_plugin | not) and (.is_floating | not) and (.tab_id | tostring) == $t
-			and (.id | tostring) != $a and (.id | tostring) != $nv) | .id] | join(" ")')
+			and (.id | tostring) != $a and (.id | tostring) != $nv
+			and ((.terminal_command // "") | test(" sidebar$") | not)) | .id] | join(" ")')
+	# The thread sidebar of its tab (the weaver session) goes with the tab.
+	sides=$(printf '%s' "$PANES" | jq -r --arg t "$tab" '
+		[.[] | select((.is_plugin | not) and (.tab_id | tostring) == $t
+			and ((.terminal_command // "") | test(" sidebar$"))) | .id] | join(" ")')
+	[ -n "$others" ] && sides=""
 
 	name=${TH_NAME:-${title:-${kind:-agent} in pane $AGENT}}
 	case $st in
@@ -4502,7 +4562,7 @@ cmd_close() {
 		>/dev/null 2>&1; then
 		detach=1
 	fi
-	set -- "$AGENT" "${nv:-}" "${pid:-}" "${start:-}" "$remove" "${TH_DIR:-}" "${TH_REPO:-}"
+	set -- "$AGENT" "${nv:-}" "${pid:-}" "${start:-}" "$remove" "${TH_DIR:-}" "${TH_REPO:-}" "$sides"
 	if [ $detach = 1 ]; then
 		mkdir -p "$STATE_DIR"
 		# Out of this pane's session, and deaf to the hangup its closing sends
@@ -4515,14 +4575,16 @@ cmd_close() {
 	close_tail "$@"
 }
 
-# The closing itself (`weaver _close AGENT NVIM PID START REMOVE DIR REPO`):
+# The closing itself (`weaver _close AGENT NVIM PID START REMOVE DIR REPO
+# [SIDEBARS]`):
 # close the agent's pane and its nvim's, wait for the agent to exit, forget
 # it, and remove its worktree if asked, checking again first.
 close_tail() {
-	local agent=$1 nv=$2 pid=$3 start=$4 remove=$5 dir=$6 repo=$7 i rc
+	local agent=$1 nv=$2 pid=$3 start=$4 remove=$5 dir=$6 repo=$7 sides=${8:-} i rc p
 	need_session
 	zellij action close-pane --pane-id "terminal_$agent" >/dev/null 2>&1
 	[ -n "$nv" ] && zellij action close-pane --pane-id "terminal_$nv" >/dev/null 2>&1
+	for p in $sides; do zellij action close-pane --pane-id "terminal_$p" >/dev/null 2>&1; done
 	for ((i = 0; i < 50; i++)); do
 		[ -n "$pid" ] && agent_alive "$pid" "$start" || break
 		sleep 0.1
@@ -4555,16 +4617,280 @@ close_tail() {
 	return "${rc:-0}"
 }
 
-# `weaver` alone: outside zellij, attach to (or start) the weaver session;
-# inside, the dashboard.
+# ---------------------------------------------------------------- the weaver session
+#
+# `weaver` starts zellij with weaver's own layout: a home tab first (`weaver
+# home`), then the threads' tabs in their numbers' order, each with the
+# thread sidebar on its left, and one status line instead of the tab bar.
+# Its config is yours with weaver's session keys added (Alt j/k: the next and
+# previous tab, Alt y: home and back). $STATE_DIR/<skey>.layout says "weaver"
+# for it.
+
+ZDIR=${ZELLIJ_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij}
+
+# Was this session started from weaver's layout?
+weaver_session() {
+	local l=""
+	{ read -r l <"$STATE_DIR/$SKEY.layout"; } 2>/dev/null
+	[ "$l" = weaver ]
+}
+
+# Print the config with file `snip` added before the brace that closes its
+# first top-level keybinds block (braces in strings and after // don't count).
+AWK_KEYS_END='
+function depth(s,   i, c, d, q) {
+	d = 0; q = 0
+	for (i = 1; i <= length(s); i++) {
+		c = substr(s, i, 1)
+		if (q) { if (c == "\\") i++; else if (c == "\"") q = 0 }
+		else if (c == "\"") q = 1
+		else if (c == "/" && substr(s, i + 1, 1) == "/") break
+		else if (c == "{") d++
+		else if (c == "}") d--
+	}
+	return d
+}
+!done && !inb && /^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]/ { inb = 1; d = 0 }
+inb {
+	n = depth($0)
+	if (d > 0 && d + n <= 0) {
+		while ((getline l < snip) > 0) print "    " l
+		inb = 0; done = 1
+	}
+	d += n
+}
+{ print }'
+
+# The weaver session's zellij config, into SESSION_CONFIG: yours
+# ($ZELLIJ_CONFIG_FILE, else config.kdl) with the session keys
+# (weaver-keys.kdl beside it, else weaver's) at the end of its keybinds,
+# where they win over yours (zellij 0.45.1: within one block the later
+# binding of a key wins; in a second keybinds block it would lose). Its
+# layout and theme directories stay yours.
+session_config() {
+	local src=${ZELLIJ_CONFIG_FILE:-$ZDIR/config.kdl} keys=$ZDIR/weaver-keys.kdl
+	[ -f "$keys" ] || keys="$(script_dir)/config/zellij-session-keys.kdl"
+	SESSION_CONFIG="$STATE_DIR/zellij-session.kdl"
+	mkdir -p "$STATE_DIR"
+	{
+		if [ -f "$src" ] && grep -Eq '^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]' "$src"; then
+			awk -v snip="$keys" "$AWK_KEYS_END" "$src"
+		else
+			[ -f "$src" ] && cat "$src"
+			echo "keybinds {"
+			sed 's/^/    /' "$keys"
+			echo "}"
+		fi
+		# (zellij refuses a config whose theme_dir is missing.)
+		[ -d "$ZDIR/layouts" ] && ! grep -Eq '^[[:space:]]*layout_dir[[:space:]]' "$src" 2>/dev/null &&
+			echo "layout_dir \"$ZDIR/layouts\""
+		[ -d "$ZDIR/themes" ] && ! grep -Eq '^[[:space:]]*theme_dir[[:space:]]' "$src" 2>/dev/null &&
+			echo "theme_dir \"$ZDIR/themes\""
+		true
+	} >"$SESSION_CONFIG.$$" && mv -f "$SESSION_CONFIG.$$" "$SESSION_CONFIG"
+}
+
+# The weaver session's layout, into SESSION_LAYOUT: $WEAVER_LAYOUT, else
+# layouts/weaver.kdl in your zellij config, else weaver's own.
+session_layout() {
+	SESSION_LAYOUT=${WEAVER_LAYOUT:-$ZDIR/layouts/weaver.kdl}
+	[ -f "$SESSION_LAYOUT" ] || SESSION_LAYOUT="$(script_dir)/config/weaver-layout.kdl"
+}
+
+# `weaver` alone: outside zellij, attach to the weaver session, or start it
+# from weaver's layout; inside, the dashboard.
 cmd_start() {
+	local name line state=""
 	if [ -n "$SESSION" ]; then
 		cmd_ls
 		return
 	fi
 	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
-	exec zellij attach --create "${1:-${WEAVER_SESSION:-weaver}}"
+	name=${1:-${WEAVER_SESSION:-weaver}}
+	while IFS= read -r line; do
+		case $line in
+		"$name "*EXITED*) state=exited ;;
+		"$name "*) state=running ;;
+		esac
+	done <<EOF2
+$(zellij list-sessions --no-formatting 2>/dev/null)
+EOF2
+	SKEY=${name//\//_}
+	case $state in
+	running) exec zellij attach "$name" ;;
+	exited)
+		# Resurrect weaver's own session; one from before its layout is in
+		# the way, and only you may delete it.
+		weaver_session ||
+			die "an exited zellij session named $name (from before weaver's layout) is in the way: zellij delete-session $name, then weaver again"
+		session_config
+		exec zellij --config "$SESSION_CONFIG" attach "$name"
+		;;
+	esac
+	session_config
+	session_layout
+	echo weaver >"$STATE_DIR/$SKEY.layout"
+	rm -f "${STATE_DIR:?}/${SKEY:?}.last"
+	exec zellij --config "$SESSION_CONFIG" --session "$name" --new-session-with-layout "$SESSION_LAYOUT"
 }
+
+# Serialise numbering threads (weaver new): a lock older than 10s was left
+# by a killed process.
+num_lock() {
+	local d="$STATE_DIR/$SKEY.num.lock" i=0 t now
+	mkdir -p "$STATE_DIR"
+	until mkdir "$d" 2>/dev/null; do
+		t=0
+		{ read -r t <"$d/at"; } 2>/dev/null
+		now=$(date +%s)
+		case $t in '' | *[!0-9]*) t=$now ;; esac
+		if [ $((now - t)) -gt 10 ]; then
+			rm -rf "${d:?}"
+			continue
+		fi
+		i=$((i + 1))
+		[ $i -ge 50 ] && break
+		sleep 0.1
+	done
+	date +%s >"$d/at" 2>/dev/null
+}
+num_unlock() { rm -rf "${STATE_DIR:?}/${SKEY:?}.num.lock"; }
+
+# The lowest number none of this session's threads has (those being opened
+# included), into NUM.
+thread_num() {
+	local used=" " f n
+	local -a files=()
+	for f in "$STATE_DIR/${SKEY}"_*.thread "$THREADS_NEW/${SKEY}"_*/thread.json; do
+		[ -f "$f" ] && files[${#files[@]}]=$f
+	done
+	if [ ${#files[@]} -gt 0 ]; then
+		for n in $(jq -r '.num // empty' "${files[@]}" 2>/dev/null); do used="$used$n "; done
+	fi
+	NUM=1
+	while case $used in *" $NUM "*) true ;; *) false ;; esac do NUM=$((NUM + 1)); done
+}
+
+# Thread tab $1 (number $2) to its place: after home, among the threads in
+# their numbers' order (zellij adds a tab at the end). Other tabs keep their
+# places after the threads.
+thread_place() {
+	local tab=$1 num=$2 nums="{}" f moves
+	case $tab$num in '' | *[!0-9]*) return 0 ;; esac
+	list_panes || return 0
+	for f in "$STATE_DIR/${SKEY}"_*.thread; do
+		[ -f "$f" ] || continue
+		nums=$(jq -c --argjson m "$nums" '$m + {(.pane | tostring): .num}' "$f" 2>/dev/null) || nums="{}"
+	done
+	moves=$(zellij action list-tabs -j 2>/dev/null | jq -r --argjson panes "$PANES" --argjson nums "$nums" \
+		--argjson tab "$tab" --argjson num "$num" '
+		(map({key: (.tab_id | tostring), value: .position}) | from_entries) as $pos
+		| [$panes[] | select((.is_plugin | not) and ($nums[.id | tostring] != null))
+			| {tab: .tab_id, num: $nums[.id | tostring]}] as $threads
+		| ([$threads[] | select(.num < $num and .tab != $tab) | $pos[.tab | tostring]] | max) as $lower
+		| ([.[] | select(.name == "home") | .position] | first) as $home
+		| (($lower // $home // -1) + 1) as $target
+		| ($pos[$tab | tostring] // $target) - $target | if . > 0 then . else 0 end' 2>/dev/null)
+	case $moves in '' | *[!0-9]*) return 0 ;; esac
+	while [ "$moves" -gt 0 ]; do
+		zellij action move-tab -t "$tab" left >/dev/null 2>&1 || return 0
+		moves=$((moves - 1))
+	done
+}
+
+# Alt y in the weaver session (`weaver go home`, from a tiny floating pane):
+# from home back to the tab you came from; from anywhere else, home (made
+# again first if it was closed).
+cmd_go() {
+	local where=${1:-} cur home last="" t
+	[ "$where" = home ] || die "usage: weaver go home"
+	need_session
+	# One question to zellij: the tabs, which is active, which is home.
+	t=$(zellij action list-tabs -j 2>/dev/null)
+	read -r cur home <<<"$(printf '%s' "$t" | jq -r '[([.[] | select(.active) | .tab_id] | first // ""),
+		([.[] | select(.name == "home") | .tab_id] | first // "")] | map(tostring) | join(" ")')"
+	if [ -n "$home" ] && [ "$cur" = "$home" ]; then
+		{ read -r last <"$STATE_DIR/$SKEY.last"; } 2>/dev/null
+		case $last in '' | *[!0-9]*) return 0 ;; esac
+		printf '%s' "$t" | jq -e --argjson l "$last" 'any(.[]; .tab_id == $l)' >/dev/null 2>&1 || return 0
+		zellij action go-to-tab-by-id "$last" >/dev/null 2>&1
+		return 0
+	fi
+	[ -n "$cur" ] && printf '%s\n' "$cur" >"$STATE_DIR/$SKEY.last"
+	if [ -z "$home" ]; then
+		kdl_str "$SELF"
+		home=$(zellij action new-tab --name home --layout-string "layout { tab { pane name=\"home\" command=$K { args \"home\"; }; }; }") ||
+			return 0
+		thread_place "$home" 0
+		return 0
+	fi
+	zellij action go-to-tab-by-id "$home" >/dev/null 2>&1
+}
+
+# The sidebar's own tab, to the window (`weaver _sidefit`, from the sidebar,
+# at its start and when it is resized): open from 160 columns, a rail below.
+# A toggle of yours (Alt [ / Alt ]) holds until the window crosses 160 again.
+cmd_sidefit() {
+	local info tab cols width want have mem=""
+	weaver_session || return 0
+	list_panes || return 0
+	info=$(printf '%s' "$PANES" | jq -r --arg me "${ZELLIJ_PANE_ID:-}" \
+		'map(select((.is_plugin | not) and (.id | tostring) == $me)) | .[0] // empty | "\(.tab_id) \(.pane_columns)"')
+	read -r tab width <<<"$info"
+	case $tab$width in '' | *[!0-9]*) return 0 ;; esac
+	cols=$(zellij action list-tabs -j 2>/dev/null | jq -r --argjson t "$tab" '.[] | select(.tab_id == $t) | .viewport_columns')
+	case $cols in '' | *[!0-9]* | 0) return 0 ;; esac
+	want=open
+	[ "$cols" -lt 160 ] && want=rail
+	have=open
+	[ $((width * 100 / cols)) -lt $(((SIDE_OPEN + SIDE_RAIL) / 2)) ] && have=rail
+	{ read -r mem <"$STATE_DIR/$SKEY.side.$tab"; } 2>/dev/null
+	[ "$mem" = "$want" ] && return 0
+	printf '%s\n' "$want" >"$STATE_DIR/$SKEY.side.$tab"
+	[ "$have" = "$want" ] || zellij action next-swap-layout -t "$tab" >/dev/null 2>&1
+	return 0
+}
+
+# The weaver session's entries in its order (its tabs' order, home left
+# out), into THREAD_ORDER, one per line, US-separated: kind (thread: an agent
+# with a number; agent; tab: no agent), num, tab id, pane (empty for a tab),
+# label (the thread's name; a tab's name, or for zellij's "Tab #N" its first
+# pane's directory and command). From $PANES when set (list-panes carries
+# each pane's tab, its position and name), else list-panes.
+thread_order() {
+	local f nums="{}" agents=""
+	THREAD_ORDER=""
+	[ -n "${PANES:-}" ] || list_panes || return 0
+	session_files json
+	for f in ${FOUND[@]+"${FOUND[@]}"}; do
+		f=${f##*_}
+		agents="$agents ${f%.json}"
+	done
+	for f in "$STATE_DIR/${SKEY}"_*.thread; do
+		[ -f "$f" ] || continue
+		nums=$(jq -c --argjson m "$nums" '$m + {(.pane | tostring): {num, name}}' "$f" 2>/dev/null) || nums="{}"
+		f=${f##*_}
+		agents="$agents ${f%.thread}"
+	done
+	THREAD_ORDER=$(printf '%s' "$PANES" | jq -r --argjson nums "$nums" --arg agents " $agents " --arg home "$HOME" '
+		def tilde: if . == $home then "~" elif startswith($home + "/") then "~" + .[($home | length):] else . end;
+		(group_by(.tab_id) | map({id: .[0].tab_id, pos: .[0].tab_position, name: .[0].tab_name,
+			panes: [.[] | select((.is_plugin | not) and (.is_floating | not))]}) | sort_by(.pos))[]
+		| select(.name != "home") | . as $t
+		| [$t.panes[] | (.id | tostring) as $i | select($agents | contains(" " + $i + " "))] as $a
+		| if ($a | length) == 0 then
+			["tab", "", $t.id, "",
+			 (if ($t.name | test("^Tab #[0-9]+$")) and ($t.panes | length) > 0
+			  then ($t.panes[0] | ((.pane_cwd // "") | tilde) + " "
+				+ ((.terminal_command // "shell") | split(" ")[0] | split("/") | last))
+			  else $t.name end)]
+		  else $a[] | ($nums[.id | tostring]) as $n
+			| if $n.num != null then ["thread", $n.num, $t.id, .id, ($n.name // "")]
+			  else ["agent", "", $t.id, .id, ""] end
+		  end
+		| map(tostring) | join("\u001f")' 2>/dev/null)
+}
+
 
 # ---------------------------------------------------------------- main
 
@@ -4607,6 +4933,9 @@ new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
+go) cmd_go "$@" ;;
+_sidefit) need_session && cmd_sidefit ;;
+_order) need_session && thread_order && printf '%s\n' "$THREAD_ORDER" ;;
 _fetch) cmd_fetch "$@" ;;
 _close) close_tail "$@" ;;
 hook) cmd_hook "$@" ;;
