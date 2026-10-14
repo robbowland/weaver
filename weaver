@@ -3,6 +3,8 @@
 # neovim in the worktree each agent is really editing.
 #
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
+#   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
+#   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
 #   weaver edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
 #   weaver nvim <agent-pane> [file] internal: start the nvim bound to one agent
 #   weaver ls                       live dashboard of every agent in this zellij session
@@ -775,11 +777,146 @@ write_state() {
 	if printf '%s\n' "$out" >|"$LOCK"; then commit_lock; else drop_lock; fi
 }
 
+# ---------------------------------------------------------------- other agents
+
+# `weaver event` takes one event of any agent as normalized JSON (see
+# docs/design.md, Events) and turns it into the Claude Code hook input the
+# state machine above understands. Adapters (`weaver adapt codex`) translate
+# an agent's own hook input into it.
+JQ_EVENT='
+def s: tostring;
+{ session_id: (.session // "" | s), transcript_path: (.transcript // "" | s), cwd: (.cwd // "" | s),
+  prompt_id: (.prompt_id // "" | s), session_title: (.title // "" | s) }
++ (if .event == "session_start" then {hook_event_name: "SessionStart", source: (.source // "startup")}
+   elif .event == "compact" then {hook_event_name: "SessionStart", source: "compact"}
+   elif .event == "prompt" then {hook_event_name: "UserPromptSubmit", prompt: (.prompt // "" | s),
+     source: (if .user == false then "system" else "user" end)}
+   elif .event == "needs_you" then {hook_event_name: "Notification", notification_type: "permission_prompt",
+     message: (.waiting // "" | s)}
+   elif .event == "answered" then {hook_event_name: "Notification", notification_type: "elicitation_response", message: ""}
+   elif .event == "tool_done" then
+     if (.file // "") != "" then {hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: {file_path: (.file | s)}}
+     else {hook_event_name: "PostToolUse", tool_name: "Bash",
+       tool_input: {command: ((.command // .tool // "") | s) + " " + ((.paths // []) | map(s) | join(" "))}} end
+   elif .event == "tool_failed" then {hook_event_name: "PostToolUseFailure", tool_name: (.tool // "" | s), tool_input: {},
+     error: (.error // "" | s)}
+   elif .event == "interrupt" then {hook_event_name: "PostToolUseFailure", tool_name: (.tool // "" | s), tool_input: {},
+     is_interrupt: true}
+   elif .event == "stop" then {hook_event_name: "Stop", last_assistant_message: (.message // "" | s)}
+   elif .event == "error" then {hook_event_name: "StopFailure", error: (.error // "" | s)}
+   elif .event == "session_end" then {hook_event_name: "SessionEnd"}
+   elif .event == "subagent_start" then {hook_event_name: "SubagentStart", agent_id: (.subagent // "" | s),
+     agent_type: (.subagent_type // "" | s)}
+   elif .event == "subagent_stop" then {hook_event_name: "SubagentStop", agent_id: (.subagent // "" | s),
+     agent_type: (.subagent_type // "" | s)}
+   else {} end)'
+
+# Codex (0.162+) hook input, as normalized events. Its hooks mirror Claude
+# Code s, without Notification; tool names differ, so any tool may have
+# changed files: edits are found the way Bash edits are.
+JQ_CODEX='
+def s: tostring;
+def patch_files: [(.tool_input | .. | strings) | scan("\\*\\*\\* (?:Update|Add) File: ([^\n]+)") | .[0]];
+{agent: "codex", session: (.session_id // "" | s), cwd: (.cwd // "" | s), transcript: (.transcript_path // ""),
+ prompt_id: (.turn_id // "")}
++ (if .hook_event_name == "SessionStart" then {event: "session_start", source: (.source // "startup")}
+   elif .hook_event_name == "UserPromptSubmit" then {event: "prompt", prompt: (.prompt // "")}
+   elif .hook_event_name == "PermissionRequest" then {event: "needs_you",
+     waiting: ((.tool_name // "") + ": " + ((.tool_input | objects | .command // .cmd // .file_path // .path) // ""
+       | if type == "array" then map(s) | join(" ") else s end))}
+   elif .hook_event_name == "PostToolUse" then
+     ((.tool_input | objects | .file_path // .path // null) // (patch_files | .[0]) // "") as $f
+     | {event: "tool_done", tool: (.tool_name // ""),
+        file: (if ($f | s | startswith("/")) then $f elif $f != "" then (.cwd // "") + "/" + $f else "" end),
+        command: ((.tool_input | objects | .command // .cmd) // "" | if type == "array" then join(" ") else s end)}
+   elif .hook_event_name == "Interrupt" then {event: "interrupt"}
+   elif .hook_event_name == "Stop" then {event: "stop", message: (.last_assistant_message // "")}
+   elif .hook_event_name == "SessionEnd" then {event: "session_end"}
+   elif .hook_event_name == "SubagentStart" then {event: "subagent_start", subagent: (.agent_id // ""), subagent_type: (.agent_type // "")}
+   elif .hook_event_name == "SubagentStop" then {event: "subagent_stop", subagent: (.agent_id // ""), subagent_type: (.agent_type // "")}
+   elif .hook_event_name == "PreCompact" or .hook_event_name == "PostCompact" then {event: "compact"}
+   else {event: "none"} end)'
+
+# weaver event [--bell]: one normalized event on stdin. The agent is the pane
+# ZELLIJ_PANE_ID names (or "pane"). With --bell, a change to needs-you or
+# done rings the terminal bell on /dev/tty, for agents that cannot ask their
+# own terminal to (zellij marks the tab).
+cmd_event() {
+	local adapter="" bell=0 meta json agent pid pane mode=sync rc ev
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--bell) bell=1 ;;
+		--adapter) adapter=$2 && shift ;;
+		esac
+		shift
+	done
+	[ -t 0 ] && die "usage: weaver event [--bell] < event.json"
+	case $adapter in
+	'') meta=$(jq -c '[.agent // "", (.pid // "" | tostring), (.pane // "" | tostring)], ('"$JQ_EVENT"')') ;;
+	codex) meta=$(jq -c '('"$JQ_CODEX"') | [.agent // "", (.pid // "" | tostring), (.pane // "" | tostring)], ('"$JQ_EVENT"')') ;;
+	*) die "unknown adapter: $adapter" ;;
+	esac || exit 0
+	IFS=$NL read -r -d '' meta json <<<"$meta"
+	IFS=, read -r agent pid pane <<<"${meta//[\[\]\"]/}"
+	pane=${pane:-${ZELLIJ_PANE_ID:-}}
+	[ -n "$pane" ] && [ -n "$SESSION" ] && [ -n "$agent" ] || exit 0
+	case $json in *'"hook_event_name"'*) ;; *) exit 0 ;; esac
+	case $json in *'"PostToolUse'* | *'"Subagent'*) mode=async ;; esac
+	pid=${pid:-${WEAVER_AGENT_PID:-}}
+	# The agent process, once per session: the nearest ancestor that is not a
+	# shell (an agent may run its hooks through one).
+	if [ -z "$pid" ] && [ -n "$adapter" ]; then
+		case $json in *'"SessionStart"'*) agent_ancestor && pid=$ANCESTOR ;; esac
+	fi
+	(printf '%s' "$json" | ZELLIJ_PANE_ID=$pane WEAVER_AGENT=$agent WEAVER_AGENT_PID=$pid hook_run "$mode") >/dev/null 2>&1
+	rc=$?
+	if [ $bell = 1 ]; then
+		case ${WEAVER_BELL:-1}:$rc in
+		1:10 | 1:11 | needs-you:10) { printf '\a' >/dev/tty; } 2>/dev/null ;;
+		esac
+	fi
+	exit 0
+}
+
+# The nearest ancestor of this process that is not a shell, into ANCESTOR.
+agent_ancestor() {
+	local p=$PPID i comm
+	ANCESTOR=""
+	for i in 1 2 3 4; do
+		comm=$(ps -o comm= -p "$p" 2>/dev/null) || return 1
+		case ${comm##*/} in
+		sh | bash | zsh | dash | fish | -sh | -bash | -zsh | -fish | env) p=$(ps -o ppid= -p "$p" 2>/dev/null) && p=${p// /} ;;
+		*)
+			ANCESTOR=$p
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
+# weaver adapt AGENT: an agent's own hook input (stdin) into weaver.
+cmd_adapt() {
+	case ${1:-} in
+	codex)
+		shift
+		cmd_event --adapter codex "$@"
+		;;
+	*) die "usage: weaver adapt codex [--bell]" ;;
+	esac
+}
+
 # ---------------------------------------------------------------- dispatch
 
 if [ -z "${WEAVER_SOURCED:-}" ] && [ "${1:-}" = hook ]; then
 	shift
 	cmd_hook "$@"
+fi
+if [ -z "${WEAVER_SOURCED:-}" ]; then
+	case ${1:-} in
+	event) shift && cmd_event "$@" ;;
+	adapt) shift && cmd_adapt "$@" ;;
+	esac
 fi
 
 # ---------------------------------------------------------------- the rest
@@ -1952,6 +2089,8 @@ usage() {
 	cat <<'EOF2'
 usage: weaver <command>
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
+  event [--bell]               an event of any agent, as normalized JSON on stdin
+  adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
   ls                           live dashboard of the agents in this zellij session
   next                         jump to the next agent that needs you; repeat to cycle

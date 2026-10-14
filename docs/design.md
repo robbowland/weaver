@@ -141,6 +141,36 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 | `snapshot` | `root`, `commit`, `point` |
 | `end` | |
 
+## Events from other agents
+
+`weaver event [--bell]` reads one event as JSON on stdin; the pane is
+`ZELLIJ_PANE_ID` unless the event names one. Adapters translate an agent's own
+hook input into it (`weaver adapt codex`). `--bell` rings the terminal bell on
+`/dev/tty` when the agent starts needing you or finishes, for agents that
+cannot ring through their hook output.
+
+| Field | For | Meaning |
+| --- | --- | --- |
+| `agent` | all, required | `codex`, `gemini`, `pi`, ...: the state's `agent` |
+| `event` | all, required | below |
+| `session` | all | the agent's session id |
+| `pid` | all | the agent process (liveness); adapters find it at `session_start` |
+| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file |
+| `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
+| `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
+| `waiting` | `needs_you` | what it waits on |
+| `tool`, `file`, `command`, `paths` | `tool_done` | with `file`, an edit; without, its changes are found as for a Bash command (in `cwd`, the root and `paths`) |
+| `tool`, `error` | `tool_failed` | |
+| `message` | `stop` | its last reply |
+| `error` | `error` | ends the turn, needs you |
+| `subagent`, `subagent_type` | `subagent_start`, `subagent_stop` | |
+
+`event` is one of `session_start`, `prompt`, `needs_you`, `answered`,
+`tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
+`session_end`, `subagent_start`, `subagent_stop`. Each maps onto the Claude
+Code event the state machine already handles, so every agent gets the same
+states, turns, snapshots, log and nvim events.
+
 ## Decisions
 
 - 2026-10-13: WorktreeCreate and WorktreeRemove hooks are not registered.
@@ -233,6 +263,14 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
   with zellij 0.44.1, still open, not mentioned in the 0.24 or 0.25 notes) is
   the known risk; see test/soak/zjstatus.sh. If it bites, lengthen the
   interval rather than drop the segment.
+- 2026-10-14: Agents other than Claude Code report through `weaver event`
+  (normalized JSON), mapped onto the Claude Code events the state machine
+  already handles; an adapter per agent turns its own hook input into it.
+  Codex's hooks mirror Claude Code's (without Notification, with Interrupt),
+  so `weaver adapt codex` is one jq program. Codex tool names differ, so a
+  tool call without a file path is treated like Bash: the files it changed are
+  found with git status. install.sh adds the Codex hooks when ~/.codex exists;
+  Codex runs them only after you trust them in /hooks.
 - 2026-10-14: zjstatus soak (test/soak/zjstatus.sh): 10 minutes, 5 tabs, the
   widget every 2 s, 1079 hook events; zellij always answered within 3 s, no
   "ERROR IN PLUGIN", no plugin panic in the log, counts on screen at every
