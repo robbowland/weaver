@@ -2,10 +2,11 @@
 # Install weaver; with --configure, also wire it into zellij and Claude Code.
 #
 #   ./install.sh                  copy to ~/.local/share/weaver, link ~/.local/bin/weaver
-#   ./install.sh --configure      also add the zellij keybindings and Claude Code hooks
+#   ./install.sh --configure      also add the zellij keybindings and the Claude Code (and Codex) hooks
 #     --zellij-config FILE        zellij config to edit; repeatable (default: $ZELLIJ_CONFIG_FILE,
 #                                 else ~/.config/zellij/config.kdl). FILE.in templates are
 #                                 edited but not validated.
+#     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
 # Idempotent: rerunning refreshes the installed copy and skips config already present.
@@ -17,6 +18,8 @@ SRC=$(cd "$(dirname "$0")" && pwd -P)
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/weaver"
 BIN="$HOME/.local/bin"
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
+CODEX_DONE=0
 TS=$(date +%Y%m%d-%H%M%S)
 
 say() { printf '%s\n' "$*"; }
@@ -26,18 +29,19 @@ die() {
 	exit 1
 }
 
-configure=0 dry=0 zconfs=""
+configure=0 dry=0 zconfs="" codex=1
 while [ $# -gt 0 ]; do
 	case $1 in
 	--configure) configure=1 ;;
 	--dry-run) dry=1 ;;
+	--no-codex) codex=0 ;;
 	--zellij-config)
 		[ $# -ge 2 ] || die "--zellij-config needs a file"
 		zconfs="$zconfs$2$NL"
 		shift
 		;;
 	-h | --help)
-		sed -n '2,12p' "$0"
+		sed -n '2,13p' "$0"
 		exit 0
 		;;
 	*) die "unknown option: $1 (see --help)" ;;
@@ -69,14 +73,19 @@ install_files() {
 		return
 	fi
 	if [ "$SRC" != "$(cd "$DEST" 2>/dev/null && pwd -P)" ]; then
-		mkdir -p "$DEST/nvim" "$DEST/config"
-		cp "$SRC/weaver" "$SRC/install.sh" "$DEST/"
-		# nvim/: the loader and its modules (lua/weaver/), replaced whole so
-		# a module removed upstream does not linger.
-		rm -rf "$DEST/nvim.new" && cp -R "$SRC/nvim" "$DEST/nvim.new" &&
-			rm -rf "$DEST/nvim" && mv "$DEST/nvim.new" "$DEST/nvim"
-		cp "$SRC/config/zellij-keybinds.kdl" "$SRC/config/claude-hooks.json" "$DEST/config/"
-		chmod 755 "$DEST/weaver" "$DEST/install.sh"
+		# Into a fresh copy, then swapped in: a hook running meanwhile sees the
+		# old install or the new one, never half of each.
+		rm -rf "$DEST.new"
+		mkdir -p "$DEST.new/config"
+		cp "$SRC/weaver" "$SRC/install.sh" "$DEST.new/"
+		cp -R "$SRC/nvim" "$DEST.new/"
+		cp "$SRC"/config/* "$DEST.new/config/"
+		chmod 755 "$DEST.new/weaver" "$DEST.new/install.sh"
+		rm -rf "$DEST.old"
+		mkdir -p "$(dirname "$DEST")"
+		if [ -e "$DEST" ]; then mv "$DEST" "$DEST.old"; fi
+		mv "$DEST.new" "$DEST"
+		rm -rf "$DEST.old"
 	fi
 	mkdir -p "$BIN"
 	if [ -e "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ]; then
@@ -204,32 +213,45 @@ configure_zellij() {
 	rm -f "$tmp"
 }
 
-# Drop the entries of agentnav (weaver's old name), then append each weaver hook
-# entry unless the event already has one with the same matcher and commands;
-# other entries are never touched.
+# Remove every weaver hook (whatever its form: "weaver hook", an exec-form
+# "weaver" with args, an absolute path to it, or agentnav, weaver's old name)
+# and add the current ones, so a changed matcher or event never leaves a stale
+# entry behind. Hooks of anything else are never touched; a matcher group left
+# empty is dropped.
 JQ_HOOKS='
-def sig: (.matcher // "") + "\u0001" + ([.hooks[]?.command? // empty] | join("\u0001"));
-def agentnav: [.hooks[]?.command? // empty] | length > 0 and all(startswith("agentnav "));
-(if .hooks then .hooks |= with_entries(
-  if any(.value[]; agentnav) then (.value |= map(select(agentnav | not))) | select(.value | length > 0)
-  else . end) else . end) |
-reduce ($add[0].hooks | to_entries[]) as $e (.;
-  reduce $e.value[] as $entry (.;
-    if any((.hooks[$e.key] // [])[]; sig == ($entry | sig)) then .
-    else .hooks[$e.key] = ((.hooks[$e.key] // []) + [$entry]) end))'
+def ours: (.command? // "" | tostring) | test("^(\\S*/)?(weaver|agentnav)( |$)");
+($add[0] | walk(if type == "object" and (.command? | type) == "string" then
+    .command |= (if . == "weaver" then $bin elif startswith("weaver ") then $bin + .[6:] else . end)
+  else . end)) as $new
+| .hooks = ((.hooks // {})
+    | with_entries(.value |= (map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0))))
+    | with_entries(select(.value | length > 0)))
+| reduce ($new.hooks | to_entries[]) as $e (.; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))'
 
-configure_claude() {
-	local f=$CLAUDE_SETTINGS tmp
+# configure_hooks LABEL FILE HOOKS-JSON: weaver's hooks into an agent's JSON
+# hooks file (Claude Code's settings.json, Codex's hooks.json).
+configure_hooks() {
+	local label=$1 f=$2 hooks=$3 tmp
 	tmp=$(mktemp "${TMPDIR:-/tmp}/weaver.XXXXXX")
 	if [ -f "$f" ]; then cat "$f"; else echo '{}'; fi |
-		jq --slurpfile add "$SRC/config/claude-hooks.json" "$JQ_HOOKS" >"$tmp" ||
+		jq --slurpfile add "$hooks" --arg bin "$BIN/weaver" "$JQ_HOOKS" >"$tmp" ||
 		die "cannot parse $f"
 	if [ -f "$f" ] && jq -e --slurpfile new "$tmp" '. == $new[0]' "$f" >/dev/null; then
-		say "claude: $f already runs weaver on every event"
-	elif show_or_apply claude "$f" "$tmp"; then
+		say "$label: $f already runs weaver on every event"
+	elif show_or_apply "$label" "$f" "$tmp"; then
 		jq empty "$f" || die "wrote invalid JSON to $f; the backup is $f.bak.$TS"
 	fi
 	rm -f "$tmp"
+}
+
+configure_claude() { configure_hooks claude "$CLAUDE_SETTINGS" "$SRC/config/claude-hooks.json"; }
+
+# Codex, when it is set up here: its hooks run `weaver adapt codex`. Codex
+# asks you to trust new hooks (in /hooks) before it runs them.
+configure_codex() {
+	[ -d "$CODEX_DIR" ] || return 0
+	configure_hooks codex "$CODEX_DIR/hooks.json" "$SRC/config/codex-hooks.json"
+	CODEX_DONE=1
 }
 
 check_deps
@@ -241,11 +263,16 @@ if [ $configure = 1 ]; then
 		[ -n "$z" ] && configure_zellij "$z"
 	done
 	configure_claude
+	[ $codex = 1 ] && configure_codex
 	[ $dry = 1 ] || cat <<'EOF'
 
 Done. To pick it up:
   - running zellij sessions reload their config file by themselves; restart zellij
     only if Alt y / Alt v do nothing
   - restart any Claude Code sessions that are already running: they read hooks at start
+EOF
+	[ $dry = 1 ] || [ $CODEX_DONE = 0 ] || cat <<'EOF'
+  - Codex: trust weaver's hooks in /hooks (Codex asks before running new hooks), then
+    restart running Codex sessions
 EOF
 fi
