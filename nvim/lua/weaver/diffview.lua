@@ -195,6 +195,24 @@ local function use_private_index(view, root)
   M.build_index(root)
 end
 
+-- Stamp VIEW whenever an update starts or finishes (entering its tab, the
+-- index changing, the agent editing), so a close can wait for it: see settle.
+local function track_updates(view)
+  local update = view.update_files
+  view.update_files = function(self, opts, cb)
+    if type(opts) == 'function' and cb == nil then
+      opts, cb = nil, opts
+    end
+    self.weaver_touched = uv.now()
+    return update(self, opts, function(...)
+      self.weaver_touched = uv.now()
+      if cb then
+        return cb(...)
+      end
+    end)
+  end
+end
+
 -- Views -------------------------------------------------------------------------
 
 -- The tagged view, if one is open.
@@ -209,12 +227,31 @@ function M.current()
   end
 end
 
+-- Whether VIEW has listed its files and shows the current one.
+local function opened(view)
+  if view.is_loading then
+    return false
+  end
+  if view.files and view.files:len() == 0 then
+    return true
+  end
+  for _, win in ipairs(view.cur_layout and view.cur_layout.windows or {}) do
+    local ok, open = pcall(win.is_file_open, win)
+    if ok and not open then
+      return false
+    end
+  end
+  return true
+end
+
 -- diffview opens a view's first file asynchronously and does not check that
 -- the view still exists when it finishes; closing it in that window raises
--- errors inside diffview. Give a view that is still loading a moment.
+-- errors inside diffview. Let a view that is still opening finish first.
+-- A view also refreshes after it opened, when its tab is entered and as the
+-- agent edits: wait for the last update to be over too.
 local function settle(view)
-  vim.wait(1500, function()
-    return not view.is_loading and (uv.now() - (view.weaver_listed_at or 0)) > 150
+  vim.wait(2000, function()
+    return opened(view) and uv.now() - (view.weaver_touched or 0) > 300
   end, 10)
 end
 
@@ -230,9 +267,6 @@ local function close(view)
     pcall(vim.cmd, (last > 0 and last ~= fn.tabpagenr()) and ('tabnext ' .. last) or 'tabprevious')
   end
   local ok, closed = pcall(view.close, view)
-  if ok and closed ~= false then
-    pcall(require('diffview.lib').dispose_view, view)
-  end
   if not ok then
     util.msg('could not close the review: ' .. tostring(closed), util.WARN)
     return false
@@ -241,6 +275,7 @@ local function close(view)
     util.msg('the review has unsaved staged edits; save or :DiffviewClose! first', util.WARN)
     return false
   end
+  pcall(require('diffview.lib').dispose_view, view)
   return true
 end
 
@@ -270,11 +305,10 @@ local function open_new(spec, ident)
     if private_index then
       use_private_index(view, spec.root)
     end
-    pcall(function()
-      view.emitter:on('files_updated', function() view.weaver_listed_at = uv.now() end)
-    end)
+    track_updates(view)
     view:open()
   end
+  view.weaver_touched = uv.now()
   vim.t[view.tabpage].diffview_scope = ident
   vim.t[view.tabpage].diffview_context = spec.label
   pcall(function() require('lualine').refresh({ place = { 'statusline' } }) end)
@@ -295,8 +329,8 @@ function M.show(spec)
       close(cur)
       return nil
     end
+    -- Entering its tab refreshes it.
     api.nvim_set_current_tabpage(cur.tabpage)
-    refresh(cur)
     return cur
   end
   if cur and not close(cur) then
@@ -305,10 +339,11 @@ function M.show(spec)
   return open_new(spec, ident)
 end
 
+-- Close the diffview view in this tab (any kind), else the tagged view.
 function M.close()
-  local cur = M.current()
-  if cur then
-    close(cur)
+  local view = util.diffview_view() or M.current()
+  if view then
+    close(view)
   end
 end
 

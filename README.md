@@ -34,8 +34,10 @@ The nvim weaver opens for an agent loads your own config, then:
   switching to them;
 - gives each worktree its own tab (closed again when the worktree is removed);
 - reloads files the moment they change on disk, never over unsaved changes;
-- shows the agent at the top of each file window: its state, turn, the edit
-  waiting to be followed, and what it was asked or is waiting on.
+- shows the agent at the top of each file window: its state, turn, task
+  progress, the edit waiting to be followed, and what it was asked or is
+  waiting on; once a turn is over, how many files it changed and the key to
+  review them (`2 files ␣at`).
 
 ### Reviewing
 
@@ -70,9 +72,9 @@ The branch is compared against `$WEAVER_BASE`, else
 
 Your own config can use the same one-view review:
 `require('weaver.diffview').show({ key = ..., label = ..., root = ..., compare = { kind = 'branch', base = 'origin/main' } })`
-(see `nvim/lua/weaver/diffview.lua`). `require('weaver.status').text()` is the
-agent's state for a statusline, and `User WeaverEvent` autocmds receive every
-event from the agent.
+(see `nvim/lua/weaver/diffview.lua`). `require('weaver.status').statusline()`
+is the agent's state for a statusline, empty where the bar already shows it,
+and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Install
 

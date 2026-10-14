@@ -178,3 +178,13 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
   over RPC (real typed keys and modes), events through `WeaverEvent`, and
   assertions on buffers, tabs, the winbar, messages, quickfix and diffview's
   file panel. No test reaches into module internals.
+- 2026-10-14: Shapes over flags (designing-with-types audit). Hook events
+  are parsed once at the boundary (`parse_event`: the contract's fields with
+  the right types, seq a number); following works on Targets (`root` and/or
+  `file`, never neither) and Plans (`new_tab` | `tab` with an optional show
+  `in`/`beside` | `blocked`); `:AgentWhy` returns `unknown` | `unsaved` |
+  `turn` | `between` | `before`, each described exhaustively; who asked is a
+  literal (`agent` | `you`), not a force flag.
+- 2026-10-14: The bar shows a finished turn's size and the review key
+  (`2 files ␣at`), from the end snapshot (one `git diff --shortstat`), and
+  task progress while the agent works (`tasks` in the state file).

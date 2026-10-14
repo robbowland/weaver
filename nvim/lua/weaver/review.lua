@@ -48,7 +48,7 @@ end
 
 local function need_sid()
   local sid = require('weaver.status').agent.sid
-  if not sid or sid == '' then
+  if not sid then
     return nil, 'no agent session is bound to this nvim'
   end
   return sid
@@ -102,7 +102,9 @@ function resolvers.mine(root)
     return nil, why
   end
   local paths, seen = turns.agent_paths(root, sid)
-  for _, p in ipairs(rel_paths_under(root, require('weaver.status').refresh_from_file().files)) do
+  local status = require('weaver.status')
+  status.refresh_from_file()
+  for _, p in ipairs(rel_paths_under(root, status.files())) do
     if not seen[p] then
       seen[p] = true
       paths[#paths + 1] = p

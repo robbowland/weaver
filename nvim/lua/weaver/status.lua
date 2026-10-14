@@ -7,69 +7,145 @@ local M = {}
 local api = vim.api
 local util = require('weaver.util')
 
+-- What this nvim knows of its agent: the state-file fields below, plus
+-- sid (session id), log (activity log path), files (FileSet) and tasks
+-- ({ subject, done }[]), all optional until the agent reports them.
 M.agent = {}
 
 local seq = 0
 
--- Fields an event or the state file may carry.
+-- Fields an event or the state file may carry, copied as they are.
 local FIELDS = { 'state', 'turn', 'title', 'prompt', 'waiting', 'root', 'agent' }
 
-function M.seed()
+-- The files the agent edited this session, in order, each once (at most
+-- 200, like the state file's list).
+local function file_set(list)
+  local set = { list = {}, has = {} }
+  for _, f in ipairs(type(list) == 'table' and list or {}) do
+    if type(f) == 'string' and not set.has[f] then
+      set.has[f] = true
+      set.list[#set.list + 1] = f
+    end
+  end
+  return set
+end
+
+local function add_file(set, f)
+  if set.has[f] then
+    return
+  end
+  set.has[f] = true
+  set.list[#set.list + 1] = f
+  if #set.list > 200 then
+    set.has[table.remove(set.list, 1)] = nil
+  end
+end
+
+local function tasks_of(list)
+  local tasks = {}
+  for _, t in ipairs(type(list) == 'table' and list or {}) do
+    if type(t) == 'table' and type(t.subject) == 'string' then
+      tasks[#tasks + 1] = { subject = t.subject, done = t.done == true }
+    end
+  end
+  return tasks
+end
+
+-- Take the state file: the start, and what events don't carry (the log
+-- path, the edited files, the task list).
+local function take_state_file()
   local st = util.read_json(vim.env.WEAVER_STATE)
   if not st then
     return
   end
-  for _, k in ipairs(FIELDS) do
-    if st[k] ~= nil then
-      M.agent[k] = st[k]
+  if not seq or seq == 0 then
+    for _, k in ipairs(FIELDS) do
+      if st[k] ~= nil then
+        M.agent[k] = st[k]
+      end
     end
   end
-  M.agent.sid = st.session_id
-  M.agent.log = st.log
-  M.agent.files = st.files
+  if type(st.session_id) == 'string' and st.session_id ~= '' then
+    M.agent.sid = M.agent.sid or st.session_id
+  end
+  if st.session_id == M.agent.sid then
+    M.agent.log = st.log or M.agent.log
+    M.agent.files = file_set(st.files)
+    M.agent.tasks = tasks_of(st.tasks)
+  end
+end
+
+-- What the agent's last finished turn changed, for the bar: sets
+-- agent.last_turn = { turn, files } from the turn's end snapshot COMMIT.
+local function summarise_turn(root, commit, turn)
+  util.git_async(root, { 'diff', '--shortstat', commit .. '^', commit }, function(out)
+    local files = out and tonumber(out:match('(%d+) files? changed'))
+    if files then
+      M.agent.last_turn = { turn = turn, files = files }
+      M.redraw()
+    end
+  end)
+end
+
+-- At startup on a finished agent: its last turn, from the chain's tip.
+local function summarise_tip()
+  local a = M.agent
+  if not (a.sid and type(a.root) == 'string' and util.is_dir(a.root)) then
+    return
+  end
+  local format = '%H%x1f%(trailers:key=Weaver-Turn,valueonly,separator=)%x1f%(trailers:key=Weaver-Point,valueonly,separator=)'
+  util.git_async(a.root, { 'log', '-1', '--format=' .. format, 'refs/worktree/weaver/sessions/' .. a.sid, '--' }, function(out)
+    local commit, turn, point = (out or ''):match('^(%x+)\31%s*(%d*)%s*\31%s*(%a*)')
+    if commit and point == 'end' then
+      summarise_turn(a.root, commit, tonumber(turn))
+    end
+  end)
+end
+
+function M.seed()
+  take_state_file()
+  summarise_tip()
 end
 
 -- Take what an event says about the agent. Older events (by seq) never
 -- overwrite newer ones.
 function M.update(ev)
-  local s = tonumber(ev.seq) or 0
-  if s ~= 0 and s < seq then
+  if ev.seq ~= 0 and ev.seq < seq then
     return
   end
-  seq = s
+  seq = ev.seq ~= 0 and ev.seq or seq
+  if ev.sid and ev.sid ~= M.agent.sid then
+    -- A new session in the agent's pane: nothing of the old one carries over.
+    M.agent = { sid = ev.sid }
+  end
   for _, k in ipairs(FIELDS) do
     if ev[k] ~= nil then
       M.agent[k] = ev[k]
     end
   end
-  if ev.sid and ev.sid ~= '' then
-    if M.agent.sid ~= ev.sid then
-      M.agent.files = nil
+  if ev.ev == 'state' then
+    if ev.state ~= 'needs-you' then
+      M.agent.waiting = nil
     end
-    M.agent.sid = ev.sid
-  end
-  if ev.ev == 'state' and ev.state ~= 'needs-you' then
-    M.agent.waiting = nil
-  end
-  if ev.ev == 'edit' and ev.file then
-    local files = M.agent.files or {}
-    files[#files + 1] = ev.file
-    M.agent.files = files
+    take_state_file()
+  elseif ev.ev == 'edit' and ev.file then
+    M.agent.files = M.agent.files or file_set()
+    add_file(M.agent.files, ev.file)
+  elseif ev.ev == 'snapshot' and ev.point == 'end' and ev.commit and ev.root then
+    summarise_turn(ev.root, ev.commit, ev.turn)
   end
   M.redraw()
 end
 
--- Re-read the state file for what events don't carry (the log path, files).
+-- The agent, with the state file re-read (for the log path and files).
 function M.refresh_from_file()
-  local st = util.read_json(vim.env.WEAVER_STATE)
-  if st then
-    M.agent.log = st.log or M.agent.log
-    M.agent.files = st.files or M.agent.files
-    if not M.agent.sid then
-      M.agent.sid = st.session_id
-    end
-  end
+  take_state_file()
   return M.agent
+end
+
+-- The files the agent edited this session, in order.
+function M.files()
+  return M.agent.files and M.agent.files.list or {}
 end
 
 -- Highlights --------------------------------------------------------------
@@ -110,6 +186,21 @@ local function esc(s)
   return (tostring(s or ''):gsub('%%', '%%%%'):gsub('[%c]', ' '))
 end
 
+-- "3/5 tasks" while the agent has a task list, else nil.
+local function tasks_label()
+  local tasks = M.agent.tasks
+  if not tasks or #tasks == 0 then
+    return nil
+  end
+  local done = 0
+  for _, t in ipairs(tasks) do
+    if t.done then
+      done = done + 1
+    end
+  end
+  return done .. '/' .. #tasks .. ' tasks'
+end
+
 -- Plain text, for a statusline component (lualine and the like).
 function M.text()
   local a = M.agent
@@ -120,6 +211,7 @@ function M.text()
   if a.turn and a.turn ~= 0 then
     parts[#parts + 1] = 'turn ' .. a.turn
   end
+  parts[#parts + 1] = tasks_label()
   local pending = require('weaver.follow').pending_label()
   if pending then
     parts[#parts + 1] = '→ ' .. pending
@@ -144,6 +236,17 @@ function M.winbar()
     if a.turn and a.turn ~= 0 then
       add(' · ', 'WeaverBarFaint')
       add('turn ' .. a.turn, 'WeaverBar')
+    end
+    local tasks = tasks_label()
+    local last = a.last_turn
+    if last and last.turn == a.turn and a.state ~= 'working' and a.state ~= 'needs-you' then
+      -- The turn is over: how much it changed, and the key to review it.
+      add(' · ', 'WeaverBarFaint')
+      add(last.files .. (last.files == 1 and ' file' or ' files'), 'WeaverBarInk')
+      add(' ' .. (vim.g.weaver_review_key_label or '␣at'), 'WeaverBarFaint')
+    elseif tasks then
+      add(' · ', 'WeaverBarFaint')
+      add(tasks, 'WeaverBar')
     end
   else
     add('weaver', 'WeaverBarFaint')
@@ -173,6 +276,15 @@ function M.winbar()
 end
 
 local EXPR = "%{%v:lua.require'weaver.status'.winbar()%}"
+
+-- For a statusline component: the agent where its bar is not shown (a
+-- review, a terminal), so it is never on screen twice.
+function M.statusline()
+  if vim.wo.winbar == EXPR then
+    return ''
+  end
+  return M.text()
+end
 
 -- Our winbar goes on normal file windows only: not on floats, terminals,
 -- quickfix, help, diffs or diffview's tabs.

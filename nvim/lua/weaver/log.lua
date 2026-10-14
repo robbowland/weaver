@@ -5,6 +5,7 @@
 local M = {}
 
 local api, fn = vim.api, vim.fn
+local uv = vim.uv or vim.loop
 local util = require('weaver.util')
 
 local MAX_ENTRIES = 1000
@@ -17,32 +18,58 @@ function M.path()
   if agent.log and agent.log ~= '' then
     return agent.log
   end
-  if agent.sid and agent.sid ~= '' then
+  if agent.sid then
     return util.state_dir() .. '/log/' .. agent.sid .. '.jsonl'
   end
 end
 
--- The log's entries, oldest first (the last MAX_ENTRIES).
+-- The log as read so far, so each refresh reads only what was appended:
+-- { path, offset (bytes read), partial (an unfinished last line), entries
+-- (oldest first, the last MAX_ENTRIES) }.
+local cache = { entries = {} }
+
+local function reset(path)
+  cache = { path = path, offset = 0, partial = '', entries = {} }
+end
+
+-- The log's entries, oldest first.
 function M.read(path)
-  local f = path and io.open(path, 'r')
-  if not f then
+  if not path then
     return {}
   end
-  local entries = {}
-  for line in f:lines() do
+  if cache.path ~= path then
+    reset(path)
+  end
+  local st = uv.fs_stat(path)
+  if not st then
+    return cache.entries
+  end
+  if st.size < cache.offset then
+    reset(path) -- rewritten from scratch
+  end
+  if st.size == cache.offset then
+    return cache.entries
+  end
+  local fd = uv.fs_open(path, 'r', 0)
+  if not fd then
+    return cache.entries
+  end
+  local data = uv.fs_read(fd, st.size - cache.offset, cache.offset) or ''
+  uv.fs_close(fd)
+  cache.offset = cache.offset + #data
+  data = cache.partial .. data
+  local finished = data:match('^.*\n') or ''
+  cache.partial = data:sub(#finished + 1)
+  for line in finished:gmatch('[^\n]+') do
     local ok, e = pcall(vim.json.decode, line, { luanil = { object = true, array = true } })
     if ok and type(e) == 'table' and e.ev then
-      entries[#entries + 1] = e
-      if #entries > MAX_ENTRIES * 2 then
-        entries = vim.list_slice(entries, MAX_ENTRIES + 1)
-      end
+      cache.entries[#cache.entries + 1] = e
     end
   end
-  f:close()
-  if #entries > MAX_ENTRIES then
-    entries = vim.list_slice(entries, #entries - MAX_ENTRIES + 1)
+  if #cache.entries > MAX_ENTRIES then
+    cache.entries = vim.list_slice(cache.entries, #cache.entries - MAX_ENTRIES + 1)
   end
-  return entries
+  return cache.entries
 end
 
 local function one(s, n)
@@ -143,10 +170,19 @@ local function draw(buf)
   end
 end
 
+-- Redraw the log if it is on screen, at most every 200ms.
+local refresh_queued = false
 function M.refresh()
-  if bufnr and api.nvim_buf_is_valid(bufnr) and #fn.win_findbuf(bufnr) > 0 then
-    draw(bufnr)
+  if refresh_queued or not (bufnr and api.nvim_buf_is_valid(bufnr) and #fn.win_findbuf(bufnr) > 0) then
+    return
   end
+  refresh_queued = true
+  vim.defer_fn(function()
+    refresh_queued = false
+    if api.nvim_buf_is_valid(bufnr) and #fn.win_findbuf(bufnr) > 0 then
+      draw(bufnr)
+    end
+  end, 200)
 end
 
 local function act()
