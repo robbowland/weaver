@@ -1857,6 +1857,7 @@ gc_states() {
 	# Tabs that never finished opening leave their meeting place behind.
 	[ -d "$THREADS_NEW" ] && find "$THREADS_NEW" -mindepth 1 -maxdepth 1 -mmin +1440 -exec rm -rf {} + 2>/dev/null
 	find "$STATE_DIR" -maxdepth 1 -name 'form.*' -mmin +1440 -exec rm -f {} + 2>/dev/null
+	[ -d "$STATE_DIR/fetch" ] && find "$STATE_DIR/fetch" -type f -mmin +1440 -exec rm -f {} + 2>/dev/null
 	[ -f "$STATE_DIR/close.log" ] && [ "$(wc -c <"$STATE_DIR/close.log")" -gt 100000 ] && rm -f "$STATE_DIR/close.log"
 	[ -d "$LOG_DIR" ] && find "$LOG_DIR" -name '*.jsonl' -mtime +30 -exec rm -f {} + 2>/dev/null
 	[ -d "$STATE_DIR/turns" ] && find "$STATE_DIR/turns" -type f -mtime +30 -exec rm -f {} + 2>/dev/null
@@ -2828,6 +2829,42 @@ form_path() {
 	return 0
 }
 
+# The form's base row: where the new branch starts, and how the fetch is going.
+form_base_row() {
+	local v note="" pid="" rc=""
+	if [ -n "$F_BASE" ]; then
+		case $F_BASE in
+		@) note="the HEAD of $(git -C "${F_HERE:-$F_REPO}" symbolic-ref --short -q HEAD 2>/dev/null || echo this checkout)" ;;
+		^) note="the local default branch" ;;
+		esac
+		form_row base "$F_BASE${note:+  $note}" "$F_BASE${note:+  ${C_GREY}$note${C_OFF}}" 'alt-B'
+		return 0
+	fi
+	[ -n "$F_REPO" ] || return 0
+	if ! preferred_remote "$F_REPO"; then
+		local_default "$F_REPO"
+		v=${LOCAL_DEFAULT:-the default branch} note="local: no remote"
+	else
+		remote_default "$F_REPO" "$REMOTE"
+		v=${REMOTE_DEFAULT:-$REMOTE}
+		fetch_file "$F_REPO"
+		{ read -r rc <"$FETCHF.rc"; } 2>/dev/null
+		{ read -r pid <"$FETCHF.pid"; } 2>/dev/null
+		if [ -n "$rc" ]; then
+			case $rc in
+			0) note="fetched" ;;
+			*)
+				local_default "$F_REPO"
+				v=${LOCAL_DEFAULT:-the default branch} note="local: could not fetch $REMOTE"
+				;;
+			esac
+		elif [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+			note="fetching…"
+		fi
+	fi
+	form_row base "$v${note:+  $note}" "$v${note:+  ${C_GREY}$note${C_OFF}}" 'alt-B'
+}
+
 # The form's header for form file $1 and the task typed so far $2, with error
 # $3 on top: right-aligned labels under the prompt's, then the key for each.
 form_header() {
@@ -2863,10 +2900,13 @@ form_header() {
 		form_branch "$task"
 		if [ -z "$BRANCH" ]; then
 			form_row branch "from the task" "${C_GREY}from the task${C_OFF}" 'alt-b'
-		elif [ -n "$F_REPO" ] && git -C "$F_REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+			form_base_row
+		elif [ -n "$F_REPO" ] && { git -C "$F_REPO" show-ref --verify --quiet "refs/heads/$BRANCH" ||
+			{ preferred_remote "$F_REPO" && git -C "$F_REPO" show-ref --verify --quiet "refs/remotes/$REMOTE/$BRANCH"; }; }; then
 			form_row branch "$BRANCH  exists: continue on it" "$BRANCH  ${C_GREY}exists: continue on it${C_OFF}" 'alt-b'
 		else
 			form_row branch "$BRANCH" "$BRANCH" 'alt-b'
+			form_base_row
 		fi
 	fi
 	if agent_installed "$F_AGENT"; then
@@ -2882,6 +2922,22 @@ form_header() {
 	done
 }
 
+# The bases to offer, as "value<TAB>display" ("=" is the default: the
+# remote's default branch, fetched).
+form_bases() {
+	local r cur
+	if preferred_remote "$F_REPO" && remote_default "$F_REPO" "$REMOTE"; then
+		printf '=\t%s  %sthe remote default, fetched%s\n' "$REMOTE_DEFAULT" "$C_GREY" "$C_OFF"
+	else
+		local_default "$F_REPO"
+		printf '=\t%s  %sthe local default branch%s\n' "${LOCAL_DEFAULT:-default}" "$C_GREY" "$C_OFF"
+	fi
+	cur=$(git -C "${F_HERE:-$F_REPO}" symbolic-ref --short -q HEAD 2>/dev/null)
+	printf '@\t@  %sthe HEAD of %s%s\n' "$C_GREY" "${cur:-this checkout}" "$C_OFF"
+	git -C "$F_REPO" for-each-ref --format='%(refname:short)' --sort=-committerdate refs/heads refs/remotes 2>/dev/null |
+		grep -v '/HEAD$' | head -n 100 | while IFS= read -r r; do printf '%s\t%s\n' "$r" "$r"; done
+}
+
 # What the form's keys do (`weaver _form OP FILE [QUERY]`), run by fzf.
 cmd_form() {
 	local op=$1 sf=$2 q=${3:-} out sel d first ed
@@ -2891,6 +2947,29 @@ cmd_form() {
 	where)
 		if [ "$F_WHERE" = here ]; then F_WHERE=worktree; else F_WHERE=here; fi
 		form_save "$sf"
+		[ "$F_WHERE" = worktree ] && [ -z "$F_BASE" ] && fetch_start "$F_REPO" "$sf"
+		;;
+	base)
+		# A base means a new worktree.
+		if [ "$F_WHERE" = here ]; then
+			F_WHERE=worktree
+			form_save "$sf"
+		fi
+		[ -n "$F_REPO" ] || return 0
+		out=$(form_bases | SHELL=/bin/sh fzf --reverse --no-info --no-separator --ansi --height 100% \
+			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      base  ' --ghost 'where the new branch starts' \
+			--color "$FZF_COLORS" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
+		sel=${out#*"$NL"}
+		if [ "$sel" != "$out" ] && [ -n "$sel" ]; then
+			d=${sel%%"$TAB"*}
+		else
+			d=${out%%"$NL"*}
+		fi
+		[ -n "$d" ] || return 0
+		[ "$d" = = ] && d=""
+		F_BASE=$d
+		form_save "$sf"
+		[ -n "$F_BASE" ] || fetch_start "$F_REPO" "$sf"
 		;;
 	agent)
 		case $F_AGENT in claude) F_AGENT=codex ;; *) F_AGENT=claude ;; esac
@@ -2927,7 +3006,10 @@ cmd_form() {
 		else
 			F_REPO="" F_HERE=$(cd "$d" && pwd -P)
 		fi
+		# Another repository's bases are its own.
+		F_BASE=""
 		form_save "$sf"
+		[ "$F_WHERE" = worktree ] && fetch_start "$F_REPO" "$sf"
 		;;
 	editor)
 		if [ -f "$sf.task" ]; then { IFS= read -r first; } <"$sf.task"; fi
@@ -2952,22 +3034,30 @@ new_form() {
 	local sf=$1 q h out rc err="" query=$TASK hd first
 	q=$(printf '%q' "$SELF")
 	hd="$q _form header $(printf '%q' "$sf") {q}"
+	# The fetch for a new branch's base starts now, while you type.
+	form_load "$sf"
+	[ "$F_WHERE" = worktree ] && [ -z "$F_BASE" ] && fetch_start "$F_REPO" "$sf"
 	while :; do
 		h=$(form_header "$sf" "$query" "$err")
-		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
+		form_sock "$sf"
+		mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
+		rm -f "$FORM_SOCK"
+		out=$(SHELL=/bin/sh fzf --listen "$FORM_SOCK" --disabled --reverse --no-info --no-separator --ansi --height 100% \
 			--prompt '      task  ' --ghost 'what should the agent do?' --query "$query" \
 			--header "$h" --footer 'enter start   ^e write it in $EDITOR   esc cancel' \
 			--color "$FZF_COLORS" \
-			--bind "change:transform-header($hd)" \
+			--bind "change:bg-cancel+bg-transform-header($hd)" \
 			--bind "tab:execute-silent($q _form where $(printf '%q' "$sf"))+transform-header($hd)" \
 			--bind "btab:execute-silent($q _form agent $(printf '%q' "$sf"))+transform-header($hd)" \
 			--bind "alt-b:execute($q _form branch $(printf '%q' "$sf") {q})+transform-header($hd)" \
+			--bind "alt-B:execute($q _form base $(printf '%q' "$sf"))+transform-header($hd)" \
 			--bind "ctrl-r:execute($q _form repo $(printf '%q' "$sf"))+transform-header($hd)" \
 			--bind "ctrl-e:execute($q _form editor $(printf '%q' "$sf") {q})+transform-query($q _form query $(printf '%q' "$sf") {q})+transform-header($hd)" \
 			--bind 'enter:print-query' </dev/null)
 		rc=$?
+		rm -f "$FORM_SOCK"
 		[ $rc = 130 ] && return 130
-		[ $rc -gt 1 ] && die "fzf failed"
+		[ $rc -gt 1 ] && die "fzf failed (the form needs fzf 0.62 or newer)"
 		query=${out%%"$NL"*}
 		form_load "$sf"
 		TASK=$query
@@ -3003,6 +3093,12 @@ thread_check() {
 			CHECK_ERR="name the branch (alt-b): the task has no letters to name it after"
 		elif ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
 			CHECK_ERR="not a valid branch name: $BRANCH"
+		else
+			case $F_BASE in
+			'' | @ | ^ | pr:* | mr:*) ;;
+			*) git -C "$F_REPO" rev-parse --verify --quiet "$F_BASE^{commit}" >/dev/null ||
+				CHECK_ERR="no such base: $F_BASE" ;;
+			esac
 		fi
 	fi
 	[ -z "$CHECK_ERR" ]
@@ -3010,16 +3106,201 @@ thread_check() {
 
 # ------------------------------------------------ making the thread
 
+# ------------------------------------------------ where a new branch starts
+#
+# As Rob's `wnew`: from the remote's default branch, freshly fetched. The form
+# starts the fetch as soon as it opens (and again when the repository
+# changes); enter waits for it, at most $WEAVER_FETCH_TIMEOUT seconds (10).
+# Offline, slow or without a remote, the branch starts from the local default
+# branch instead, and says so.
+
+# The remote of repository $1 to start from: origin, else the first one; into
+# REMOTE. Returns 1 when there is none.
+preferred_remote() {
+	local r
+	# The form's header asks several times per keystroke: once per repository.
+	if [ "${PR_REPO:-}" = "$1" ]; then
+		REMOTE=$PR_REMOTE
+		[ -n "$REMOTE" ]
+		return
+	fi
+	REMOTE=""
+	while IFS= read -r r; do
+		[ -n "$r" ] || continue
+		[ -z "$REMOTE" ] && REMOTE=$r
+		[ "$r" = origin ] && REMOTE=origin && break
+	done <<EOF2
+$(git -C "$1" remote 2>/dev/null)
+EOF2
+	PR_REPO=$1 PR_REMOTE=$REMOTE
+	[ -n "$REMOTE" ]
+}
+
+# Remote $2's default branch in repository $1 (origin/main), into
+# REMOTE_DEFAULT: its HEAD, else its main or master.
+remote_default() {
+	local r
+	REMOTE_DEFAULT=$(git -C "$1" symbolic-ref --quiet --short "refs/remotes/$2/HEAD" 2>/dev/null) && return 0
+	for r in main master; do
+		if git -C "$1" show-ref --verify --quiet "refs/remotes/$2/$r"; then
+			REMOTE_DEFAULT=$2/$r
+			return 0
+		fi
+	done
+	REMOTE_DEFAULT=""
+	return 1
+}
+
+# Repository $1's local default branch (main), into LOCAL_DEFAULT: the one
+# its remote's HEAD names, else main or master; empty when there is none
+# (Worktrunk's default, or HEAD).
+local_default() {
+	local r=""
+	LOCAL_DEFAULT=""
+	preferred_remote "$1" && r=$(git -C "$1" symbolic-ref --quiet --short "refs/remotes/$REMOTE/HEAD" 2>/dev/null)
+	for r in ${r#*/} main master; do
+		if git -C "$1" show-ref --verify --quiet "refs/heads/$r"; then
+			LOCAL_DEFAULT=$r
+			return 0
+		fi
+	done
+}
+
+# Where repository $1's fetch keeps its state, into FETCHF: FETCHF.pid while
+# it runs, FETCHF.rc (git's status, or "none") once it is done.
+fetch_file() {
+	FETCHF="$STATE_DIR/fetch/${1//\//%}"
+}
+
+# Fetch repository $1's remote in the background, unless that is under way
+# or done in the last minute. Its own session, so ssh can never ask for a
+# passphrase on the form's terminal. When it is done it redraws form $2's
+# header, if the form is open.
+fetch_start() {
+	local repo=$1 pid=""
+	[ -n "$repo" ] || return 0
+	fetch_file "$repo"
+	mkdir -p "${FETCHF%/*}" || return 0
+	{ read -r pid <"$FETCHF.pid"; } 2>/dev/null
+	[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && return 0
+	[ -n "$(find "$FETCHF.rc" -mmin -1 2>/dev/null)" ] && return 0
+	rm -f "$FETCHF.rc" "$FETCHF.pid"
+	if ! preferred_remote "$repo"; then
+		echo none >"$FETCHF.rc"
+		return 0
+	fi
+	perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV or exit 1' "$SELF" _fetch "$repo" "$REMOTE" "$FETCHF" "${2:-}" \
+		</dev/null >/dev/null 2>&1 &
+	echo $! >"$FETCHF.pid"
+}
+
+# The fetch itself (`weaver _fetch REPO REMOTE FETCHF [FORM]`).
+cmd_fetch() {
+	local repo=$1 remote=$2 f=$3 sf=${4:-} rc q
+	GIT_TERMINAL_PROMPT=0 git -C "$repo" fetch --prune --quiet "$remote" </dev/null >/dev/null 2>"$f.err"
+	rc=$?
+	printf '%s\n' "$rc" >"$f.rc.$$" && mv -f "$f.rc.$$" "$f.rc"
+	rm -f "$f.pid"
+	[ -n "$sf" ] || return 0
+	form_sock "$sf"
+	if [ -S "$FORM_SOCK" ]; then
+		q=$(printf '%q' "$SELF")
+		curl -s -m 1 --unix-socket "$FORM_SOCK" -X POST \
+			-d "transform-header($q _form header $(printf '%q' "$sf") {q})" http://localhost >/dev/null 2>&1
+	fi
+	return 0
+}
+
+# The socket of form $1's fzf, into FORM_SOCK (in $SOCK_DIR: macOS caps a
+# socket's path at about 104 bytes).
+form_sock() { FORM_SOCK="$SOCK_DIR/form.${1##*.}.sock"; }
+
+# Wait for repository $1's fetch (started if need be), at most $2 seconds;
+# into FETCH_RC: 0, git's failure status, none (no remote) or timeout.
+fetch_wait() {
+	local i n=$((${2:-10} * 10)) pid="" said=""
+	fetch_start "$1"
+	for ((i = 0; i < n; i++)); do
+		[ -f "$FETCHF.rc" ] && break
+		pid=""
+		{ read -r pid <"$FETCHF.pid"; } 2>/dev/null
+		[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || break
+		if [ -z "$said" ] && [ $i -ge 3 ]; then
+			printf '%sweaver: fetching %s…%s\n' "$C_DIM" "${REMOTE:-the remote}" "$C_OFF" >&2
+			said=1
+		fi
+		sleep 0.1
+	done
+	FETCH_RC=""
+	{ read -r FETCH_RC <"$FETCHF.rc"; } 2>/dev/null
+	if [ -z "$FETCH_RC" ]; then
+		FETCH_RC=timeout
+		[ -n "$pid" ] && kill -- "-$pid" 2>/dev/null
+		rm -f "$FETCHF.pid"
+	fi
+}
+
+# The base for a new branch of repository $1 started from checkout $2, into
+# BASE (empty: Worktrunk's default branch, or git's HEAD) and BASE_NOTE (why
+# it is not the fetched remote default, when it is not). F_BASE, when set, is
+# used as it is (@ is the checkout's HEAD).
+thread_base() {
+	local repo=$1 t=${WEAVER_FETCH_TIMEOUT:-10} from
+	BASE="" BASE_NOTE=""
+	if [ -n "$F_BASE" ]; then
+		BASE=$F_BASE
+		return 0
+	fi
+	case $t in '' | *[!0-9]*) t=10 ;; esac
+	local_default "$repo"
+	from="the local ${LOCAL_DEFAULT:-default branch}"
+	if ! preferred_remote "$repo"; then
+		BASE=$LOCAL_DEFAULT BASE_NOTE="no remote: starts from $from"
+		return 0
+	fi
+	fetch_wait "$repo" "$t"
+	case $FETCH_RC in
+	0)
+		if remote_default "$repo" "$REMOTE"; then
+			BASE=$REMOTE_DEFAULT
+			return 0
+		fi
+		BASE_NOTE="$REMOTE has no default branch: starts from $from"
+		;;
+	timeout) BASE_NOTE="$REMOTE took over ${t}s to fetch: starts from $from" ;;
+	*) BASE_NOTE="could not fetch $REMOTE (offline?): starts from $from" ;;
+	esac
+	BASE=$LOCAL_DEFAULT
+}
+
+# The checkout of repository $1 that @ means: the one you are in ($2) when it
+# belongs to it, else the main one; into FROM.
+thread_from() {
+	FROM=$1
+	[ -n "${2:-}" ] && [ "$2" != "$1" ] && [ -d "$2" ] || return 0
+	local r=$REPO c=$CHECKOUT
+	repo_of "$2" && [ "$REPO" = "$1" ] && FROM=$CHECKOUT
+	REPO=$r CHECKOUT=$c
+}
+
 # The worktree for branch $2 of repository $1, made unless it exists (from
-# base $3, if given): with Worktrunk when it is installed (your worktree-path
-# template and hooks), else with git at Worktrunk's default path. Into WT_DIR,
-# and WT_CREATED (true when this made it).
+# base $3 if given; a branch only on the remote is checked out to track it),
+# working from checkout $4 (where @ is): with Worktrunk when it is installed
+# (your worktree-path template and hooks), else with git at Worktrunk's
+# default path. Into WT_DIR, and WT_CREATED (true when this made it).
 thread_worktree() {
-	local repo=$1 branch=$2 base=${3:-} create="" json rc path line wtp=""
+	local repo=$1 branch=$2 base=${3:-} from=${4:-$1} create="" json rc path line wtp=""
 	WT_DIR="" WT_CREATED=false
-	git -C "$repo" show-ref --verify --quiet "refs/heads/$branch" || create=1
+	if ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch" &&
+		! { preferred_remote "$repo" && git -C "$repo" show-ref --verify --quiet "refs/remotes/$REMOTE/$branch"; }; then
+		create=1
+	fi
+	[ -n "$create" ] || base=""
+	WT_BASE=$base
+	[ -n "$create" ] && [ -n "${BASE_NOTE:-}" ] && printf '%sweaver: %s%s\n' "$C_DIM" "$BASE_NOTE" "$C_OFF" >&2
+	printf '%sweaver: worktree for %s%s%s\n' "$C_GREY" "$branch" "${base:+ from $base}" "$C_OFF" >&2
 	if [ "${WEAVER_WORKTRUNK:-1}" != 0 ] && command -v wt >/dev/null 2>&1; then
-		json=$(wt -C "$repo" switch ${create:+--create} ${base:+--base "$base"} --no-cd --format json "$branch")
+		json=$(wt -C "$from" switch ${create:+--create} ${base:+--base "$base"} --no-cd --format json "$branch")
 		rc=$?
 		[ $rc = 0 ] || return $rc
 		WT_DIR=$(printf '%s' "$json" | jq -r '.path // empty' 2>/dev/null)
@@ -3042,6 +3323,14 @@ thread_worktree() {
 	done <<EOF2
 $(git -C "$repo" worktree list --porcelain 2>/dev/null)
 EOF2
+	# Worktrunk's shortcuts, for git: @ is the checkout's HEAD, ^ the default branch.
+	case $base in
+	@) base=$(git -C "$from" rev-parse --verify --quiet HEAD) ;;
+	^)
+		local_default "$repo"
+		base=$LOCAL_DEFAULT
+		;;
+	esac
 	path="${repo%/*}/${repo##*/}.${branch//\//-}"
 	if [ -n "$create" ]; then
 		git -C "$repo" worktree add -b "$branch" "$path" ${base:+"$base"} >&2 || return 1
@@ -3072,17 +3361,26 @@ function depth(s,   i, c, d, q) {
 !inb && /^[[:space:]]*new_tab_template[[:space:]]*[{]/ { inb = 1; d = depth($0); next }
 inb { d += depth($0); if (d <= 0) exit; print }'
 
+# $WEAVER_AGENT_WIDTH: a percentage of the tab (AW_PCT) or columns (AW_COLS),
+# and as a layout size (AW_SIZE).
+agent_width() {
+	local w=${WEAVER_AGENT_WIDTH:-20%}
+	AW_PCT="" AW_COLS=""
+	case $w in
+	[1-9]% | [1-9][0-9]%) AW_PCT=${w%\%} AW_SIZE="\"$w\"" ;;
+	[1-9] | [1-9][0-9] | [1-9][0-9][0-9]) AW_COLS=$w AW_SIZE=$w ;;
+	*) AW_PCT=20 AW_SIZE='"20%"' ;;
+	esac
+}
+
 # The new thread tab's layout, into LAYOUT: nvim on the left, the agent on the
 # right ($WEAVER_AGENT_WIDTH of the width: 20% by default; a plain number is
 # columns) with the focus, in the session's new-tab template. $1 the token,
 # $2 the agent, $3 the directory.
 thread_layout() {
-	local tok=$1 kind=$2 dir=$3 w=${WEAVER_AGENT_WIDTH:-20%} size self name ktok kkind split tpl
-	case $w in
-	[1-9]% | [1-9][0-9]%) size="\"$w\"" ;;
-	[1-9] | [1-9][0-9] | [1-9][0-9][0-9]) size=$w ;;
-	*) size='"20%"' ;;
-	esac
+	local tok=$1 kind=$2 dir=$3 size self name ktok kkind split tpl
+	agent_width
+	size=$AW_SIZE
 	kdl_str "$SELF"
 	self=$K
 	kdl_str "nvim: ${dir##*/}"
@@ -3120,6 +3418,7 @@ $tpl
 # then its tab. Prints where it went.
 thread_create() {
 	local dir name branch="" created=false tok d tab
+	BASE="" BASE_NOTE=""
 	if [ "$F_WHERE" = here ]; then
 		dir=$F_HERE
 		slugify "$TASK"
@@ -3128,9 +3427,12 @@ thread_create() {
 	else
 		form_branch "$TASK"
 		branch=$BRANCH
-		printf '%sweaver: worktree for %s%s\n' "$C_GREY" "$branch" "$C_OFF" >&2
-		thread_worktree "$F_REPO" "$branch" "$F_BASE" || return 1
-		dir=$WT_DIR created=$WT_CREATED name=$branch
+		thread_from "$F_REPO" "$F_HERE"
+		# A branch that is not here yet: fetch first (it may be on the
+		# remote), and find where it would start.
+		git -C "$F_REPO" show-ref --verify --quiet "refs/heads/$branch" || thread_base "$F_REPO"
+		thread_worktree "$F_REPO" "$branch" "$BASE" "$FROM" || return 1
+		dir=$WT_DIR created=$WT_CREATED name=$branch BASE=$WT_BASE
 	fi
 	tok="$(date +%s)$$$RANDOM"
 	d="$THREADS_NEW/${SKEY}_$tok"
@@ -3138,9 +3440,9 @@ thread_create() {
 	printf '%s' "$TASK" >"$d/task"
 	jq -nc --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
 		--arg dir "$dir" --argjson here "$([ "$F_WHERE" = here ] && echo true || echo false)" \
-		--argjson created "$created" --arg agent "$F_AGENT" --argjson now "$(date +%s)" \
+		--argjson created "$created" --arg agent "$F_AGENT" --argjson now "$(date +%s)" --arg base "$BASE" \
 		'{name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
-		  worktree_created: $created, agent: $agent, created: $now}' >"$d/thread.json" ||
+		  worktree_created: $created, agent: $agent, created: $now, base: $base}' >"$d/thread.json" ||
 		die "cannot write the thread record"
 	thread_layout "$tok" "$F_AGENT" "$dir"
 	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
@@ -3557,8 +3859,10 @@ usage: weaver [command]
                                "weaver" ($WEAVER_SESSION); inside: the dashboard
   start [session]              the same, for another session
   new [task...]                start a thread: a new tab with nvim and an agent, in a new
-                               worktree; with no task, a form. Options: --repo DIR,
-                               --branch NAME, --base REF, --here (the current checkout),
+                               worktree whose branch starts from the remote's default
+                               branch, fetched; with no task, a form. Options: --repo DIR,
+                               --branch NAME, --base REF (@: this checkout's HEAD),
+                               --here (the current checkout),
                                --agent claude|codex, --edit (write the task in $EDITOR),
                                --from PANE (that agent's repository), --no-focus
   close [--yes] [--remove-worktree] [pane-id]
@@ -3587,6 +3891,7 @@ new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
+_fetch) cmd_fetch "$@" ;;
 _close) close_tail "$@" ;;
 hook) cmd_hook "$@" ;;
 edit) cmd_edit "$@" ;;

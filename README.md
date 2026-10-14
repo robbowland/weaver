@@ -50,7 +50,8 @@ repository of the pane you were on (else the one you used last):
 | --- | --- |
 | `enter` | Start the thread |
 | `tab` | New worktree, or this checkout (for a quick question) |
-| `alt-b` | Edit the branch name (from the task by default); an existing branch continues in its own worktree |
+| `alt-b` | Edit the branch name (from the task by default); an existing branch, here or on the remote, continues in its own worktree |
+| `alt-B` | Where a new branch starts: the remote's default branch, fetched (the default), `@` (the HEAD of the checkout you are in), or any branch |
 | `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
 | `shift-tab` | Claude Code or Codex |
 | `ctrl-e` | Write a long task in `$EDITOR` |
@@ -62,7 +63,12 @@ task in `$EDITOR`) or `--no-focus`.
 
 New worktrees come from [Worktrunk](https://worktrunk.dev) when it is
 installed (`wt switch --create`, so your `worktree-path` and hooks apply),
-else from `git worktree add` at `../<repo>.<branch>`. The nvim on the left is
+else from `git worktree add` at `../<repo>.<branch>`. A new branch starts from
+the remote's default branch (`origin`, else the first remote) freshly fetched,
+as `wnew` does: the form starts the fetch as it opens and its `base` row says
+how it is going, so enter rarely waits. Offline, slower than
+`WEAVER_FETCH_TIMEOUT`, or with no remote, it starts from the local default
+branch and says so. The nvim on the left is
 the agent's own weaver nvim, so following, the bar, reviews and `Alt v` all
 work from the first prompt.
 
@@ -262,6 +268,7 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
+| `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 
 ## Tests
 

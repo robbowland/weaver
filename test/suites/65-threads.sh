@@ -43,6 +43,7 @@ TABS=""
 # --- a thread in a new worktree, from the arguments
 out=$(cd "$T/repo" && weaver new --no-focus 'Fix the flaky test!' 2>&1)
 ok "new: says where the thread is" "$(printf '%s' "$out" | grep -c 'thread fix-the-flaky-test in')" "1"
+ok "new: no remote, so from the local main, and it says so" "$(printf '%s' "$out" | grep -c 'no remote: starts from the local main')" "1"
 tab=$(tab_named fix-the-flaky-test)
 TABS="$TABS $tab"
 ok "new: a tab named after the branch" "${tab:+yes}" "yes"
@@ -115,6 +116,79 @@ out=$(cd "$T/repo" && weaver new --no-focus --branch 'bad..name' "x" 2>&1)
 ok "new: an invalid branch is refused" "$(printf '%s' "$out" | grep -c 'not a valid branch name')" "1"
 out=$(cd "$T/repo" && weaver new </dev/null 2>&1)
 ok "new: no task and no terminal says how" "$(printf '%s' "$out" | grep -c 'what should the agent do')" "1"
+
+# --- where a new branch starts: the remote's default branch, fetched first
+git clone -q --bare "$T/repo" "$T/origin.git"
+git clone -q "$T/origin.git" "$T/up"
+git clone -q "$T/origin.git" "$T/elsewhere"
+for r in up elsewhere; do git -C "$T/$r" config user.email t@example.com && git -C "$T/$r" config user.name t; done
+git -C "$T/elsewhere" commit -q --allow-empty -m "pushed from elsewhere"
+git -C "$T/elsewhere" push -q origin main
+git -C "$T/elsewhere" push -q origin main:feature-x
+pushed=$(git -C "$T/elsewhere" rev-parse HEAD)
+out=$(cd "$T/up" && weaver new --no-focus "from the remote" 2>&1)
+tab=$(tab_named from-the-remote)
+TABS="$TABS $tab"
+thread_panes "$tab"
+waitfor "[ -f '$SD/${SESSION}_$AG.thread' ]"
+ok "base: fetched first, the branch starts from origin/main" \
+	"$(git -C "$T/up.from-the-remote" merge-base --is-ancestor "$pushed" HEAD && echo fresh)|$(th "$AG" base)|$(printf '%s' "$out" | grep -c 'worktree for from-the-remote from origin/main')" "fresh|origin/main|1"
+ok "base: your local main is left as it was" "$(git -C "$T/up" merge-base --is-ancestor "$pushed" main || echo untouched)" "untouched"
+out=$(cd "$T/up" && weaver new --no-focus --branch feature-x "carry on with x" 2>&1)
+tab=$(tab_named feature-x)
+TABS="$TABS $tab"
+ok "base: a branch only on the remote is checked out to track it" \
+	"$(git -C "$T/up.feature-x" rev-parse --abbrev-ref '@{u}' 2>/dev/null)" "origin/feature-x"
+
+# @ is the HEAD of the checkout you are in.
+git -C "$T/up" worktree add -q -b side "$T/up-side"
+git -C "$T/up-side" commit -q --allow-empty -m "on the side"
+side=$(git -C "$T/up-side" rev-parse HEAD)
+out=$(cd "$T/up-side" && weaver new --no-focus --base @ "stack on side" 2>&1)
+tab=$(tab_named stack-on-side)
+TABS="$TABS $tab"
+ok "base: --base @ stacks on the checkout you are in" \
+	"$(git -C "$T/up.stack-on-side" merge-base --is-ancestor "$side" HEAD && echo stacked)" "stacked"
+
+# The form fetches while you type, and its header says how it is going (a
+# remote that takes 2s to answer).
+git -C "$T/up" config protocol.ext.allow always
+git -C "$T/up" remote set-url origin "ext::sh -c sleep% 2;% %S% $T/origin.git"
+utab=$(Z new-tab --name up --cwd "$T/up" -- bash --noprofile --norc -i)
+TABS="$TABS $utab"
+rm -rf "$SD/fetch"
+sleep 0.5
+key 1b4e
+sleep 1.2
+fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating)] | .[0].id // empty')
+ok "form: the fetch starts as the form opens" \
+	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'base +origin/main +fetching')" "1"
+sleep 2.5
+ok "form: ...and its header says when it is done, untouched" \
+	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'base +origin/main +fetched')" "1"
+key 1b
+sleep 0.5
+git -C "$T/up" remote set-url origin "$T/origin.git"
+
+# Offline, or too slow: the local default branch, and a line saying so.
+git -C "$T/up" remote set-url origin "$T/nowhere.git"
+rm -rf "$SD/fetch"
+out=$(cd "$T/up" && weaver new --no-focus "offline one" 2>&1)
+TABS="$TABS $(tab_named offline-one)"
+ok "base: offline, the local main, and it says so" \
+	"$(printf '%s' "$out" | grep -c 'could not fetch origin (offline?): starts from the local main')|$(git -C "$T/up.offline-one" rev-parse HEAD)" \
+	"1|$(git -C "$T/up" rev-parse main)"
+git -C "$T/up" config protocol.ext.allow always
+git -C "$T/up" remote set-url origin 'ext::sh -c sleep% 6'
+rm -rf "$SD/fetch"
+t=$(ms sh -c "cd '$T/up' && WEAVER_FETCH_TIMEOUT=1 weaver new --no-focus 'slow one' >'$AT/slow.out' 2>&1")
+TABS="$TABS $(tab_named slow-one)"
+ok "base: a fetch that takes too long is given up after WEAVER_FETCH_TIMEOUT" \
+	"$(grep -c 'origin took over 1s to fetch: starts from the local main' "$AT/slow.out")|$([ "$t" -lt 4000 ] && echo quick)" "1|quick"
+ok "base: no remote: the local main, and it says so" \
+	"$(cd "$T/repo" && weaver new --no-focus --here "x" >/dev/null 2>&1; cd "$T/repo" && weaver new --no-focus "no remote here" 2>&1 | grep -c 'no remote: starts from the local main')" "1"
+TABS="$TABS $(tab_named x) $(tab_named no-remote-here)"
+git -C "$T/up" remote remove origin
 
 # --- closing
 tab=$(tab_named fix-the-flaky-test)
@@ -224,6 +298,13 @@ sleep 0.8
 scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
 ok "form: alt-b edits the branch, shift-tab picks the agent" \
 	"$(printf '%s' "$scr" | grep -c 'branch *form-thread-x')|$(printf '%s' "$scr" | grep -c 'agent *codex')" "1|1"
+key 1b42 # alt-B: the base
+sleep 1
+key 40
+sleep 0.5
+key 0d
+sleep 0.8
+ok "form: alt-B picks the base" "$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'base +@ +the HEAD of main')" "1"
 key 1b5b5a
 key 09
 sleep 0.8

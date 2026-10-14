@@ -17,6 +17,7 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `weaver new` started it (below) |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread tab being opened: `task` and `thread.json` until the agent's pane takes them, then `pane` (the agent's pane id) until the nvim beside it reads it |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
+| `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
@@ -192,6 +193,20 @@ dump-layout`, its bare `pane` (the tab's content) replaced by a vertical split:
 <token> <agent>` on the right at `$WEAVER_AGENT_WIDTH` (default `20%`) with the
 focus. Without a template, the split alone.
 
+A new branch starts, as Rob's `wnew` does, from the remote's default branch
+(`origin`, else the first remote; its `HEAD`, else its `main` or `master`)
+after `git fetch --prune`. The form starts that fetch as it opens (and again
+when the repository changes), in its own session so ssh cannot prompt on the
+form's terminal, and redraws its header through fzf's `--listen` socket when
+the fetch is done; enter waits for it at most `$WEAVER_FETCH_TIMEOUT` seconds
+(10), and a fetch less than a minute old is reused. Offline, too slow, or
+without a remote, the branch starts from the local default branch (the one
+the remote's `HEAD` names, else `main` or `master`) and one dim line says so.
+An explicit base (`--base`, the form's `alt-B`) is used as it is: `@` is the
+HEAD of the checkout you are in (Worktrunk runs with `-C` that checkout; git
+gets its commit), `^` the default branch. A branch that exists only on the
+remote is checked out tracking it (`wt switch` / `git worktree add`).
+
 Neither pane knows the other's id when the layout spawns them, so they meet
 in `$STATE_DIR/new/<skey>_<token>/`: the agent's pane moves `thread.json` to
 `<skey>_<its pane>.thread`, deletes `task` (read first), writes `pane`, then
@@ -219,6 +234,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `worktree_created` | bool | `weaver new` made this worktree (only then may `weaver close` offer to remove it) |
 | `agent` | string | `claude` or `codex` |
 | `created` | int | epoch s |
+| `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
 
 The tab's current name is zellij's (`tab_name` in `list-panes`); weaver never
@@ -515,3 +531,7 @@ lines as fit; `?` the keys.
   reload (22 ms, was 50 ms with its 30-line screen dump).
 - 2026-10-14: zjstatus marks a tab whose agent rang the bell with `*`, not
   `●`, which the counts use for working.
+- 2026-10-14: New branches start from the fetched remote default, as Rob's
+  `wnew` does, rather than from a possibly stale local `main`. The fetch is
+  started when the form opens so enter seldom waits; offline it falls back
+  instead of failing.
