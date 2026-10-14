@@ -193,6 +193,15 @@ ZELLIJ_PANE_ID=77 weaver _agent gone-token claude </dev/null >/dev/null 2>&1
 ok "rerun: its own session when known" "$(tr '\n' ' ' <"$AT/args.claude.77")" "--resume sid-77 "
 rm -f "$SD/${SESSION}_77.json"
 
+# --- `weaver` alone: outside zellij it starts or attaches to the session
+mkdir -p "$AT/fakez"
+printf '#!/bin/sh\necho "zellij $*"\n' >"$AT/fakez/zellij"
+chmod +x "$AT/fakez/zellij"
+ok "weaver: outside zellij, attach to or start the weaver session" \
+	"$(env -u ZELLIJ_SESSION_NAME -u ZELLIJ PATH="$AT/fakez:$PATH" weaver)" "zellij attach --create weaver"
+ok "weaver: the session's name from WEAVER_SESSION" \
+	"$(env -u ZELLIJ_SESSION_NAME -u ZELLIJ WEAVER_SESSION=work PATH="$AT/fakez:$PATH" weaver)" "zellij attach --create work"
+
 # --- the form: Alt N, type, Enter
 focus 0
 key 1b4e

@@ -2,6 +2,7 @@
 # weaver: keep track of the coding agents running in zellij panes, and open
 # neovim in the worktree each agent is really editing.
 #
+#   weaver                          attach to or start the zellij session; inside it, the dashboard
 #   weaver new [task...]            start a thread: a tab with nvim and a new agent, in a new worktree
 #   weaver close [pane-id]          close an agent, its nvim and its thread's tab
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
@@ -2998,11 +2999,25 @@ close_tail() {
 	return "${rc:-0}"
 }
 
+# `weaver` alone: outside zellij, attach to (or start) the weaver session;
+# inside, the dashboard.
+cmd_start() {
+	if [ -n "$SESSION" ]; then
+		cmd_ls
+		return
+	fi
+	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
+	exec zellij attach --create "${1:-${WEAVER_SESSION:-weaver}}"
+}
+
 # ---------------------------------------------------------------- main
 
 usage() {
 	cat <<'EOF2'
-usage: weaver <command>
+usage: weaver [command]
+  (none)                       outside zellij: attach to, or start, the zellij session
+                               "weaver" ($WEAVER_SESSION); inside: the dashboard
+  start [session]              the same, for another session
   new [task...]                start a thread: a new tab with nvim and an agent, in a new
                                worktree; with no task, a form. Options: --repo DIR,
                                --branch NAME, --base REF, --here (the current checkout),
@@ -3029,6 +3044,7 @@ EOF2
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
+'' | start) cmd_start "$@" ;;
 new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
