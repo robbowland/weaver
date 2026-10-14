@@ -52,6 +52,9 @@ median() {
 		sleep 0.25
 	done
 	MED=$(sort -n "$J/times" | sed -n "$(((N + 1) / 2))p")
+	# The lower quartile, for the budgets: the path's own cost, which a
+	# loaded machine (another test run, an agent) inflates less.
+	LOW=$(sort -n "$J/times" | sed -n "$(((N + 3) / 4))p")
 	printf '  %-36s median %3s ms   max %3s ms\n' "$name" "$MED" "$(sort -n "$J/times" | tail -n 1)"
 }
 cycle() {
@@ -61,7 +64,7 @@ cycle() {
 # An edit, in worktree a and b by turns, so the root changes every time.
 edits() {
 	local n=0
-	read -r n <"$J/n" 2>/dev/null
+	{ read -r n <"$J/n"; } 2>/dev/null
 	echo $((n + 1)) >"$J/n"
 	if [ $((n % 2)) = 0 ]; then run "$J/edit-a" "$@"; else run "$J/edit-b" "$@"; fi
 }
@@ -70,26 +73,26 @@ run "$J/start" >/dev/null
 run "$J/prompt" >/dev/null
 echo "  (hook latency, $N runs each)"
 median "UserPromptSubmit" run "$J/prompt"
-P_PROMPT=$MED
+P_PROMPT=$MED L_PROMPT=$LOW
 median "Stop" cycle stop
 median "PermissionRequest" cycle perm
 median "Notification idle_prompt" run "$J/note"
 run "$J/prompt" >/dev/null
 median "Edit via the sync hook (as before)" edits
 median "Edit via the async hook (as now)" edits --async
-P_EDIT=$MED
+P_EDIT=$MED L_EDIT=$LOW
 median "async PostToolUse Read, working" run "$J/read" --async
-P_ASYNC=$MED
+P_ASYNC=$MED L_ASYNC=$LOW
 sleep 1
 
 # Generous budgets, so a loaded machine passes; what they catch is a
 # synchronous nvim or zellij call (10-15 ms each, 2 s when stuck) creeping
 # back in, or the async hook parsing events it has no use for.
-ok "latency: a prompt costs the agent under 25 ms" "$([ "$P_PROMPT" -lt 25 ] && echo y)" y
+ok "latency: a prompt costs the agent under 25 ms" "$([ "$L_PROMPT" -lt 25 ] && echo y)" y
 ok "latency: an edit in the async hook waits on neither nvim nor zellij (under 40 ms)" \
-	"$([ "$P_EDIT" -lt 40 ] && echo y)" y
+	"$([ "$L_EDIT" -lt 40 ] && echo y)" y
 ok "latency: the async hook with nothing to do skips the parse" \
-	"$([ "$P_ASYNC" -lt 12 ] && [ "$P_ASYNC" -lt "$P_PROMPT" ] && echo y)" y
+	"$([ "$L_ASYNC" -lt 12 ] && [ "$L_ASYNC" -lt "$L_PROMPT" ] && echo y)" y
 
 kill "$nvpid" 2>/dev/null
 Z close-pane --pane-id "terminal_$NVP" >/dev/null 2>&1
