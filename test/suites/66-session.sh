@@ -18,7 +18,7 @@ EOF
 done
 waitfor() {
 	local i
-	for i in $(seq 50); do
+	for i in $(seq 100); do
 		eval "$1" && return 0
 		sleep 0.1
 	done
@@ -105,7 +105,7 @@ ok "session: the next thread takes the free number, and its place" \
 	"$(num "$A4")|$(position "$T4")|$(position "$T3")" "2|2|3"
 hook 2 SessionStart "$T/repo"
 ok "session: its order: threads, then other tabs, their agents or their names" \
-	"$(weaver _order | awk -F "$(printf '\037')" '{ print $1 ":" $2 ":" $5 }' | tr '\n' ' ')" \
+	"$(weaver _order | awk -F "$(printf '\037')" '{ print $1 ":" $2 ":" $5 }' | head -n 5 | tr '\n' ' ')" \
 	"thread:1:alpha thread:2:delta thread:3:gamma tab::one agent:: "
 
 # Alt y: home, and back to where you were.

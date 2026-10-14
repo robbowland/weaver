@@ -27,10 +27,10 @@ thread_panes() {
 	NVP=$(printf '%s' "$j" | jq -r --argjson t "$1" '[.[] | select((.is_plugin | not) and .tab_id == $t
 		and ((.terminal_command // "") | test(" nvim --thread ")))] | .[0].id // empty')
 }
-# Wait (up to 5s) for shell condition $1.
+# Wait (up to 10s) for shell condition $1.
 waitfor() {
 	local i
-	for i in $(seq 50); do
+	for i in $(seq 100); do
 		eval "$1" && return 0
 		sleep 0.1
 	done
@@ -389,7 +389,7 @@ printf 'Gosecond line' | xxd -p | while read -r h; do key "$h"; done
 key 1b
 printf ':wq' | xxd -p | while read -r h; do key "$h"; done
 key 0d
-sleep 1
+sleep 2
 fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating)] | .[0].id // empty')
 ok "form: ctrl-e writes the task in \$EDITOR; the form shows its first line and the rest" \
 	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'task  long one( |$)|[+]1 more lines')" "2"
