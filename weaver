@@ -3,6 +3,7 @@
 # neovim in the worktree each agent is really editing.
 #
 #   weaver new [task...]            start a thread: a tab with nvim and a new agent, in a new worktree
+#   weaver close [pane-id]          close an agent, its nvim and its thread's tab
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
 #   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
@@ -2779,6 +2780,224 @@ agent_of_pane() {
 	return 1
 }
 
+# ------------------------------------------------ closing a thread
+
+# The thread record of agent pane $1 into TH_*; returns 1 (TH_NAME empty)
+# when the agent is not a weaver thread.
+thread_read() {
+	local info
+	TH_NAME="" TH_TASK="" TH_REPO="" TH_BRANCH="" TH_DIR="" TH_HERE="" TH_CREATED="" TH_AGENT=""
+	[ -f "$STATE_DIR/${SKEY}_$1.thread" ] || return 1
+	info=$(jq -r '[.name, .task, .repo, .branch, .worktree, .here, .worktree_created, .agent]
+		| map(. // "" | tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' \
+		"$STATE_DIR/${SKEY}_$1.thread" 2>/dev/null) || return 1
+	IFS=$US read -r TH_NAME TH_TASK TH_REPO TH_BRANCH TH_DIR TH_HERE TH_CREATED TH_AGENT <<<"$info"
+	[ -n "$TH_NAME" ]
+}
+
+plural() { [ "$1" = 1 ] || printf s; }
+
+# May worktree $1 be removed? Only a linked worktree (not the main checkout),
+# not locked, with nothing uncommitted or untracked, whose HEAD is merged into
+# the default branch or pushed to its upstream. Into WT_WHY: why not.
+worktree_removable() {
+	local dir=$1 gd cd n ref up ahead
+	WT_WHY=""
+	[ -d "$dir" ] || {
+		WT_WHY="it is gone"
+		return 1
+	}
+	gd=$(git -C "$dir" rev-parse --path-format=absolute --git-dir 2>/dev/null) &&
+		cd=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
+		WT_WHY="it is not a git worktree"
+		return 1
+	}
+	[ "$gd" != "$cd" ] || {
+		WT_WHY="it is the main checkout"
+		return 1
+	}
+	[ -f "$gd/locked" ] && {
+		WT_WHY="it is locked"
+		return 1
+	}
+	n=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+	[ "${n:-1}" = 0 ] || {
+		WT_WHY="$n uncommitted file$(plural "$n")"
+		return 1
+	}
+	for ref in origin/HEAD upstream/HEAD main master; do
+		git -C "$dir" rev-parse --verify --quiet "$ref^{commit}" >/dev/null 2>&1 || continue
+		git -C "$dir" merge-base --is-ancestor HEAD "$ref" 2>/dev/null && return 0
+	done
+	if up=$(git -C "$dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null); then
+		ahead=$(git -C "$dir" rev-list --count '@{u}..HEAD' 2>/dev/null)
+		[ "$ahead" = 0 ] && return 0
+		WT_WHY="${ahead:-its} commit$(plural "${ahead:-2}") not pushed to $up"
+		return 1
+	fi
+	WT_WHY="its commits are neither merged nor pushed"
+	return 1
+}
+
+# Panes of this session (other than $2, a space-separated list) whose
+# directory is in $1, into USERS.
+worktree_users() {
+	USERS=$(printf '%s' "$PANES" | jq -r --arg d "$1" --arg skip " $2 " '
+		[.[] | select((.is_plugin | not) and (.exited | not)
+			and ($skip | contains(" \(.id) ") | not)
+			and ((.pane_cwd // "") as $c | $c == $d or ($c | startswith($d + "/"))))
+		| .id] | join(" ")')
+}
+
+# Is there a terminal to ask on?
+have_tty() { { : </dev/tty; } 2>/dev/null; }
+
+# Ask $1 on the terminal; true on y or Y.
+ask_yes() {
+	local a=""
+	printf '%s [y/N] ' "$1" >/dev/tty
+	IFS= read -r -s -n 1 a </dev/tty
+	printf '%s\n' "$a" >/dev/tty
+	case $a in y | Y) return 0 ;; esac
+	return 1
+}
+
+# weaver close [--yes] [--remove-worktree] [pane]
+cmd_close() {
+	local yes=0 rmwt=0 target="" nv tab others name what="" n="" st pid start title kind remove=0 detach=0 info
+	local keep="" removable=0 out
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--yes | -y) yes=1 ;;
+		--remove-worktree) rmwt=1 ;;
+		-*) die "usage: weaver close [--yes] [--remove-worktree] [pane-id]" ;;
+		*) target=${1#terminal_} ;;
+		esac
+		shift
+	done
+	need_session
+	list_panes || die "zellij action list-panes failed"
+	if [ -z "$target" ]; then
+		focused_pane
+		target=$FOCUSED
+		agent_of_pane "$target" || target=${ZELLIJ_PANE_ID:-}
+	fi
+	agent_of_pane "$target" || die "no agent in pane ${target:-?}"
+	read_nvim_pane "$AGENT"
+	nv=$NV
+	thread_read "$AGENT"
+	state_file "$AGENT"
+	info=$(jq -r '[.state // "", .pid // "", .proc_start // "", .title // "", .agent // ""]
+		| map(tostring) | join("\u001f")' "$SF" 2>/dev/null)
+	IFS=$US read -r st pid start title kind <<<"$info"
+	tab=$(printf '%s' "$PANES" | jq -r --arg p "$AGENT" \
+		'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id // empty')
+	# The tab's other panes, which close must leave alone (and which keep it open).
+	others=$(printf '%s' "$PANES" | jq -r --arg t "$tab" --arg a "$AGENT" --arg nv "${nv:-x}" '
+		[.[] | select((.is_plugin | not) and (.is_floating | not) and (.tab_id | tostring) == $t
+			and (.id | tostring) != $a and (.id | tostring) != $nv) | .id] | join(" ")')
+
+	name=${TH_NAME:-${title:-${kind:-agent} in pane $AGENT}}
+	case $st in working | needs-you) what=" (${kind:-it} is $st)" ;; esac
+	if [ -n "$nv" ]; then
+		sock_path "$AGENT"
+		n=$(bounded /dev/stdout nvim --server "$SOCK" --remote-expr \
+			'len(filter(getbufinfo({"bufmodified": 1}), "v:val.listed"))' 2>/dev/null)
+		case $n in '' | *[!0-9]* | 0) n="" ;; esac
+	fi
+	# Its worktree may go only if weaver made it and nothing would be lost.
+	if [ "$TH_CREATED" = true ] && [ "$TH_HERE" != true ] && [ -n "$TH_DIR" ]; then
+		tildify "$TH_DIR"
+		worktree_users "$TH_DIR" "$AGENT ${nv:-}"
+		if ! worktree_removable "$TH_DIR"; then
+			keep="$TILDE stays: $WT_WHY"
+		elif [ -n "$USERS" ]; then
+			keep="$TILDE stays: pane $USERS is in it"
+		else
+			removable=1
+		fi
+	fi
+
+	out=/dev/stdout
+	[ $yes = 1 ] || {
+		have_tty || die "close needs a terminal to ask, or --yes"
+		out=/dev/tty
+	}
+	{
+		printf '%sclose %s%s%s%s%s\n' "$C_BOLD" "$name" "$C_OFF" "$C_GREY" "$what" "$C_OFF"
+		printf '  %sthe agent%s%s%s%s\n' "$C_GREY" "${nv:+ and its nvim}" "${n:+ ($n unsaved buffer$(plural "$n"))}" \
+			"$([ -z "$others" ] && [ -n "$TH_NAME" ] && echo ", and the tab")" "$C_OFF"
+		[ -n "$keep" ] && printf '  %s%s%s\n' "$C_GREY" "$keep" "$C_OFF"
+	} >"$out"
+	[ $yes = 1 ] || ask_yes "  close it?" || exit 130
+	if [ $removable = 1 ]; then
+		if [ $rmwt = 1 ]; then
+			remove=1
+		elif have_tty; then
+			ask_yes "  remove its worktree $TILDE too (${TH_BRANCH:+branch $TH_BRANCH }kept)?" && remove=1
+		fi
+	fi
+
+	# Closing the last panes of the tab closes the tab, and any floating pane
+	# in it: when this runs in one, finish from outside it.
+	if [ -z "$others" ] && [ -n "${ZELLIJ_PANE_ID:-}" ] && printf '%s' "$PANES" | jq -e --arg t "$tab" \
+		--arg me "$ZELLIJ_PANE_ID" 'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and (.tab_id | tostring) == $t)' \
+		>/dev/null 2>&1; then
+		detach=1
+	fi
+	set -- "$AGENT" "${nv:-}" "${pid:-}" "${start:-}" "$remove" "${TH_DIR:-}" "${TH_REPO:-}"
+	if [ $detach = 1 ]; then
+		mkdir -p "$STATE_DIR"
+		# Out of this pane's session, and deaf to the hangup its closing sends
+		# (also while it is still on its way out).
+		trap '' HUP TERM
+		perl -e 'use POSIX qw(setsid); setsid(); exec @ARGV or exit 1' "$SELF" _close "$@" \
+			</dev/null >>"$STATE_DIR/close.log" 2>&1 &
+		exit 0
+	fi
+	close_tail "$@"
+}
+
+# The closing itself (`weaver _close AGENT NVIM PID START REMOVE DIR REPO`):
+# close the agent's pane and its nvim's, wait for the agent to exit, forget
+# it, and remove its worktree if asked, checking again first.
+close_tail() {
+	local agent=$1 nv=$2 pid=$3 start=$4 remove=$5 dir=$6 repo=$7 i rc
+	need_session
+	zellij action close-pane --pane-id "terminal_$agent" >/dev/null 2>&1
+	[ -n "$nv" ] && zellij action close-pane --pane-id "terminal_$nv" >/dev/null 2>&1
+	for ((i = 0; i < 50; i++)); do
+		[ -n "$pid" ] && agent_alive "$pid" "$start" || break
+		sleep 0.1
+	done
+	if [ -n "$pid" ] && agent_alive "$pid" "$start"; then
+		echo "weaver: the agent (pid $pid) is still running; its worktree stays" >&2
+		remove=0
+	fi
+	state_file "$agent"
+	if [ -f "$SF" ]; then
+		forget "$SF" "$pid"
+	else
+		rm -f "${SF%.json}.nvim" "${SF%.json}.thread"
+	fi
+	if [ "$remove" = 1 ]; then
+		tildify "$dir"
+		if ! worktree_removable "$dir"; then
+			echo "weaver: kept $TILDE: $WT_WHY" >&2
+			rc=1
+		elif [ "${WEAVER_WORKTRUNK:-1}" != 0 ] && command -v wt >/dev/null 2>&1; then
+			wt -C "${repo:-$dir}" remove --no-delete-branch --foreground "$dir" </dev/null
+			rc=$?
+		else
+			git -C "${repo:-$dir}" worktree remove "$dir"
+			rc=$?
+		fi
+		[ "$rc" = 0 ] && echo "weaver: removed $TILDE"
+	fi
+	push_status
+	return "${rc:-0}"
+}
+
 # ---------------------------------------------------------------- main
 
 usage() {
@@ -2789,6 +3008,10 @@ usage: weaver <command>
                                --branch NAME, --base REF, --here (the current checkout),
                                --agent claude|codex, --edit (write the task in $EDITOR),
                                --from PANE (that agent's repository), --no-focus
+  close [--yes] [--remove-worktree] [pane-id]
+                               close an agent (the focused one) with its nvim, and its
+                               thread's tab; offers to remove a thread's worktree when it
+                               is clean and merged or pushed
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
@@ -2807,8 +3030,10 @@ cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
 new) cmd_new "$@" ;;
+close) cmd_close "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
+_close) close_tail "$@" ;;
 hook) cmd_hook "$@" ;;
 edit) cmd_edit "$@" ;;
 nvim) cmd_nvim "$@" ;;
