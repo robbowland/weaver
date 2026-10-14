@@ -1,4 +1,4 @@
-Add a CLI flag · repo/feat-a · turn 3
+Add a CLI flag · dash/flag · turn 3
 needs you · 4m
 
 asked      add a CLI flag to app.py, then run it to check it
@@ -6,5 +6,5 @@ asked      add a CLI flag to app.py, then run it to check it
 waits      Bash: python app.py --name rob
 said       Added --name; running it to check
 tasks      ✓ parse  ✓ wire  ○ run
-files      app.txt
-git        feat-a · clean
+files      app.py
+git        flag · clean

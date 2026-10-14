@@ -1665,7 +1665,8 @@ claude_live() {
 # proc_start, state file, then for the dashboard: turn, last message, tasks
 # done, tasks, last file (base name), session id, tab name, agent, background
 # tasks, the thread's task and name (from its .thread file), and the turn's
-# roots (RS-separated). A state is refined by the agent's Claude Code session
+# roots (RS-separated). A thread whose agent has not reported yet (a .thread
+# without a state) is a row in state "starting". A state is refined by the agent's Claude Code session
 # file when that is newer: a dialog you already answered (a long tool you
 # approved) shows as working, a dialog the hooks missed as needs-you, and an
 # agent stopped with Esc (which fires no hook) as interrupted. Rows "gone"
@@ -1675,7 +1676,7 @@ JQ_ROWS='
 | ($all | map({key: (.id | tostring), value: .}) | from_entries) as $byid
 | ($claude | map({key: (.pid | tostring), value: .}) | from_entries) as $live
 | (reduce inputs as $l ({}; .[input_filename] += $l + "\n")) as $in
-| $in | to_entries[] | select(.key | endswith(".json"))
+| ( ($in | to_entries[] | select(.key | endswith(".json"))
 | .key as $f
 | (try (.value | fromjson) catch null) as $s
 | (try ($in[($f | rtrimstr(".json")) + ".thread"] // "" | fromjson) catch null) as $t
@@ -1708,7 +1709,18 @@ JQ_ROWS='
          (($t | objects | .task) // ""), (($t | objects | .name) // ""),
          [($s.turn_roots // []) | arrays | .[] | tostring]]
     end
-  end
+  end),
+  # A thread whose agent has not reported yet (its pane still open).
+  ($in | to_entries[] | select(.key | endswith(".thread"))
+   | select($in[(.key | rtrimstr(".thread")) + ".json"] == null)
+   | .key as $f
+   | (try (.value | fromjson) catch null) as $t
+   | select(($t | type) == "object")
+   | ($byid[($t.pane // "") | tostring]) as $p
+   | select($p != null and ($p.exited | not))
+   | [$t.pane, $p.tab_id, "starting", ($t.worktree // ""), ($t.created // $now), false, ($t.task // ""), "",
+      0, "", 0, "", "", $f, 0, "", 0, 0, "", "", ($p.tab_name // ""), ($t.agent // ""), "",
+      ($t.task // ""), ($t.name // ""), []]))
 | (if (.[-1] | type) == "array" then .[-1] else [] end) as $roots
 | (if (.[-1] | type) == "array" then .[:-1] else . end)
 | map(tostring | gsub("[\u0000-\u001f]+"; " "))
@@ -1846,6 +1858,7 @@ gc_states() {
 	find "$STATE_DIR" -maxdepth 1 -name 'form.*' -mmin +1440 -exec rm -f {} + 2>/dev/null
 	[ -f "$STATE_DIR/close.log" ] && [ "$(wc -c <"$STATE_DIR/close.log")" -gt 100000 ] && rm -f "$STATE_DIR/close.log"
 	[ -d "$LOG_DIR" ] && find "$LOG_DIR" -name '*.jsonl' -mtime +30 -exec rm -f {} + 2>/dev/null
+	[ -d "$STATE_DIR/turns" ] && find "$STATE_DIR/turns" -type f -mtime +30 -exec rm -f {} + 2>/dev/null
 	[ "${1:-}" = quiet ] || echo "weaver: cleaned up"
 	return 0
 }
@@ -2082,17 +2095,18 @@ ls_width() {
 	LS_WIDTH=$cols
 }
 
-# The dashboard's lines. LS_MODE=fzf (the default for `weaver _rows`): TAB-
-# separated items for fzf, the title first (fzf's header line), then
+# The dashboard's lines. LS_MODE=fzf (the default for `weaver _rows`): two
+# header lines (the title, a gap), then one TAB-separated item per line:
 #   id  pane  tab  prev  next  label  display
-# where id is a<pane> for an agent, h<group> for a heading, g<group> for the
-# gap above one and e for the empty board; prev and next are the list
-# positions of the agents around a heading or gap, for the cursor to skip it;
-# label is the resume card's title. Browsing (fzf's input hidden) shows the
-# headings and numbers the first nine agents (their positions go to
-# $FZF_SOCK's .keys file, for the 1-9 keys); searching lists the agents alone.
-# LS_MODE=plain: the board as text. Width: $FZF_COLUMNS, else $COLUMNS, else
-# 100. Micrographics colours when COLOR=1.
+# id is a<pane> for an agent, h<group> for a heading, g<group> for the gap
+# above one, e for the empty board; prev and next are the list positions of
+# the agents around a heading or gap, for the cursor to skip it; label is the
+# resume card's title. The display has a TAB after the glyph: fzf searches
+# only what follows (--nth 2), which headings and gaps leave empty. The first
+# nine agents are numbered, and $FZF_SOCK's .keys file holds the fzf actions
+# that pick them (one per line, for the 1-9 keys). Width: fzf's list
+# (ls_width). LS_MODE=plain: the board as text, $COLUMNS wide (100 when
+# unset). Micrographics colours for fzf, else only with COLOR=1.
 ls_rows() {
 	local mode=${LS_MODE:-fzf} width now i j k n=0 g c sep="  "
 	local pane tab state root since seen prompt waiting bg title nsub turn last tdone ttotal file sid
@@ -2149,6 +2163,16 @@ ls_rows() {
 			esac
 			;;
 		interrupted) g=3 glyph="$grey$G_INT$off" fact=interrupted ;;
+		starting)
+			# Its agent reports within seconds, unless its hooks are not in
+			# place (Codex runs them only once trusted in /hooks).
+			if [ $((now - since)) -lt 120 ]; then
+				g=2 glyph=$G_WORK fact=starting
+			else
+				g=3 glyph="$dim$G_IDLE$off" fact="not reporting"
+				[ "$agent" = codex ] && fact="no hooks: trust them in codex /hooks"
+			fi
+			;;
 		*)
 			g=3 glyph="$dim$G_IDLE$off"
 			[ "${turn:-0}" = 0 ] && fact="no prompt yet"
@@ -2337,7 +2361,11 @@ cmd_preview() {
 		return 0
 	fi
 	state_file "$pane"
-	[ -f "$SF" ] || return 0
+	if [ ! -f "$SF" ]; then
+		# A thread whose agent has not reported yet: its record.
+		SF="$STATE_DIR/${SKEY}_$pane.thread" re_r='"worktree":"([^"]*)"'
+		[ -f "$SF" ] || return 0
+	fi
 	[ -n "$title" ] &&
 		printf '%s%s%s%s%s%s\n' "$C_BOLD" "${title%% · *}" "$C_OFF" "$C_DIM" "${title#"${title%% · *}"}" "$C_OFF"
 	line=""
@@ -2345,7 +2373,7 @@ cmd_preview() {
 	[[ $line =~ $re_r ]] && root=${BASH_REMATCH[1]}
 	# Other agents in the same worktree: their turn diffs mix.
 	session_files json
-	for f in "${FOUND[@]}"; do
+	for f in ${FOUND[@]+"${FOUND[@]}"}; do
 		[ "$f" = "$SF" ] && continue
 		line=""
 		{ IFS= read -r line <"$f"; } 2>/dev/null
@@ -2389,7 +2417,8 @@ EOF2
 					  + $color + .value + $off
 					  + (if .key == $lines - 1 and ($ls | length) > $lines then $dim + " …" + $off else "" end))
 			  end;
-		(.state // "idle") as $st
+		(if has("state") | not then {state: "starting", since: .created, prompt: .task, agent: .agent} else . end)
+		| (.state // "idle") as $st
 		| (.seen // false) as $seen
 		| ($now - (.since // .ts // $now)) as $for
 		| ($st | if . == "needs-you" then $red + "needs you" + $off
@@ -2539,8 +2568,7 @@ cmd_ls() {
 			--track --id-nth 1 --delimiter "$TAB" --with-nth 7.. --nth 2 --tabstop 1 --no-sort --ansi --layout reverse \
 			--no-input --header-lines 2 --highlight-line --pointer ' ' --marker ' ' --ellipsis '…' \
 			--no-scrollbar --footer "$foot" --footer-border none \
-			--color 'fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000' \
-			--color 'header:-1,footer:#616161,border:#616161,preview-border:#616161,preview-label:#ffffff,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161' \
+			--color "$FZF_COLORS" \
 			--prompt '/ ' --ghost 'search threads' --info hidden --no-separator \
 			--preview "$q _preview {2} {6}" --preview-window "right,45%,border-left,wrap,<72(down,$size,border-top,wrap)" \
 			--bind "resize:reload($q _rows)" --bind "load:transform-footer($q _footer)" \

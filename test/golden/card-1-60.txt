@@ -1,7 +1,7 @@
-Add a README · repo/feat-b · turn 1
+Add a README · dash/readme · turn 1
 done · 1m
 
 asked      write a README and a guide
 said       Wrote README.md and GUIDE.md.
 files      GUIDE.md  README.md
-git        feat-b · 1 changed · 1 new
+git        readme · 2 new
