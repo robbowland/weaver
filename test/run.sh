@@ -42,8 +42,9 @@ export WEAVER_FOLLOW_IDLE_MS=300
 # Worktrunk with its defaults, not your config, and approvals of its own.
 export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 : >"$WORKTRUNK_CONFIG_PATH"
-# Nor your zoxide history (the new-thread form offers its repositories).
-export _ZO_DATA_DIR=$AT/zoxide
+# Nor your zoxide history (the new-thread form offers its repositories), nor
+# your editor (the form's ctrl-e).
+export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi

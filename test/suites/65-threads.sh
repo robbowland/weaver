@@ -238,6 +238,29 @@ waitfor "[ -f '$SD/${SESSION}_$AG.thread' ]"
 ok "form: enter starts it, here, in the focused pane's checkout" "$(th "$AG" here)|$(th "$AG" worktree)" "true|$T/repo"
 ok "form: you land on the agent" "$(client)" "terminal_$AG"
 
+# A long task, written in $EDITOR (nvim, from run.sh).
+focus 0
+key 1b4e
+sleep 1.5
+printf 'long one' | xxd -p | while read -r h; do key "$h"; done
+key 05 # ctrl-e
+sleep 2
+printf 'Gosecond line' | xxd -p | while read -r h; do key "$h"; done
+key 1b
+printf ':wq' | xxd -p | while read -r h; do key "$h"; done
+key 0d
+sleep 1
+fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating)] | .[0].id // empty')
+ok "form: ctrl-e writes the task in \$EDITOR; the form shows its first line and the rest" \
+	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -cE 'task  long one *$|[+]1 more lines')" "2"
+key 0d
+waitfor "[ -n \"\$(tab_named long-one)\" ]"
+tab=$(tab_named long-one)
+TABS="$TABS $tab"
+thread_panes "$tab"
+waitfor "[ -f '$AT/args.claude.$AG' ]"
+ok "form: named after its first line; the agent gets all of it" "$(cat "$AT/args.claude.$AG" 2>/dev/null | tr '\n' '|')" "long one|second line|"
+
 focus 0
 before=$(Z list-tabs -j | jq length)
 key 1b4e

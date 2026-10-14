@@ -2176,11 +2176,12 @@ kdl_str() {
 	K="\"$s\""
 }
 
-# The task $1 as a branch name, into SLUG: lowercase ASCII letters and digits
-# joined by '-', at most 48 characters, cut at a '-' (as Rob's `wi` does).
+# The task $1 as a branch name, into SLUG: its first line in lowercase ASCII
+# letters and digits joined by '-', at most 48 characters, cut at a '-' (as
+# Rob's `wi` does).
 slugify() {
 	local s
-	s=$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -cs 'a-z0-9' '-')
+	s=$(printf '%s' "${1%%"$NL"*}" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -cs 'a-z0-9' '-')
 	s=${s#-}
 	s=${s%-}
 	if [ ${#s} -gt 48 ]; then
@@ -2317,8 +2318,8 @@ form_header() {
 	[ -n "$err" ] && printf '%8s%s%s%s\n' "" "$C_RED" "$err" "$C_OFF"
 	if [ -f "$1.task" ]; then
 		{ IFS= read -r first; } <"$1.task"
-		lines=$(wc -l <"$1.task" | tr -d ' ')
-		if [ "$first" = "$task" ] && [ "$lines" -gt 0 ]; then
+		lines=$(awk 'END { print NR - 1 }' "$1.task")
+		if [ "$first" = "$task" ] && [ "${lines:-0}" -gt 0 ]; then
 			form_row '' "+$lines more lines" "${C_GREY}+$lines more lines${C_OFF}" '^e'
 		fi
 	fi

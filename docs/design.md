@@ -222,8 +222,8 @@ the agent's other files. Readers ignore fields they don't know.
 The tab's current name is zellij's (`tab_name` in `list-panes`); weaver never
 renames it.
 
-A task's slug: lowercase ASCII letters and digits, every other run of
-characters one `-`, at most 48 characters, cut at a `-`.
+A task's slug: its first line in lowercase ASCII letters and digits, every
+other run of characters one `-`, at most 48 characters, cut at a `-`.
 
 ### Commands for the dashboard
 
