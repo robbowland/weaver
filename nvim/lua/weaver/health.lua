@@ -25,7 +25,7 @@ function M.check()
     health.warn('diffview is not installed: reviews fall back to quickfix', {
       'Install dlyongemallo/diffview-plus.nvim',
     })
-  elseif require('diffview.scene.views.diff.diff_view').set_revs then
+  elseif (require('diffview.scene.views.diff.diff_view').DiffView or {}).set_revs then
     health.ok('diffview-plus')
   else
     health.warn('diffview is the unmaintained upstream: reviews work, but diffview-plus is what weaver is tested with')

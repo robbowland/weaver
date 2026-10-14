@@ -194,6 +194,9 @@ T.run(function()
   local health = C.lua("vim.cmd('checkhealth weaver'); return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')")
   T.ok('checkhealth: git is checked', health:find('OK git version', 1, true) ~= nil, true)
   T.ok('...the bound agent is reported', health:find('bound to an agent: session ' .. sid, 1, true) ~= nil, true)
+  if T.has_diffview() then
+    T.ok('...diffview-plus is recognised', health:find('OK diffview-plus', 1, true) ~= nil, true)
+  end
   C.cmd('bwipeout')
 
   C.close()
