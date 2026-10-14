@@ -73,13 +73,13 @@ thread() {
 }
 thread 70 claude
 ok "a new thread, before its agent reports: working, starting" \
-	"$(LS_MODE=plain weaver _rows | grep -c '^●  Fix the flaky test  *starting ')" "1"
+	"$(LS_MODE=plain weaver _rows | grep -c '^\[/\]  Fix the flaky test  *starting ')" "1"
 ok "...and its card says what it was asked" \
 	"$(weaver _preview "$NP" | strip | sed -n '1p;3p')" "starting · 1m
 asked      Fix the flaky test"
 thread 300 codex
 ok "a Codex thread that never reports: its hooks need trusting" \
-	"$(LS_MODE=plain weaver _rows | grep -c '^○  Fix the flaky test  *no hooks: trust them in codex /hooks')" "1"
+	"$(LS_MODE=plain weaver _rows | grep -c '^\[ \]  Fix the flaky test  *no hooks: trust them in codex /hooks')" "1"
 Z close-pane --pane-id "terminal_$NP"
 sleep 0.3
 ok "...and gone with its pane" "$(LS_MODE=plain weaver _rows | grep -c 'flaky')" "0"
@@ -108,7 +108,7 @@ ok "Alt y: a borderless pane named weaver, fitted to the list and the card besid
 	"$(Z list-panes -a -j | jq -r ".[] | select(.id == $FL) | \"\\(.title) \\(.pane_rows == .pane_content_rows) \\(.pane_rows) \\(.pane_columns < 180)\"")" \
 	"weaver true 14 true"
 ok "...with the title, headings and counts on screen" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'weaver · 3 threads|NEEDS YOU 1|DONE 1|WORKING 1')" "4"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE '\[ WEAVER :: THREADS \] 3|NEEDS YOU · 1|DONE · 1|WORKING · 1')" "4"
 press 6b # k at the top
 ok "k at the top stays on the first agent" "$(cur)" "a0"
 press 6a # j
@@ -173,7 +173,7 @@ key 1b79
 sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating and (.exited|not)) | .id')
 ok "empty board: stays open and says how to start a thread" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\. n starts one here|n new thread  q quit')" "2"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\. n starts one here|n NEW THREAD  q QUIT')" "2"
 S=$(ls /tmp/weaver-$(id -u)/${SESSION}.fzf.*.sock 2>/dev/null | head -n 1)
 ok "...in a small pane, with nothing to select" \
 	"$(Z list-panes -a -j | jq -r ".[] | select(.id == $FL) | .pane_rows")|$(fz '.matches | length')" "7|0"
@@ -183,7 +183,7 @@ ok "q closes it" "$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and 
 # The first thread of the day: its record alone, no agent state anywhere yet.
 jq -nc --argjson c $(($(date +%s) - 5)) --arg w "$T/dash-flag" \
 	'{name: "first", task: "The first thread", worktree: $w, agent: "claude", created: $c, pane: 2}' >"$SD/${SESSION}_2.thread"
-ok "a thread's record alone is on the board" "$(LS_MODE=plain weaver _rows | grep -c '^●  The first thread  *starting')" "1"
+ok "a thread's record alone is on the board" "$(LS_MODE=plain weaver _rows | grep -c '^\[/\]  The first thread  *starting')" "1"
 rm -f "$SD/${SESSION}_2.thread"
 
 done_suite

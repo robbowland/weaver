@@ -5,7 +5,7 @@
 . "$(dirname "$0")/../lib.sh"
 fresh
 
-rows() { weaver ls | grep -c -E '^[!✓●○] '; }
+rows() { weaver ls | grep -c -E '^\[.\] '; }
 
 # The harness itself: zellij falls back to some other running session when the
 # named one is gone, so the test shim must refuse.

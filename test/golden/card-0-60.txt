@@ -5,6 +5,6 @@ asked      add a CLI flag to app.py, then run it to check it
            works
 waits      Bash: python app.py --name rob
 said       Added --name; running it to check
-tasks      ✓ parse  ✓ wire  ○ run
+tasks      [x] parse  [x] wire  [ ] run
 files      app.py
 git        flag · clean

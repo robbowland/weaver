@@ -18,6 +18,13 @@
 # Must stay bash 3.2 compatible (macOS /bin/bash): no mapfile, no ${x,,}, no
 # BASHPID, no GNU-only flags.
 
+# The state glyphs: Micrographics task cells (the vault's checkboxes, as
+# brackets), the same everywhere: the dashboard, home, the status counts, the
+# nvim bar and Worktrunk's markers.
+#   [!] needs you (red)   [x] done (green; faint once seen)   [/] working
+#   [ ] idle              [-] interrupted, or ended
+G_NEED='[!]' G_DONE='[x]' G_SEEN='[x]' G_WORK='[/]' G_IDLE='[ ]' G_INT='[-]' G_END='[-]'
+
 # zjstatus runs `weaver status --zjstatus` every couple of seconds in every
 # tab: answer from the counts the hooks keep, before parsing anything else.
 # It must never fail or hang zjstatus: no external command, only a file read
@@ -28,9 +35,10 @@ if [ "${1:-}" = status ] && [ "${2:-}" = --zjstatus ]; then
 	[ -n "${ZELLIJ_SESSION_NAME:-}" ] && [ -f "$f" ] && { read -r -t 1 n d w _ <"$f"; } 2>/dev/null
 	case "${n:-0}${d:-0}${w:-0}" in *[!0-9]*) n=0 d=0 w=0 ;; esac
 	out=""
-	[ "${n:-0}" -gt 0 ] && out="$out#[fg=#ff3b2f,bold]! $n "
-	[ "${d:-0}" -gt 0 ] && out="$out#[fg=#39d97a,bold]✓ $d "
-	[ "${w:-0}" -gt 0 ] && out="$out#[fg=#999999]● $w "
+	# Each count's cell: faint brackets, its mark in the signal colour.
+	[ "${n:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] $n  "
+	[ "${d:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] $d  "
+	[ "${w:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] $w  "
 	printf '%s\n' "$out"
 	exit 0
 fi
@@ -649,7 +657,14 @@ hook_run() {
 
 	# Worktrunk branch markers, like its own Claude Code plugin sets for the
 	# session's start directory, but on the worktree the agent is really in.
-	case $state in working) marker='🤖' ;; ended) marker='' ;; *) marker='💬' ;; esac
+	# weaver's glyph for the state, not Worktrunk's emoji.
+	case $state in
+	working) marker=$G_WORK ;;
+	needs-you) marker=$G_NEED ;;
+	done) marker=$G_DONE ;;
+	ended) marker='' ;;
+	*) marker=$G_IDLE ;;
+	esac
 	mark_dir=""
 	if [ "${WEAVER_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
 		mark_dir=$root
@@ -1990,9 +2005,9 @@ status_counts() {
 # The status text, plain.
 status_text() {
 	STATUS=""
-	[ $N_NEED -gt 0 ] && STATUS="$STATUS! $N_NEED  "
-	[ $N_DONE -gt 0 ] && STATUS="${STATUS}✓ $N_DONE  "
-	[ $N_WORK -gt 0 ] && STATUS="${STATUS}● $N_WORK  "
+	[ $N_NEED -gt 0 ] && STATUS="$STATUS$G_NEED $N_NEED  "
+	[ $N_DONE -gt 0 ] && STATUS="${STATUS}$G_DONE $N_DONE  "
+	[ $N_WORK -gt 0 ] && STATUS="${STATUS}$G_WORK $N_WORK  "
 	STATUS=${STATUS%  }
 }
 
@@ -2040,15 +2055,22 @@ cmd_status() {
 # ---------------------------------------------------------------- ls
 
 # The dashboard: every agent of the session under a heading per group, best
-# first. The groups match the status bar's counts, and each state has a shape
-# that reads without colour (the nvim bar uses the same):
+# first. The groups match the status bar's counts, and each state has a glyph
+# that reads without colour (G_*, at the top; the nvim bar uses the same):
 #
-#   NEEDS YOU  !  needs you, longest waiting first      (red)
-#   DONE       ✓  done and not yet seen, oldest first   (green)
-#   WORKING    ●  working, longest working first
-#   IDLE       ✓  done and seen, ○ idle, ◌ interrupted; most recent first
+#   NEEDS YOU  needs you, longest waiting first      (red)
+#   DONE       done and not yet seen, oldest first   (green)
+#   WORKING    working, longest working first        (grey)
+#   IDLE       done and seen, idle, interrupted; most recent first (faint)
+#
+# Titles are in ink only where a thread needs you (needs you, done); the rest
+# are grey.
 
-G_NEED='!' G_DONE='✓' G_WORK='●' G_IDLE='○' G_INT='◌'
+# paint CELL COLOUR [DIM OFF]: the cell's brackets in DIM (C_DIM), its mark in
+# COLOUR, each closed by OFF (C_OFF), into PAINT. Without colours, the cell.
+paint() {
+	PAINT="${3-$C_DIM}${1:0:1}${4-$C_OFF}$2${1:1:1}${4-$C_OFF}${3-$C_DIM}${1:2:1}${4-$C_OFF}"
+}
 
 # Character counts and cuts need a UTF-8 locale: keep the one in place when it
 # counts 'é' as one character, else try en_US.UTF-8, then C.UTF-8 (quietly:
@@ -2317,7 +2339,7 @@ ls_rows() {
 	local red="" green="" grey="" dim="" bold="" off=""
 	local wn=0 wf=0 ww=0 cn cf cw pre lead age_w=3 out="" keys="" title_l title_r gap
 	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root r_num order
-	local nums="" numw=1 jump=${LS_JUMP:-print(jump)+accept}
+	local nums="" numw=2 jump=${LS_JUMP:-print(jump)+accept} shown tl tc tk
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
 	local -a counts=(0 0 0 0) heads=("NEEDS YOU" "DONE" "WORKING" "IDLE")
 	local gaps=1 groups=0
@@ -2340,9 +2362,15 @@ ls_rows() {
 		[ -n "$name" ] || name="new ${agent:-claude} session"
 		fact=""
 		case $state in
-		needs-you) g=0 glyph="$red$G_NEED$off" fact="${waiting:-input}" ;;
+		needs-you)
+			g=0 fact="${waiting:-input}"
+			paint "$G_NEED" "$red" "$dim" "$off"
+			glyph=$PAINT
+			;;
 		working)
-			g=2 glyph=$G_WORK
+			g=2
+			paint "$G_WORK" "$grey" "$dim" "$off"
+			glyph=$PAINT
 			if [ "$bg" != 0 ]; then
 				fact="$bg in background"
 			elif [ "$nsub" != 0 ]; then
@@ -2354,7 +2382,14 @@ ls_rows() {
 			fi
 			;;
 		done)
-			if [ "$seen" = true ]; then g=3 glyph="$dim$G_DONE$off"; else g=1 glyph="$green$G_DONE$off"; fi
+			if [ "$seen" = true ]; then
+				g=3
+				paint "$G_SEEN" "$dim" "$dim" "$off"
+			else
+				g=1
+				paint "$G_DONE" "$green" "$dim" "$off"
+			fi
+			glyph=$PAINT
 			turn_files "$sid" "$turn" "${troots:-$root}"
 			case $TURN_FILES in
 			'' | 0) fact=$last ;;
@@ -2362,19 +2397,28 @@ ls_rows() {
 			*) fact="$TURN_FILES files${last:+ · $last}" ;;
 			esac
 			;;
-		interrupted) g=3 glyph="$grey$G_INT$off" fact=interrupted ;;
+		interrupted)
+			g=3 fact=interrupted
+			paint "$G_INT" "$grey" "$dim" "$off"
+			glyph=$PAINT
+			;;
 		starting)
 			# Its agent reports within seconds, unless its hooks are not in
 			# place (Codex runs them only once trusted in /hooks).
 			if [ $((now - since)) -lt 120 ]; then
-				g=2 glyph=$G_WORK fact=starting
+				g=2 fact=starting
+				paint "$G_WORK" "$grey" "$dim" "$off"
 			else
-				g=3 glyph="$dim$G_IDLE$off" fact="not reporting"
+				g=3 fact="not reporting"
+				paint "$G_IDLE" "$dim" "$dim" "$off"
 				[ "$agent" = codex ] && fact="no hooks: trust them in codex /hooks"
 			fi
+			glyph=$PAINT
 			;;
 		*)
-			g=3 glyph="$dim$G_IDLE$off"
+			g=3
+			paint "$G_IDLE" "$dim" "$dim" "$off"
+			glyph=$PAINT
 			[ "${turn:-0}" = 0 ] && fact="no prompt yet"
 			;;
 		esac
@@ -2426,11 +2470,11 @@ EOF2
 	# --tabstop 1): headings and gaps have nothing there, so a search shows
 	# the agents alone.
 	if [ "$mode" = fzf ]; then
-		pre=$((numw + 4)) sep=" $TAB"
+		pre=$((numw + 6)) sep=" $TAB"
 		for g in 0 1 2 3; do [ ${counts[g]} -gt 0 ] && groups=$((groups + 1)); done
 		ls_plan
 	else
-		pre=3 cw=0
+		pre=5 cw=0
 		[ $width -ge 96 ] && [ $ww -gt 0 ] && cw=$((ww + 2 > 30 ? 30 : ww + 2))
 	fi
 	k=$((width - pre - age_w - cw))
@@ -2450,14 +2494,25 @@ EOF2
 	width=$((pre + cn + cf + cw + age_w))
 
 	# The title: the thread count, and the status bar's counts at the right.
-	if [ $n = 0 ]; then title_l="weaver"; elif [ $n = 1 ]; then title_l="weaver · 1 thread"; else title_l="weaver · $n threads"; fi
-	title_r=""
-	[ ${counts[0]} -gt 0 ] && title_r="$title_r$G_NEED ${counts[0]}  "
-	[ ${counts[1]} -gt 0 ] && title_r="$title_r$G_DONE ${counts[1]}  "
-	[ ${counts[2]} -gt 0 ] && title_r="$title_r$G_WORK ${counts[2]}  "
-	title_r=${title_r%  }
+	# [ WEAVER :: THREADS ] 5, like the vault's [ MAP :: LOCAL ] 4 LINKS; tl in
+	# colour (WEAVER in ink on fzf's grey border), title_l to measure.
+	title_l="[ WEAVER :: THREADS ]"
+	[ $n = 0 ] || title_l="$title_l $n"
+	tk=$bold
+	[ "$mode" = fzf ] && [ -n "$bold" ] && tk="$C_BOLD$C_INK"
+	tl="$dim[$off ${tk}WEAVER$off $dim::$off ${grey}THREADS$off $dim]$off"
+	[ $n = 0 ] || tl="$tl $grey$n$off"
+	# The status bar's counts, their cells in its colours; tc in colour.
+	title_r="" tc=""
+	for g in 0 1 2; do
+		[ ${counts[g]} -gt 0 ] || continue
+		case $g in 0) shown=$G_NEED tk=$red ;; 1) shown=$G_DONE tk=$green ;; *) shown=$G_WORK tk=$grey ;; esac
+		paint "$shown" "$tk" "$dim" "$off"
+		title_r="$title_r$shown ${counts[g]}  " tc="$tc$PAINT $grey${counts[g]}$off  "
+	done
+	title_r=${title_r%  } tc=${tc%  }
 	if [ "$mode" = fzf ]; then
-		# On fzf's top border: ┌─ weaver · 5 threads ──── ! 2  ✓ 1  ● 1 ─┐
+		# On fzf's top border: ┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐
 		k=$((LS_COLS - 4 - ${#title_l} - ${#title_r} - 4))
 		[ $k -lt 1 ] && k=1
 		gap=""
@@ -2469,18 +2524,10 @@ EOF2
 		[ $k -lt 2 ] && k=2
 		printf -v gap '%*s' $k ''
 	fi
-	# In the status bar's colours.
-	title_r=${title_r/"$G_NEED "/"$red$G_NEED$off "}
-	title_r=${title_r/"$G_DONE "/"$green$G_DONE$off "}
-	title_r=${title_r/"$G_WORK "/"$grey$G_WORK$off "}
-	title_l="$bold${title_l%% · *}$off${title_l#weaver}"
-	title_l=${title_l/ · /"$dim · $off"}
-	# On fzf's border, whose label is grey: weaver in ink.
-	[ "$mode" = fzf ] && [ -n "$bold" ] && title_l=${title_l/"$bold"/"$C_BOLD$C_INK"}
 	if [ "$mode" = fzf ]; then
 		# The border's label, and (no agents) what to do, for the header.
 		if [ -n "${FZF_SOCK:-}" ]; then
-			printf '%s\n' " $title_l$gap$title_r " >"${FZF_SOCK%.sock}.label.$$" &&
+			printf '%s\n' " $tl$gap$tc " >"${FZF_SOCK%.sock}.label.$$" &&
 				mv -f "${FZF_SOCK%.sock}.label.$$" "${FZF_SOCK%.sock}.label"
 			out=""
 			[ $n = 0 ] && out="${grey}No threads yet.$off ${C_OFF}n$grey starts one here, ${C_OFF}Alt N$grey from anywhere;$off$NL${grey}or start claude or codex in any pane.$off"
@@ -2489,7 +2536,7 @@ EOF2
 		fi
 		[ $n = 0 ] && return 0
 	else
-		printf '%s\n\n' "$title_l$gap$title_r"
+		printf '%s\n\n' "$tl$gap$tc"
 		if [ $n = 0 ]; then
 			printf '%s\n' "No agents in zellij session $SESSION."
 			return 0
@@ -2507,8 +2554,8 @@ EOF2
 				l_id[m]="g$g" l_text[m]="" l_isagent[m]=0
 				m=$((m + 1))
 			fi
-			l_id[m]="h$g" l_text[m]="$grey${heads[g]}$off $dim${counts[g]}$off" l_isagent[m]=0
-			[ "$mode" = fzf ] || l_text[m]="${heads[g]} ${counts[g]}"
+			l_id[m]="h$g" l_text[m]="$grey${heads[g]}$off$dim · $off$grey${counts[g]}$off" l_isagent[m]=0
+			[ "$mode" = fzf ] || l_text[m]="${heads[g]} · ${counts[g]}"
 			m=$((m + 1))
 			last_g=$g
 		fi
@@ -2517,16 +2564,19 @@ EOF2
 		if [ "$mode" = fzf ]; then
 			# Threads' stable numbers when they have them (the same in the
 			# sidebar and on the home tab), else the rows' order.
+			# Two digits, like the vault's numbered sections (01).
 			if [ -n "$nums" ]; then
-				printf -v lead "%s%${numw}s%s " "$dim" "${r_num[i]}" "$off"
-				c=${r_num[i]}
+				c=${r_num[i]} shown=${r_num[i]}
 			else
-				printf -v lead "%s%${numw}s%s " "$dim" "$([ $a -le 9 ] && echo $a)" "$off"
-				c=$a
+				c=$a shown=""
+				[ $a -le 9 ] && shown=$a
 			fi
+			[ -n "$shown" ] && printf -v shown '%02d' "$shown"
+			printf -v lead "%s%${numw}s%s " "$dim" "$shown" "$off"
 			case $c in [1-9]) keyl[c]="pos($((m + 1)))+$jump" ;; esac
 		fi
 		fit "${r_name[i]}" $((cn - 2))
+		[ "${r_group[i]}" -ge 2 ] && FIT="$grey$FIT$off"
 		out="$lead${r_glyph[i]}$sep$FIT  "
 		if [ $cf -gt 0 ]; then
 			fit "${r_fact[i]}" $((cf - 2))
@@ -2633,7 +2683,8 @@ EOF2
 	fi
 	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" \
 		--arg head "$head" --arg ab "$ab" --argjson changed "$changed" --argjson new "$new" --argjson shared "$n" \
-		--arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" '
+		--arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" \
+		--arg gseen "$G_SEEN" --arg gidle "$G_IDLE" '
 		def age: if . < 60 then "\(.)s" elif . < 3600 then "\(. / 60 | floor)m"
 			elif . < 172800 then "\(. / 3600 | floor)h" else "\(. / 86400 | floor)d" end;
 		def base: tostring | split("/") | last;
@@ -2668,7 +2719,7 @@ EOF2
 		    (if (.background // 0) > 0 then field("background"; .background_tasks // ""; ""; 2) else empty end),
 		    (if (.last_message // "") != "" and $st != "working" then field("said"; .last_message; $grey; 6) else empty end),
 		    (if ((.tasks // []) | length) > 0 then
-		       field("tasks"; (.tasks[-12:] | map((if .done then "✓ " else "○ " end) + .subject | one | gsub(" "; "\u00a0")) | join("\u00a0 ")); ""; 3)
+		       field("tasks"; (.tasks[-12:] | map((if .done then $gseen + " " else $gidle + " " end) + .subject | one | gsub(" "; "\u00a0")) | join("\u00a0 ")); ""; 3)
 		     else empty end),
 		    (if ((.subagents // []) | length) > 0 then
 		       field("subagents"; ((.subagents // []) | map(.type + " " + (($now - (.since // $now)) | age)) | join(" · ")); ""; 2)
@@ -2706,7 +2757,7 @@ ls_help() {
 	local d=$C_DIM g=$C_GREY o=$C_OFF
 	cat <<EOF2
 ${g}keys$o
-  ${g}↵  1-9${o}      jump to the thread ${d}(1-9: that row)$o
+  ${g}⏎  1-9${o}      jump to the thread ${d}(1-9: that row)$o
   ${g}j k  g G$o    move; first, last
   $g/$o           search ${d}(esc: back)$o
   ${g}n$o           new thread ${d}(weaver new)$o
@@ -2719,8 +2770,8 @@ ${g}keys$o
   ${g}q  esc$o      close the dashboard
 
 ${g}threads$o
-  $C_RED$G_NEED$o  needs you    $C_GREEN$G_DONE$o  done, not yet seen    $G_WORK  working
-  $d$G_DONE$o  done, seen   $d$G_IDLE$o  idle    $g$G_INT$o  interrupted
+  $(paint "$G_NEED" "$C_RED"; printf %s "$PAINT")  needs you    $(paint "$G_DONE" "$C_GREEN"; printf %s "$PAINT")  done, not yet seen    $(paint "$G_WORK" "$g"; printf %s "$PAINT")  working
+  $(paint "$G_SEEN" "$d"; printf %s "$PAINT")  done, seen   $(paint "$G_IDLE" "$d"; printf %s "$PAINT")  idle    $(paint "$G_INT" "$g"; printf %s "$PAINT")  interrupted
 
   ${d}×2$o  ${d}two agents share the worktree: their turn diffs mix$o
 EOF2
@@ -2793,10 +2844,10 @@ jump_to() {
 # fzf's input shows), as many as fit the list's width, ? always last.
 ls_footer() {
 	local width k w item out="" end="" g=$C_GREY d=$C_DIM o=$C_OFF IFS='|'
-	local browse='↵ jump|1-9|n new|x close|/ search|s screen|e nvim' search='↵ jump|esc back|tab screen|^e nvim'
+	local browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|e NVIM' search='⏎ JUMP|esc BACK|tab SCREEN|^e NVIM'
 	# The card hidden for want of room: s shows it.
 	[ -n "${FZF_SOCK:-}" ] && [ -f "${FZF_SOCK%.sock}.tight" ] && [ "${FZF_PREVIEW_LINES:-0}" = 0 ] &&
-		browse='↵ jump|1-9|n new|x close|/ search|s card|e nvim'
+		browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM'
 	ls_utf8
 	ls_size border
 	ls_width
@@ -2804,11 +2855,11 @@ ls_footer() {
 	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
 		set -- $search
 	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-1}" = 0 ]; then
-		if [ -n "${LS_HOME:-}" ]; then set -- 'n new thread'; else set -- 'n new thread' 'q quit'; fi
+		if [ -n "${LS_HOME:-}" ]; then set -- 'n NEW THREAD'; else set -- 'n NEW THREAD' 'q QUIT'; fi
 		end="" w=0
 	else
 		set -- $browse
-		end="${g}?$o ${d}help$o" w=6
+		end="${g}?$o ${d}HELP$o" w=6
 	fi
 	for item in "$@"; do
 		[ $((w + ${#item} + 2)) -le $width ] || break
@@ -2976,17 +3027,19 @@ side_order() {
 # A state's glyph, in its colour, into GLYPH, and plain, into GCHAR (the
 # dashboard's shapes).
 glyph_of() {
+	local c=$G_IDLE k=$C_DIM
 	case $1 in
-	needs-you) GCHAR=$G_NEED GLYPH="$C_RED$G_NEED$C_OFF" ;;
-	done)
-		GCHAR=$G_DONE
-		if [ "$2" = true ]; then GLYPH="$C_DIM$G_DONE$C_OFF"; else GLYPH="$C_GREEN$G_DONE$C_OFF"; fi
+	needs-you) c=$G_NEED k=$C_RED ;;
+	done) if [ "$2" = true ]; then c=$G_SEEN; else c=$G_DONE k=$C_GREEN; fi ;;
+	working | starting) c=$G_WORK k=$C_GREY ;;
+	interrupted) c=$G_INT k=$C_GREY ;;
+	tab)
+		GCHAR=" · " GLYPH="$C_DIM · $C_OFF" GMARK="${C_DIM}·$C_OFF"
+		return 0
 		;;
-	working | starting) GCHAR=$G_WORK GLYPH=$G_WORK ;;
-	interrupted) GCHAR=$G_INT GLYPH="$C_GREY$G_INT$C_OFF" ;;
-	tab) GCHAR="·" GLYPH="${C_DIM}·$C_OFF" ;;
-	*) GCHAR=$G_IDLE GLYPH="$C_DIM$G_IDLE$C_OFF" ;;
 	esac
+	paint "$c" "$k"
+	GCHAR=$c GLYPH=$PAINT GMARK="$k${c:1:1}$C_OFF"
 }
 
 # The sidebar's items, NUL-separated (fzf --read0): "id<TAB>pane<TAB>tab<TAB>"
@@ -2996,7 +3049,7 @@ glyph_of() {
 # rows push_status kept. Into $FZF_SOCK's .keys, the actions for 1-9 (by
 # thread number) and .cur, the current thread's position.
 side_rows() {
-	local now n=0 i j a=0 cur="" numw=1 w rail="" name line2 key out base num pl e=0 kind label
+	local now n=0 i j a=0 cur="" numw=2 w rail="" name line2 key out base num pl e=0 kind label
 	local pane tab state root since seen prompt waiting title tnum ttask agent pos=" "
 	local -a k_key k_pane k_tab k_state k_seen k_name k_wait k_since k_num order
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
@@ -3073,27 +3126,29 @@ EOF2
 		a=$((a + 1))
 		case ${k_num[i]} in [1-9]) keyl[k_num[i]]="execute-silent($(printf '%q' "$SELF") _goto ${k_pane[i]} ${k_tab[i]})" ;; esac
 		glyph_of "${k_state[i]}" "${k_seen[i]}"
-		printf -v num '%*s ' "$numw" "${k_num[i]}"
+		num=${k_num[i]}
+		[ -n "$num" ] && printf -v num '%02d' "$num"
+		printf -v num '%*s ' "$numw" "$num"
 		line2=""
 		if [ -n "$rail" ]; then
 			# Two columns: number and glyph, touching.
 			[ "$w" -lt 3 ] && num=${num% }
-			pl="$num$GCHAR" out="$C_DIM$num$C_OFF$GLYPH"
+			pl="$num${GCHAR:1:1}" out="$C_DIM$num$C_OFF$GMARK"
 		elif [ "${k_state[i]}" = tab ]; then
 			# A tab without an agent: its name, faint; a long one (a path)
 			# keeps its end.
 			label=${k_name[i]}
-			[ ${#label} -gt $((w - numw - 5)) ] && label="…${label:$((${#label} - (w - numw - 6)))}"
-			fit "$label" $((w - numw - 5))
+			[ ${#label} -gt $((w - numw - 7)) ] && label="…${label:$((${#label} - (w - numw - 8)))}"
+			fit "$label" $((w - numw - 7))
 			pl="$num$GCHAR  $FIT" out="$C_DIM$num$GLYPH  $C_DIM$FIT$C_OFF"
 		else
 			age $((now - k_since[i]))
-			fit "${k_name[i]}" $((w - numw - 9))
+			fit "${k_name[i]}" $((w - numw - 11))
 			printf -v pl '%s%s  %s %3s' "$num" "$GCHAR" "$FIT" "$AGE"
 			printf -v out '%s%s%s%s  %s %s%3s%s' "$C_DIM" "$num" "$C_OFF" "$GLYPH" "$FIT" "$C_DIM" "$AGE" "$C_OFF"
 			if [ "${k_state[i]}" = needs-you ] && [ -n "${k_wait[i]}" ]; then
-				fit "${k_wait[i]}" $((w - numw - 5))
-				printf -v line2 '%*s%s' $((numw + 4)) '' "$FIT"
+				fit "${k_wait[i]}" $((w - numw - 7))
+				printf -v line2 '%*s%s' $((numw + 6)) '' "$FIT"
 			fi
 		fi
 		if [ "${k_tab[i]}" = "${WEAVER_SIDE_TAB:-x}" ] && [ -z "$cur" ]; then
@@ -3133,6 +3188,7 @@ thread_tab_labels() {
 		fit "$label" 30
 		label=${FIT%"${FIT##*[! ]}"}
 		where_of "$root"
+		printf -v tnum '%02d' "$tnum"
 		label="$tnum $label · $W_REPO${W_BRANCH:+/$W_BRANCH}"
 		line="$tab$TAB$label"
 		new="$new$line$NL"
@@ -3564,7 +3620,7 @@ cmd_form() {
 		# shellcheck disable=SC2086
 		out=$(form_bases | SHELL=/bin/sh fzf --reverse $FORM_FZF --border-label ' base ' \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      base  ' --ghost 'where the new branch starts' \
-			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+			--color "$FZF_COLORS" --footer "${C_GREY}⏎$C_OFF ${C_DIM}PICK$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}BACK$C_OFF")
 		form_refit "$sf"
 		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
@@ -3594,7 +3650,7 @@ cmd_form() {
 		out=$(SHELL=/bin/sh fzf --disabled --reverse $FORM_FZF --border-label ' branch ' \
 			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FZF_COLORS" \
 			--header "        ${C_GREY}names the branch and its worktree; an existing branch continues${C_OFF}" \
-			--footer "${C_GREY}↵$C_OFF ${C_DIM}keep$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF" --bind 'enter:print-query' </dev/null) || return 0
+			--footer "${C_GREY}⏎$C_OFF ${C_DIM}KEEP$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}BACK$C_OFF" --bind 'enter:print-query' </dev/null) || return 0
 		if [ -n "$out" ] && git check-ref-format --branch "$out" >/dev/null 2>&1; then
 			F_BRANCH=$out
 			slugify "$q"
@@ -3607,7 +3663,7 @@ cmd_form() {
 		# shellcheck disable=SC2086
 		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse $FORM_FZF --border-label ' repository ' \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      repo  ' --ghost 'a repository, or a path' \
-			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+			--color "$FZF_COLORS" --footer "${C_GREY}⏎$C_OFF ${C_DIM}PICK$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}BACK$C_OFF")
 		form_refit "$sf"
 		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
@@ -3649,7 +3705,7 @@ cmd_form() {
 # label, the pane itself borderless (float_fit).
 FORM_COLS=96 FORM_ROWS=11 FORM_PICK_ROWS=24
 # The form's footer: its keys, in the dashboard's style.
-FORM_FOOTER="${C_GREY}↵$C_OFF ${C_DIM}start$C_OFF   $C_GREY^e$C_OFF ${C_DIM}write it in \$EDITOR$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}cancel$C_OFF"
+FORM_FOOTER="${C_GREY}⏎$C_OFF ${C_DIM}START$C_OFF   $C_GREY^e$C_OFF ${C_DIM}WRITE IT IN \$EDITOR$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}CANCEL$C_OFF"
 FORM_FZF="--border sharp --border-label-pos 2 --no-info --no-separator --ansi --height 100% --highlight-line"
 
 # The form: fills TASK and the F_* fields from form file $1. Returns 130 when

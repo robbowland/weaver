@@ -76,7 +76,7 @@ while [ "$(date +%s)" -lt $end ]; do
 		[ "$t" -gt 3000 ] && slow=$((slow + 1))
 		screen=$(plain)
 		case $screen in *"ERROR IN PLUGIN"*) crash=$((crash + 1)) ;; esac
-		case $screen in *"! "[0-9]* | *"✓ "[0-9]* | *"● "[0-9]*) shown=$((shown + 1)) ;; esac
+		case $screen in *"$G_NEED "[0-9]* | *"$G_DONE "[0-9]* | *"$G_WORK "[0-9]*) shown=$((shown + 1)) ;; esac
 	fi
 	sleep 0.5
 done

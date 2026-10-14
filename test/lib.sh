@@ -7,6 +7,8 @@ SD=$AT/state/weaver
 SESSION=$(cat "$AT/session")
 export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
 pass=0 fail=0
+# weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
+eval "$(grep -m 1 "^G_NEED='" "$AT/bin/weaver")"
 
 ok() {
 	if [ "$2" = "$3" ]; then

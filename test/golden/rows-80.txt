@@ -1,10 +1,10 @@
-weaver · 3 threads                                      ! 1  ✓ 1  ● 1
+[ WEAVER :: THREADS ] 3                             [!] 1  [x] 1  [/] 1
 
-NEEDS YOU 1
-!  Add a CLI flag        Bash: python app.py --name rob            4m
+NEEDS YOU · 1
+[!]  Add a CLI flag        Bash: python app.py --name rob            4m
 
-DONE 1
-✓  Add a README          2 files · Wrote README.md and GUIDE.md.   1m
+DONE · 1
+[x]  Add a README          2 files · Wrote README.md and GUIDE.md.   1m
 
-WORKING 1
-●  Refine the dashboard  2 subagents                              10m
+WORKING · 1
+[/]  Refine the dashboard  2 subagents                              10m

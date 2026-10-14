@@ -118,21 +118,21 @@ zellij marks its tab until you look at it.
 ### The dashboard
 
 ```
-┌─ weaver · 5 threads ───────────────────────────────── ! 2  ✓ 1  ● 1 ─┐
+┌─ [ WEAVER :: THREADS ] 5 ─────────────────── [!] 2  [x] 1  [/] 1 ─┐
 │                                                                      │
-│   NEEDS YOU 2                                                        │
-│   1 !  Add a CLI flag           Bash: python app.py --name rob  11m  │
-│   2 !  Tidy the fish config     question: Which config file s…   8m  │
+│   NEEDS YOU · 2                                                      │
+│   01 [!]  Add a CLI flag          Bash: python app.py --name … 11m  │
+│   02 [!]  Tidy the fish config    question: Which config file…  8m  │
 │                                                                      │
-│   DONE 1                                                             │
-│   3 ✓  Add a README             Wrote README.md and CONTRIBUT…   8m  │
+│   DONE · 1                                                           │
+│   03 [x]  Add a README            Wrote README.md and CONTRIB…  8m  │
 │                                                                      │
-│   WORKING 1                                                          │
-│   4 ●  Group the dashboard ro…  2 subagents                      9m  │
+│   WORKING · 1                                                        │
+│   04 [/]  Group the dashboard r…  2 subagents                   9m  │
 │                                                                      │
-│   IDLE 1                                                             │
-│   5 ✓  Audit yabai float rules  Removed two dead rules; the r…  47m  │
-│   ↵ jump  1-9  n new  x close  / search  s screen  ? help            │
+│   IDLE · 1                                                           │
+│   05 [x]  Audit yabai float rules Removed two dead rules; th…  47m  │
+│   ⏎ JUMP  1-9  n NEW  x CLOSE  / SEARCH  s SCREEN  ? HELP            │
 │ ─────────────────────────────────────────────────────────────────────│
 │ Add a CLI flag · try/add-a-cli-flag · turn 3                         │
 │ needs you · 11m                                                      │
@@ -140,7 +140,7 @@ zellij marks its tab until you look at it.
 │ asked      add a CLI flag to app.py, then run it to check it works   │
 │ waits      Bash: python app.py --name rob                            │
 │ said       Added --name and --shout; running it to check.            │
-│ tasks      ✓ parse the flag  ✓ wire it into main  ○ run it           │
+│ tasks      [x] parse the flag  [x] wire it into main  [ ] run it     │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,9 +149,10 @@ and IDLE (seen, idle or interrupted), in the order `Alt 1` visits them; the
 headings' counts are the status bar's. Each row is the thread's name, one fact
 (what it waits on, what its last turn changed and said, its subagents),
 repo/branch when there is room, and how long it has been in that state. The
-shapes read without colour: `!` needs you, `✓` done, `●` working, `○` idle,
-`◌` interrupted; `×2` after a branch means two agents share the worktree, so
-their per-turn diffs mix.
+states are Micrographics task cells, which read without colour: `[!]` needs you,
+`[x]` done, `[/]` working, `[ ]` idle, `[-]` interrupted. Titles are in ink only
+where a thread needs you. `×2` after a branch means two agents share the
+worktree, so their per-turn diffs mix.
 
 The cursor never rests on a heading, and stays on its agent as the board
 reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
@@ -181,7 +182,7 @@ the counts and zellij's mode.
 
 ### Status bar
 
-`weaver status` prints the counts (`! 1  ✓ 2  ● 3`: needs you, done and
+`weaver status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
 unseen, working). In [zjstatus](https://github.com/dj95/zjstatus), its command
 widget shows them in Micrographics signal colours:
 
@@ -299,7 +300,7 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_BELL` | `1` | `needs-you`: ring only when an agent needs you; `0`: never |
 | `WEAVER_SNAPSHOTS` | `1` | `0` stops the per-turn snapshots |
 | `WEAVER_SNAPSHOT_MAX_KB` | `5120` | Untracked files bigger than this stay out of snapshots |
-| `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (🤖 working, 💬 needs you) |
+| `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
 | `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |

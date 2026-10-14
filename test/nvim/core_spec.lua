@@ -14,7 +14,7 @@ T.run(function()
   C.cmd('edit ' .. R.main .. '/README.md')
 
   -- Events ----------------------------------------------------------------
-  T.ok('starts from the state file', C.winbar():match('^● working · turn 3 · fix the readme') ~= nil, true)
+  T.ok('starts from the state file', C.winbar():match('^%[/%] working · turn 3 · fix the readme') ~= nil, true)
   T.ok('WeaverEvent returns at once', C.lua('return WeaverEvent(...)', '{"ev":"state","state":"done"}'), 0)
   C.lua([[
     _G.got = nil
@@ -22,16 +22,16 @@ T.run(function()
   ]])
   C.event({ ev = 'state', state = 'needs-you', waiting = 'Bash: rm -rf build', sid = sid, turn = 3 })
   T.ok('User WeaverEvent carries the event', C.lua('return _G.got.waiting'), 'Bash: rm -rf build')
-  T.ok('winbar: needs you and what it waits on', C.winbar():match('^! needs you · turn 3 · Bash: rm %-rf build') ~= nil, true)
+  T.ok('winbar: needs you and what it waits on', C.winbar():match('^%[!%] needs you · turn 3 · Bash: rm %-rf build') ~= nil, true)
   C.lua('return WeaverEvent(...)', 'not json')
   C.event({ ev = 'state', state = 'working', seq = 1 })
-  T.ok('garbage and older events change nothing', C.winbar():match('^! needs you') ~= nil, true)
+  T.ok('garbage and older events change nothing', C.winbar():match('^%[!%] needs you') ~= nil, true)
   C.event({ ev = 'state', state = 'done', sid = sid, turn = 3 })
-  T.ok('done: the prompt again', C.winbar():match('^✓ done · turn 3 · fix the readme') ~= nil, true)
-  T.ok('a plain-text component for statuslines', C.lua("return require('weaver.status').text()"), '✓ done · turn 3')
+  T.ok('done: the prompt again', C.winbar():match('^%[x%] done · turn 3 · fix the readme') ~= nil, true)
+  T.ok('a plain-text component for statuslines', C.lua("return require('weaver.status').text()"), '[x] done · turn 3')
   T.ok('...empty where the bar already shows the agent', C.lua("return require('weaver.status').statusline()"), '')
   C.cmd('botright copen')
-  T.ok('...the agent where it does not', C.lua("return require('weaver.status').statusline()"), '✓ done · turn 3')
+  T.ok('...the agent where it does not', C.lua("return require('weaver.status').statusline()"), '[x] done · turn 3')
   C.cmd('cclose')
   T.write(state, vim.json.encode({
     session_id = sid,
@@ -41,7 +41,7 @@ T.run(function()
     tasks = { { id = '1', subject = 'read the code', done = true }, { id = '2', subject = 'fix it', done = false } },
   }))
   C.event({ ev = 'state', state = 'working', turn = 4, sid = sid })
-  T.ok('the task list in the bar', C.winbar():match('^● working · turn 4 · 1/2 tasks') ~= nil, true)
+  T.ok('the task list in the bar', C.winbar():match('^%[/%] working · turn 4 · 1/2 tasks') ~= nil, true)
   -- A finished turn: how much it changed, and the key to review it.
   T.snapshot(R.main, sid, 4, 'start', 'turn four')
   T.write(R.main .. '/t4a.txt', { 'a' })
@@ -50,7 +50,7 @@ T.run(function()
   C.event({ ev = 'state', state = 'done', sid = sid, turn = 4 })
   C.event({ ev = 'snapshot', root = R.main, commit = commit, point = 'end', turn = 4, sid = sid })
   T.ok('a finished turn: its size and the review key', C.wait_for(2000, "return require('weaver.status').winbar():find('2 files', 1, true) ~= nil", true), true)
-  T.ok('...as the bar shows it', C.winbar():match('^✓ done · turn 4 · 2 files ␣at') ~= nil, true)
+  T.ok('...as the bar shows it', C.winbar():match('^%[x%] done · turn 4 · 2 files ␣at') ~= nil, true)
   -- A turn that also changed another worktree: both count.
   T.snapshot(R.a, sid, 4, 'start', 'turn four')
   T.write(R.a .. '/t4c.txt', { 'c' })

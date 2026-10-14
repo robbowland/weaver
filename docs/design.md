@@ -274,7 +274,7 @@ The pane fits its content (`float_fit`, below): as wide as the rows need, as
 tall as the list, its header and footer and the card, at most 90% x 85% of
 the tab, centred; re-fitted when a reload changes the list. It is borderless
 (the Alt y binding: `borderless true; name "weaver"`) and fzf draws one sharp
-border in faint grey: `┌─ weaver · 5 threads ──── ! 2  ✓ 1  ● 1 ─┐`, the
+border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
 title and the status bar's counts in its label. Inside, from the top: a blank
 line (the search input takes its place, so nothing moves), the agents under a
 heading per group, groups apart by one blank line, fzf's footer with the keys
@@ -287,10 +287,10 @@ box saying how to start one, with nothing to select.
 
 | Group | Glyph | Who | Order |
 | --- | --- | --- | --- |
-| NEEDS YOU | `!` red | needs you | longest waiting first |
-| DONE | `✓` green | done, not yet seen | finished longest ago first |
-| WORKING | `●` | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
-| IDLE | `✓` dim, `○`, `◌` | done and seen, idle, interrupted | most recent first |
+| NEEDS YOU | `[!]` red | needs you | longest waiting first |
+| DONE | `[x]` green | done, not yet seen | finished longest ago first |
+| WORKING | `[/]` grey | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
+| IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted | most recent first |
 
 So the headings' counts are the status bar's, and the order is the one Alt 1
 visits. A row: its number (1-9), glyph, name (Claude Code's title, else the
@@ -640,6 +640,20 @@ without the marker (from before this layout) is left to you.
   reload (22 ms, was 50 ms with its 30-line screen dump).
 - 2026-10-14: zjstatus marks a tab whose agent rang the bell with `*`, not
   `●`, which the counts use for working.
+- 2026-10-14: Rob asked for one consistent glyph family, no emoji, in the
+  Micrographics design language of his Obsidian vault. In JetBrains Mono the
+  old set had three sizes (`!` a thin stroke, `✓` 527 units and raised, `●`
+  620), and `↵` was not in the font. A Nerd Font circle set was consistent but
+  an icon legend, which the language avoids. The vault draws task states as a
+  square cell with one mono mark (`x` done, `/` in progress, `-` cancelled,
+  `!` in red), so weaver's states are those cells as brackets (`[!]` `[x]`
+  `[/]` `[ ]` `[-]`), every one three columns, brackets faint and the mark in
+  its signal colour, everywhere a state shows (board, home, counts, nvim bar,
+  Worktrunk's markers, which were emoji). The board follows the vault too:
+  `[ WEAVER :: THREADS ] 5` like `[ MAP :: LOCAL ] 4 LINKS`, `NEEDS YOU · 2`
+  captions, two-digit numbers like its numbered sections, uppercase key
+  labels (keys keep their case: `n` is not `N`), and titles in ink only where
+  a thread needs you. `⏎`, which the font has, replaces `↵`.
 - 2026-10-14: New branches start from the fetched remote default, as Rob's
   `wnew` does, rather than from a possibly stale local `main`. The fetch is
   started when the form opens so enter seldom waits; offline it falls back

@@ -1,5 +1,5 @@
 keys
-  ↵  1-9      jump to the thread (1-9: that row)
+  ⏎  1-9      jump to the thread (1-9: that row)
   j k  g G    move; first, last
   /           search (esc: back)
   n           new thread (weaver new)
@@ -12,7 +12,7 @@ keys
   q  esc      close the dashboard
 
 threads
-  !  needs you    ✓  done, not yet seen    ●  working
-  ✓  done, seen   ○  idle    ◌  interrupted
+  [!]  needs you    [x]  done, not yet seen    [/]  working
+  [x]  done, seen   [ ]  idle    [-]  interrupted
 
   ×2  two agents share the worktree: their turn diffs mix

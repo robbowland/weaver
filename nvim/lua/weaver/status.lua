@@ -189,13 +189,15 @@ end
 
 -- The bar ---------------------------------------------------------------
 
+-- weaver's state cells (the G_* at the top of `weaver`): Micrographics task
+-- cells, a mark between faint brackets.
 local GLYPH = {
-  working = { '●', 'WeaverBarInk' },
+  working = { '/', 'WeaverBar' },
   ['needs-you'] = { '!', 'WeaverBarAlert' },
-  done = { '✓', 'WeaverBarOk' },
-  idle = { '○', 'WeaverBarFaint' },
-  interrupted = { '◌', 'WeaverBar' },
-  ended = { '·', 'WeaverBarFaint' },
+  done = { 'x', 'WeaverBarOk' },
+  idle = { ' ', 'WeaverBarFaint' },
+  interrupted = { '-', 'WeaverBar' },
+  ended = { '-', 'WeaverBarFaint' },
 }
 local WORD = { ['needs-you'] = 'needs you' }
 
@@ -224,7 +226,7 @@ function M.text()
   if not a.state then
     return ''
   end
-  local parts = { (GLYPH[a.state] or { '·' })[1] .. ' ' .. (WORD[a.state] or a.state) }
+  local parts = { '[' .. (GLYPH[a.state] or { '-' })[1] .. '] ' .. (WORD[a.state] or a.state) }
   if a.turn and a.turn ~= 0 then
     parts[#parts + 1] = 'turn ' .. a.turn
   end
@@ -248,8 +250,11 @@ function M.winbar()
     width = width + vim.fn.strdisplaywidth(text)
   end
   if a.state then
-    local g = GLYPH[a.state] or { '·', 'WeaverBarFaint' }
-    add(g[1] .. ' ' .. (WORD[a.state] or a.state), g[2])
+    local g = GLYPH[a.state] or GLYPH.ended
+    add('[', 'WeaverBarFaint')
+    add(g[1], g[2])
+    add(']', 'WeaverBarFaint')
+    add(' ' .. (WORD[a.state] or a.state), g[2])
     if a.turn and a.turn ~= 0 then
       add(' · ', 'WeaverBarFaint')
       add('turn ' .. a.turn, 'WeaverBar')

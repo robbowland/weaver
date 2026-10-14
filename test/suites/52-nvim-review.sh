@@ -57,7 +57,7 @@ q "execute('let g:weaver_follow_idle_ms = 300')" >/dev/null
 
 point() { git -C "$W" log -1 --format='%(trailers:key=Weaver-Point,valueonly,separator=)' "$REF" 2>/dev/null | tr -d '\n'; }
 bar() { q "luaeval('(function() for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do if vim.wo[w].winbar ~= \"\" then return vim.api.nvim_eval_statusline(vim.wo[w].winbar, { winid = w, use_winbar = true }).str end end return \"\" end)()')"; }
-bar_done() { bar | grep -c '^✓ done · turn 1 · 2 files'; }
+bar_done() { bar | grep -c '^\[x\] done · turn 1 · 2 files'; }
 panel() { q "luaeval('(function() for _, w in ipairs(vim.api.nvim_list_wins()) do local b = vim.api.nvim_win_get_buf(w); if vim.bo[b].filetype == \"DiffviewFiles\" then return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), \" \") end end return \"\" end)()')"; }
 panel_has() { panel | grep -c "$1"; }
 log_lines() { q 'join(getline(1, "$"), "|")' | tr '|' '\n'; }

@@ -70,7 +70,7 @@ ev TaskCreated "$T/repo" ',"task_id":"1","task_subject":"Write the parser"'
 ev TaskCreated "$T/repo" ',"task_id":"2","task_subject":"Test it"'
 ev TaskCompleted "$T/repo" ',"task_id":"1","task_subject":"Write the parser"'
 ok "the task list" "$(st 0 'tasks | map((if .done then "x" else "o" end) + " " + .subject) | join(", ")')" "x Write the parser, o Test it"
-ok "the resume card shows it" "$(weaver _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^tasks  *✓ Write the parser  ○ Test it')" "1"
+ok "the resume card shows it" "$(weaver _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^tasks  *\[x\] Write the parser  \[ \] Test it')" "1"
 
 # --- waiting on background subagents is not done
 ev Stop "$T/repo" ',"background_tasks":[{"id":"x1","type":"subagent","status":"running","description":"Implement feature A"},{"id":"x2","type":"shell","status":"running","description":"npm run dev"}]'

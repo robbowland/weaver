@@ -35,7 +35,7 @@ TAB0=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id == 0) |
 side() { FZF_COLUMNS=$1 FZF_LINES=20 WEAVER_SIDE_TAB=$TAB0 weaver _side | tr '\0' '\n' | cut -f4- | sed $'s/\x1b\\[7m/[/; s/\x1b\\[27m/]/' | strip; }
 golden side-26.txt "$(side 26)"
 golden side-rail.txt "$(side 12)"
-ok "sidebar: in thread order, whatever the state" "$(side 26 | grep -oE '^ ?\[?[0-9]' | tr -d ' [' | tr -d '\n')" "123"
+ok "sidebar: in thread order, whatever the state" "$(side 26 | grep -oE '^ ?\[?[0-9]+' | tr -d ' [' | sed 's/^0*//' | tr -d '\n')" "123"
 
 # --- a sidebar pane, live
 SB=$(Z new-pane --name sidebar -- weaver sidebar)
@@ -50,18 +50,18 @@ ok "sidebar: three threads, the cursor on its own tab's" "$(fz '.matches | lengt
 put 2 '{state: "done", since: ($now - 1), title: "Refine the dashboard", root: "'"$T/repo"'"}'
 weaver status --push
 sleep 1
-ok "sidebar: reloaded when an agent changes" "$(fz '.matches[0].text' | strip | grep -c '✓')" "1"
+ok "sidebar: reloaded when an agent changes" "$(fz '.matches[0].text' | strip | grep -cF "$G_DONE")" "1"
 ok "...from the rows push_status keeps for every sidebar" "$([ -s "$SD/${SESSION}.rows" ] && echo yes)" "yes"
 tabname() { Z list-tabs -j | jq -r ".[] | select(.tab_id == $1) | .name"; }
 TAB2=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id == 2) | .tab_id')
 ok "outside the weaver session, tab names are left alone" "$(tabname "$TAB2")" "two"
 echo weaver >"$SD/${SESSION}.layout"
 weaver status --push
-ok "in the weaver session, a thread's tab names it for the status bar" "$(tabname "$TAB2")" "1 Refine the dashboard · repo/main"
+ok "in the weaver session, a thread's tab names it for the status bar" "$(tabname "$TAB2")" "01 Refine the dashboard · repo/main"
 PLAIN=$(Z new-tab --name plain --cwd "$T/repo" -- bash --noprofile --norc)
 sleep 0.5
 ok "in the weaver session, a tab without an agent is a faint row of its own" \
-	"$(FZF_COLUMNS=26 FZF_LINES=20 weaver _side | tr '\0' '\n' | cut -f4- | strip | grep -c '^ *·  plain')" "1"
+	"$(FZF_COLUMNS=26 FZF_LINES=20 weaver _side | tr '\0' '\n' | cut -f4- | strip | grep -c '^ *·   plain')" "1"
 Z close-tab-by-id "$PLAIN" >/dev/null 2>&1
 rm -f "$SD/${SESSION}.layout"
 Z rename-tab-by-id "$TAB2" two
@@ -82,7 +82,7 @@ sleep 2.5
 H=$(ls /tmp/weaver-$(id -u)/${SESSION}.fzf.*.sock 2>/dev/null | head -n 1)
 hz() { curl -s -m 2 --unix-socket "$H" "http://localhost?limit=100" | jq -r "$1"; }
 ok "home: rows carry the threads' numbers" \
-	"$(hz '[.matches[].text | select(startswith("a")) | split("\t")[6] | gsub("\u001b\\[[0-9;]*m"; "") | ltrimstr(" ") | .[0:1]] | join("")')" "213"
+	"$(hz '[.matches[].text | select(startswith("a")) | split("\t")[6] | gsub("\u001b\\[[0-9;]*m"; "") | ltrimstr(" ") | .[0:2] | ltrimstr("0")] | join("")')" "213"
 focus "$HM"
 key 32 # 2: thread 2, wherever its row is
 sleep 2.5

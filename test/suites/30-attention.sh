@@ -112,15 +112,15 @@ lhook "$(pj UserPromptSubmit ',"prompt":"run the slow tests"')"
 lhook "$(pj PermissionRequest "$bash_input")"
 sleep 1.1
 claude_session "$P1" sid-live busy
-ok "a long tool you approved: working, though no hook said so" "$(weaver ls | grep -c '^● .*run the slow tests')" "1"
+ok "a long tool you approved: working, though no hook said so" "$(weaver ls | grep -c '^\[/\] .*run the slow tests')" "1"
 lhook "$(pj PostToolUse "$bash_input")" --async
 ok "...and working once it finishes" "$(st 1 state)" "working"
 sleep 1.1
 claude_session "$P1" sid-live waiting "$(($(date +%s) * 1000))" "dialog open"
-ok "a dialog no hook reported: needs you" "$(weaver ls | grep -c '^! .*dialog open')" "1"
+ok "a dialog no hook reported: needs you" "$(weaver ls | grep -c '^\[!\] .*dialog open')" "1"
 jq -c '.ts -= 30' "$SD/${SESSION}_1.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SESSION}_1.json"
 claude_session "$P1" sid-live idle $((($(date +%s) - 10) * 1000))
-ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^◌ .*interrupted')" "1"
+ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^\[-\] .*interrupted')" "1"
 kill "$P1"
 
 # --- the dashboard: what each agent waits on (looking at C: a done agent you
@@ -130,7 +130,7 @@ focus 2
 feed >/dev/null
 out=$(hookj 1 "$(j PermissionRequest "$bash_input")")
 table=$(weaver ls)
-ok "dashboard: needs-you row shows what it waits on" "$(printf '%s\n' "$table" | grep -c '^! .*Bash: git push --force')" "1"
+ok "dashboard: needs-you row shows what it waits on" "$(printf '%s\n' "$table" | grep -c '^\[!\] .*Bash: git push --force')" "1"
 hook 0 Stop "$T/repo" >/dev/null
 ok "Stop resets seen" "$(st 0 seen)" "false"
 
@@ -172,14 +172,14 @@ cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 # --- the status bar: counts, pushed to zjstatus, and unread
 hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
-ok "status: needs you, done and unseen, working" "$(weaver status)" "! 1  ✓ 1  ● 1"
+ok "status: needs you, done and unseen, working" "$(weaver status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
 settle
 ok "status for zjstatus, kept by the hooks: Micrographics signal colours" "$(weaver status --zjstatus)" \
-	"#[fg=#ff3b2f,bold]! 1 #[fg=#39d97a,bold]✓ 1 #[fg=#999999]● 1 "
+	"#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 focus 0
 weaver status --push
-ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(weaver status)" "true|! 1  ● 1"
-ok "...in zjstatus too" "$(weaver status --zjstatus)" "#[fg=#ff3b2f,bold]! 1 #[fg=#999999]● 1 "
+ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(weaver status)" "true|$G_NEED 1  $G_WORK 1"
+ok "...in zjstatus too" "$(weaver status --zjstatus)" "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 printf 'garbage\n' >"$SD/$SESSION.status"
 ok "zjstatus widget: a bad counts file prints nothing, status 0" "$(weaver status --zjstatus; echo "rc=$?")" "
 rc=0"
@@ -197,11 +197,11 @@ if command -v wt >/dev/null 2>&1; then
 	hook 0 UserPromptSubmit "$T/repo" "" "more work" >/dev/null
 	hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
 	settle
-	ok "working agent marks its real branch" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "🤖"
+	ok "working agent marks its real branch" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_WORK"
 	ok "...not the start directory's branch" "$(wt -C "$T/repo" config state marker get 2>/dev/null)" ""
 	hook 0 Stop "$T/repo" >/dev/null
 	settle
-	ok "done agent: marker says it is waiting for you" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "💬"
+	ok "done agent: marker says it is done" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_DONE"
 	hook 0 SessionEnd "$T/repo" >/dev/null
 	settle
 	ok "session end clears the marker" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" ""
