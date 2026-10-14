@@ -3055,8 +3055,11 @@ EOF2
 		if [ -n "$rail" ]; then
 			pl="$num$GCHAR" out="$C_DIM$num$C_OFF$GLYPH"
 		elif [ "${k_state[i]}" = tab ]; then
-			# A tab without an agent: its name, faint.
-			fit "${k_name[i]}" $((w - numw - 5))
+			# A tab without an agent: its name, faint; a long one (a path)
+			# keeps its end.
+			label=${k_name[i]}
+			[ ${#label} -gt $((w - numw - 5)) ] && label="…${label:$((${#label} - (w - numw - 6)))}"
+			fit "$label" $((w - numw - 5))
 			pl="$num$GCHAR  $FIT" out="$C_DIM$num$GLYPH  $C_DIM$FIT$C_OFF"
 		else
 			age $((now - k_since[i]))
