@@ -71,7 +71,10 @@ install_files() {
 	if [ "$SRC" != "$(cd "$DEST" 2>/dev/null && pwd -P)" ]; then
 		mkdir -p "$DEST/nvim" "$DEST/config"
 		cp "$SRC/weaver" "$SRC/install.sh" "$DEST/"
-		cp "$SRC/nvim/weaver.lua" "$DEST/nvim/"
+		# nvim/: the loader and its modules (lua/weaver/), replaced whole so
+		# a module removed upstream does not linger.
+		rm -rf "$DEST/nvim.new" && cp -R "$SRC/nvim" "$DEST/nvim.new" &&
+			rm -rf "$DEST/nvim" && mv "$DEST/nvim.new" "$DEST/nvim"
 		cp "$SRC/config/zellij-keybinds.kdl" "$SRC/config/claude-hooks.json" "$DEST/config/"
 		chmod 755 "$DEST/weaver" "$DEST/install.sh"
 	fi

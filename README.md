@@ -25,23 +25,59 @@ terminal bell, so zellij marks its tab.
 
 The nvim weaver opens for an agent loads your own config, then:
 
-- follows the agent's edits, including those made by subagents and by Bash,
-  giving each worktree its own tab;
-- reloads files the moment they change on disk;
-- never takes over a diff you are reviewing.
+- **follows the agent politely.** An edit by the agent (or its subagents, or
+  its Bash commands) is followed only once you have been idle for about 3
+  seconds in normal mode, in a file window, and not reviewing a diff. Until
+  then it waits in the bar as `→ file`, and `<leader>aj` goes there at once.
+  It never types into nvim, never replaces a buffer with unsaved changes, a
+  terminal, quickfix or git window, and brings other tabs up to date without
+  switching to them;
+- gives each worktree its own tab (closed again when the worktree is removed);
+- reloads files the moment they change on disk, never over unsaved changes;
+- shows the agent at the top of each file window: its state, turn, the edit
+  waiting to be followed, and what it was asked or is waiting on.
 
-| Command | Does |
-| --- | --- |
-| `:AgentFollow` | Toggle following the agent |
-| `:AgentChanges` | Quickfix list of the files changed on this branch |
-| `:AgentReview` | Review the branch in Diffview |
+### Reviewing
+
+Reviews open in one [diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim)
+view. A scope's key opens it, pressing it again from elsewhere brings the view
+back (refreshed), pressing it inside the view closes it, and another scope
+replaces it. The view refreshes itself as the agent edits.
+
+| Key | Command | Shows |
+| --- | --- | --- |
+| `<leader>at` | `:AgentReview turn` | The agent's last turn (the turn so far while it works) |
+| `<leader>au` | `:AgentReview uncommitted` | The worktree against the index |
+| `<leader>ab` | `:AgentReview branch` | The whole branch, committed or not |
+| `<leader>ar` | `:AgentReview reviewed` | Everything since you last marked it reviewed |
+| `<leader>am` | `:AgentReview mine` | Only the files this agent changed |
+| `<leader>aR` | `:AgentReviewed` | Mark the worktree reviewed as it is now |
+| `<leader>aT` | `:AgentTurns` | Pick a turn and review its own diff |
+| `<leader>ac` | `:AgentChanges turn` | The last turn's hunks in quickfix (any scope works) |
+| `<leader>al` | `:AgentLog` | The agent's activity, turn by turn |
+| `<leader>aw` | `:AgentWhy` | Which turn and prompt last changed this line (`!` opens that turn) |
+| `<leader>aj` | `:AgentJump` | Go to the agent's latest edit now |
+| `<leader>af` | `:AgentFollow` | Toggle following |
+
+In a review, `gf` opens the file at the same line in the tab of its own
+worktree. Untracked files the agent created are listed like any other (your
+index is never touched to do it). In diffview-plus's file panel, `w` marks a
+file reviewed and `H` hides the reviewed ones.
 
 The branch is compared against `$WEAVER_BASE`, else
-`git config branch.<branch>.weaverbase`, else `main` or `master`.
+`git config branch.<branch>.weaverbase`, else the default branch of the
+`upstream` or `origin` remote, else `main` or `master`.
+
+Your own config can use the same one-view review:
+`require('weaver.diffview').show({ key = ..., label = ..., root = ..., compare = { kind = 'branch', base = 'origin/main' } })`
+(see `nvim/lua/weaver/diffview.lua`). `require('weaver.status').text()` is the
+agent's state for a statusline, and `User WeaverEvent` autocmds receive every
+event from the agent.
 
 ## Install
 
-Needs zellij 0.45+, neovim, jq and git; fzf for the interactive dashboard.
+Needs zellij 0.45+, neovim 0.10+, jq and git; fzf for the interactive
+dashboard, and diffview-plus.nvim in your nvim for reviews.
 
 ```sh
 ./install.sh --configure
@@ -71,4 +107,6 @@ test/run.sh [suite...]
 ```
 
 End-to-end, in a throwaway zellij session with its own state; your real
-sessions are not touched.
+sessions are not touched. `test/nvim/run.sh` runs only the Neovim specs
+(headless, a few seconds); set `WEAVER_TEST_PLUGINS` to a directory holding
+`diffview-plus.nvim` if lazy.nvim's plugin directory doesn't have it.

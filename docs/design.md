@@ -145,3 +145,36 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 - 2026-10-13: Snapshots are forked from the synchronous hook rather than run
   from a separate async hook entry, because an async entry would race the
   synchronous one for the turn number.
+- 2026-10-14: Polite following. An `edit` or `root` event is followed only
+  when you have been idle for `g:weaver_follow_idle_ms` (default 3000;
+  `$WEAVER_FOLLOW_IDLE_MS` in tests) in normal mode, in a normal file window,
+  with nothing half typed, and no diff review in the tab; otherwise it waits
+  as the pending target (winbar `→ file`) and a 250 ms poll follows it once
+  those hold. Everything is planned before any tab switch; a window with
+  unsaved changes, a terminal, quickfix or git UI is never replaced (a
+  terminal-only tab gets a split); a tab that is not current is updated
+  without switching to it. `focus` skips only the idle wait and the
+  file-window rule.
+- 2026-10-14: Quiet by default: routine "following"/"reloaded" messages are
+  gone (they covered the winbar under noice); only warnings remain.
+- 2026-10-14: One review view. `nvim/lua/weaver/diffview.lua` (no agent
+  knowledge) tags the view's tab with `diffview_scope` (identity) and
+  `diffview_context` (label); any tagged view is "the" view, so Rob's own
+  diff keys (which call the same module) and weaver's scopes never stack.
+  Comparisons are a closed variant (`index`, `worktree`, `branch`,
+  `commits`); whether a view needs the private index is derived from it.
+- 2026-10-14: Untracked files in reviews. diffview hides untracked files
+  whenever the left side is a commit, and `git diff <commit>` calls a file
+  that is in the commit but untracked DELETED. Such views run git with
+  `GIT_INDEX_FILE` pointing at `$(git rev-parse --git-path weaver)/view-index`,
+  a copy of the real index with untracked files intent-to-add, rebuilt before
+  each listing (skipped when neither the index nor the untracked set changed).
+- 2026-10-14: The agent's nvim sets 'autoread' off: with it on, nvim reloads
+  an unchanged buffer without asking FileChangedShell, so the changed line
+  could not be found. weaver's FileChangedShell makes the same choice.
+- 2026-10-14: A review is closed from the tab you came from: closing the
+  current tab fails with E445 while noice has a float open in it.
+- 2026-10-14: Neovim tests sit at the public boundary: a child nvim driven
+  over RPC (real typed keys and modes), events through `WeaverEvent`, and
+  assertions on buffers, tabs, the winbar, messages, quickfix and diffview's
+  file panel. No test reaches into module internals.
