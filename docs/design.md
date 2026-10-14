@@ -18,6 +18,8 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/new/<skey>_<token>/` | a thread tab being opened: `task` and `thread.json` until the agent's pane takes them, then `pane` (the agent's pane id) until the nvim beside it reads it |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
+| `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
+| `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 
 ## State file
 
@@ -246,6 +248,84 @@ is in it. It checks again after the agent has exited, and never forces:
 Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
 worktree themselves. The branch always stays.
 
+## Dashboard
+
+`weaver ls` (Alt y) is fzf in a floating pane. `push_status`, run by every hook
+that changes a state, reloads it through its `--listen` socket.
+
+From the top: the title (`weaver · N threads`, the status bar's counts at the
+right), the agents under a heading per group, groups apart by one blank line,
+fzf's footer with the keys that work now, and the preview: on the right when
+it gets 72 columns there, else below, as tall as the list leaves (at least 10
+lines, at most 60%).
+
+| Group | Glyph | Who | Order |
+| --- | --- | --- | --- |
+| NEEDS YOU | `!` red | needs you | longest waiting first |
+| DONE | `✓` green | done, not yet seen | finished longest ago first |
+| WORKING | `●` | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
+| IDLE | `✓` dim, `○`, `◌` | done and seen, idle, interrupted | most recent first |
+
+So the headings' counts are the status bar's, and the order is the one Alt 1
+visits. A row: its number (1-9), glyph, name (Claude Code's title, else the
+thread's task, else the last prompt; at most 40 columns), one fact (what it
+waits on; for a finished turn, the files it changed and its last reply;
+background tasks, subagents, task progress or the file being edited; the
+reason it is not reporting), repo/branch (from 96 columns; `×N` when N agents
+share the worktree) and its age in that state. Columns are no wider than
+their longest entry, so repo/branch and age stay close at any width.
+
+Rows cost no git command: repo and branch come from the checkout's `.git`
+file, `commondir` and `HEAD`; a finished turn's file count from the end
+snapshot at the tip of `refs/worktree/weaver/sessions/<sid>` (read as a file),
+asked of git once per commit (`git show --name-only` with its Weaver-Turn and
+Weaver-Point trailers) and kept in `$STATE_DIR/turns/`. Only a tip that is the
+`end` of the agent's current turn counts.
+
+### Items
+
+`weaver _rows` prints two header lines (title, gap), then one item per line,
+TAB-separated: `id pane tab prev next label display`. `id` is `a<pane>` for an
+agent, `h<group>` a heading, `g<group>` the gap above it, `e` the empty
+board's line; fzf tracks the selection by it (`--track --id-nth 1`). A heading
+or gap has the list positions of the agents before and after it in `prev` and
+`next`. `label` (`name · repo/branch · turn N`) heads the card. `display` has
+a TAB after the glyph; fzf shows it with `--tabstop 1` and searches only what
+follows (`--nth 2`), which headings and gaps leave empty. The first nine
+agents are numbered and `<sock>.keys` holds, line by line, the action that
+picks each (`pos(N)+print(jump)+accept`).
+
+### Keys
+
+Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
+`1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `e`
+(`ctrl-e`) jump and open nvim, `s` (`tab`) card or screen, `?` keys,
+`ctrl-r` reload, `q` and `esc` close. `/` shows the input and unbinds the
+letters; `esc` clears the query, hides it and binds them again. The footer is
+recomputed (`weaver _footer`) on every load and mode change, from the width
+and the mode, `?` always last.
+
+A heading or gap never keeps the cursor: on `focus`, a transform sends it on
+to `next` (to `prev` when the move was upward, or when there is no `next`).
+That covers every way of moving (keys, page, first/last, mouse, a reload
+whose agent went away) in one place, for one `/bin/dash` spawn per move
+(about 1 ms).
+
+`n` and `e` end fzf with a key (`print`), and cmd_ls acts: `e` jumps and runs
+`weaver edit`; `n` runs `weaver new --from <pane>` on the pane's terminal and
+reopens the dashboard when it is cancelled (130) or fails. `x` runs `weaver
+close <pane>` inside fzf (`execute`), then reloads.
+
+### Resume card
+
+`weaver _preview PANE LABEL`: the label in bold, then the state and its age,
+then aligned fields (asked, waits, background, said, tasks, subagents, files,
+git), each wrapped under itself, at most a few lines. `git` is the worktree's
+`git status` in one line: branch, ahead/behind, changed and new files. A
+thread whose agent has not reported shows its record (task, worktree).
+`s`/`tab` swap in the agent's screen (`zellij action dump-screen`), as many
+lines as fit; `?` the keys.
+
 ## Decisions
 
 - 2026-10-13: WorktreeCreate and WorktreeRemove hooks are not registered.
@@ -390,3 +470,48 @@ worktree themselves. The branch always stays.
   -i` for prefilled fields. Its keys (tab, shift-tab, ctrl-r, alt-b, ctrl-e)
   avoid zellij's mode keys (Ctrl b, g, h, n, o, p, q, s, t never reach a pane)
   and fzf's line editing.
+- 2026-10-14: The dashboard is grouped by state under headings (Rob's pick
+  among mockups, "but more readable"). From prior art: status first and the
+  last reply in the row, progressive depth in a peek
+  ([Claude Code's agent view](https://claude.com/blog/agent-view-in-claude-code));
+  shapes that read without colour, 1-9 to jump, `?` for help, `n` for a new
+  session ([agent-deck](https://github.com/asheshgoplani/agent-deck));
+  waiting before done before working, a jump closes the dashboard, the agent's
+  output in a preview ([workmux](https://workmux.raine.dev/guide/dashboard/));
+  sections ([gh-dash](https://github.com/dlvhdr/gh-dash)); `/` to search a
+  list whose letters are keys (k9s, lazygit). And the usual TUI rules: groups
+  apart by space, not lines; one border style; names left, numbers right;
+  inverse only for the selection; a footer with the keys that work now.
+- 2026-10-14: Seen done agents are under IDLE, not DONE, so each heading's
+  count is the status bar's and DONE is what is new. Rows are in Alt 1's
+  order (oldest first), not newest first as in the mockup: row 1 is where
+  Alt 1 goes.
+- 2026-10-14: Headings are items the cursor skips (a `focus` transform), not
+  parts of multi-line items (`--read0`: the selection would invert the
+  heading with its first row) nor fzf's raw mode with `down-match` (it needs
+  a query that is always on, and page, first/last, mouse and reloads would
+  still land on headings). Measured: one dash spawn per move, about 1 ms.
+- 2026-10-14: Searching does not reload: headings and gaps have nothing in
+  the searched field, so a query hides them and an empty one brings them
+  back, and the selection is never lost. Two fzf 0.74.5 quirks shape `esc`:
+  `clear-query` from a transform's output does nothing, and `clear-query`
+  does nothing while the input is hidden; so the binding is `clear-query`
+  then the transform.
+- 2026-10-14: The screen is on `s` and `tab`, not `ctrl-s`: Rob's zellij
+  binds Ctrl s to scroll mode outside it, so fzf never sees it.
+- 2026-10-14: fzf exports `FZF_COLUMNS=0` to a `start` action, so the first
+  rows are rendered before fzf starts, at the terminal's width (`stty size`)
+  with the preview where fzf will put it; reloads use `FZF_COLUMNS` and
+  `FZF_PREVIEW_LEFT`.
+- 2026-10-14: The selection is pure invert, the row's own colours stripped
+  (`fg+:#000000:strip,bg+:#ffffff`), in one `FZF_COLORS` for every fzf weaver
+  opens.
+- 2026-10-14: Rows run no git. Before, `weaver _rows` ran `git rev-parse` and
+  `git status` per agent; measured in the test session (9 agents in three
+  worktrees of a small repository, median of 11): 166 ms before, 65 ms after,
+  of which `zellij action list-panes` is 30 ms. In a large repository the
+  old cost grew with each worktree's `git status`; now git runs once per new
+  end snapshot. The card's one `git status` runs in the preview, off the
+  reload (22 ms, was 50 ms with its 30-line screen dump).
+- 2026-10-14: zjstatus marks a tab whose agent rang the bell with `*`, not
+  `●`, which the counts use for working.

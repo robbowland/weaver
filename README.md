@@ -31,7 +31,7 @@ the task.
 | Key | Does |
 | --- | --- |
 | `Alt N` | Start a thread: a form for the task, then a tab with nvim and the agent |
-| `Alt y` | Live dashboard of every agent in the session, with a resume card for the selected one. `enter` jumps, `ctrl-e` jumps and opens nvim, `ctrl-r` reloads |
+| `Alt y` | The dashboard: every agent in the session, grouped by state, with a resume card for the selected one. `enter` or `1`-`9` jumps, `e` jumps and opens nvim, `?` lists its keys |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
@@ -89,10 +89,45 @@ state is refined from Claude Code's own session files.
 An agent that starts needing you, or finishes, rings the terminal bell, so
 zellij marks its tab until you look at it.
 
-The dashboard reloads by itself as agents change. Its resume card says what the
-agent was asked, what it waits on, what it last said, its tasks, subagents and
-files, and how long it has been in that state; then its git status and screen.
-Two agents in one worktree are flagged: their per-turn diffs mix.
+### The dashboard
+
+```
+weaver · 4 threads                                     ! 1  ✓ 2  ● 1
+
+NEEDS YOU 1
+1 !  Add a CLI flag        Bash: python app.py --name rob    4m
+
+DONE 2
+2 ✓  Add a README          2 files · Wrote README.md.        1m
+3 ✓  Audit yabai config    1 file · Removed two dead rules  12m
+
+WORKING 1
+4 ●  Refine the dashboard  2 subagents                       8s
+↵ jump  1-9  n new  x close  / search  s screen  e nvim  ? help
+```
+
+Agents are grouped under NEEDS YOU, DONE (finished, not yet seen), WORKING
+and IDLE (seen, idle or interrupted), in the order `Alt 1` visits them; the
+headings' counts are the status bar's. Each row is the thread's name, one fact
+(what it waits on, what its last turn changed and said, its subagents),
+repo/branch when there is room, and how long it has been in that state. The
+shapes read without colour: `!` needs you, `✓` done, `●` working, `○` idle,
+`◌` interrupted; `×2` after a branch means two agents share the worktree, so
+their per-turn diffs mix.
+
+The cursor never rests on a heading, and stays on its agent as the board
+reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
+`j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
+(`weaver new`), `x` closes one (`weaver close`), `e` jumps and opens its nvim,
+`s` (or `tab`) swaps the resume card for the agent's screen, `?` lists them
+all, `q` or `esc` closes the dashboard. With no agents, it says how to start
+one.
+
+The resume card says what the agent was asked, what it waits on, what it last
+said, its tasks, subagents and files, and its worktree's git status in one
+line. In a dashboard narrower than about 160 columns it sits under the list,
+otherwise beside it.
+`weaver ls | cat` prints the board as text.
 
 ### Status bar
 
@@ -108,7 +143,7 @@ command_weaver_interval   "2"
 command_weaver_rendermode "dynamic"
 // and the tab mark for an agent's bell (zjstatus 0.24+):
 tab_normal_bell    "#[fg=#ffffff,bold][{index}] {name}{bell_indicator} "
-tab_bell_indicator " ●"
+tab_bell_indicator " *"
 ```
 
 `weaver status --zjstatus` only reads a small file the hooks keep, so running
