@@ -2156,11 +2156,17 @@ turn_files() {
 }
 
 # The dashboard's size, into LS_COLS and LS_LINES: fzf's (FZF_COLUMNS and
-# FZF_LINES are 0 before it has drawn), else the terminal's.
+# FZF_LINES are 0 before it has drawn), else the terminal's. With "border",
+# fzf's border is counted in.
 ls_size() {
 	local size
 	LS_COLS=${FZF_COLUMNS:-0} LS_LINES=${FZF_LINES:-0}
 	case $LS_COLS$LS_LINES in *[!0-9]*) LS_COLS=0 LS_LINES=0 ;; esac
+	# Inside fzf's border (the dashboard's), fzf counts without it and the
+	# padding next to it: the pane is 4 columns and 2 lines more.
+	if [ "${1:-}" = border ] && [ "$LS_COLS" -gt 0 ] && [ "$LS_LINES" -gt 0 ]; then
+		LS_COLS=$((LS_COLS + 4)) LS_LINES=$((LS_LINES + 2))
+	fi
 	if [ "$LS_COLS" -eq 0 ] || [ "$LS_LINES" -eq 0 ]; then
 		size=$({ stty size </dev/tty; } 2>/dev/null)
 		LS_LINES=${size%% *} LS_COLS=${size#* }
@@ -2239,7 +2245,7 @@ ls_plan() {
 	[ $wf -gt 0 ] && nf=$((wf + 2 > 58 ? 58 : wf + 2))
 	[ $ww -gt 0 ] && nw=$((ww + 2 > 30 ? 30 : ww + 2))
 	[ $n -gt 0 ] && items=$((n + groups * 2 - 1))
-	ls_size
+	ls_size border
 	if ls_view && [ -n "$VIEW_FLOAT" ]; then
 		vmc=$((VIEW_COLS * 90 / 100)) vmr=$((VIEW_ROWS * 85 / 100))
 		# The rows, and fzf's border, padding and pointer around them.
@@ -2726,7 +2732,7 @@ cmd_view() {
 	if [ -n "$hidden" ]; then
 		# Shown on request: the card first.
 		[ "$1" = screen ] && next=""
-		ls_size
+		ls_size border
 		printf 'change-preview-window(down,%d,border-top,wrap)+' $((LS_LINES / 2))
 	elif [ "$1:$cur" = screen:screen ] && [ -f "${FZF_SOCK%.sock}.tight" ]; then
 		printf 'hide-preview+'
@@ -2780,7 +2786,7 @@ ls_footer() {
 	[ -n "${FZF_SOCK:-}" ] && [ -f "${FZF_SOCK%.sock}.tight" ] && [ "${FZF_PREVIEW_LINES:-0}" = 0 ] &&
 		browse='↵ jump|1-9|n new|x close|/ search|s card|e nvim'
 	ls_utf8
-	ls_size
+	ls_size border
 	ls_width
 	width=$((LS_WIDTH - 6)) w=0
 	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
@@ -3096,6 +3102,8 @@ cmd_sidebar() {
 		done
 	) </dev/null >/dev/null 2>&1 &
 	tick=$!
+	# Open or a rail, by the window's width (the layout's swap layouts).
+	"$SELF" _sidefit </dev/null >/dev/null 2>&1
 	while :; do
 		rm -f "$sock"
 		FZF_SOCK=$sock side_rows | fzf --read0 --listen "$sock" --with-shell "$sh -c" --ansi \
@@ -3103,7 +3111,7 @@ cmd_sidebar() {
 			--info hidden --no-scrollbar --no-separator --pointer '' --marker '' --gap 0 \
 			--color 'fg:-1,bg:-1,fg+:-1:regular,bg+:-1,hl:-1,hl+:-1,gutter:-1,pointer:#ffffff' \
 			--bind "load:transform(cat '$base.cur')" \
-			--bind "resize:reload($q _side --cached)" \
+			--bind "resize:execute-silent($q _sidefit)+reload($q _side --cached)" \
 			--bind 'j:down,k:up,g:first,G:last,esc:ignore,q:ignore' \
 			--bind "enter,double-click:execute-silent($q _goto {2} {3})" \
 			--bind "1:transform(sed -n 1p '$base.keys'),2:transform(sed -n 2p '$base.keys'),3:transform(sed -n 3p '$base.keys')" \
