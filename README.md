@@ -92,17 +92,25 @@ zellij marks its tab until you look at it.
 ### The dashboard
 
 ```
-weaver · 4 threads                                     ! 1  ✓ 2  ● 1
+weaver · 10 threads                                           ! 2  ✓ 2  ● 3
 
-NEEDS YOU 1
-1 !  Add a CLI flag        Bash: python app.py --name rob    4m
+NEEDS YOU 2
+1 !  Add a CLI flag                 Bash: python app.py --name rob         4m
+2 !  Tidy the fish config           question: Which config file should …  40s
 
 DONE 2
-2 ✓  Add a README          2 files · Wrote README.md.        1m
-3 ✓  Audit yabai config    1 file · Removed two dead rules  12m
+3 ✓  Audit yabai config             1 file · Removed two dead rules; th…  12m
+4 ✓  Add a README                   2 files · Wrote README.md and CONTR…   1m
 
-WORKING 1
-4 ●  Refine the dashboard  2 subagents                       8s
+WORKING 3
+5 ●  Add weaver new and close       1 in background                        2m
+6 ●  Fix the flaky test in the pa…  starting                              25s
+7 ●  Refine the dashboard ui        2 subagents                            8s
+
+IDLE 3
+8 ◌  bump fzf to 0.74 and check t…  interrupted                           40m
+9 ✓  Fix zjstatus colours           Fixed: the working count is #999999…   3h
+  ○  new claude session             no prompt yet                          2d
 ↵ jump  1-9  n new  x close  / search  s screen  e nvim  ? help
 ```
 
