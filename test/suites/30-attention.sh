@@ -162,6 +162,12 @@ ok "...then the other" "$(client)" "terminal_0"
 key 1b31
 sleep 2
 ok "...and cycles back" "$(client)" "terminal_2"
+focus 1
+key 1b31
+key 1b31 # pressed twice at once: the second is dropped, not fought over
+sleep 4
+ok "Alt 1 twice at once: one step, cleanly" "$(client)|$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and .is_floating and (.exited|not))] | length')" "terminal_2|0"
+cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 
 # --- the status bar: counts, pushed to zjstatus, and unread
 hook 0 Stop "$T/repo" >/dev/null

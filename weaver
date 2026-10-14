@@ -988,15 +988,27 @@ list_panes() {
 # (this pane keeps running; it closes when weaver exits). Outside a floating
 # pane, the focused tiled pane of our own tab.
 focused_pane() {
-	local me=${ZELLIJ_PANE_ID:-} id
+	local me=${ZELLIJ_PANE_ID:-} id cur floats
 	FOCUSED=""
 	if [ -n "$me" ] && printf '%s' "$PANES" | jq -e --arg me "$me" \
 		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and .is_floating)' >/dev/null 2>&1; then
+		floats=" $(printf '%s' "$PANES" | jq -r '[.[] | select((.is_plugin | not) and .is_floating) | .id] | join(" ")') "
 		id=$(client_of "$me")
-		zellij action toggle-floating-panes >/dev/null 2>&1
-		FLOATS_HIDDEN=1
-		FOCUSED=$(client_pane "$id")
-		case $FOCUSED in '' | *[!0-9]*) FOCUSED="" ;; *) return 0 ;; esac
+		cur=$(client_pane "$id")
+		# On a floating pane (this one, or another weaver press's): hide them.
+		case $floats in *" $cur "*)
+			zellij action hide-floating-panes >/dev/null 2>&1
+			cur=$(client_pane "$id")
+			;;
+		esac
+		case $cur in '' | *[!0-9]*) ;; *)
+			case $floats in *" $cur "*) ;; *)
+				FOCUSED=$cur
+				return 0
+				;;
+			esac
+			;;
+		esac
 	fi
 	FOCUSED=$(printf '%s' "$PANES" | jq -r --arg me "$me" '
 		map(select(.is_plugin | not)) as $t
@@ -1034,7 +1046,7 @@ focus_pane() {
 		cur=$(client_pane "$id")
 		[ "$cur" = "$pane" ] && return 0
 		case $floats in
-		*" $cur "*) zellij action toggle-floating-panes >/dev/null 2>&1 ;;
+		*" $cur "*) zellij action hide-floating-panes >/dev/null 2>&1 ;;
 		*) zellij action focus-next-pane >/dev/null 2>&1 ;;
 		esac
 	done
@@ -1474,6 +1486,33 @@ open_left_of() {
 	NEWPANE=${NEWPANE#terminal_}
 }
 
+# One `weaver edit` or `weaver next` per session at a time: each hides the
+# floating panes to see where you are, and two at once would undo each
+# other. A second Alt v waits, then finds the nvim the first opened; with
+# "nowait" (Alt 1) a second press while the first is at work is dropped. A
+# lock older than 10s was left by a killed process.
+ui_lock() {
+	local d="$STATE_DIR/$SKEY.ui" i=0 t now
+	mkdir -p "$STATE_DIR"
+	until mkdir "$d" 2>/dev/null; do
+		t=0
+		{ read -r t <"$d/at"; } 2>/dev/null
+		now=$(date +%s)
+		case $t in '' | *[!0-9]*) t=$now ;; esac
+		if [ $((now - t)) -gt 10 ]; then
+			rm -rf "$d"
+			continue
+		fi
+		[ "${1:-}" = nowait ] && return 1
+		i=$((i + 1))
+		[ $i -ge 100 ] && break
+		sleep 0.1
+	done
+	date +%s >"$d/at" 2>/dev/null
+	UI_LOCK=$d
+	trap 'rm -rf "$UI_LOCK"' EXIT
+}
+
 # One `weaver edit` per agent at a time, so pressing Alt v twice finds the
 # nvim the first press is opening rather than open a second. A lock older
 # than 5s was left by a killed process.
@@ -1509,6 +1548,7 @@ cmd_edit() {
 		shift
 	done
 	need_session
+	ui_lock
 	list_panes || die "zellij action list-panes failed"
 
 	if [ -z "$target" ]; then
@@ -2060,7 +2100,11 @@ EOF2
 		[ -t 1 ] && sleep 1
 		return 0
 	fi
+	# Pressed again while the last press is still at work: that one already
+	# moves you, so this one does nothing.
+	ui_lock nowait || return 0
 	# Where you are now, to go on from there (this hides the floating panes).
+	list_panes
 	focused_pane
 	while IFS=$TAB read -r _ _ pane tab; do
 		[ -n "$pane" ] || continue

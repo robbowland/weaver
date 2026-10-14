@@ -279,7 +279,7 @@ states, turns, snapshots, log and nvim events.
 - 2026-10-14: Moving you to an agent. In zellij 0.45.1 `zellij action
   focus-pane-id` from the command line does not move a client between the
   panes of a tab; it leaves a phantom per-command focus that also shows up as
-  a second `is_focused` pane. Going to a tab, `toggle-floating-panes` and
+  a second `is_focused` pane. Going to a tab, `hide-floating-panes` and
   `focus-next-pane` do move the client. So weaver finds the pane you pressed
   a key on by hiding the floating panes (its own pane keeps running) and
   asking `list-clients` where your client landed, and moves you with
