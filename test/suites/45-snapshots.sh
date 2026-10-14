@@ -101,6 +101,17 @@ stop
 files=$(git -C "$R" show --name-only --format= "$REF" | sort | tr '\n' ' ')
 ok "untracked files are snapshotted, ignored and big ones are not" "$files" ".gitignore a.txt new.txt "
 rm -f "$R/huge.bin"
+prompt 81 "a file that grows"
+dd if=/dev/zero of="$R/grows.bin" bs=1024 count=10 2>/dev/null
+edit "$R/a.txt" small
+stop
+ok "...a small untracked file is in" "$(git -C "$R" cat-file -t "$REF:grows.bin" 2>/dev/null)" "blob"
+prompt 82 "it grew"
+dd if=/dev/zero of="$R/grows.bin" bs=1024 count=6000 2>/dev/null
+edit "$R/a.txt" grown
+stop
+ok "...and out once it grows past the limit, not kept stale" "$(git -C "$R" cat-file -t "$REF:grows.bin" 2>/dev/null || echo absent)" "absent"
+rm -f "$R/grows.bin"
 
 # Marking reviewed.
 c1=$(cd "$R" && weaver snapshot --reviewed)

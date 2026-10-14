@@ -136,10 +136,11 @@ commit_lock() { mv -f "$LOCK" "$SF"; }
 drop_lock() { rm -f "$LOCK"; }
 
 # JSON string literal for $1, into J. jq has already turned control characters
-# into spaces; tabs and newlines from elsewhere (git paths) are escaped here.
+# into spaces in what comes from the agent; for anything else (git paths), tabs
+# and newlines are escaped and other control characters become spaces.
 json_str() {
 	case $1 in
-	*[\\\"$TAB$NL]*) ;;
+	*[\\\"[:cntrl:]]*) ;;
 	*)
 		J="\"$1\""
 		return 0
@@ -149,6 +150,7 @@ json_str() {
 	s=${s//\"/\\\"}
 	s=${s//$TAB/\\t}
 	s=${s//$NL/\\n}
+	s=${s//[[:cntrl:]]/ }
 	J="\"$s\""
 }
 
@@ -230,21 +232,8 @@ load_rest() {
 # identifies a tool call (name + input), so the PostToolUse of an approved
 # tool can be matched to the PermissionRequest that asked for it. Arrays
 # (files, subagents, tasks) come back already updated, as JSON.
-#
-# The tool-call events only ever reach the async hook, so the sync hook gets
-# stubs for the code that handles them (JQ_SYNC): jq compiles a smaller program.
-JQ_SYNC='
-def edit_file: "";
-def command_paths: "";
-def rejected: false;
-def files_new($files; $file): $files;
-def subs_new($subs; $aid; $now):
-  if .hook_event_name == "Stop" and (background | length) == 0 then []
-  elif .hook_event_name == "SessionStart" and .source != "compact" then []
-  else $subs end;
-def tasks_new($tasks): if .hook_event_name == "SessionStart" and .source != "compact" and .source != "resume" then [] else $tasks end;
-'
-JQ_ASYNC='
+
+JQ_TOOLS='
 def edit_file:
   (.tool_name // "") as $t
   | if .hook_event_name == "PostToolUse" and ($t == "Edit" or $t == "Write" or $t == "MultiEdit" or $t == "NotebookEdit") then
@@ -273,6 +262,8 @@ def subs_new($subs; $aid; $now):
   if .hook_event_name == "SubagentStart" and $aid != "" then
     ($subs | map(select(.id != $aid))) + [{id: $aid, type: (.agent_type // "" | one(40)), since: ($now | floor)}]
   elif .hook_event_name == "SubagentStop" then $subs | map(select(.id != $aid))
+  elif .hook_event_name == "Stop" and (background | length) == 0 then []
+  elif .hook_event_name == "SessionStart" and .source != "compact" then []
   else $subs end;
 def tasks_new($tasks):
   (.task_id // "" | tostring) as $tid
@@ -281,6 +272,7 @@ def tasks_new($tasks):
     elif .hook_event_name == "TaskCompleted" then
       if any($tasks[]; .id == $tid) then $tasks | map(if .id == $tid then .done = true else . end)
       else $tasks + [{id: $tid, subject: $tsub, done: true}] | .[-30:] end
+    elif .hook_event_name == "SessionStart" and .source != "compact" and .source != "resume" then []
     else $tasks end;
 '
 JQ_DEFS='
@@ -465,9 +457,9 @@ hook_run() {
 	lock
 	if [ -f "$SF" ]; then set -- --rawfile st "$SF"; else set -- --arg st ""; fi
 	if [ "$mode" = async ]; then
-		parsed=$(jq -rRs --arg h "$HEAD" "$@" '($h + .) | fromjson | '"$JQ_DEFS$JQ_ASYNC$JQ_MAIN")
+		parsed=$(jq -rRs --arg h "$HEAD" "$@" '($h + .) | fromjson | '"$JQ_DEFS$JQ_TOOLS$JQ_MAIN")
 	else
-		parsed=$(jq -r "$@" "$JQ_DEFS$JQ_SYNC$JQ_MAIN")
+		parsed=$(jq -r "$@" "$JQ_DEFS$JQ_TOOLS$JQ_MAIN")
 	fi || {
 		drop_lock
 		return
@@ -1303,6 +1295,9 @@ snapshot() {
 			while IFS= read -r p; do
 				[ -n "$p" ] && excl[${#excl[@]}]=":(exclude,literal)${p#./}"
 			done <<<"$big"
+			# One that was small when an earlier snapshot took it: out of this one.
+			printf '%s\n' "$big" | sed 's|^\./||' |
+				GIT_INDEX_FILE=$idx git -C "$top" rm --cached -f -q --ignore-unmatch --pathspec-from-file=- >/dev/null 2>&1
 		fi
 		GIT_INDEX_FILE=$idx git -C "$top" add --all -- . ${excl[@]+"${excl[@]}"} >/dev/null 2>&1
 		tree=$(GIT_INDEX_FILE=$idx git -C "$top" write-tree 2>/dev/null) || {

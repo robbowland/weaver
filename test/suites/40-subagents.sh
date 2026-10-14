@@ -84,5 +84,11 @@ ev UserPromptSubmit "$T/repo" ',"prompt":"<agent-message from=\"x1\"> [Subagent 
 ev Stop "$T/repo" ',"background_tasks":[]'
 ok "last report handled: done" "$(st 0 state)|$(st 0 background)" "done|0"
 ok "...and no subagent is listed any more" "$(st 0 'subagents | length')" "0"
+# --- a prompt with control characters (pasted escapes) still reaches nvim
+hooka 0 "$(jq -nc --arg c "$T/repo" '{hook_event_name:"UserPromptSubmit", cwd:$c, session_id:"sid-sub", prompt:"paste\r\u001b[31mred\u001b[0m"}')"
+settle
+ok "a pasted prompt with escapes: nvim gets valid JSON, the escapes as spaces" \
+	"$(nvq 0 "luaeval('(function() for i = #_G.ev, 1, -1 do if _G.ev[i].ev == \"state\" then return _G.ev[i].prompt end end end)()')")" \
+	"paste [31mred [0m"
 kill "$FAKE_NVIM_PID" 2>/dev/null
 done_suite

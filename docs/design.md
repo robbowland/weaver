@@ -276,4 +276,13 @@ states, turns, snapshots, log and nvim events.
   "ERROR IN PLUGIN", no plugin panic in the log, counts on screen at every
   check. Not covered: detaching and re-attaching a client, the trigger in
   zjstatus issue #247's report.
+- 2026-10-14: Moving you to an agent. In zellij 0.45.1 `zellij action
+  focus-pane-id` from the command line does not move a client between the
+  panes of a tab; it leaves a phantom per-command focus that also shows up as
+  a second `is_focused` pane. Going to a tab, `toggle-floating-panes` and
+  `focus-next-pane` do move the client. So weaver finds the pane you pressed
+  a key on by hiding the floating panes (its own pane keeps running) and
+  asking `list-clients` where your client landed, and moves you with
+  go-to-tab plus `focus-next-pane` until `list-clients` shows the target.
+  Side effect: floating panes you had open are hidden afterwards.
 
