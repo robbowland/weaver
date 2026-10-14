@@ -22,8 +22,14 @@ A=$T/repo-wt-a
 B=$T/repo-wt-b
 q() { nvq "$AG" "$1"; }
 pending() { q "luaeval('(function() for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do local s = vim.wo[w].winbar ~= \"\" and vim.api.nvim_eval_statusline(vim.wo[w].winbar, { winid = w, use_winbar = true }).str or \"\"; local p = s:match(\"→ (%S+)\"); if p then return p end end return \"\" end)()')"; }
+# Move the client to the nvim pane (lib.sh's focus moves the real client;
+# `zellij action focus-pane-id` from a script only records a phantom focus).
 focus_nvim() {
-	Z focus-pane-id "terminal_$NV" >/dev/null 2>&1
+	if type focus >/dev/null 2>&1; then
+		focus "$NV"
+	else
+		Z focus-pane-id "terminal_$NV" >/dev/null 2>&1
+	fi
 	eventually "  (nvim pane focused)" "terminal_$NV" client >/dev/null
 }
 

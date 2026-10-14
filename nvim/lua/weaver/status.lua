@@ -75,36 +75,53 @@ local function take_state_file()
   end
 end
 
--- What the agent's last finished turn changed, for the bar: sets
--- agent.last_turn = { turn, files } from the turn's end snapshot COMMIT.
+-- What the agent's last finished turn changed, for the bar:
+-- agent.last_turn = { turn, files, roots = { [root] = files } }, adding up the
+-- end snapshots of every worktree the turn touched (one event each).
 local function summarise_turn(root, commit, turn)
   util.git_async(root, { 'diff', '--shortstat', commit .. '^', commit }, function(out)
     local files = out and tonumber(out:match('(%d+) files? changed'))
-    if files then
-      M.agent.last_turn = { turn = turn, files = files }
-      M.redraw()
+    if not files then
+      return
     end
+    local last = M.agent.last_turn
+    if not last or last.turn ~= turn then
+      last = { turn = turn, files = 0, roots = {} }
+      M.agent.last_turn = last
+    end
+    last.files = last.files - (last.roots[root] or 0) + files
+    last.roots[root] = files
+    M.redraw()
   end)
 end
 
--- At startup on a finished agent: its last turn, from the chain's tip.
-local function summarise_tip()
+-- At startup on a finished agent: its last turn, from the chain tips in the
+-- worktrees that turn touched (the state file's turn_roots, else root).
+local function summarise_tips(st)
   local a = M.agent
-  if not (a.sid and type(a.root) == 'string' and util.is_dir(a.root)) then
+  if not a.sid then
     return
   end
+  local roots = type(st.turn_roots) == 'table' and st.turn_roots or {}
+  if #roots == 0 and type(st.root) == 'string' then
+    roots = { st.root }
+  end
   local format = '%H%x1f%(trailers:key=Weaver-Turn,valueonly,separator=)%x1f%(trailers:key=Weaver-Point,valueonly,separator=)'
-  util.git_async(a.root, { 'log', '-1', '--format=' .. format, 'refs/worktree/weaver/sessions/' .. a.sid, '--' }, function(out)
-    local commit, turn, point = (out or ''):match('^(%x+)\31%s*(%d*)%s*\31%s*(%a*)')
-    if commit and point == 'end' then
-      summarise_turn(a.root, commit, tonumber(turn))
+  for _, root in ipairs(roots) do
+    if type(root) == 'string' and util.is_dir(root) then
+      util.git_async(root, { 'log', '-1', '--format=' .. format, 'refs/worktree/weaver/sessions/' .. a.sid, '--' }, function(out)
+        local commit, turn, point = (out or ''):match('^(%x+)\31%s*(%d*)%s*\31%s*(%a*)')
+        if commit and point == 'end' and tonumber(turn) == a.turn then
+          summarise_turn(root, commit, tonumber(turn))
+        end
+      end)
     end
-  end)
+  end
 end
 
 function M.seed()
   take_state_file()
-  summarise_tip()
+  summarise_tips(util.read_json(vim.env.WEAVER_STATE) or {})
 end
 
 -- Take what an event says about the agent. Older events (by seq) never

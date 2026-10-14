@@ -51,6 +51,17 @@ T.run(function()
   C.event({ ev = 'snapshot', root = R.main, commit = commit, point = 'end', turn = 4, sid = sid })
   T.ok('a finished turn: its size and the review key', C.wait_for(2000, "return require('weaver.status').winbar():find('2 files', 1, true) ~= nil", true), true)
   T.ok('...as the bar shows it', C.winbar():match('^✓ done · turn 4 · 2 files ␣at') ~= nil, true)
+  -- A turn that also changed another worktree: both count.
+  T.snapshot(R.a, sid, 4, 'start', 'turn four')
+  T.write(R.a .. '/t4c.txt', { 'c' })
+  local other = T.snapshot(R.a, sid, 4, 'end', 'turn four')
+  C.event({ ev = 'snapshot', root = R.a, commit = other, point = 'end', turn = 4, sid = sid })
+  T.ok('...adding up every worktree the turn changed', C.wait_for(2000, "return require('weaver.status').winbar():find('3 files', 1, true) ~= nil", true), true)
+  T.ok('...counting a repeated snapshot event once', (function()
+    C.event({ ev = 'snapshot', root = R.a, commit = other, point = 'end', turn = 4, sid = sid })
+    T.settle(300)
+    return C.winbar():find('3 files', 1, true) ~= nil
+  end)(), true)
   C.event({ ev = 'state', state = 'working', sid = sid, turn = 5 })
   T.ok('...gone when the next turn starts', C.winbar():find('2 files', 1, true) == nil, true)
   vim.fn.delete(R.main .. '/t4a.txt')
@@ -161,6 +172,23 @@ T.run(function()
   C.lua('return AgentChecktime()')
   C.poke()
   T.ok('AgentChecktime: a checktime event', C.lua('return _G.got.ev'), 'checktime')
+
+  -- An nvim opened on a finished agent: the last turn's size from the
+  -- worktrees it touched.
+  local sid2 = 'sid-startup'
+  for _, root in ipairs({ R.main, R.a }) do
+    T.snapshot(root, sid2, 1, 'start', 'touch two worktrees')
+    T.write(root .. '/startup.txt', { 'x' })
+    T.snapshot(root, sid2, 1, 'end', 'touch two worktrees')
+  end
+  local state2 = R.base .. '/state2.json'
+  T.write(state2, vim.json.encode({ session_id = sid2, state = 'done', turn = 1, root = R.a, turn_roots = { R.main, R.a } }))
+  local C2 = T.child({ WEAVER_STATE = state2 })
+  C2.cmd('edit ' .. R.main .. '/README.md')
+  T.ok('opened on a finished agent: the last turn in every worktree it touched', C2.wait_for(3000, "return require('weaver.status').winbar():find('2 files', 1, true) ~= nil", true), true)
+  C2.close()
+  vim.fn.delete(R.main .. '/startup.txt')
+  vim.fn.delete(R.a .. '/startup.txt')
 
   -- :checkhealth weaver
   local health = C.lua("vim.cmd('checkhealth weaver'); return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')")
