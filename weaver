@@ -2783,6 +2783,19 @@ agent_of_pane() {
 
 # ------------------------------------------------ closing a thread
 
+# The one agent in the tab of pane $1 (none when there are several).
+tab_agent() {
+	local p found=""
+	for p in $(printf '%s' "$PANES" | jq -r --arg me "$1" '
+		(map(select((.is_plugin | not) and (.id | tostring) == $me)) | .[0].tab_id) as $t
+		| .[] | select((.is_plugin | not) and (.is_floating | not) and .tab_id == $t) | .id'); do
+		[ -f "$STATE_DIR/${SKEY}_$p.json" ] || [ -f "$STATE_DIR/${SKEY}_$p.thread" ] || continue
+		[ -z "$found" ] || return 0
+		found=$p
+	done
+	printf '%s\n' "$found"
+}
+
 # The thread record of agent pane $1 into TH_*; returns 1 (TH_NAME empty)
 # when the agent is not a weaver thread.
 thread_read() {
@@ -2879,9 +2892,12 @@ cmd_close() {
 	need_session
 	list_panes || die "zellij action list-panes failed"
 	if [ -z "$target" ]; then
+		# The focused pane's agent; else this pane's; else the one agent in
+		# this pane's tab (run from a shell beside a thread).
 		focused_pane
 		target=$FOCUSED
 		agent_of_pane "$target" || target=${ZELLIJ_PANE_ID:-}
+		agent_of_pane "$target" || target=$(tab_agent "${ZELLIJ_PANE_ID:-}")
 	fi
 	agent_of_pane "$target" || die "no agent in pane ${target:-?}"
 	read_nvim_pane "$AGENT"
