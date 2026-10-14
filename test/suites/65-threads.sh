@@ -302,7 +302,7 @@ sleep 1
 fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floating)] | .[0].id // empty')
 scr=$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null)
 ok "close: given its nvim's pane, says what goes" \
-	"$(printf '%s' "$scr" | grep -c 'close ask-me')|$(printf '%s' "$scr" | grep -c 'the agent and its nvim, and the tab')" "1|1"
+	"$(printf '%s' "$scr" | grep -c 'close  ask-me')|$(printf '%s' "$scr" | grep -c 'goes  the agent, its nvim and the tab')|$(printf '%s' "$scr" | grep -c 'y close   n keep')" "1|1|1"
 key 6e
 sleep 0.8
 ok "close: n keeps it" "$(tab_named ask-me)" "$tab"
@@ -312,7 +312,7 @@ fl=$(Z list-panes -a -j | jq -r '[.[] | select((.is_plugin | not) and .is_floati
 key 79
 sleep 0.5
 ok "close: then offers the clean, merged worktree" \
-	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -c 'remove its worktree .*repo.ask-me too (branch ask-me kept)')" "1"
+	"$(Z dump-screen --pane-id "terminal_$fl" 2>/dev/null | grep -c 'remove  the worktree .*repo.ask-me · branch ask-me stays')" "1"
 key 79
 waitfor "[ -z \"\$(tab_named ask-me)\" ] && [ ! -d '$T/repo.ask-me' ]"
 ok "close: y, y: the tab and the worktree are gone, the branch stays" \

@@ -4013,23 +4013,49 @@ worktree_users() {
 		| $i] | join(" ")')
 }
 
+# A row of a card: label $1 (grey, right-aligned like the form's), text $2.
+card_row() { printf '%s%s%6s%s  %s\n' "$CARD_PAD" "$C_GREY" "$1" "$C_OFF" "$2"; }
+
+# The keys under a card: pairs of key and what it does.
+card_keys() {
+	local out=""
+	while [ $# -ge 2 ]; do
+		out="$out$C_GREY$1$C_OFF $C_DIM$2$C_OFF   "
+		shift 2
+	done
+	printf '%s%8s%s\n' "$CARD_PAD" "" "${out%   }"
+}
+
 # Is there a terminal to ask on?
 have_tty() { { : </dev/tty; } 2>/dev/null; }
 
-# Ask $1 on the terminal; true on y or Y.
-ask_yes() {
+# A key from the terminal; true on y or Y.
+read_yes() {
 	local a=""
-	printf '%s [y/N] ' "$1" >/dev/tty
 	IFS= read -r -s -n 1 a </dev/tty
-	printf '%s\n' "$a" >/dev/tty
 	case $a in y | Y) return 0 ;; esac
 	return 1
+}
+
+# Clear terminal $1 and set CARD_PAD so a card about $2 rows and 64 columns
+# sits in its middle (a third of the way down).
+card_place() {
+	local size rows=0 cols=0 top
+	size=$(stty size <"$1" 2>/dev/null)
+	rows=${size% *} cols=${size#* }
+	case $rows$cols in '' | *[!0-9]*) return 0 ;; esac
+	top=$(((rows - $2) / 3))
+	[ $top -gt 0 ] || top=0
+	# Cursor moves, not newlines: nothing scrolls into the pane's history.
+	printf '\033[H\033[2J\033[%d;1H' $((top + 1)) >"$1"
+	[ $cols -gt 72 ] && printf -v CARD_PAD '%*s' $(((cols - 64) / 2)) ''
+	return 0
 }
 
 # weaver close [--yes] [--remove-worktree] [pane]
 cmd_close() {
 	local yes=0 rmwt=0 target="" nv tab others name what="" n="" st pid start title kind remove=0 detach=0 info
-	local keep="" removable=0 out
+	local keep="" removable=0 out goes
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--yes | -y) yes=1 ;;
@@ -4065,7 +4091,13 @@ cmd_close() {
 			and (.id | tostring) != $a and (.id | tostring) != $nv) | .id] | join(" ")')
 
 	name=${TH_NAME:-${title:-${kind:-agent} in pane $AGENT}}
-	case $st in working | needs-you) what=" (${kind:-it} is $st)" ;; esac
+	case $st in
+	needs-you) what="${C_RED}needs you$C_OFF" ;;
+	done) what="${C_GREEN}done$C_OFF" ;;
+	working) what=working ;;
+	'') what="${C_GREY}starting$C_OFF" ;;
+	*) what="$C_GREY$st$C_OFF" ;;
+	esac
 	if [ -n "$nv" ]; then
 		sock_path "$AGENT"
 		n=$(bounded /dev/stdout nvim --server "$SOCK" --remote-expr \
@@ -4074,12 +4106,12 @@ cmd_close() {
 	fi
 	# Its worktree may go only if weaver made it and nothing would be lost.
 	if [ "$TH_CREATED" = true ] && [ "$TH_HERE" != true ] && [ -n "$TH_DIR" ]; then
-		tildify "$TH_DIR"
+		form_path "$TH_DIR"
 		worktree_users "$TH_DIR" "$AGENT ${nv:-} ${ZELLIJ_PANE_ID:-}" "$tab"
 		if ! worktree_removable "$TH_DIR"; then
-			keep="$TILDE stays: $WT_WHY"
+			keep="$TILDE ${C_DIM}·$C_OFF$C_GREY $WT_WHY"
 		elif [ -n "$USERS" ]; then
-			keep="$TILDE stays: pane $USERS is in it"
+			keep="$TILDE ${C_DIM}·$C_OFF$C_GREY pane $USERS is in it"
 		else
 			removable=1
 		fi
@@ -4090,18 +4122,38 @@ cmd_close() {
 		have_tty || die "close needs a terminal to ask, or --yes"
 		out=/dev/tty
 	}
+	goes="the agent"
+	[ -n "$nv" ] && goes="the agent and its nvim"
+	[ -z "$others" ] && [ -n "$TH_NAME" ] && goes="the agent${nv:+, its nvim} and the tab"
+	# The card: in fzf's place (the dashboard ran this), on a clean screen,
+	# in the middle; else where the cursor is.
+	CARD_PAD="  "
+	if [ $yes = 0 ] && [ -n "${FZF_COLUMNS:-}" ]; then
+		card_place "$out" 8
+	fi
 	{
-		printf '%sclose %s%s%s%s%s\n' "$C_BOLD" "$name" "$C_OFF" "$C_GREY" "$what" "$C_OFF"
-		printf '  %sthe agent%s%s%s%s\n' "$C_GREY" "${nv:+ and its nvim}" "${n:+ ($n unsaved buffer$(plural "$n"))}" \
-			"$([ -z "$others" ] && [ -n "$TH_NAME" ] && echo ", and the tab")" "$C_OFF"
-		[ -n "$keep" ] && printf '  %s%s%s\n' "$C_GREY" "$keep" "$C_OFF"
+		card_row close "$C_BOLD$name$C_OFF"
+		card_row "" "$what ${C_DIM}·$C_OFF $C_GREY${kind:-claude}$C_OFF"
+		card_row goes "$goes"
+		[ -n "$n" ] && card_row "" "${C_RED}its nvim has $n unsaved buffer$(plural "$n")$C_OFF"
+		[ -n "$keep" ] && card_row stays "$C_GREY$keep$C_OFF"
+		if [ $yes = 0 ]; then
+			echo
+			card_keys y close n keep
+		fi
 	} >"$out"
-	[ $yes = 1 ] || ask_yes "  close it?" || exit 130
+	[ $yes = 1 ] || read_yes || exit 130
 	if [ $removable = 1 ]; then
 		if [ $rmwt = 1 ]; then
 			remove=1
 		elif have_tty; then
-			ask_yes "  remove its worktree $TILDE too (${TH_BRANCH:+branch $TH_BRANCH }kept)?" && remove=1
+			{
+				echo
+				card_row remove "the worktree $TILDE ${C_GREY}· branch ${TH_BRANCH:-?} stays$C_OFF"
+				echo
+				card_keys y remove n keep
+			} >/dev/tty
+			read_yes && remove=1
 		fi
 	fi
 
