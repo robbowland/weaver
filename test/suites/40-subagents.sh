@@ -84,6 +84,13 @@ ev UserPromptSubmit "$T/repo" ',"prompt":"<agent-message from=\"x1\"> [Subagent 
 ev Stop "$T/repo" ',"background_tasks":[]'
 ok "last report handled: done" "$(st 0 state)|$(st 0 background)" "done|0"
 ok "...and no subagent is listed any more" "$(st 0 'subagents | length')" "0"
+# --- a prompt typed while the agent works still reaches the bar
+ev UserPromptSubmit "$T/repo" ',"prompt":"and add tests","session_title":"Both features"'
+settle
+ok "a prompt while working: nvim is told the new prompt, turn and title" \
+	"$(nvq 0 "luaeval('(function() for i = #_G.ev, 1, -1 do local e = _G.ev[i]; if e.ev == \"state\" then return e.prompt .. \"|\" .. e.turn .. \"|\" .. e.title end end end)()')")" \
+	"and add tests|$(st 0 turn)|Both features"
+
 # --- a prompt with control characters (pasted escapes) still reaches nvim
 hooka 0 "$(jq -nc --arg c "$T/repo" '{hook_event_name:"UserPromptSubmit", cwd:$c, session_id:"sid-sub", prompt:"paste\r\u001b[31mred\u001b[0m"}')"
 settle

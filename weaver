@@ -1074,7 +1074,11 @@ hook_bg() {
 		elif [ "$root" != "$o_root" ]; then
 			json_str "$root" && nvim_event root ",\"root\":$J" "$root" ""
 		fi
-		[ "$state" != "$o_state" ] && nvim_state_event
+		# The bar shows the state, turn, prompt and title: any change to them.
+		if [ "$state" != "$o_state" ] || [ "$turn" != "${o_turn:-0}" ] || [ "$prompt" != "$o_prompt" ] ||
+			[ "$title" != "$o_title" ]; then
+			nvim_state_event
+		fi
 	fi
 	if [ "$state" != "$o_state" ] || [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] ||
 		[ "$title" != "$o_title" ]; then

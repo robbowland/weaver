@@ -285,4 +285,9 @@ states, turns, snapshots, log and nvim events.
   asking `list-clients` where your client landed, and moves you with
   go-to-tab plus `focus-next-pane` until `list-clients` shows the target.
   Side effect: floating panes you had open are hidden afterwards.
+- 2026-10-14: Known and left: Alt v and Alt 1 leave your own floating panes
+  hidden (showing them again before weaver's pane closes would put the focus
+  back on a floating pane); install.sh swaps the install in with two renames,
+  so a hook firing in the milliseconds between them fails (harmlessly: hooks
+  never block Claude Code).
 
