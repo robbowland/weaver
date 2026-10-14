@@ -1,28 +1,67 @@
 #!/usr/bin/env bash
-# weaver: keep track of Claude Code agents running in zellij panes, and open
+# weaver: keep track of the coding agents running in zellij panes, and open
 # neovim in the worktree each agent is really editing.
 #
-#   weaver hook                     Claude Code hook for every event (JSON on stdin)
+#   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver edit [--full] [pane-id]  open, or jump to, the nvim bound to the focused agent
 #   weaver nvim <agent-pane> [file] internal: start the nvim bound to one agent
-#   weaver ls                       dashboard of every agent in this zellij session
-#   weaver next                     jump to the agent that has needed you longest
+#   weaver ls                       live dashboard of every agent in this zellij session
+#   weaver next                     jump to the next agent that needs you (repeat to cycle)
+#   weaver status [--zjstatus]      the agent counts (formatted for zjstatus)
+#   weaver snapshot --reviewed [dir] mark the worktree reviewed
 #
 # Must stay bash 3.2 compatible (macOS /bin/bash): no mapfile, no ${x,,}, no
-# GNU-only flags.
+# BASHPID, no GNU-only flags.
+
+# zjstatus runs `weaver status --zjstatus` every couple of seconds in every
+# tab: answer from the counts the hooks keep, before parsing anything else.
+# It must never fail or hang zjstatus: no external command, only a file read
+# (bounded by read -t), empty output and status 0 on anything unexpected.
+if [ "${1:-}" = status ] && [ "${2:-}" = --zjstatus ]; then
+	n=0 d=0 w=0
+	f="${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/weaver/${ZELLIJ_SESSION_NAME//\//_}.status"
+	[ -n "${ZELLIJ_SESSION_NAME:-}" ] && [ -f "$f" ] && { read -r -t 1 n d w _ <"$f"; } 2>/dev/null
+	case "${n:-0}${d:-0}${w:-0}" in *[!0-9]*) n=0 d=0 w=0 ;; esac
+	out=""
+	[ "${n:-0}" -gt 0 ] && out="$out#[fg=#ff3b2f,bold]! $n "
+	[ "${d:-0}" -gt 0 ] && out="$out#[fg=#39d97a,bold]✓ $d "
+	[ "${w:-0}" -gt 0 ] && out="$out#[fg=#999999]● $w "
+	printf '%s\n' "$out"
+	exit 0
+fi
 
 set -u
 
+# The hook's string work is all byte-wise, and bash's pattern matching is
+# several times faster in the C locale than in UTF-8. Restored (load_rest) for
+# the background work and never seen by the other commands.
+if [ "${1:-}" = hook ]; then
+	WEAVER_LC_ALL=${LC_ALL-} WEAVER_LC_SET=${LC_ALL+1}
+	LC_ALL=C
+fi
+
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/weaver"
+LOG_DIR="$STATE_DIR/log"
 # /tmp rather than $TMPDIR: macOS caps unix socket paths at ~104 bytes.
 SOCK_DIR="/tmp/weaver-${UID:-$(id -u)}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SESSION="${ZELLIJ_SESSION_NAME:-}"
 SKEY="${SESSION//\//_}"
 US=$'\037' # field separator for jq output; never appears in paths or prompts
+RS=$'\036' # list separator inside one field
 TAB=$'\t'
 NL=$'\n'
 
+# Micrographics: ink and greys, with green and red only as signals.
+C_RED=$'\033[38;2;255;59;47m'
+C_GREEN=$'\033[38;2;57;217;122m'
+C_GREY=$'\033[38;2;153;153;153m'
+C_DIM=$'\033[38;2;97;97;97m'
+C_BOLD=$'\033[1m'
+C_OFF=$'\033[0m'
+
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
+
 
 die() {
 	printf 'weaver: %s\n' "$*" >&2
@@ -35,15 +74,717 @@ need_session() {
 
 state_file() { SF="$STATE_DIR/${SKEY}_$1.json"; }
 sock_path() { SOCK="$SOCK_DIR/${SKEY}_$1.sock"; }
-# The agent's nvim pane id lives in its own file, written only by `weaver
-# nvim`, so racing hooks can never lose it.
+# The agent's nvim lives in its own file, written only by `weaver edit` and
+# `weaver nvim`, so racing hooks can never lose it: line 1 its pane id, line 2
+# its pid (empty while it starts).
 nvim_file() { NVF="$STATE_DIR/${SKEY}_$1.nvim"; }
+# The agent's nvim pane into NV and pid into NVPID; both empty when the file is
+# stale (that nvim has exited), so a reused pane id is never renamed.
 read_nvim_pane() {
-	NV=""
+	NV="" NVPID=""
 	nvim_file "$1"
-	[ -f "$NVF" ] && read -r NV <"$NVF"
+	[ -f "$NVF" ] || return 0
+	{
+		read -r NV
+		read -r NVPID
+	} <"$NVF"
 	case $NV in *[!0-9]*) NV="" ;; esac
+	case $NVPID in *[!0-9]*) NVPID="" ;; esac
+	if [ -n "$NVPID" ] && ! kill -0 "$NVPID" 2>/dev/null; then
+		NV="" NVPID=""
+	fi
 }
+
+# Serialise read-modify-write of state file $SF. The lock is $SF.lock, created
+# exclusively (noclobber) holding the owner's pid; the new state is written
+# into it and renamed over $SF, which also releases it. A waiter removes a
+# lock only when its owner is no longer running, so a held lock is never
+# stolen however long it is held. After ~2s it goes ahead with a private file
+# rather than block the agent (risking a lost update, never a corrupt file).
+lock() {
+	local i=0 owner again
+	LOCK="$SF.lock"
+	set -C
+	until { printf '%s\n' "$$" >"$LOCK"; } 2>/dev/null; do
+		i=$((i + 1))
+		owner=""
+		{ read -r owner <"$LOCK"; } 2>/dev/null
+		case $owner in
+		'' | *[!0-9]*) ;; # being written: its owner is alive
+		*)
+			if ! kill -0 "$owner" 2>/dev/null; then
+				# Read again just before removing, so a lock that another
+				# waiter has meanwhile retaken survives.
+				again=""
+				{ read -r again <"$LOCK"; } 2>/dev/null
+				[ "$again" = "$owner" ] && rm -f "$LOCK"
+				continue
+			fi
+			;;
+		esac
+		if [ $i -ge 100 ]; then
+			LOCK="$SF.$$.tmp"
+			break
+		fi
+		sleep 0.02
+	done
+	set +C
+}
+commit_lock() { mv -f "$LOCK" "$SF"; }
+drop_lock() { rm -f "$LOCK"; }
+
+# JSON string literal for $1, into J. jq has already turned control characters
+# into spaces; tabs and newlines from elsewhere (git paths) are escaped here.
+json_str() {
+	case $1 in
+	*[\\\"$TAB$NL]*) ;;
+	*)
+		J="\"$1\""
+		return 0
+		;;
+	esac
+	local s=${1//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$TAB/\\t}
+	s=${s//$NL/\\n}
+	J="\"$s\""
+}
+
+# The work tree holding directory $1, into TOP: the nearest ancestor with a
+# .git (a directory, or the file of a worktree or submodule), as a physical
+# path like git's. No git spawn: the hook calls this on every move. Returns 1
+# outside a repository.
+find_top() {
+	local d old=$PWD
+	TOP=""
+	cd -P -- "$1" 2>/dev/null || return 1
+	d=$PWD
+	cd -- "$old" 2>/dev/null
+	[ "$d" = / ] && d=""
+	while :; do
+		if [ -e "$d/.git" ]; then
+			TOP=${d:-/}
+			return 0
+		fi
+		[ -n "$d" ] || return 1
+		d=${d%/*}
+	done
+}
+# The work tree holding path $1 (a file that may not exist yet, in directories
+# that may not exist yet), into TOP.
+file_top() {
+	local d=${1%/*}
+	while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
+	find_top "${d:-/}"
+}
+# Is the agent process PID (started at PROC_START, if known) still running?
+# kill -0 alone would trust a reused pid; ps confirms the start time.
+agent_alive() {
+	local pid=$1 start=${2:-} now
+	case $pid in '' | *[!0-9]*) return 0 ;; esac
+	kill -0 "$pid" 2>/dev/null || return 1
+	[ -n "$start" ] || return 0
+	now=$(TZ=UTC LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)
+	[ -n "$now" ] || return 0
+	# Compare word by word: ps pads single-digit days.
+	set -f
+	set -- $now
+	now="$*"
+	set -- $start
+	set +f
+	[ "$now" = "$*" ]
+}
+
+# procStart of Claude Code process $1, from its session file (no spawn), into
+# PROC_START; empty if unknown.
+claude_proc_start() {
+	local line="" re='"procStart":"([^"]*)"'
+	PROC_START=""
+	[ -f "$CLAUDE_DIR/sessions/$1.json" ] || return 0
+	{ IFS= read -r line <"$CLAUDE_DIR/sessions/$1.json"; } 2>/dev/null
+	[[ $line =~ $re ]] && PROC_START=${BASH_REMATCH[1]}
+	return 0
+}
+
+# The hook parses only the code above the hook's dispatch, so it starts fast;
+# everything else (the background work, the other commands) is defined below
+# it, and loaded by sourcing this file again.
+load_rest() {
+	if [ "${LC_ALL-}" = C ] && [ -n "${WEAVER_LC_SET+x}" ]; then
+		if [ -n "$WEAVER_LC_SET" ]; then LC_ALL=$WEAVER_LC_ALL; else unset LC_ALL; fi
+	fi
+	[ -n "${WEAVER_REST:-}" ] || WEAVER_SOURCED=1 . "$SELF"
+}
+
+# ---------------------------------------------------------------- hook
+
+# The hook event (stdin) plus the stored state ($st), as one US-separated line;
+# see the read in hook_run for the fields. key identifies a tool call (name +
+# input), so the PostToolUse of an approved tool can be matched to the
+# PermissionRequest that asked for it. Arrays (files, subagents, tasks) come
+# back already updated, as JSON.
+# The hook's one jq program: the event (stdin) plus the stored state ($st), as
+# one US-separated line; see the read in hook_run for the fields. key
+# identifies a tool call (name + input), so the PostToolUse of an approved
+# tool can be matched to the PermissionRequest that asked for it. Arrays
+# (files, subagents, tasks) come back already updated, as JSON.
+#
+# The tool-call events only ever reach the async hook, so the sync hook gets
+# stubs for the code that handles them (JQ_SYNC): jq compiles a smaller program.
+JQ_SYNC='
+def edit_file: "";
+def command_paths: "";
+def rejected: false;
+def files_new($files; $file): $files;
+def subs_new($subs; $aid; $now):
+  if .hook_event_name == "Stop" and (background | length) == 0 then []
+  elif .hook_event_name == "SessionStart" and .source != "compact" then []
+  else $subs end;
+def tasks_new($tasks): if .hook_event_name == "SessionStart" and .source != "compact" and .source != "resume" then [] else $tasks end;
+'
+JQ_ASYNC='
+def edit_file:
+  (.tool_name // "") as $t
+  | if .hook_event_name == "PostToolUse" and ($t == "Edit" or $t == "Write" or $t == "MultiEdit" or $t == "NotebookEdit") then
+      ((.tool_input | objects | .file_path // .notebook_path) // "") | line
+      | if . == "" or startswith("/") then . else (.cwd // "" | tostring) + "/" + . end
+    else "" end;
+# Absolute paths in a Bash command (cd targets, VAR=/path, arguments), or in
+# an MCP tool input: where to look for what it changed.
+def command_paths:
+  if (.tool_name // "") | startswith("mcp__") then
+    [.tool_input | .. | strings | select(startswith("/")) | line] | unique | .[0:8] | join("\u001e")
+  elif .tool_name != "Bash" then "" else
+  ([39] | implode) as $q
+  | [(.tool_input | objects | .command // "") | tostring
+     | scan("(?:^|[\\s=;&|(\"" + $q + ":])(/[^\\s\"" + $q + ";&|()<>`$*?:]+)") | .[0] | line]
+  | unique | .[0:8] | join("\u001e") end;
+# A rejected permission dialog stops the agent until you say more; with
+# feedback typed in, it carries on.
+def rejected:
+  .hook_event_name == "PostToolBatch"
+  and ([(.tool_calls // []) | arrays | .[] | objects | (.tool_response // "") | tostring
+        | select(test("doesn.t want to proceed with this tool use") and (test("the user said:") | not))]
+       | length > 0);
+def files_new($files; $file): if $file != "" then ($files - [$file]) + [$file] | .[-200:] else $files end;
+def subs_new($subs; $aid; $now):
+  if .hook_event_name == "SubagentStart" and $aid != "" then
+    ($subs | map(select(.id != $aid))) + [{id: $aid, type: (.agent_type // "" | one(40)), since: ($now | floor)}]
+  elif .hook_event_name == "SubagentStop" then $subs | map(select(.id != $aid))
+  else $subs end;
+def tasks_new($tasks):
+  (.task_id // "" | tostring) as $tid
+  | (.task_subject // "" | one(80)) as $tsub
+  | if .hook_event_name == "TaskCreated" then ($tasks | map(select(.id != $tid))) + [{id: $tid, subject: $tsub, done: false}] | .[-30:]
+    elif .hook_event_name == "TaskCompleted" then
+      if any($tasks[]; .id == $tid) then $tasks | map(if .id == $tid then .done = true else . end)
+      else $tasks + [{id: $tid, subject: $tsub, done: true}] | .[-30:] end
+    else $tasks end;
+'
+JQ_DEFS='
+def line: tostring | gsub("[\u0000-\u001f\u007f]+"; " ");
+def one($n): tostring | gsub("[\\s\u0000-\u001f\u007f]+"; " ") | ltrimstr(" ") | rtrimstr(" ") | .[0:$n];
+def summary:
+  ((.tool_input | objects) // {}) as $i
+  | (($i.file_path // $i.notebook_path) // null) as $fp
+  | if .tool_name == "Bash" then "Bash: " + ($i.command // "" | tostring)
+    elif .tool_name == "AskUserQuestion" then "question: " + ((($i.questions // []) | arrays | .[0].question?) // "" | tostring)
+    elif $fp then (.tool_name // "") + ": " + ($fp | tostring | split("/") | last)
+    else (.tool_name // "") end;
+# Subagent reports, task notifications and peer messages arrive as prompts,
+# but are not yours.
+def yours:
+  (.source // "user") == "user"
+  and ((.prompt // "") | tostring
+       | test("^\\s*(<agent-message|<task-notification|<teammate-message|<channel|Another Claude session sent a message)") | not);
+# Background subagents and workflows still running when the agent stops: it
+# will wake up when they report back.
+def background: [(.background_tasks // []) | arrays | .[] | objects | select(.type == "subagent" or .type == "workflow")];
+'
+JQ_MAIN='
+((try ($st | fromjson) catch {}) | if type == "object" then . else {} end) as $s
+| (.session_id // "" | tostring) as $sid
+| (if ($s.session_id // "") == $sid then $s else {} end) as $o
+| (.agent_id // "" | tostring) as $aid
+| (now) as $now
+| edit_file as $file
+| command_paths as $paths
+| [ .hook_event_name // "",
+    .cwd // "",
+    $sid,
+    $file,
+    (if .hook_event_name == "UserPromptSubmit" and yours then .prompt // "" | one(120) else "" end),
+    (if .hook_event_name == "UserPromptSubmit" and yours then .prompt // "" | one(2000) else "" end),
+    .tool_name // "",
+    .notification_type // "",
+    ($now | floor),
+    ($now * 1000 | floor),
+    (if .hook_event_name == "PermissionRequest" or .hook_event_name == "PreToolUse" then summary
+     elif .hook_event_name == "Notification" then (.message // "")
+     elif .hook_event_name == "StopFailure" then "error: " + (.error // "" | tostring)
+     else "" end | one(100)),
+    (if .tool_name then .tool_name + ":" + (.tool_input | tojson | .[0:300]) else "" end),
+    (.last_assistant_message // "" | one(400)),
+    $aid,
+    (.agent_type // "" | one(40)),
+    (if .hook_event_name == "Stop" then background | length else "" end),
+    (if .hook_event_name == "Stop" then background | map(.description // "" | one(80)) | join("; ") | one(240) else "" end),
+    .source // "",
+    (if .is_interrupt == true then 1 else "" end),
+    (.session_title // "" | one(80)),
+    .prompt_id // "",
+    .transcript_path // "",
+    .new_cwd // "",
+    (if rejected then 1 else "" end),
+    (.error // "" | tostring | one(100)),
+    (if .tool_name == "Bash" then (.tool_input | objects | .command // "") | one(200) else "" end),
+    $s.cwd // "", $s.root // "", $s.file // "", $s.prompt // "",
+    $s.state // "", $s.session_id // "", $s.start_cwd // "", $s.since // "",
+    $s.waiting // "", $s.pending // "", $s.last_message // "", ($s.seen // false),
+    $s.marked_root // "", $s.marker // "", $s.project_root // "",
+    $s.background // "", $s.background_tasks // "",
+    $s.pid // "", $s.proc_start // "", $o.title // "", $o.turn // 0, $o.turn_ended // 0,
+    $o.prompt_id // "", $o.transcript // "", $s.agent // "",
+    (files_new(($o.files // []) | arrays; $file) | tojson),
+    (subs_new(($o.subagents // []) | arrays; $aid; $now) | tojson),
+    (tasks_new(($o.tasks // []) | arrays) | tojson)
+  ] | map(tostring) | join("\u001f") | gsub("[\u0000-\u001d\u007f]"; " ")
+  | . + "\u001f" + (($o.turn_roots // []) | arrays | map(line) | join("\u001e")) + "\u001f" + $paths'
+
+# Ring the bell (terminalSequence is written by Claude Code to the agent's
+# terminal): zellij marks the tab until you look at it.
+BELL_JSON='{"terminalSequence":"\u0007"}'
+
+cmd_hook() {
+	local rc mode=sync
+	[ "${1:-}" = --async ] && mode=async
+	[ -n "${ZELLIJ_PANE_ID:-}" ] && [ -n "$SESSION" ] || exit 0
+	[ -t 0 ] && exit 0
+	if [ -n "${WEAVER_DEBUG:-}" ]; then
+		[ "$WEAVER_DEBUG" = trace ] && set -x
+		mkdir -p "$STATE_DIR" && (hook_run "$mode") >/dev/null 2>>"$STATE_DIR/hook.log"
+	else
+		(hook_run "$mode") >/dev/null 2>&1
+	fi
+	rc=$?
+	if [ "$mode" = sync ]; then
+		case ${WEAVER_BELL:-1}:$rc in
+		1:10 | 1:11 | needs-you:10) printf '%s\n' "$BELL_JSON" ;;
+		esac
+	fi
+	exit 0
+}
+
+# The stored state's state and pid, read without a spawn, into PK_STATE and
+# PK_PID (and PK_START).
+peek_state() {
+	local line="" re_s='"state":"([a-z-]+)"' re_p='"pid":([0-9]+)' re_t='"proc_start":"([^"]*)"'
+	PK_STATE="" PK_PID="" PK_START=""
+	[ -f "$SF" ] && { IFS= read -r line <"$SF"; } 2>/dev/null
+	[[ $line =~ $re_s ]] && PK_STATE=${BASH_REMATCH[1]}
+	[[ $line =~ $re_p ]] && PK_PID=${BASH_REMATCH[1]}
+	[[ $line =~ $re_t ]] && PK_START=${BASH_REMATCH[1]}
+	return 0
+}
+
+# The async hook runs after every tool call; most of them change nothing. Read
+# the event only as far as its tool name (comma-separated chunks, so no
+# multibyte character is split) into HEAD, and return 1 when there is nothing
+# to do.
+async_gate() {
+	local part i t
+	HEAD=""
+	for ((i = 0; i < 16; i++)); do
+		if ! IFS= read -r -d , part; then
+			HEAD="$HEAD$part"
+			break
+		fi
+		HEAD="$HEAD$part,"
+		case $part in *'"tool_name":'* | *'"hook_event_name":"'[!P]*) break ;; esac
+	done
+	case $HEAD in
+	*'"hook_event_name":"PostToolUse"'*)
+		t=${HEAD#*\"tool_name\":\"}
+		t=${t%%\"*}
+		case $t in
+		Bash | Edit | Write | MultiEdit | NotebookEdit | EnterWorktree | ExitWorktree) return 0 ;;
+		mcp__*)
+			case $t in
+			*[Ww]rite* | *[Ee]dit* | *[Rr]eplace* | *[Ii]nsert* | *[Cc]reate* | *[Pp]atch* | *[Aa]pply* | \
+				*[Rr]ename* | *[Mm]ove* | *[Dd]elete*) return 0 ;;
+			esac
+			;;
+		esac
+		[ "$PK_STATE" != working ]
+		;;
+	*'"hook_event_name":"PostToolBatch"'*) [ "$PK_STATE" = needs-you ] ;;
+	*) return 0 ;;
+	esac
+}
+
+# Append one line to the agent session's activity log: $1 is the event's
+# fields after "ev", as JSON members (`,"k":v...`).
+log_line() {
+	[ -n "$LOGF" ] || return 0
+	json_str "$pane"
+	printf '{"t":%s,"pane":%s,"turn":%s,"ev":"%s"%s}\n' "${now:-0}" "$J" "${turn:-0}" "$1" "${2:-}" >>"$LOGF" 2>/dev/null
+}
+
+# Kept to one jq and one mv, plus forks: the hook runs on every agent event
+# and must stay fast. nvim, zellij, Worktrunk, snapshots and the status bar
+# are all updated from a background fork (hook_bg) after the state is written.
+# Mode "async" is the hook Claude Code runs in the background after every tool
+# call (and for the events nobody waits on); it returns at once when the call
+# can change nothing, and after Bash or an MCP edit tool follows the files the
+# call changed.
+# Returns 10 when the agent has just started needing you, 11 when it has just
+# finished (ring the bell).
+hook_run() {
+	local mode=$1 pane=$ZELLIJ_PANE_ID parsed J out moved=0 rc=0 HEAD=""
+	local event cwd sid file prompt prompt_long tool ntype now now_ms waiting_new key last_new aid atype bg_new bgdesc_new
+	local source interrupt title_new prompt_id transcript new_cwd rejected err cmd
+	local o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen
+	local o_marked o_marker o_proj o_bg o_bgdesc o_pid o_procstart o_title o_turn o_turn_ended o_promptid
+	local o_transcript o_agent o_turn_roots files_json subs_json tasks_json paths
+	local root="" d state ev_file="" start since waiting pending last seen marked marker proj mark_dir bg bgdesc
+	local pid proc_start title turn turn_ended turn_roots agent_kind=${WEAVER_AGENT:-claude} LOGF=""
+	local snap_prev="" snap_start="" snap_end="" first_touch="" prev_prompt="" turn_prompt="" seq
+	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR" || return
+	state_file "$pane"
+	peek_state
+	# A session nested in this pane's agent (claude -p, an SDK script) inherits
+	# ZELLIJ_PANE_ID: while the pane's own agent runs, its events are not ours.
+	local me=${WEAVER_AGENT_PID:-${CLAUDE_PID:-}}
+	if [ -n "$me" ] && [ -n "$PK_PID" ] && [ "$me" != "$PK_PID" ] &&
+		[ "$PK_STATE" != ended ] && agent_alive "$PK_PID" "$PK_START"; then
+		return 0
+	fi
+	if [ "$mode" = async ]; then async_gate || return 0; fi
+	lock
+	if [ -f "$SF" ]; then set -- --rawfile st "$SF"; else set -- --arg st ""; fi
+	if [ "$mode" = async ]; then
+		parsed=$(jq -rRs --arg h "$HEAD" "$@" '($h + .) | fromjson | '"$JQ_DEFS$JQ_ASYNC$JQ_MAIN")
+	else
+		parsed=$(jq -r "$@" "$JQ_DEFS$JQ_SYNC$JQ_MAIN")
+	fi || {
+		drop_lock
+		return
+	}
+	IFS=$US read -r event cwd sid file prompt prompt_long tool ntype now now_ms waiting_new key last_new \
+		aid atype bg_new bgdesc_new source interrupt title_new prompt_id transcript new_cwd rejected err cmd \
+		o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen \
+		o_marked o_marker o_proj o_bg o_bgdesc o_pid o_procstart o_title o_turn o_turn_ended o_promptid \
+		o_transcript o_agent files_json subs_json tasks_json o_turn_roots paths <<<"$parsed"
+	if [ -z "$event" ]; then
+		# Empty or eventless input: keep the stored state rather than blank it.
+		drop_lock
+		return
+	fi
+	NOW=$now seq=$now_ms
+	read_nvim_pane "$pane"
+
+	# A new agent session in this pane (not a resume or compaction) starts
+	# afresh; otherwise the root is never reset to the start directory.
+	if [ -n "$sid" ] && [ "$sid" != "$o_sid" ]; then
+		o_cwd="" o_root="" o_file="" o_prompt="" o_state="" o_start="" o_since=""
+		o_waiting="" o_pending="" o_last="" o_seen=false o_proj="" o_bg="" o_bgdesc=""
+	fi
+	pid=${me:-$o_pid} proc_start=$o_procstart
+	if [ -n "$pid" ] && { [ "$pid" != "$o_pid" ] || [ -z "$proc_start" ]; }; then
+		claude_proc_start "$pid"
+		proc_start=$PROC_START
+		# Not Claude Code (or before it writes its session file): ask ps, once.
+		if [ -z "$proc_start" ] && [ "$pid" != "$o_pid" ]; then
+			proc_start=$(TZ=UTC LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)
+			proc_start=${proc_start%"${proc_start##*[! ]}"}
+		fi
+	fi
+
+	# A subagent reports its own cwd: only the main agent's is tracked.
+	[ -n "$aid" ] && [ -n "$o_cwd" ] && cwd=$o_cwd
+	[ "$event" = CwdChanged ] && [ -n "$new_cwd" ] && cwd=$new_cwd
+	start=${o_start:-$cwd}
+	proj=$o_proj
+	if [ -z "$proj" ]; then
+		if find_top "${CLAUDE_PROJECT_DIR:-$start}"; then proj=$TOP; else proj=-; fi
+	fi
+
+	# Where the agent is really working: the repo of the file it (or one of its
+	# subagents) just edited...
+	if [ -n "$file" ]; then
+		ev_file=$file
+		file_top "$file" && root=$TOP
+	fi
+	# ...else the repo of a new cwd, if it is another repo or worktree. Claude
+	# Code snaps cwd back to the start directory after any command that cd's
+	# outside it, and an agent looking around its own checkout may still be
+	# working in a worktree, so only a real move counts: the worktree tools,
+	# CwdChanged, or a cwd in another repo...
+	if [ -z "$root" ]; then
+		if [ "$cwd" != "$o_cwd" ]; then
+			case $event:$tool in
+			CwdChanged:*) moved=1 ;;
+			*:EnterWorktree | *:ExitWorktree) moved=1 start=$cwd ;;
+			*)
+				if [ "$cwd" != "$start" ]; then
+					if find_top "$cwd"; then d=$TOP; else d=$cwd; fi
+					[ "$d" != "$proj" ] && moved=1
+				fi
+				;;
+			esac
+		fi
+		if [ $moved = 1 ] || [ -z "$o_root" ]; then
+			if find_top "$cwd"; then root=$TOP; else root=$cwd; fi
+		else
+			# ...else wherever it was before.
+			root=$o_root
+		fi
+	fi
+
+	# Turns: each prompt of yours starts one; it ends at Stop, StopFailure or
+	# an interrupt. The roots it touches are snapshotted at its end.
+	turn=${o_turn:-0} turn_ended=${o_turn_ended:-0} turn_roots=$o_turn_roots
+	case $turn in *[!0-9]*) turn=0 ;; esac
+	case $turn_ended in *[!0-9]*) turn_ended=0 ;; esac
+	if [ "$event" = UserPromptSubmit ] && [ -n "$prompt" ]; then
+		# Esc while the model was writing fires nothing: the previous turn
+		# ends here.
+		[ $turn -gt $turn_ended ] && snap_prev=$turn
+		turn=$((turn + 1)) turn_ended=$((turn - 1))
+		turn_roots=$root snap_start=1
+	elif [ $turn -gt 0 ] && [ -n "$root" ] && { [ -n "$ev_file" ] || [ $moved = 1 ]; }; then
+		case "$RS$turn_roots$RS" in
+		*"$RS$root$RS"*) ;;
+		*)
+			turn_roots="$turn_roots${turn_roots:+$RS}$root"
+			first_touch=$root
+			;;
+		esac
+	fi
+	case $event in
+	Stop | StopFailure) [ $turn -gt 0 ] && snap_end=1 ;;
+	PostToolUseFailure) [ -n "$interrupt" ] && [ $turn -gt 0 ] && snap_end=1 ;;
+	esac
+	[ -n "$snap_end" ] && turn_ended=$turn
+
+	waiting=$o_waiting pending=$o_pending bg=$o_bg bgdesc=$o_bgdesc
+	state=${o_state:-working}
+	case $event in
+	SessionStart)
+		# A compaction is not a new start: the agent carries on as it was.
+		if [ "$source" = compact ]; then state=${o_state:-idle}; else state=idle bg="" bgdesc=""; fi
+		;;
+	UserPromptSubmit) state=working bg="" bgdesc="" ;;
+	PermissionRequest | PreToolUse)
+		# A permission dialog, or (PreToolUse on AskUserQuestion) a question.
+		state=needs-you waiting=$waiting_new pending=$key
+		;;
+	Notification)
+		case $ntype in
+		permission_prompt | elicitation_dialog | elicitation_url_dialog | agent_needs_input | \
+			worker_permission_prompt | quota_auto_resume_stale | "")
+			# A dialog: keep the more specific text of the request that opened it.
+			state=needs-you
+			[ "$o_state" = needs-you ] && [ -n "$o_waiting" ] || waiting=$waiting_new
+			;;
+		elicitation_complete | elicitation_response) [ "$o_state" = needs-you ] && state=working ;;
+		quota_auto_resume_fired) state=working ;;
+		idle_prompt)
+			# The reminder 60s after the agent went quiet: still "working" means
+			# Esc stopped it (no Stop fires), unless background work is pending.
+			case $o_state in
+			working) [ "${o_bg:-0}" -gt 0 ] 2>/dev/null || state=interrupted ;;
+			'') state=done ;;
+			esac
+			;;
+		esac
+		# agent_completed is about a background agent, not this one.
+		;;
+	PostToolUse | PostToolUseFailure)
+		state=working
+		if [ "$event" = PostToolUseFailure ] && [ -n "$interrupt" ]; then
+			state=interrupted
+		elif [ "$o_state" = needs-you ] && [ -n "$o_pending" ] && [ "$key" != "$o_pending" ]; then
+			# Another tool finished while one still waits for you.
+			state=needs-you
+		else
+			# A late async hook must not undo a Stop or an interrupt.
+			case $o_state in
+			done | idle | interrupted) [ $((now - ${o_since:-0})) -lt 3 ] 2>/dev/null && state=$o_state ;;
+			ended) state=ended ;;
+			esac
+		fi
+		;;
+	PostToolBatch)
+		# Every call in the batch has resolved, so the dialog has been answered.
+		if [ "$o_state" = needs-you ]; then
+			if [ -n "$rejected" ]; then state=interrupted; else state=working; fi
+		fi
+		;;
+	StopFailure) state=needs-you waiting=$waiting_new pending="" ;;
+	Stop)
+		# Not done while background subagents work on: their reports wake it.
+		bg=$bg_new bgdesc=$bgdesc_new
+		state=done
+		[ "${bg:-0}" -gt 0 ] 2>/dev/null && state=working
+		;;
+	SessionEnd) state=ended bg="" bgdesc="" ;;
+	esac
+	[ "$state" = needs-you ] || waiting="" pending=""
+	if [ "$state" != "$o_state" ]; then
+		case $state in needs-you) rc=10 ;; done) rc=11 ;; esac
+	fi
+	since=$o_since
+	if [ "$state" != "$o_state" ] || [ -z "$since" ]; then
+		since=$now seen=false
+	else
+		seen=$o_seen
+	fi
+	case $event in Stop | StopFailure) last=${last_new:-$o_last} ;; *) last=$o_last ;; esac
+	[ -n "$prompt" ] || prompt=$o_prompt
+	[ -n "$ev_file" ] && file=$ev_file || file=$o_file
+	title=${title_new:-$o_title}
+	prompt_id=${prompt_id:-$o_promptid}
+	transcript=${transcript:-$o_transcript}
+
+	# Worktrunk branch markers, like its own Claude Code plugin sets for the
+	# session's start directory, but on the worktree the agent is really in.
+	case $state in working) marker='🤖' ;; ended) marker='' ;; *) marker='💬' ;; esac
+	mark_dir=""
+	if [ "${WEAVER_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
+		mark_dir=$root
+	fi
+	marked=$mark_dir
+
+	write_state
+
+	# The activity log, and the prompt the turn's snapshots are labelled with.
+	if [ -n "$sid" ]; then
+		LOGF="$LOG_DIR/$sid.jsonl"
+		[ -d "$LOG_DIR" ] || mkdir -p "$LOG_DIR"
+	fi
+	if [ -n "$snap_prev$snap_end" ] && [ -f "$STATE_DIR/${SKEY}_$pane.prompt" ]; then
+		IFS= read -r turn_prompt <"$STATE_DIR/${SKEY}_$pane.prompt"
+		prev_prompt=$turn_prompt
+	fi
+	[ -n "$snap_start" ] && printf '%s\n' "$prompt_long" >"$STATE_DIR/${SKEY}_$pane.prompt"
+	hook_log
+
+	if [ "$mode" = async ] && [ "$event" = PostToolUse ] && case $tool in Bash | mcp__*) true ;; *) false ;; esac then
+		# Following a Bash or MCP edit needs git: this process runs in the
+		# background anyway, so do it here.
+		load_rest
+		if ! follow_bash_edits; then
+			[ "$tool" = Bash ] && json_str "$cmd" && log_line bash ",\"cmd\":$J"
+			[ -n "$NV" ] && nvim_event checktime ""
+		fi
+	fi
+	# The background work, only when there is some: a fork is cheap, but the
+	# work it starts (a zellij call or two) is not.
+	if [ "$state" != "$o_state" ] || [ "$root" != "$o_root" ] || [ -n "$ev_file$snap_prev$snap_start$snap_end$first_touch" ] ||
+		[ "$title" != "$o_title" ] || [ "$marker" != "$o_marker" ] || [ "$mark_dir" != "$o_marked" ] ||
+		[ "$event" = SessionStart ] || [ "$event" = UserPromptSubmit ]; then
+		if [ -n "${WEAVER_DEBUG:-}" ]; then
+			(load_rest && hook_bg) </dev/null >/dev/null 2>>"$STATE_DIR/hook.log" &
+		else
+			(load_rest && hook_bg) </dev/null >/dev/null 2>&1 &
+		fi
+	fi
+	return $rc
+}
+
+# The activity log lines for this event (see docs/design.md).
+hook_log() {
+	local jr
+	[ -n "$LOGF" ] || return 0
+	case $event in
+	SessionStart) json_str "$source" && log_line session ",\"source\":$J" ;;
+	UserPromptSubmit)
+		if [ -n "$snap_start" ]; then
+			json_str "$prompt_id" && jr=$J
+			json_str "$prompt_long" && log_line prompt ",\"text\":$J,\"prompt_id\":$jr"
+		fi
+		;;
+	PostToolUse)
+		if [ -n "$ev_file" ]; then
+			json_str "$root" && jr=$J
+			json_str "$ev_file" && out=",\"file\":$J,\"root\":$jr"
+			json_str "$tool" && out="$out,\"tool\":$J"
+			[ -n "$aid" ] && json_str "$aid" && out="$out,\"agent_id\":$J"
+			log_line edit "$out"
+		fi
+		;;
+	PostToolUseFailure) [ -n "$interrupt" ] && json_str "$tool" && log_line interrupt ",\"tool\":$J" ;;
+	SubagentStart | SubagentStop)
+		json_str "$aid" && out=",\"agent_id\":$J"
+		json_str "$atype" && out="$out,\"agent_type\":$J"
+		if [ "$event" = SubagentStart ]; then out="$out,\"phase\":\"start\""; else out="$out,\"phase\":\"stop\""; fi
+		log_line subagent "$out"
+		;;
+	Stop) json_str "$last_new" && log_line stop ",\"last\":$J" ;;
+	StopFailure) json_str "$err" && log_line error ",\"error\":$J" ;;
+	SessionEnd) log_line end ;;
+	esac
+	if [ $moved = 1 ] && [ "$root" != "$o_root" ]; then
+		json_str "$root" && jr=$J
+		json_str "$cwd" && log_line cwd ",\"cwd\":$J,\"root\":$jr"
+	fi
+	if [ "$state" != "$o_state" ]; then
+		[ "$state" = needs-you ] && json_str "$waiting" && log_line needs-you ",\"waiting\":$J"
+		log_line state ",\"state\":\"$state\""
+	fi
+	return 0
+}
+
+# Write the state file from the hook's variables (and release the lock).
+write_state() {
+	case $pane in '' | *[!0-9]*) json_str "$pane" ;; *) J=$pane ;; esac
+	out="{\"pane\":$J,\"agent\":\"$agent_kind\""
+	out="$out,\"state\":\"$state\",\"ts\":${now:-0},\"since\":${since:-0}"
+	[ "$seen" = true ] && out="$out,\"seen\":true" || out="$out,\"seen\":false"
+	json_str "$sid" && out="$out,\"session_id\":$J"
+	case $pid in '' | *[!0-9]*) ;; *) out="$out,\"pid\":$pid" ;; esac
+	json_str "$proc_start" && out="$out,\"proc_start\":$J"
+	json_str "$title" && out="$out,\"title\":$J"
+	out="$out,\"turn\":${turn:-0},\"turn_ended\":${turn_ended:-0}"
+	json_str "$prompt_id" && out="$out,\"prompt_id\":$J"
+	json_str "$transcript" && out="$out,\"transcript\":$J"
+	json_str "$cwd" && out="$out,\"cwd\":$J"
+	json_str "$root" && out="$out,\"root\":$J"
+	json_str "$start" && out="$out,\"start_cwd\":$J"
+	json_str "$proj" && out="$out,\"project_root\":$J"
+	json_str "$file" && out="$out,\"file\":$J"
+	json_str "$prompt" && out="$out,\"prompt\":$J"
+	json_str "$waiting" && out="$out,\"waiting\":$J"
+	json_str "$pending" && out="$out,\"pending\":$J"
+	json_str "$last" && out="$out,\"last_message\":$J"
+	json_str "$marked" && out="$out,\"marked_root\":$J"
+	json_str "$marker" && out="$out,\"marker\":$J"
+	case $bg in '' | *[!0-9]*) bg=0 ;; esac
+	json_str "$bgdesc" && out="$out,\"background\":$bg,\"background_tasks\":$J"
+	out="$out,\"nvim_pane\":${NV:-null}"
+	[ -n "$sid" ] && json_str "$LOG_DIR/$sid.jsonl" && out="$out,\"log\":$J"
+	out="$out,\"subagents\":${subs_json:-[]},\"tasks\":${tasks_json:-[]}"
+	local IFS=$RS r rl=""
+	set -f
+	for r in $turn_roots; do
+		json_str "$r" && rl="$rl${rl:+,}$J"
+	done
+	set +f
+	out="$out,\"turn_roots\":[$rl],\"files\":${files_json:-[]}}"
+	if printf '%s\n' "$out" >|"$LOCK"; then commit_lock; else drop_lock; fi
+}
+
+# ---------------------------------------------------------------- dispatch
+
+if [ -z "${WEAVER_SOURCED:-}" ] && [ "${1:-}" = hook ]; then
+	shift
+	cmd_hook "$@"
+fi
+
+# ---------------------------------------------------------------- the rest
+
+WEAVER_REST=1
 
 # This session's per-pane files with extension $1, into the array FOUND. Only
 # <session>_<digits>.$1 counts, so session "a" never claims session "a_b"'s files.
@@ -67,45 +808,6 @@ script_dir() {
 		case $p in /*) ;; *) p="$d/$p" ;; esac
 	done
 	cd -P "${p%/*}" && pwd
-}
-
-# Serialise read-modify-write of state file $SF. The lock is $SF.lock, created
-# exclusively (noclobber); the new state is written into it and renamed over
-# $SF, which also releases the lock. A held lock is never truncated: one older
-# than the moment we started waiting, still there about a second later, was
-# left by a killed process and is removed. After ~2s we go ahead with a
-# private file rather than block the agent (risking a lost update, not a
-# corrupt file).
-lock() {
-	local i=0 mark=""
-	LOCK="$SF.lock"
-	set -C
-	until { : >"$LOCK"; } 2>/dev/null; do
-		i=$((i + 1))
-		if [ $i = 1 ]; then
-			mark="$SF.wait.$$"
-			: >|"$mark"
-		elif [ $((i % 50)) = 0 ] && [ "$LOCK" -ot "$mark" ]; then
-			rm -f "$LOCK"
-			continue
-		fi
-		if [ $i -ge 100 ]; then
-			LOCK="$SF.$$.tmp"
-			break
-		fi
-		sleep 0.02
-	done
-	set +C
-	[ -z "$mark" ] || rm -f "$mark"
-}
-commit_lock() { mv -f "$LOCK" "$SF"; }
-drop_lock() { rm -f "$LOCK"; }
-
-# JSON string literal for $1, into J. Inputs never contain control characters.
-json_str() {
-	local s=${1//\\/\\\\}
-	s=${s//\"/\\\"}
-	J="\"$s\""
 }
 
 # bounded OUT CMD... runs CMD with stdout to OUT and stdin/stderr on /dev/null,
@@ -135,47 +837,6 @@ bounded() {
 	return $rc
 }
 
-# The arguments of v:lua.F(...) are Vimscript expressions: in a single-quoted
-# Vim string a quote is doubled and a backslash is literal.
-follow_expr() {
-	local r=${1//\'/\'\'} f=${2//\'/\'\'}
-	EXPR="v:lua.AgentFollow('$r','$f')"
-}
-
-# nvim_follow AGENT-PANE ROOT FILE tells the agent's nvim to follow it.
-# Returns 0 on success, 128+ when nvim did not answer in time (stuck at a
-# prompt, or busy), and anything else when nothing is listening.
-#
-# With NOW set (the hook), a timeout is remembered: calls are skipped for 15s
-# so a stuck nvim costs the agent one 2s wait per 15s, not 2s on every event.
-nvim_follow() {
-	local stalled t=0 rc
-	sock_path "$1"
-	[ -S "$SOCK" ] || return 1
-	stalled="$SOCK.stalled"
-	if [ -n "${NOW:-}" ] && [ -f "$stalled" ]; then
-		read -r t <"$stalled"
-		case $t in '' | *[!0-9]*) t=0 ;; esac
-		[ $((NOW - t)) -lt 15 ] && return 128
-	fi
-	follow_expr "$2" "$3"
-	bounded /dev/null nvim --server "$SOCK" --remote-expr "$EXPR"
-	rc=$?
-	if [ $rc -ge 128 ]; then
-		[ -n "${NOW:-}" ] && printf '%s\n' "$NOW" >"$stalled"
-	elif [ -f "$stalled" ]; then
-		rm -f "$stalled"
-	fi
-	return $rc
-}
-
-# Tell the agent's nvim to re-check files (after a Bash command, say).
-nvim_checktime() {
-	sock_path "$1"
-	[ -S "$SOCK" ] || return 1
-	bounded /dev/null nvim --server "$SOCK" --remote-expr "v:lua.AgentChecktime()"
-}
-
 toplevel() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 
 # All panes as a JSON array, into PANES. Retried: list-panes has once been
@@ -187,284 +848,191 @@ list_panes() {
 			printf '%s' "$PANES" | jq -e 'type == "array"' >/dev/null 2>&1 && return 0
 		sleep 0.1
 	done
-	die "zellij action list-panes failed"
+	PANES=""
+	return 1
 }
 
-# ---------------------------------------------------------------- hook
-
-# The hook event (stdin) plus the stored state ($st), as one US-separated line.
-# key identifies a tool call (name + input), so the PostToolUse of an approved
-# tool can be matched to the PermissionRequest that asked for it. The last
-# field is the absolute paths a Bash command names, RS-separated.
-JQ_HOOK='
-def line: tostring | gsub("[\u0000-\u001f]+"; " ");
-def one($n): line | gsub("\\s+"; " ") | sub("^ "; "") | .[0:$n];
-def summary:
-  ((.tool_input | objects) // {}) as $i
-  | (($i.file_path // $i.notebook_path) // null) as $fp
-  | if .tool_name == "Bash" then "Bash: " + ($i.command // "" | tostring)
-    elif .tool_name == "AskUserQuestion" then "question: " + ((($i.questions // []) | arrays | .[0].question?) // "" | tostring)
-    elif $fp then (.tool_name // "") + ": " + ($fp | tostring | split("/") | last)
-    else (.tool_name // "") end;
-# Subagent reports and task notifications arrive as prompts, but are not yours.
-def your_prompt:
-  .prompt // "" | tostring
-  | if test("^\\s*(<agent-message|<task-notification|Another Claude session sent a message)") then ""
-    else one(120) end;
-# Background subagents and workflows still running when the agent stops: it
-# will wake up when they report back.
-def background: [(.background_tasks // []) | arrays | .[] | objects | select(.type == "subagent" or .type == "workflow")];
-# Absolute paths in a Bash command: cd targets, VAR=/path, arguments.
-def command_paths:
-  ([39] | implode) as $q
-  | [(.tool_input | objects | .command // "") | tostring
-     | scan("(?:^|[\\s=;&|(\"" + $q + ":])(/[^\\s\"" + $q + ";&|()<>`$*?:]+)") | .[0] | line]
-  | unique | .[0:8] | join("\u001e");
-((try ($st | fromjson) catch {}) | if type == "object" then . else {} end) as $s
-| (.hook_event_name == "Stop") as $stop
-| command_paths as $paths
-| [ .hook_event_name // "",
-    .cwd // "",
-    .session_id // "",
-    ((.tool_input | objects | .file_path // .notebook_path) // ""),
-    your_prompt,
-    .tool_name // "",
-    .notification_type // "",
-    (now | floor),
-    (if .hook_event_name == "PermissionRequest" or .hook_event_name == "PreToolUse" then summary
-     elif .hook_event_name == "Notification" then (.message // "")
-     elif .hook_event_name == "StopFailure" then "error: " + (.error // "" | tostring)
-     else "" end | one(100)),
-    (if .tool_name then .tool_name + ":" + (.tool_input | tojson | .[0:300]) else "" end),
-    (.last_assistant_message // "" | one(400)),
-    .agent_id // "",
-    (if $stop then background | length else "" end),
-    (if $stop then background | map(.description // "" | one(80)) | join("; ") | one(240) else "" end),
-    $s.cwd // "", $s.root // "", $s.file // "", $s.prompt // "",
-    $s.state // "", $s.session_id // "", $s.start_cwd // "", $s.since // "",
-    $s.waiting // "", $s.pending // "", $s.last_message // "", ($s.seen // false),
-    $s.marked_root // "", $s.marker // "", $s.project_root // "",
-    $s.background // "", $s.background_tasks // ""
-  ] | map(line) + [$paths] | join("\u001f")'
-
-# Ring the bell (terminalSequence is written by Claude Code to the agent's
-# terminal): zellij marks the tab until the pane is focused.
-BELL_JSON='{"terminalSequence":"\u0007"}'
-
-cmd_hook() {
-	local rc mode=sync
-	[ "${1:-}" = --async ] && mode=async
-	[ -n "${ZELLIJ_PANE_ID:-}" ] || exit 0
-	[ -t 0 ] && exit 0
-	if [ -n "${WEAVER_DEBUG:-}" ]; then
-		mkdir -p "$STATE_DIR" && (hook_run "$mode") >/dev/null 2>>"$STATE_DIR/hook.log"
-	else
-		(hook_run "$mode") >/dev/null 2>&1
+# The pane you were on when you pressed the key that opened this floating
+# weaver pane, into FOCUSED. zellij reports is_focused per client, and
+# `focus-pane-id` from the command line leaves phantom focus behind, so ask
+# zellij instead: hide the floating panes and see where your client lands
+# (this pane keeps running; it closes when weaver exits). Outside a floating
+# pane, the focused tiled pane of our own tab.
+focused_pane() {
+	local me=${ZELLIJ_PANE_ID:-} id
+	FOCUSED=""
+	if [ -n "$me" ] && printf '%s' "$PANES" | jq -e --arg me "$me" \
+		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and .is_floating)' >/dev/null 2>&1; then
+		id=$(client_of "$me")
+		zellij action toggle-floating-panes >/dev/null 2>&1
+		FLOATS_HIDDEN=1
+		FOCUSED=$(client_pane "$id")
+		case $FOCUSED in '' | *[!0-9]*) FOCUSED="" ;; *) return 0 ;; esac
 	fi
-	rc=$?
-	[ $rc = 10 ] && [ "${WEAVER_BELL:-1}" != 0 ] && printf '%s\n' "$BELL_JSON"
-	exit 0
+	FOCUSED=$(printf '%s' "$PANES" | jq -r --arg me "$me" '
+		map(select(.is_plugin | not)) as $t
+		| ($t | map(select((.id | tostring) == $me)) | .[0].tab_id) as $tab
+		| $t | map(select(.tab_id == $tab and .is_focused and (.is_floating | not)
+			and (.id | tostring) != $me)) | .[0].id // empty')
+}
+
+# The client on pane $1 (empty: none), and the pane client $1 is on (empty:
+# the first client's).
+client_of() {
+	zellij action list-clients 2>/dev/null | awk -v p="terminal_$1" 'NR > 1 && $2 == p { print $1; exit }'
+}
+client_pane() {
+	zellij action list-clients 2>/dev/null |
+		awk -v id="$1" 'NR > 1 && (id == "" || $1 == id) { sub("terminal_", "", $2); print $2; exit }'
+}
+
+# Move your focus to pane PANE (in tab TAB, if given). zellij 0.45's
+# `focus-pane-id` from the command line does not move a client between panes of
+# a tab, but going to a tab, hiding the floating panes and `focus-next-pane`
+# do: so step until the client this runs for (the one on our own floating
+# pane, else the first) is on PANE. A few zellij calls per pane in the tab.
+focus_pane() {
+	local pane=$1 tab=${2:-} me=${ZELLIJ_PANE_ID:-} id cur i n=8 floats=""
+	id=$(client_of "$me")
+	[ -n "$tab" ] && zellij action go-to-tab-by-id "$tab" >/dev/null 2>&1
+	if list_panes; then
+		n=$(printf '%s' "$PANES" | jq -r --arg p "$pane" '
+			(map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id) as $t
+			| [.[] | select((.is_plugin | not) and .tab_id == $t)] | length + 2')
+		floats=" $(printf '%s' "$PANES" | jq -r '[.[] | select((.is_plugin | not) and .is_floating) | .id] | join(" ")') "
+	fi
+	for ((i = 0; i < n; i++)); do
+		cur=$(client_pane "$id")
+		[ "$cur" = "$pane" ] && return 0
+		case $floats in
+		*" $cur "*) zellij action toggle-floating-panes >/dev/null 2>&1 ;;
+		*) zellij action focus-next-pane >/dev/null 2>&1 ;;
+		esac
+	done
+	return 1
 }
 
 # Set or clear a Worktrunk branch marker in DIR, in the background.
 wt_marker() {
 	command -v wt >/dev/null 2>&1 || return 0
 	if [ -n "$2" ]; then
-		(wt -C "$1" config state marker set "$2") </dev/null >/dev/null 2>&1 &
+		wt -C "$1" config state marker set "$2" </dev/null >/dev/null 2>&1
 	else
-		(wt -C "$1" config state marker clear) </dev/null >/dev/null 2>&1 &
+		wt -C "$1" config state marker clear </dev/null >/dev/null 2>&1
 	fi
 }
 
-# Kept to one jq and one mv (plus git, nvim and zellij only when needed): the
-# hook runs on every agent event and must stay fast. Mode "async" is the
-# all-tools PostToolUse hook that runs in the background: it clears a
-# needs-you whose approved tool has finished, and after Bash follows the files
-# the command changed (or just reloads nvim).
-# Exits 10 when the agent has just started needing you (ring the bell).
-hook_run() {
-	local mode=$1 pane=$ZELLIJ_PANE_ID parsed J out moved=0 rc=0
-	local event cwd sid file prompt tool ntype now waiting_new key last_new agent bg_new bgdesc_new paths
-	local o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen o_marked o_marker o_proj
-	local o_bg o_bgdesc
-	local root="" d state ev_file="" start since waiting pending last seen marked marker proj mark_dir bg bgdesc
-	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR" || return
-	state_file "$pane"
-	lock
-	if [ -f "$SF" ]; then set -- --rawfile st "$SF"; else set -- --arg st ""; fi
-	parsed=$(jq -r "$@" "$JQ_HOOK") || {
-		drop_lock
-		return
-	}
-	IFS=$US read -r event cwd sid file prompt tool ntype now waiting_new key last_new agent bg_new bgdesc_new \
-		o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen \
-		o_marked o_marker o_proj o_bg o_bgdesc paths <<<"$parsed"
-	if [ -z "$event" ]; then
-		# Empty or eventless input: keep the stored state rather than blank it.
-		drop_lock
-		return
-	fi
-	NOW=$now
-
-	if [ "$mode" = async ]; then
-		read_nvim_pane "$pane"
-		if [ "$o_state" = needs-you ] && [ -n "$o_pending" ] && [ "$key" = "$o_pending" ]; then
-			# The tool you approved (or the question you answered) has finished.
-			async_write
-		else
-			drop_lock
+# Everything the hook does besides writing the state, in a background fork so
+# the agent never waits on nvim, zellij, git or Worktrunk.
+hook_bg() {
+	local out
+	# nvim first: following is what you see.
+	if [ -n "$NV" ]; then
+		if [ -n "$ev_file" ]; then
+			nvim_edit_event edit "$root" "$ev_file" "$tool"
+		elif [ "$root" != "$o_root" ]; then
+			json_str "$root" && nvim_event root ",\"root\":$J" "$root" ""
 		fi
-		if [ "$tool" = Bash ] && ! follow_bash_edits && [ -n "$NV" ]; then
-			nvim_checktime "$pane"
-		fi
-		return 0
+		[ "$state" != "$o_state" ] && nvim_state_event
 	fi
-
-	# A new Claude session in this pane (not a resume or compaction) starts
-	# afresh; otherwise the root is never reset to the start directory.
-	if [ -n "$sid" ] && [ "$sid" != "$o_sid" ]; then
-		o_cwd="" o_root="" o_file="" o_prompt="" o_state="" o_start="" o_since=""
-		o_waiting="" o_pending="" o_last="" o_seen=false o_proj="" o_bg="" o_bgdesc=""
+	if [ "$state" != "$o_state" ] || [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] ||
+		[ "$title" != "$o_title" ]; then
+		push_status
 	fi
-	# A subagent reports its own cwd: only the main agent's is tracked.
-	[ -n "$agent" ] && [ -n "$o_cwd" ] && cwd=$o_cwd
-	start=${o_start:-$cwd}
-	proj=$o_proj
-	if [ -z "$proj" ] && [ -n "${CLAUDE_PROJECT_DIR:-$start}" ]; then
-		proj=$(toplevel "${CLAUDE_PROJECT_DIR:-$start}") || proj=-
-	fi
-
-	# Where the agent is really working: the repo of the file it (or one of its
-	# subagents) just edited (the nearest existing parent, since new files may
-	# be in new directories)...
-	if [ "$event" = PostToolUse ] && [ -n "$file" ]; then
-		case $file in /*) ;; *) file="$cwd/$file" ;; esac
-		ev_file=$file
-		d=${file%/*}
-		while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
-		root=$(toplevel "${d:-/}") || root=""
-	fi
-	# ...else the repo of a new cwd, if it is another repo or worktree. Claude
-	# Code snaps cwd back to the start directory after any command that cd's
-	# outside it, and an agent looking around its own checkout may still be
-	# working in a worktree, so only the worktree tools move it back...
-	if [ -z "$root" ]; then
-		if [ "$cwd" != "$o_cwd" ]; then
-			case $tool in
-			EnterWorktree | ExitWorktree) moved=1 start=$cwd ;;
-			*)
-				if [ "$cwd" != "$start" ]; then
-					d=$(toplevel "$cwd") || d=$cwd
-					[ "$d" != "$proj" ] && moved=1
-				fi
-				;;
-			esac
-		fi
-		if [ $moved = 1 ] || [ -z "$o_root" ]; then
-			root=$(toplevel "$cwd") || root=$cwd
-		else
-			# ...else wherever it was before.
-			root=$o_root
-		fi
-	fi
-
-	waiting=$o_waiting pending=$o_pending bg=$o_bg bgdesc=$o_bgdesc
-	case $event in
-	PermissionRequest | PreToolUse)
-		# A permission dialog, or (PreToolUse on AskUserQuestion) a question.
-		state=needs-you waiting=$waiting_new pending=$key
-		;;
-	Notification)
-		# Only dialogs need you. The idle reminder Claude Code sends 60s after
-		# a turn ends means it is done; other notices leave the state alone.
-		# No type at all: assume it needs you.
-		case $ntype in
-		permission_prompt | elicitation_* | agent_needs_input | "")
-			state=needs-you
-			[ "$o_state" = needs-you ] && [ -n "$o_waiting" ] || waiting=$waiting_new
-			;;
-		idle_prompt | agent_completed)
-			state=done
-			[ "$o_state" = needs-you ] && state=needs-you
-			[ "${bg:-0}" -gt 0 ] && state=${o_state:-working}
-			;;
-		*) state=${o_state:-working} ;;
-		esac
-		;;
-	PostToolUse | PostToolUseFailure)
-		state=working
-		if [ "$o_state" = needs-you ] && [ -n "$o_pending" ] && [ "$key" != "$o_pending" ]; then
-			# Another tool finished while one still waits for you.
-			state=needs-you
-		fi
-		;;
-	StopFailure) state=needs-you waiting=$waiting_new pending="" ;;
-	Stop)
-		# Not done while background subagents work on: their reports wake it.
-		bg=$bg_new bgdesc=$bgdesc_new
-		state=done
-		[ "${bg:-0}" -gt 0 ] && state=working
-		;;
-	SessionStart) state=idle bg="" bgdesc="" ;;
-	SessionEnd) state=ended bg="" bgdesc="" ;;
-	UserPromptSubmit) state=working bg="" bgdesc="" ;;
-	*) state=working ;;
-	esac
-	[ "$state" = needs-you ] || waiting="" pending=""
-	[ "$o_state" != needs-you ] && [ "$state" = needs-you ] && rc=10
-	since=$o_since
-	if [ "$state" != "$o_state" ] || [ -z "$since" ]; then
-		since=$now seen=false
-	else
-		seen=$o_seen
-	fi
-	last=${last_new:-$o_last}
-	[ -n "$prompt" ] || prompt=$o_prompt
-	[ -n "$ev_file" ] && file=$ev_file || file=$o_file
-
-	# Worktrunk branch markers, like its own Claude Code plugin sets for the
-	# session's start directory, but on the worktree the agent is really in.
-	case $state in working) marker='🤖' ;; ended) marker='' ;; *) marker='💬' ;; esac
-	mark_dir=""
-	if [ "${WEAVER_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
-		mark_dir=$root
+	if [ -n "$NV" ] && [ "$root" != "$o_root" ] && same_root; then
+		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${root##*/}"
 	fi
 	if [ "$mark_dir" != "$o_marked" ] || { [ -n "$mark_dir" ] && [ "$marker" != "$o_marker" ]; }; then
 		[ -n "$o_marked" ] && [ "$o_marked" != "$mark_dir" ] && wt_marker "$o_marked" ""
 		[ -n "$mark_dir" ] && wt_marker "$mark_dir" "$marker"
 	fi
-	marked=$mark_dir
+	[ "$event" = SessionStart ] && gc_states quiet
+	hook_snapshots
+}
 
-	write_state
+# Is $root still the agent's root? A later hook may have moved it on while
+# this one waited in the background.
+same_root() {
+	local line="" re='"root":"([^"]*)"'
+	{ IFS= read -r line <"$STATE_DIR/${SKEY}_$pane.json"; } 2>/dev/null
+	[[ $line =~ $re ]] || return 0
+	[ "${BASH_REMATCH[1]}" = "$root" ]
+}
 
-	[ -n "$NV" ] || return $rc
-	if [ -n "$ev_file" ]; then
-		nvim_follow "$pane" "$root" "$ev_file"
-	elif [ "$root" != "$o_root" ]; then
-		nvim_follow "$pane" "$root" ""
+# Mark an agent seen (you looked at it), so a "done" no longer stands out.
+mark_seen() {
+	state_file "$1"
+	[ -f "$SF" ] || return 0
+	lock
+	if jq -c '.seen = true' "$SF" >|"$LOCK" 2>/dev/null; then commit_lock; else drop_lock; fi
+}
+
+# nvim_event EV MEMBERS [ROOT FILE] sends event EV (see docs/design.md) to the
+# agent's nvim: WeaverEvent, or AgentFollow / AgentChecktime on a weaver.lua
+# that predates it. Returns 0 on success, 128+ when nvim did not answer in time
+# (stuck at a prompt, or busy), and anything else when nothing is listening.
+#
+# With NOW set (the hook), a timeout is remembered: calls are skipped for 15s
+# so a stuck nvim costs one 2s wait per 15s, not one on every event.
+nvim_event() {
+	local ev=$1 extra=$2 r=${3:-} f=${4:-} stalled t=0 json compat rc jp js
+	sock_path "$pane"
+	[ -S "$SOCK" ] || return 1
+	stalled="$SOCK.stalled"
+	if [ -n "${NOW:-}" ] && [ -f "$stalled" ]; then
+		read -r t <"$stalled"
+		case $t in '' | *[!0-9]*) t=0 ;; esac
+		[ $((NOW - t)) -lt 15 ] && return 128
 	fi
-	if [ "$root" != "$o_root" ]; then
-		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${root##*/}"
+	json_str "$pane" && jp=$J
+	json_str "${sid:-}" && js=$J
+	json="{\"ev\":\"$ev\",\"seq\":${seq:-0},\"pane\":$jp,\"agent\":\"${agent_kind:-claude}\",\"sid\":$js"
+	json="$json,\"turn\":${turn:-0},\"state\":\"${state:-}\"$extra}"
+	case $ev in
+	edit | root | focus) compat="v:lua.AgentFollow('${r//\'/\'\'}','${f//\'/\'\'}')" ;;
+	checktime) compat="v:lua.AgentChecktime()" ;;
+	*) compat=0 ;;
+	esac
+	# The arguments are Vimscript expressions: in a single-quoted Vim string a
+	# quote is doubled and a backslash is literal.
+	bounded /dev/null nvim --server "$SOCK" --remote-expr \
+		"luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('${json//\'/\'\'}') : $compat"
+	rc=$?
+	if [ $rc -ge 128 ]; then
+		[ -n "${NOW:-}" ] && printf '%s\n' "$NOW" >"$stalled"
+	elif [ -f "$stalled" ]; then
+		rm -f "$stalled"
 	fi
 	return $rc
 }
 
-# The async hook's one change: needs-you back to working. Everything else is
-# carried over from the stored state.
-async_write() {
-	state=working since=$now seen=false waiting="" pending=""
-	cwd=$o_cwd root=$o_root start=$o_start sid=$o_sid file=$o_file prompt=$o_prompt
-	last=$o_last marked=$o_marked marker=$o_marker proj=$o_proj bg=$o_bg bgdesc=$o_bgdesc
-	write_state
+# nvim_edit_event EV ROOT FILE TOOL: an edit (or, from `weaver edit`, a focus)
+# at FILE in ROOT.
+nvim_edit_event() {
+	local ev=$1 r=$2 f=$3 x
+	json_str "$r" && x=",\"root\":$J"
+	json_str "$f" && x="$x,\"file\":$J"
+	json_str "${4:-}" && x="$x,\"tool\":$J"
+	[ -n "${aid:-}" ] && json_str "$aid" && x="$x,\"agent_id\":$J"
+	nvim_event "$ev" "$x" "$r" "$f"
 }
 
-# A Bash command that changed files (sed -i, a heredoc, a formatter) counts as
-# an edit: in the repos the command names and the one it ran in, find the
-# files git sees as changed since the previous Bash command, and follow the
-# newest. Returns 1 when nothing changed. GIT_OPTIONAL_LOCKS=0 keeps git
-# status off the index lock, so the agent's own git commands never collide.
+nvim_state_event() {
+	local x=""
+	json_str "${prompt:-}" && x=",\"prompt\":$J"
+	json_str "${waiting:-}" && x="$x,\"waiting\":$J"
+	json_str "${title:-}" && x="$x,\"title\":$J"
+	nvim_event state "$x"
+}
+
+# A Bash command or MCP tool that changed files (sed -i, a heredoc, a
+# formatter, an MCP write) counts as an edit: in the repos the command names,
+# the one it ran in and the agent's root, find the files git sees as changed
+# since the previous such call, and follow the newest. Returns 1 when nothing
+# changed. GIT_OPTIONAL_LOCKS=0 keeps git status off the index lock, so the
+# agent's own git commands never collide.
 follow_bash_edits() {
-	local stamp="$STATE_DIR/${SKEY}_$pane.bash" new p d r e roots="" n=0 newest="" IFS
+	local stamp="$STATE_DIR/${SKEY}_$pane.bash" new p d r e roots="" n=0 newest="" IFS x
 	local -a changed
 	new="$stamp.$$"
 	: >"$new" || return 1
@@ -472,14 +1040,15 @@ follow_bash_edits() {
 		mv -f "$new" "$stamp"
 		return 1
 	fi
-	IFS=$'\036'
+	IFS=$RS
 	set -f
-	for p in "$cwd" $paths; do
+	for p in "$cwd" "$root" $paths; do
 		case $p in /*) ;; *) continue ;; esac
 		d=$p
 		while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
 		[ -n "$d" ] || continue
-		r=$(toplevel "$d") || continue
+		find_top "$d" || continue
+		r=$TOP
 		case "$NL$roots" in *"$NL$r$NL"*) continue ;; esac
 		roots="$roots$r$NL"
 		n=$((n + 1))
@@ -495,82 +1064,252 @@ follow_bash_edits() {
 		done < <(GIT_OPTIONAL_LOCKS=0 git -C "$r" status --porcelain -z -uall 2>/dev/null)
 	done
 	set +f
+	IFS=$' \t\n'
 	if [ ${#changed[@]} -gt 0 ]; then
 		newest=$(find "${changed[@]}" -prune -type f -newer "$stamp" -exec ls -1t {} + 2>/dev/null | head -n 1)
 	fi
 	mv -f "$new" "$stamp"
-	[ -n "$newest" ] && r=$(toplevel "${newest%/*}") || return 1
+	[ -n "$newest" ] && file_top "$newest" || return 1
+	r=$TOP
 
 	state_file "$pane"
 	if [ -f "$SF" ]; then
 		lock
-		if jq --arg r "$r" --arg f "$newest" '.root = $r | .file = $f' "$SF" >"$LOCK"; then
+		if jq -c --arg r "$r" --arg f "$newest" --argjson t "${turn:-0}" \
+			'.root = $r | .file = $f | .files = (((.files // []) - [$f]) + [$f] | .[-200:])
+			| if $t > 0 and ((.turn_roots // []) | index([$r]) | not) then .turn_roots += [$r] else . end' \
+			"$SF" >|"$LOCK"; then
 			commit_lock
 		else
 			drop_lock
 		fi
 	fi
+	# A root first touched this turn starts its chain from HEAD.
+	case "$RS$turn_roots$RS" in
+	*"$RS$r$RS"*) ;;
+	*) [ "${turn:-0}" -gt 0 ] && [ -n "$sid" ] && (
+		SNAP_SID=$sid SNAP_PANE=$pane SNAP_PROMPT="" SNAP_PROMPT_ID=$prompt_id SNAP_TRANSCRIPT=$transcript
+		snap_roots base "$turn" "$r"
+	) ;;
+	esac
+	json_str "$newest" && x=",\"file\":$J"
+	if [ "$tool" = Bash ]; then
+		json_str "$cmd" && log_line bash ",\"cmd\":$J$x"
+	else
+		json_str "$tool" && x="$x,\"tool\":$J"
+		json_str "$r" && log_line edit "$x,\"root\":$J"
+	fi
 	[ -n "$NV" ] || return 0
-	nvim_follow "$pane" "$r" "$newest"
+	nvim_edit_event edit "$r" "$newest" "$tool"
 	if [ "$r" != "$o_root" ]; then
 		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${r##*/}"
 	fi
 	return 0
 }
 
-# Write the state file from the hook's variables (and release the lock).
-write_state() {
-	case $pane in '' | *[!0-9]*) json_str "$pane" ;; *) J=$pane ;; esac
-	out="{\"pane\":$J"
-	json_str "$cwd" && out="$out,\"cwd\":$J"
-	json_str "$root" && out="$out,\"root\":$J"
-	json_str "$start" && out="$out,\"start_cwd\":$J"
-	json_str "$proj" && out="$out,\"project_root\":$J"
-	out="$out,\"state\":\"$state\",\"ts\":${now:-0},\"since\":${since:-0}"
-	json_str "$sid" && out="$out,\"session_id\":$J"
-	json_str "$file" && out="$out,\"file\":$J"
-	json_str "$prompt" && out="$out,\"prompt\":$J"
-	json_str "$waiting" && out="$out,\"waiting\":$J"
-	json_str "$pending" && out="$out,\"pending\":$J"
-	json_str "$last" && out="$out,\"last_message\":$J"
-	[ "$seen" = true ] && out="$out,\"seen\":true" || out="$out,\"seen\":false"
-	json_str "$marked" && out="$out,\"marked_root\":$J"
-	json_str "$marker" && out="$out,\"marker\":$J"
-	case $bg in '' | *[!0-9]*) bg=0 ;; esac
-	json_str "$bgdesc" && out="$out,\"background\":$bg,\"background_tasks\":$J"
-	read_nvim_pane "$pane"
-	out="$out,\"nvim_pane\":${NV:-null}}"
-	if printf '%s\n' "$out" >"$LOCK"; then commit_lock; else drop_lock; fi
+# ---------------------------------------------------------------- snapshots
+
+# snapshot DIR REF POINT TURN KEY commits the worktree holding DIR onto REF
+# with CodeCompanion's recipe (docs/design.md): a private index (named by KEY)
+# so your staging area is never touched, a tree, a commit on the tip, and a
+# compare-and-swap update of REF. Point "base" commits HEAD's tree as the
+# start of a chain instead of reading the worktree. An "end" on top of an end
+# of the same turn replaces it (a turn that resumes after background work
+# ends once). Sets SNAP_COMMIT, and SNAP_NEW=1 when it made a commit; returns
+# 1 when DIR is not in a repo. Message fields come from SNAP_SID, SNAP_PANE,
+# SNAP_PROMPT, SNAP_PROMPT_ID and SNAP_TRANSCRIPT.
+snapshot() {
+	local dir=$1 ref=$2 point=$3 n=$4 key=$5 top gd idx real tree tip="" parent="" body="" subject
+	local lockd i=0 owner max big p msg label=$3
+	local -a excl
+	SNAP_COMMIT="" SNAP_NEW=""
+	top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 1
+	gd=$(git -C "$top" rev-parse --path-format=absolute --git-path weaver 2>/dev/null) || return 1
+	mkdir -p "$gd" || return 1
+	idx="$gd/index-$key"
+	# One snapshot of a chain at a time; a lock whose owner died is removed.
+	lockd="$idx.lock.d"
+	until mkdir "$lockd" 2>/dev/null; do
+		owner=""
+		{ read -r owner <"$lockd/pid"; } 2>/dev/null
+		if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+			rm -rf "$lockd"
+			continue
+		fi
+		i=$((i + 1))
+		[ $i -ge 600 ] && return 1
+		sleep 0.1
+	done
+	printf '%s\n' "$$" >"$lockd/pid"
+
+	tip=$(git -C "$top" rev-parse -q --verify "$ref^{commit}" 2>/dev/null)
+	if [ "$point" = base ]; then
+		label=start
+		# Only a chain that does not exist yet gets a base.
+		if [ -n "$tip" ] || ! tree=$(git -C "$top" rev-parse -q --verify 'HEAD^{tree}' 2>/dev/null); then
+			SNAP_COMMIT=$tip
+			rm -rf "$lockd"
+			return 0
+		fi
+	else
+		if [ ! -f "$idx" ]; then
+			real=$(git -C "$top" rev-parse --path-format=absolute --git-path index 2>/dev/null)
+			[ -f "$real" ] && cp "$real" "$idx" 2>/dev/null
+		fi
+		# Untracked files over WEAVER_SNAPSHOT_MAX_KB (5 MB) stay out: a
+		# download or a build artefact must not bloat the object store.
+		max=${WEAVER_SNAPSHOT_MAX_KB:-5120}
+		big=$(cd "$top" && git ls-files -z -o --exclude-standard 2>/dev/null |
+			xargs -0 sh -c 'find "$@" -prune -type f -size +'"$max"'k' sh 2>/dev/null)
+		excl=()
+		if [ -n "$big" ]; then
+			while IFS= read -r p; do
+				[ -n "$p" ] && excl[${#excl[@]}]=":(exclude,literal)${p#./}"
+			done <<<"$big"
+		fi
+		GIT_INDEX_FILE=$idx git -C "$top" add --all -- . ${excl[@]+"${excl[@]}"} >/dev/null 2>&1
+		tree=$(GIT_INDEX_FILE=$idx git -C "$top" write-tree 2>/dev/null) || {
+			rm -rf "$lockd"
+			return 1
+		}
+	fi
+	parent=$tip
+	if [ -n "$tip" ] && [ "$point" = end ] &&
+		git -C "$top" cat-file commit "$tip" 2>/dev/null | grep -qx "Weaver-Turn: $n" &&
+		git -C "$top" cat-file commit "$tip" 2>/dev/null | grep -qx 'Weaver-Point: end'; then
+		parent=$(git -C "$top" rev-parse -q --verify "$tip^" 2>/dev/null)
+	fi
+	if [ -n "$tip" ] && [ "$tree" = "$(git -C "$top" rev-parse "$tip^{tree}" 2>/dev/null)" ]; then
+		SNAP_COMMIT=$tip
+		rm -rf "$lockd"
+		return 0
+	fi
+
+	subject="weaver: turn $n $label"
+	[ "$point" = reviewed ] && subject="weaver: reviewed"
+	if [ -n "${SNAP_PROMPT:-}" ] && [ "$point" != reviewed ]; then
+		p=${SNAP_PROMPT:0:72}
+		[ ${#SNAP_PROMPT} -gt 72 ] && p="${SNAP_PROMPT:0:71}…"
+		subject="$subject: $p"
+		body="${SNAP_PROMPT:0:2000}$NL$NL"
+	fi
+	msg="$subject$NL$NL$body"
+	[ -n "${SNAP_SID:-}" ] && msg="${msg}Weaver-Session: $SNAP_SID$NL"
+	[ "$point" = reviewed ] || msg="${msg}Weaver-Turn: $n$NL"
+	msg="${msg}Weaver-Point: $label$NL"
+	[ -n "${SNAP_PANE:-}" ] && msg="${msg}Weaver-Pane: $SNAP_PANE$NL"
+	[ -n "${SNAP_PROMPT_ID:-}" ] && msg="${msg}Prompt-Id: $SNAP_PROMPT_ID$NL"
+	[ -n "${SNAP_TRANSCRIPT:-}" ] && msg="${msg}Transcript: $SNAP_TRANSCRIPT$NL"
+	SNAP_COMMIT=$(printf '%s' "$msg" | GIT_AUTHOR_NAME=weaver GIT_AUTHOR_EMAIL=weaver@localhost \
+		GIT_COMMITTER_NAME=weaver GIT_COMMITTER_EMAIL=weaver@localhost \
+		git -C "$top" commit-tree "$tree" ${parent:+-p "$parent"} 2>/dev/null) &&
+		git -C "$top" update-ref -m "$subject" "$ref" "$SNAP_COMMIT" "$tip" 2>/dev/null &&
+		SNAP_NEW=1
+	[ -n "$SNAP_NEW" ] || SNAP_COMMIT=$tip
+	rm -rf "$lockd"
+	return 0
 }
 
-# Mark an agent seen (you jumped to it), so a "done" no longer stands out.
-mark_seen() {
-	state_file "$1"
-	[ -f "$SF" ] || return 0
-	lock
-	if jq '.seen = true' "$SF" >"$LOCK"; then commit_lock; else drop_lock; fi
+# snap_roots POINT TURN ROOTS: snapshot each root (RS-separated) onto the
+# session's chain; log and tell nvim about each new commit.
+snap_roots() {
+	local point=$1 turn=$2 r x seen=$RS
+	local -a roots
+	local IFS=$RS
+	set -f
+	roots=($3)
+	set +f
+	IFS=$' \t\n'
+	for r in ${roots[@]+"${roots[@]}"}; do
+		[ -d "$r" ] || continue
+		case $seen in *"$RS$r$RS"*) continue ;; esac
+		seen="$seen$r$RS"
+		snapshot "$r" "refs/worktree/weaver/sessions/$sid" "$point" "$turn" "$sid" || continue
+		[ -n "$SNAP_NEW" ] || continue
+		[ "$point" = base ] && point=start
+		json_str "$r" && x=",\"root\":$J"
+		x="$x,\"commit\":\"$SNAP_COMMIT\",\"point\":\"$point\""
+		log_line snapshot "$x"
+		[ -n "$NV" ] && nvim_event snapshot "$x,\"ref\":\"refs/worktree/weaver/sessions/$sid\""
+	done
+}
+
+# The turn's snapshots, from the hook's background fork.
+hook_snapshots() {
+	[ "${WEAVER_SNAPSHOTS:-1}" != 0 ] && [ -n "$sid" ] || return 0
+	local SNAP_SID=$sid SNAP_PANE=$pane SNAP_PROMPT SNAP_PROMPT_ID=$prompt_id SNAP_TRANSCRIPT=$transcript
+	if [ -n "$snap_prev" ]; then
+		SNAP_PROMPT=$prev_prompt SNAP_PROMPT_ID=$o_promptid
+		snap_roots end "$snap_prev" "$o_turn_roots"
+		SNAP_PROMPT_ID=$prompt_id
+	fi
+	if [ -n "$snap_start" ]; then
+		# The agent's root, and the roots of its previous turn: changes made
+		# there since are not this turn's.
+		SNAP_PROMPT=$prompt_long
+		snap_roots start "$turn" "$root$RS$o_turn_roots"
+	fi
+	if [ -n "$first_touch" ]; then
+		SNAP_PROMPT=""
+		snap_roots base "$turn" "$first_touch"
+	fi
+	if [ -n "$snap_end" ]; then
+		SNAP_PROMPT=$turn_prompt
+		snap_roots end "$turn" "$turn_roots${turn_roots:+$RS}$root"
+	fi
+	return 0
+}
+
+# weaver snapshot --reviewed [DIR]: mark the worktree holding DIR reviewed.
+cmd_snapshot() {
+	local dir=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--reviewed) ;;
+		-*) die "usage: weaver snapshot --reviewed [dir]" ;;
+		*) dir=$1 ;;
+		esac
+		shift
+	done
+	dir=${dir:-$PWD}
+	git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1 || die "$dir is not in a git repository"
+	snapshot "$dir" refs/worktree/weaver/reviewed reviewed 0 reviewed || die "cannot snapshot $dir"
+	[ -n "$SNAP_COMMIT" ] || die "cannot snapshot $dir"
+	printf '%s\n' "$SNAP_COMMIT"
 }
 
 # ---------------------------------------------------------------- nvim
 
 cmd_nvim() {
 	[ $# -ge 1 ] || die "usage: weaver nvim <agent-pane-id> [file]"
-	local agent=${1#terminal_} file=${2:-} lua
+	local agent=${1#terminal_} file=${2:-} lua dir rc
 	need_session
 	mkdir -p "$SOCK_DIR" || die "cannot create $SOCK_DIR"
 	[ -O "$SOCK_DIR" ] || die "$SOCK_DIR is not owned by you"
 	chmod 700 "$SOCK_DIR"
 	sock_path "$agent"
-	rm -f "$SOCK"
+	# Never take the socket of an nvim still serving this agent (answering, or
+	# alive but busy): go to it instead, and let this pane close.
+	if [ -S "$SOCK" ]; then
+		bounded /dev/null nvim --server "$SOCK" --remote-expr 1
+		rc=$?
+		if [ $rc = 0 ] || [ $rc -ge 128 ]; then
+			read_nvim_pane "$agent"
+			[ -n "$NV" ] && [ "$NV" != "${ZELLIJ_PANE_ID:-}" ] && focus_pane "$NV"
+			exit 0
+		fi
+	fi
+	rm -f "$SOCK" "$SOCK.stalled"
 
 	state_file "$agent"
 	nvim_file "$agent"
 	if [ -n "${ZELLIJ_PANE_ID:-}" ]; then
 		mkdir -p "$STATE_DIR"
-		printf '%s\n' "$ZELLIJ_PANE_ID" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
+		# exec keeps this pid for nvim.
+		printf '%s\n%s\n' "$ZELLIJ_PANE_ID" "$$" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
 		if [ -f "$SF" ]; then
 			lock
-			if jq --arg nv "$ZELLIJ_PANE_ID" '.nvim_pane = ($nv | tonumber? // $nv)' "$SF" >"$LOCK"; then
+			if jq -c --arg nv "$ZELLIJ_PANE_ID" '.nvim_pane = ($nv | tonumber? // $nv)' "$SF" >|"$LOCK"; then
 				commit_lock
 			else
 				drop_lock
@@ -578,7 +1317,9 @@ cmd_nvim() {
 		fi
 	fi
 
-	lua="$(script_dir)/nvim/weaver.lua"
+	dir=$(script_dir)
+	export WEAVER_PANE=$agent WEAVER_STATE=$SF WEAVER_BIN="$dir/weaver"
+	lua="$dir/nvim/weaver.lua"
 	# The ATTENTION dialog for a stale swap file would block this nvim and every
 	# remote call: open the startup file read-only instead (weaver.lua reports
 	# it and removes this autocmd).
@@ -590,17 +1331,43 @@ cmd_nvim() {
 # ---------------------------------------------------------------- edit
 
 # Open a new pane running CMD... beside pane TARGET, then move it to the left.
+# The new pane's id goes into NEWPANE.
 open_left_of() {
-	local target=$1 cwd=$2 name=$3 id
+	local target=$1 cwd=$2 name=$3
 	shift 3
-	zellij action focus-pane-id "terminal_$target" >/dev/null 2>&1 || true
-	id=$(zellij action new-pane --direction right --close-on-exit --cwd "$cwd" --name "$name" -- "$@") ||
+	focus_pane "$target"
+	NEWPANE=$(zellij action new-pane --direction right --close-on-exit --cwd "$cwd" --name "$name" -- "$@") ||
 		die "zellij action new-pane failed"
-	zellij action move-pane ${id:+--pane-id "$id"} left || true
+	zellij action move-pane ${NEWPANE:+--pane-id "$NEWPANE"} left || true
+	NEWPANE=${NEWPANE#terminal_}
 }
 
+# One `weaver edit` per agent at a time, so pressing Alt v twice finds the
+# nvim the first press is opening rather than open a second. A lock older
+# than 5s was left by a killed process.
+edit_lock() {
+	local d="$STATE_DIR/${SKEY}_$1.opening" i=0 t now
+	mkdir -p "$STATE_DIR"
+	EDIT_LOCK=$d
+	until mkdir "$d" 2>/dev/null; do
+		t=0
+		{ read -r t <"$d/at"; } 2>/dev/null
+		now=$(date +%s)
+		case $t in '' | *[!0-9]*) t=$now ;; esac
+		if [ $((now - t)) -gt 5 ]; then
+			rm -rf "$d"
+			continue
+		fi
+		i=$((i + 1))
+		[ $i -ge 60 ] && break
+		sleep 0.1
+	done
+	date +%s >"$d/at" 2>/dev/null
+}
+edit_unlock() { rm -rf "$EDIT_LOCK"; }
+
 cmd_edit() {
-	local full=0 target="" panes agent="" info root file nv cwd rc f p d
+	local full=0 target="" agent="" info root file nv cwd f p d sid turn state
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--full) full=1 ;;
@@ -610,17 +1377,11 @@ cmd_edit() {
 		shift
 	done
 	need_session
-	list_panes
-	panes=$PANES
+	list_panes || die "zellij action list-panes failed"
 
-	# The tiled pane we were on keeps is_focused while this floating pane is
-	# open, but is_focused is per tab, so look only in our own tab.
 	if [ -z "$target" ]; then
-		target=$(printf '%s' "$panes" | jq -r --arg me "${ZELLIJ_PANE_ID:-}" '
-			map(select(.is_plugin | not)) as $t
-			| ($t | map(select((.id | tostring) == $me)) | .[0].tab_id) as $tab
-			| $t | map(select(.tab_id == $tab and .is_focused and (.is_floating | not)
-				and (.id | tostring) != $me)) | .[0].id // empty')
+		focused_pane
+		target=$FOCUSED
 		[ -n "$target" ] || die "cannot find the focused pane"
 	fi
 
@@ -641,18 +1402,16 @@ cmd_edit() {
 	fi
 
 	if [ -z "$agent" ]; then
-		cwd=$(printf '%s' "$panes" | jq -r --arg p "$target" \
+		cwd=$(printf '%s' "$PANES" | jq -r --arg p "$target" \
 			'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].pane_cwd // empty')
 		[ -d "$cwd" ] || cwd=$PWD
 		open_left_of "$target" "$cwd" "nvim: ${cwd##*/}" nvim
 	else
 		mark_seen "$agent"
 		state_file "$agent"
-		info=$(jq -r '[.root // .cwd // "", .file // ""] | map(tostring) | join("\u001f")' "$SF") ||
-			die "cannot read $SF"
-		IFS=$US read -r root file <<<"$info"
-		read_nvim_pane "$agent"
-		nv=$NV
+		info=$(jq -r '[.root // .cwd // "", .file // "", .session_id // "", .turn // 0, .state // ""]
+			| map(tostring) | join("\u001f")' "$SF") || die "cannot read $SF"
+		IFS=$US read -r root file sid turn state <<<"$info"
 		[ -d "$root" ] || root=$PWD
 		# git gives the root as a real path; the agent may have used a symlinked
 		# one (/tmp vs /private/tmp on macOS), so compare real paths.
@@ -661,52 +1420,297 @@ cmd_edit() {
 		fi
 		case $file in "$root"/*) [ -e "$file" ] || file="" ;; *) file="" ;; esac
 
-		# Reuse the agent's nvim if its pane is alive and nvim answers. One that
-		# timed out is alive but stuck (e.g. at a hit-enter prompt): jump to it
-		# rather than open a second nvim for the same agent.
-		rc=1
+		edit_lock "$agent"
+		# Fresh, now that no other press is opening an nvim for this agent.
+		[ "$EDIT_LOCK" ] && list_panes
+		read_nvim_pane "$agent"
+		nv=$NV
+		# Reuse the agent's nvim while its pane is alive, even when nvim does
+		# not answer (still starting, or stuck at a prompt): never a second one.
 		if [ -n "$nv" ] &&
-			printf '%s' "$panes" | jq -e --arg p "$nv" \
+			printf '%s' "$PANES" | jq -e --arg p "$nv" \
 				'any(.[]; (.is_plugin | not) and (.id | tostring) == $p and (.exited | not))' >/dev/null; then
-			nvim_follow "$agent" "$root" "$file"
-			rc=$?
-		fi
-		if [ $rc = 0 ] || [ $rc -ge 128 ]; then
-			zellij action focus-pane-id "terminal_$nv" >/dev/null 2>&1 || true
+			edit_unlock
+			pane=$agent aid="" seq=$(jq -n 'now * 1000 | floor') agent_kind=claude
+			nvim_edit_event focus "$root" "$file" ""
+			focus_pane "$nv"
 		else
 			open_left_of "$agent" "$root" "nvim: ${root##*/}" "$SELF" nvim "$agent" ${file:+"$file"}
+			read_nvim_pane "$agent"
+			if [ -n "$NEWPANE" ] && [ "$NV" != "$NEWPANE" ]; then
+				nvim_file "$agent"
+				printf '%s\n\n' "$NEWPANE" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
+			fi
+			edit_unlock
 		fi
 	fi
 	[ $full = 1 ] && zellij action toggle-fullscreen
 	return 0
 }
 
-# ---------------------------------------------------------------- ls
+# ---------------------------------------------------------------- agents
 
-# Live agents in this session, one US-separated line each: pane, tab, state,
-# root, ts, since, seen, prompt, waiting, background. Also prints "gc<US>file"
-# for state files whose pane no longer exists.
+# The Claude Code sessions running on this machine, from their
+# ~/.claude/sessions/<pid>.json files (read without a spawn each), as a JSON
+# array in CLAUDE_LIVE. Undocumented, so used only to refine the hooks' state;
+# a missing or unreadable directory just means no refinement.
+claude_live() {
+	local f line lines=""
+	CLAUDE_LIVE="[]"
+	for f in "$CLAUDE_DIR"/sessions/*.json; do
+		[ -f "$f" ] || continue
+		line=""
+		{ IFS= read -r line <"$f"; } 2>/dev/null
+		lines="$lines$line$NL"
+	done
+	[ -n "$lines" ] || return 0
+	CLAUDE_LIVE=$(printf '%s' "$lines" | jq -cRn '[inputs | try fromjson catch empty | objects
+		| {pid, sessionId, status, statusUpdatedAt, waitingFor, procStart}]' 2>/dev/null) || CLAUDE_LIVE="[]"
+	[ -n "$CLAUDE_LIVE" ] || CLAUDE_LIVE="[]"
+}
+
+# Every state file in this session, as US-separated rows: pane, tab, state,
+# root, since, seen, prompt, waiting, background, title, subagents, pid,
+# proc_start, state file. A state is refined by the agent's Claude Code session
+# file when that is newer: a dialog you already answered (a long tool you
+# approved) shows as working, a dialog the hooks missed as needs-you, and an
+# agent stopped with Esc (which fires no hook) as interrupted. Rows "gone"
+# (pane no longer listed) and "corrupt" (unreadable) carry the file instead.
 JQ_ROWS='
 ($panes | map(select(.is_plugin | not))) as $all
 | ($all | map({key: (.id | tostring), value: .}) | from_entries) as $byid
-| inputs as $s
-| ($byid[$s.pane | tostring]) as $p
-| if $p == null then ["gc", input_filename]
-  elif ($p.exited or $s.state == "ended") then empty
-  else [$s.pane, $p.tab_id, $s.state, ($s.root // $s.cwd // ""), ($s.ts // 0),
-        ($s.since // $s.ts // 0), ($s.seen // false), ($s.prompt // ""), ($s.waiting // ""),
-        ($s.background // 0)]
+| ($claude | map({key: (.pid | tostring), value: .}) | from_entries) as $live
+| (reduce inputs as $l ({}; .[input_filename] += $l + "\n")) | to_entries[]
+| .key as $f
+| (try (.value | fromjson) catch null) as $s
+| if ($s | type) != "object" then ["corrupt", $f]
+  else ($byid[$s.pane | tostring]) as $p
+  | if $p == null then ["gone", $f, ($s.pid // ""), ($s.proc_start // ""), ($s.state // "")]
+    elif $p.exited or $s.state == "ended" then empty
+    else
+      ($live[($s.pid // "") | tostring]) as $c0
+      | (if $c0 != null and ($c0.sessionId // "") == ($s.session_id // "") then $c0 else null end) as $c
+      | ((($c.statusUpdatedAt // 0) / 1000) | floor) as $cu
+      | ($s.state // "idle") as $st0
+      | (if $c == null then $st0
+         elif $st0 == "needs-you" and $c.status == "busy" and $cu > ($s.since // 0) then "working"
+         elif ($st0 != "needs-you") and $c.status == "waiting" and $cu >= ($s.ts // 0) then "needs-you"
+         elif $st0 == "working" and $c.status == "idle" and (($s.background // 0) == 0)
+              and $cu > ($s.ts // 0) and ($now - $cu) > 3 then "interrupted"
+         else $st0 end) as $st
+      | [$s.pane, $p.tab_id, $st, ($s.root // $s.cwd // ""),
+         (if $st == $st0 then ($s.since // $s.ts // 0) else $cu end),
+         ($s.seen // false), ($s.prompt // ""),
+         (if $st == "needs-you" and $st0 != "needs-you" then ($c.waitingFor // "input") else ($s.waiting // "") end),
+         ($s.background // 0), ($s.title // ""), (($s.subagents // []) | length),
+         ($s.pid // ""), ($s.proc_start // ""), $f]
+    end
   end
 | map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")'
 
-# The agents as JQ_ROWS lines, into AGENT_ROWS (gc lines included).
+# Is our list of panes the whole truth? Only when it includes the pane we run
+# in (or we run outside a pane): never garbage-collect on a partial answer.
+panes_trusted() {
+	[ -n "$PANES" ] || return 1
+	[ -n "${ZELLIJ_PANE_ID:-}" ] || return 0
+	printf '%s' "$PANES" | jq -e --arg me "$ZELLIJ_PANE_ID" \
+		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me)' >/dev/null 2>&1
+}
+
+# Remove the files of the agent whose state file is $1 (its activity log stays).
+# Only if its pid is still $2 (empty: none recorded) when we hold its lock: a
+# hook may have just given the pane to a new agent.
+forget() {
+	local b=${1%.json} line="" re='"pid":([0-9]+)' now_pid="" SF=$1 LOCK
+	[ -f "$1" ] || return 0
+	lock
+	{ IFS= read -r line <"$1"; } 2>/dev/null
+	[[ $line =~ $re ]] && now_pid=${BASH_REMATCH[1]}
+	if [ "$now_pid" != "${2:-}" ]; then
+		drop_lock
+		return 0
+	fi
+	rm -f "$1" "$b.nvim" "$b.bash" "$b.prompt"
+	rm -rf "$b.opening"
+	drop_lock
+}
+
+# The live agents of this session as JQ_ROWS lines, into AGENT_ROWS; the files
+# of agents that are gone (pane closed, or process dead) are removed.
 agent_rows() {
+	local rows line kind f pid start st trusted=0 now
 	AGENT_ROWS=""
 	session_files json
 	[ ${#FOUND[@]} -gt 0 ] || return 0
-	list_panes
-	AGENT_ROWS=$(jq -rn --argjson panes "$PANES" "$JQ_ROWS" "${FOUND[@]}") || AGENT_ROWS=""
+	list_panes || return 0
+	panes_trusted && trusted=1
+	claude_live
+	now=$(date +%s)
+	# A file removed meanwhile (an agent cleaned up) makes jq fail at the end,
+	# after it has printed the others: keep them.
+	rows=$(jq -rRn --argjson panes "$PANES" --argjson claude "$CLAUDE_LIVE" --argjson now "$now" \
+		"$JQ_ROWS" "${FOUND[@]}" 2>/dev/null)
+	while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		case $line in
+		corrupt"$US"*) continue ;;
+		gone"$US"*)
+			IFS=$US read -r kind f pid start st <<<"$line"
+			[ $trusted = 1 ] || continue
+			agent_alive "$pid" "$start" && [ -n "$pid" ] && [ "$st" != ended ] && continue
+			forget "$f" "$pid"
+			;;
+		*)
+			IFS=$US read -r _ _ _ _ _ _ _ _ _ _ _ pid start f <<<"$line"
+			if [ -n "$pid" ] && ! agent_alive "$pid" "$start"; then
+				# Killed without a SessionEnd: it is not coming back.
+				forget "$f" "$pid"
+				continue
+			fi
+			AGENT_ROWS="$AGENT_ROWS$line$NL"
+			;;
+		esac
+	done <<EOF2
+$rows
+EOF2
 }
+
+# Across every session: remove the state of agents whose process is gone,
+# ended agents after an hour, sessions that no longer exist (state from before
+# pids were recorded), stale nvim files and month-old activity logs.
+gc_states() {
+	local f line pid start st ts sessions="" re_p='"pid":([0-9]+)' re_t='"proc_start":"([^"]*)"'
+	local re_s='"state":"([a-z-]+)"' re_ts='"ts":([0-9]+)' now base skey
+	now=$(date +%s)
+	for f in "$STATE_DIR"/*_*.json; do
+		[ -f "$f" ] || continue
+		line="" pid="" start="" st="" ts=0
+		{ IFS= read -r line <"$f"; } 2>/dev/null
+		[[ $line =~ $re_p ]] && pid=${BASH_REMATCH[1]}
+		[[ $line =~ $re_t ]] && start=${BASH_REMATCH[1]}
+		[[ $line =~ $re_s ]] && st=${BASH_REMATCH[1]}
+		[[ $line =~ $re_ts ]] && ts=${BASH_REMATCH[1]}
+		if [ -n "$pid" ]; then
+			agent_alive "$pid" "$start" || {
+				forget "$f" "$pid"
+				continue
+			}
+		else
+			base=${f##*/}
+			skey=${base%_*}
+			if [ -z "$sessions" ]; then
+				sessions=$NL$(zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g')$NL
+			fi
+			case $sessions in
+			"$NL$NL") ;; # zellij did not answer: keep everything
+			*"$NL$skey$NL"*) ;;
+			*)
+				forget "$f" ""
+				continue
+				;;
+			esac
+		fi
+		[ "$st" = ended ] && [ $((now - ts)) -gt 3600 ] && forget "$f" "$pid"
+	done
+	for f in "$STATE_DIR"/*_*.nvim; do
+		[ -f "$f" ] || continue
+		[ -f "${f%.nvim}.json" ] && continue
+		pid=""
+		{ read -r _ && read -r pid; } <"$f" 2>/dev/null
+		[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || rm -f "$f"
+	done
+	[ -d "$LOG_DIR" ] && find "$LOG_DIR" -name '*.jsonl' -mtime +30 -exec rm -f {} + 2>/dev/null
+	[ "${1:-}" = quiet ] || echo "weaver: cleaned up"
+	return 0
+}
+
+# ---------------------------------------------------------------- status
+
+# Counts for the status bar, into N_NEED (needs you), N_DONE (done, not yet
+# seen) and N_WORK (working). Pure bash over the state files: no jq, and zellij
+# only to see which panes you are looking at (those count as seen).
+status_counts() {
+	local f line st seen pid pane re_s='"state":"([a-z-]+)"' re_p='"pid":([0-9]+)' re_n='"seen":true'
+	local re_c='"status":"([a-z]+)"' cs clients
+	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW=""
+	session_files json
+	[ ${#FOUND[@]} -gt 0 ] || return 0
+	clients=" "
+	[ "${1:-}" = mark ] &&
+		clients=" $(zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }')"
+	for f in "${FOUND[@]}"; do
+		line="" st="" pid="" seen=""
+		{ IFS= read -r line <"$f"; } 2>/dev/null
+		[[ $line =~ $re_s ]] && st=${BASH_REMATCH[1]}
+		[[ $line =~ $re_p ]] && pid=${BASH_REMATCH[1]}
+		[[ $line =~ $re_n ]] && seen=1
+		[ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null && continue
+		# Claude Code's own status, when newer, settles a dialog already answered.
+		if [ -n "$pid" ] && [ -f "$CLAUDE_DIR/sessions/$pid.json" ]; then
+			cs=""
+			{ IFS= read -r cs <"$CLAUDE_DIR/sessions/$pid.json"; } 2>/dev/null
+			if [[ $cs =~ $re_c ]]; then
+				case $st:${BASH_REMATCH[1]} in
+				needs-you:busy) st=working ;;
+				working:waiting | done:waiting) st=needs-you ;;
+				esac
+			fi
+		fi
+		pane=${f##*_}
+		pane=${pane%.json}
+		case $st in
+		needs-you) N_NEED=$((N_NEED + 1)) ;;
+		working) N_WORK=$((N_WORK + 1)) ;;
+		done)
+			[ -n "$seen" ] && continue
+			case $clients in
+			*" $pane "*) SEEN_NOW="$SEEN_NOW $pane" ;;
+			*) N_DONE=$((N_DONE + 1)) ;;
+			esac
+			;;
+		esac
+	done
+}
+
+# The status text, plain.
+status_text() {
+	STATUS=""
+	[ $N_NEED -gt 0 ] && STATUS="$STATUS! $N_NEED  "
+	[ $N_DONE -gt 0 ] && STATUS="${STATUS}✓ $N_DONE  "
+	[ $N_WORK -gt 0 ] && STATUS="${STATUS}● $N_WORK  "
+	STATUS=${STATUS%  }
+}
+
+# Keep the counts zjstatus shows (weaver status --zjstatus) and reload any
+# open dashboard. Agents you are looking at count as seen.
+push_status() {
+	local p s
+	status_counts mark
+	for p in $SEEN_NOW; do mark_seen "$p"; done
+	mkdir -p "$STATE_DIR"
+	printf '%s %s %s\n' "$N_NEED" "$N_DONE" "$N_WORK" >"$STATE_DIR/$SKEY.status.$$" &&
+		mv -f "$STATE_DIR/$SKEY.status.$$" "$STATE_DIR/$SKEY.status"
+	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
+		[ -S "$s" ] || continue
+		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $(printf '%q' "$SELF") _rows)+refresh-preview" \
+			http://localhost >/dev/null 2>&1 || rm -f "$s"
+	done
+	return 0
+}
+
+cmd_status() {
+	need_session
+	case ${1:-} in
+	--push) push_status ;;
+	*)
+		status_counts
+		status_text
+		printf '%s\n' "$STATUS"
+		;;
+	esac
+}
+
+# ---------------------------------------------------------------- ls
 
 # repo/branch and "N files (M new)" for ROOT, into REPO_BRANCH and FILES.
 git_info() {
@@ -727,9 +1731,9 @@ git_info() {
 		"1 A"* | "2 A"*) n=$((n + 1)) m=$((m + 1)) ;;
 		[12u]" "*) n=$((n + 1)) ;;
 		esac
-	done <<EOF
+	done <<EOF2
 $(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain=v2 --branch 2>/dev/null)
-EOF
+EOF2
 	REPO_BRANCH="$repo/${branch:-?}"
 	if [ $n = 1 ]; then FILES="1 file"; else FILES="$n files"; fi
 	[ $m -gt 0 ] && FILES="$FILES ($m new)"
@@ -742,41 +1746,31 @@ age() {
 		AGE="${1}s"
 	elif [ "$1" -lt 3600 ]; then
 		AGE="$(($1 / 60))m"
-	else
+	elif [ "$1" -lt 172800 ]; then
 		AGE="$(($1 / 3600))h"
+	else
+		AGE="$(($1 / 86400))d"
 	fi
 }
 
-# Claude Code shows "esc to interrupt" while it works. A "working" agent that
-# has been quiet for 30s without it was most likely interrupted with Esc, which
-# fires no Stop hook.
-interrupted() {
-	zellij action dump-screen --pane-id "terminal_$1" 2>/dev/null | grep -q 'esc to interrupt' && return 1
-	return 0
-}
-
 # Rows for the dashboard: pane<TAB>tab<TAB>display, best first, after a header
-# row; ANSI colours when COLOR=1. Prints nothing when there are no agents.
-# Order: needs you (longest waiting first), done and not yet seen, done,
-# working, interrupted, idle.
+# row; Micrographics colours when COLOR=1. Prints nothing when there are no
+# agents. Order: needs you (longest waiting first), done and not yet seen,
+# done, working, interrupted, idle.
 ls_rows() {
-	local now pane tab state root ts since seen prompt waiting bg icon text rank sortkey w=11 i n=0
-	local red="" green="" dim="" off=""
-	local -a k_rank k_key k_pane k_tab k_icon k_rb k_age k_files k_text
-	[ "${COLOR:-}" = 1 ] && red=$'\033[31m' green=$'\033[32m' dim=$'\033[2m' off=$'\033[0m'
+	local now pane tab state root since seen prompt waiting bg title nsub icon text rank sortkey w=11 i n=0
+	local red="" green="" grey="" dim="" off="" roots=$NL
+	local -a k_rank k_key k_pane k_tab k_icon k_rb k_age k_files k_text k_root
+	[ "${COLOR:-}" = 1 ] && red=$C_RED green=$C_GREEN grey=$C_GREY dim=$C_DIM off=$C_OFF
 	agent_rows
 	[ -n "$AGENT_ROWS" ] || return 0
 	now=$(date +%s)
-	while IFS=$US read -r pane tab state root ts since seen prompt waiting bg; do
+	while IFS=$US read -r pane tab state root since seen prompt waiting bg title nsub _; do
 		[ -n "$pane" ] || continue
-		if [ "$pane" = gc ]; then
-			rm -f "$tab" "${tab%.json}.nvim" "${tab%.json}.bash"
-			continue
-		fi
 		case $bg in '' | *[!0-9]*) bg=0 ;; esac
-		# An agent waiting on background subagents shows no "esc to interrupt".
-		[ "$state" = working ] && [ "$bg" = 0 ] && [ $((now - ts)) -gt 30 ] && interrupted "$pane" && state=interrupted
+		case $nsub in '' | *[!0-9]*) nsub=0 ;; esac
 		text=$prompt
+		[ -n "$title" ] && text="$title${prompt:+ · $prompt}"
 		case $state in
 		needs-you) rank=0 icon="${red}!${off}" text="${red}${waiting:-$prompt}${off}" ;;
 		done)
@@ -788,28 +1782,35 @@ ls_rows() {
 			;;
 		working)
 			rank=3 icon='●'
-			[ "$bg" = 0 ] || text="${dim}${bg} in background ·${off} $prompt"
+			if [ "$bg" != 0 ]; then
+				text="${grey}${bg} in background ·${off} $text"
+			elif [ "$nsub" != 0 ]; then
+				text="${grey}${nsub} subagent$([ "$nsub" = 1 ] || echo s) ·${off} $text"
+			fi
 			;;
-		interrupted) rank=4 icon='○' text="interrupted? $prompt" ;;
+		interrupted) rank=4 icon="${grey}○${off}" text="${grey}interrupted ·${off} $text" ;;
 		*) rank=5 icon="${dim}○${off}" ;;
 		esac
 		git_info "$root"
 		age $((now - since))
 		sortkey=$REPO_BRANCH
 		[ $rank = 0 ] && sortkey=$(printf '%012d' "$since")
-		k_rank[n]=$rank k_key[n]=$sortkey k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon
+		k_rank[n]=$rank k_key[n]=$sortkey k_pane[n]=$pane k_tab[n]=$tab k_icon[n]=$icon k_root[n]=$root
 		k_rb[n]=$REPO_BRANCH k_files[n]=$FILES k_text[n]=$text k_age[n]=$AGE
+		case $roots in *"$NL$root$NL"*) roots="$roots$root$NL$root$NL" ;; *) roots="$roots$root$NL" ;; esac
 		[ ${#REPO_BRANCH} -gt $w ] && w=${#REPO_BRANCH}
 		n=$((n + 1))
-	done <<EOF
+	done <<EOF2
 $AGENT_ROWS
-EOF
+EOF2
 	[ $n -gt 0 ] || return 0
 	[ $w -gt 48 ] && w=48
 	i=0
 	{
-		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "LAST PROMPT / WAITING ON"
+		printf -- '-1\t\t-\t-\t   %-*s  %5s  %-16s  %s\n' "$w" "REPO/BRANCH" "AGE" "FILES" "TITLE · LAST PROMPT / WAITING ON"
 		while [ $i -lt $n ]; do
+			# Two agents in one worktree mix their per-turn diffs: say so.
+			case $roots in *"$NL${k_root[i]}$NL${k_root[i]}$NL"*) k_text[i]="${grey}[shared worktree]${off} ${k_text[i]}" ;; esac
 			printf '%s\t%s\t%s\t%s\t%s  %-*.*s  %5s  %-16s  %s\n' "${k_rank[i]}" "${k_key[i]}" \
 				"${k_pane[i]}" "${k_tab[i]}" "${k_icon[i]}" "$w" "$w" "${k_rb[i]}" \
 				"${k_age[i]}" "${k_files[i]}" "${k_text[i]}"
@@ -818,33 +1819,52 @@ EOF
 	} | sort -t "$TAB" -k1,1n -k2,2 | cut -f3-
 }
 
+# The resume card: what the agent was asked, what it waits on, what it last
+# said, its tasks, subagents and files, then its worktree and screen.
 cmd_preview() {
-	local pane=${1#terminal_} info root state waiting prompt last bgdesc
+	local pane=${1#terminal_} root
 	pane=${pane%%[!0-9]*}
 	state_file "$pane"
-	info=$(jq -r '[.root // .cwd // "", .state // "", .waiting // "", .prompt // "", .last_message // "",
-		(if .state == "working" then .background_tasks // "" else "" end)]
-		| map(tostring) | join("\u001f")' "$SF" 2>/dev/null)
-	IFS=$US read -r root state waiting prompt last bgdesc <<<"$info"
-	printf '\033[1m%s\033[0m\n' "$root"
-	[ -n "$waiting" ] && printf '\033[31mneeds you: %s\033[0m\n' "$waiting"
-	[ -n "$bgdesc" ] && printf 'in background: %s\n' "$bgdesc"
-	[ -n "$prompt" ] && printf 'prompt: %s\n' "$prompt"
-	[ -n "$last" ] && printf '\033[2mreply: %s\033[0m\n' "$last"
-	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 12
-	printf '\033[2m%s\033[0m\n' "────────────────────────────────────────"
-	zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 40
+	[ -f "$SF" ] || return 0
+	jq -r --argjson now "$(date +%s)" --arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" \
+		--arg dim "$C_DIM" --arg bold "$C_BOLD" --arg off "$C_OFF" '
+		def age: if . < 60 then "\(.)s" elif . < 3600 then "\(. / 60 | floor)m"
+			elif . < 172800 then "\(. / 3600 | floor)h" else "\(. / 86400 | floor)d" end;
+		def base: tostring | split("/") | last;
+		(.root // .cwd // "") as $root
+		| ($now - (.since // .ts // $now)) as $for
+		| [ $bold + (if (.title // "") != "" then .title else ($root | base) end) + $off
+		    + "  " + $grey + "turn \(.turn // 0) · \(.state // "?") for \($for | age)" + $off,
+		    $grey + $root + $off,
+		    (if .state == "needs-you" then $red + "waiting on: " + (.waiting // "you") + $off else empty end),
+		    (if .state == "working" and (.background_tasks // "") != "" then $grey + "in background: " + .background_tasks + $off else empty end),
+		    (if (.prompt // "") != "" then "asked: " + .prompt else empty end),
+		    (if (.last_message // "") != "" then $grey + "said: " + .last_message + $off else empty end),
+		    (if ((.tasks // []) | length) > 0 then
+		       "tasks: " + ((.tasks // [])[-8:] | map((if .done then $green + "✓" + $off else "○" end) + " " + .subject) | join("  "))
+		     else empty end),
+		    (if ((.subagents // []) | length) > 0 then
+		       "subagents: " + ((.subagents // []) | map(.type + " " + (($now - (.since // $now)) | age)) | join(", "))
+		     else empty end),
+		    (if ((.files // []) | length) > 0 then
+		       $grey + "files (\(.files | length)): " + ((.files // [])[-6:] | reverse | map(base) | join(", ")) + $off
+		     else empty end)
+		  ] | .[]' "$SF" 2>/dev/null
+	root=$(jq -r '.root // .cwd // ""' "$SF" 2>/dev/null)
+	printf '%s%s%s\n' "$C_DIM" "────────────────────────────────────────" "$C_OFF"
+	[ -d "$root" ] && git -C "$root" -c color.status=always status -sb 2>/dev/null | head -n 10
+	printf '%s%s%s\n' "$C_DIM" "────────────────────────────────────────" "$C_OFF"
+	zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 30
 }
 
 # Jump to pane PANE in tab TAB and count it as seen.
 jump_to() {
-	zellij action go-to-tab-by-id "$2" >/dev/null 2>&1 || true
-	zellij action focus-pane-id "terminal_$1" >/dev/null 2>&1 || true
+	focus_pane "$1" "$2"
 	mark_seen "$1"
 }
 
 cmd_ls() {
-	local rows out key sel pane tab q fzf=0
+	local rows out key sel pane tab q fzf=0 sock
 	need_session
 	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
 	rows=$(COLOR=$fzf ls_rows)
@@ -858,12 +1878,19 @@ cmd_ls() {
 		return 0
 	fi
 	q=$(printf '%q' "$SELF")
+	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
+	# Hooks reload this dashboard through its socket as agents change.
+	sock="$SOCK_DIR/${SKEY}.fzf.$$.sock"
+	rm -f "$sock"
 	# fzf runs preview/reload through $SHELL, which may be fish.
-	out=$(printf '%s\n' "$rows" | SHELL=/bin/sh fzf --delimiter "$TAB" --with-nth 3.. --reverse \
-		--no-sort --ansi --prompt 'agents> ' --expect ctrl-e --header-lines 1 \
+	out=$(printf '%s\n' "$rows" | SHELL=/bin/sh fzf --listen "$sock" --track --id-nth 1 \
+		--delimiter "$TAB" --with-nth 3.. --reverse --no-sort --ansi --prompt 'agents> ' \
+		--expect ctrl-e --header-lines 1 \
 		--header 'enter: jump   ctrl-e: jump + nvim   ctrl-r: reload' \
+		--color 'fg:-1,bg:-1,hl:#ffffff,fg+:#ffffff,bg+:#303030,hl+:#ffffff,info:#616161,prompt:#999999,pointer:#ffffff,marker:#39d97a,spinner:#616161,header:#616161,border:#303030,gutter:-1' \
 		--preview "$q _preview {1}" --preview-window 'down,60%,border-top,wrap' \
-		--bind "ctrl-r:reload(COLOR=1 $q _rows)")
+		--bind "ctrl-r:reload(COLOR=1 $q _rows)+refresh-preview")
+	rm -f "$sock"
 	[ -n "$out" ] || return 0
 	key=${out%%"$NL"*}
 	sel=${out#*"$NL"}
@@ -872,50 +1899,70 @@ cmd_ls() {
 	sel=${sel#*"$TAB"}
 	tab=${sel%%"$TAB"*}
 	jump_to "$pane" "$tab"
+	push_status
 	[ "$key" = ctrl-e ] && exec "$SELF" edit "$pane"
 	return 0
 }
 
 # Jump to the agent that has needed you longest; failing that, the one that
-# finished longest ago and you haven't looked at yet.
+# finished longest ago and you haven't looked at yet. Pressed again on one of
+# those, go on to the next, round and round.
 cmd_next() {
-	local pane tab state root ts since seen prompt waiting bg class best="" best_tab="" best_class=9 best_since=""
+	local pane tab state since seen class list="" i=0 n=0 at=-1 pick
+	local -a c_pane c_tab
 	need_session
 	agent_rows
-	while IFS=$US read -r pane tab state root ts since seen prompt waiting bg; do
-		case $pane in '' | gc) continue ;; esac
+	while IFS=$US read -r pane tab state _ since seen _; do
+		[ -n "$pane" ] || continue
 		case $state in
 		needs-you) class=0 ;;
 		done) [ "$seen" = true ] && continue || class=1 ;;
 		*) continue ;;
 		esac
-		if [ $class -lt $best_class ] || { [ $class = $best_class ] && [ "$since" -lt "$best_since" ]; }; then
-			best=$pane best_tab=$tab best_class=$class best_since=$since
-		fi
-	done <<EOF
+		list="$list$class$TAB$(printf '%012d' "$since")$TAB$pane$TAB$tab$NL"
+	done <<EOF2
 $AGENT_ROWS
-EOF
-	if [ -z "$best" ]; then
+EOF2
+	if [ -z "$list" ]; then
 		echo "weaver: no agent needs you"
 		[ -t 1 ] && sleep 1
 		return 0
 	fi
-	jump_to "$best" "$best_tab"
+	# Where you are now, to go on from there (this hides the floating panes).
+	focused_pane
+	while IFS=$TAB read -r _ _ pane tab; do
+		[ -n "$pane" ] || continue
+		c_pane[n]=$pane c_tab[n]=$tab
+		n=$((n + 1))
+	done <<EOF2
+$(printf '%s' "$list" | sort -t "$TAB" -k1,1n -k2,2n)
+EOF2
+	while [ $i -lt $n ]; do
+		[ "${c_pane[i]}" = "$FOCUSED" ] && at=$i
+		i=$((i + 1))
+	done
+	pick=$(((at + 1) % n))
+	jump_to "${c_pane[pick]}" "${c_tab[pick]}"
+	push_status
 }
 
 # ---------------------------------------------------------------- main
 
 usage() {
-	cat <<'EOF'
+	cat <<'EOF2'
 usage: weaver <command>
-  hook                       Claude Code hook (reads the event JSON on stdin)
-  edit [--full] [pane-id]    open or jump to the nvim for the focused agent
-  ls                         dashboard of the agents in this zellij session
-  next                       jump to the agent that has needed you longest
-  nvim <agent-pane> [file]   internal: start the nvim bound to an agent
-EOF
+  hook [--async]               Claude Code hook (reads the event JSON on stdin)
+  edit [--full] [pane-id]      open or jump to the nvim for the focused agent
+  ls                           live dashboard of the agents in this zellij session
+  next                         jump to the next agent that needs you; repeat to cycle
+  status [--zjstatus]          agent counts (formatted for zjstatus's command widget)
+  snapshot --reviewed [dir]    mark the worktree holding dir reviewed
+  gc                           forget agents that are gone, in every session
+  nvim <agent-pane> [file]     internal: start the nvim bound to an agent
+EOF2
 }
 
+[ -n "${WEAVER_SOURCED:-}" ] && return 0
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
@@ -924,8 +1971,12 @@ edit) cmd_edit "$@" ;;
 nvim) cmd_nvim "$@" ;;
 ls) cmd_ls ;;
 next) cmd_next ;;
+status) cmd_status "$@" ;;
+snapshot) cmd_snapshot "$@" ;;
+gc) gc_states ;;
 _rows) need_session && ls_rows ;;
 _preview) need_session && cmd_preview "$@" ;;
+_focus) need_session && focus_pane "$@" ;;
 -h | --help | help) usage ;;
 *)
 	usage >&2

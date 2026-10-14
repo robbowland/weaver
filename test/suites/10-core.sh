@@ -1,6 +1,9 @@
 #!/bin/bash
-# The spec end to end: root tracking, Alt v / Alt V, following, the dashboard.
+# The core: where each agent really works, Alt v / Alt V placing and reusing
+# its nvim, a stuck nvim never blocking a hook, the dashboard. What nvim does
+# with the agent's edits is tested in the 5x suites.
 . "$(dirname "$0")/../lib.sh"
+fresh
 
 edit_json() { printf '{"hook_event_name":"PostToolUse","cwd":"%s","session_id":"sid-0","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$1" "$2"; }
 
@@ -10,7 +13,9 @@ feed
 ok "A root is worktree, not start dir" "$(st 0 root)" "$T/repo-wt-a"
 ok "A start_cwd recorded" "$(st 0 start_cwd)" "$T/repo"
 ok "C root via not-yet-existing dir" "$(st 2 root)" "$T/repo-wt-b"
+ok "edits are listed as the agent's files" "$(st 0 'files | map(split("/") | last) | join(",")')" "app.txt"
 
+focus 0
 key 1b76 # Alt v
 sleep 3
 NV=$(nvim_pane 0)
@@ -19,62 +24,39 @@ ok "Alt v: nvim pane recorded and focused" "$(client)" "terminal_$NV"
 ok "Alt v: nvim left of agent" \
 	"$(Z list-panes -a -j | jq -r "[.[] | select((.is_plugin|not) and (.id==$NV or .id==0))] | sort_by(.pane_x) | map(.id|tostring) | join(\",\")")" "$NV,0"
 ok "Alt v: nvim in worktree on last edited file" "$(nvst 0)" "repo-wt-a|app.txt"
-
-hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/README.md"
-sleep 0.7
-ok "agent edit opens in nvim" "$(nvst 0)" "repo-wt-a|README.md"
-printf 'REWRITTEN\n' >"$T/repo-wt-a/README.md"
-sleep 1.7
-ok "external rewrite reloads" "$(nvq 0 'getline(1)')" "REWRITTEN"
+ok "Alt v: nvim's pid recorded beside its pane" "$(sed -n 2p "$SD/${SESSION}_0.nvim" | grep -c '^[0-9][0-9]*$')" "1"
+ok "...and nvim knows its agent" "$(nvq 0 '$WEAVER_PANE . "|" . fnamemodify($WEAVER_STATE, ":t")')" "0|${SESSION}_0.json"
 
 hook 0 UserPromptSubmit "$T/repo" "" "back at the start dir"
-sleep 0.5
 ok "cwd snapped back to start dir: root kept" "$(st 0 root)" "$T/repo-wt-a"
-ok "...and nvim stays put" "$(nvst 0)" "repo-wt-a|README.md"
 hook 0 UserPromptSubmit "$T/repo-wt-b" "" "now feature b"
-sleep 0.7
-ok "agent moves to wt-b: nvim cds" "$(nvst 0 | cut -d'|' -f1)" "repo-wt-b"
-ok "...in a tab of its own" "$(tabcwds 0)" "repo-wt-a,repo-wt-b"
+ok "agent moves to wt-b: root follows" "$(st 0 root)" "$T/repo-wt-b"
+settle
 ok "nvim pane renamed" "$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin|not) and .id==$NV) | .title")" "nvim: repo-wt-b"
 
-hook 0 PostToolUse "$T/repo-wt-b" "$T/repo-wt-b/README.md"
-sleep 0.7
-nvq 0 'nvim_buf_set_lines(0, 0, 1, v:false, ["MY UNSAVED EDIT"])' >/dev/null
-hook 0 PostToolUse "$T/repo-wt-b" "$T/repo-wt-b/src/app.txt"
-sleep 0.7
-ok "unsaved buffer not replaced" \
-	"$(nvq 0 'fnamemodify(bufname("%"), ":p:h:t") . "/" . fnamemodify(bufname("%"), ":t") . "|" . getline(1) . "|" . &modified')" \
-	"repo-wt-b/README.md|MY UNSAVED EDIT|1"
-nvsend 0 '<Esc>:e!<CR>'
-sleep 0.5
-
-key 1b6c # Alt l
-sleep 0.5
-ok "Alt l back to agent A" "$(client)" "terminal_0"
+focus 0
+ok "back to agent A" "$(client)" "terminal_0"
 before=$(tabpanes 0)
 key 1b76
 sleep 2.5
 ok "Alt v again reuses nvim" "$(client)|$(tabpanes 0)" "terminal_$NV|$before"
 
-key 1b6c
-sleep 0.5
+focus 0
 nvsend 0 ':lua vim.uv.sleep(15000)<CR>'
 sleep 0.5
 edit_json "$T/repo-wt-b" "$T/repo-wt-b/README.md" >"$AT/in-edit.json"
-timed_hook() { ms /bin/bash -c "ZELLIJ_PANE_ID=0 weaver hook <'$AT/in-edit.json'"; }
+timed_hook() { ms /bin/bash -c "ZELLIJ_PANE_ID=0 weaver hook ${1:-} <'$AT/in-edit.json' >/dev/null"; }
 t1=$(timed_hook)
-t2=$(timed_hook)
-t3=$(timed_hook)
+t2=$(timed_hook --async)
+t3=$(timed_hook --async)
 echo "  stuck nvim: hook times ${t1}ms, ${t2}ms, ${t3}ms"
-ok "stuck nvim: first hook bounded (<3s)" "$([ "$t1" -lt 3000 ] && echo y)" y
-ok "stuck nvim: later hooks skip the call (<1s)" "$([ "$t2" -lt 1000 ] && [ "$t3" -lt 1000 ] && echo y)" y
+ok "stuck nvim: no hook waits on it (<1s)" "$([ "$t1" -lt 1000 ] && [ "$t2" -lt 1000 ] && [ "$t3" -lt 1000 ] && echo y)" y
 before=$(tabpanes 0)
 key 1b76
 sleep 3.5
 ok "Alt v on stuck nvim focuses it, no duplicate" "$(client)|$(tabpanes 0)" "terminal_$NV|$before"
 sleep 10
-key 1b6c
-sleep 0.5
+focus 0
 
 key 1b56 # Alt V
 sleep 2.5
@@ -90,7 +72,19 @@ sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating) | .id')
 ok "dashboard order (needs-you, done, working)" \
 	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ *>? +[!✓●○] ' | awk '{print ($1==">") ? $2 : $1}' | tr -d '\n')" "!✓●"
-key 1b5b42
+ok "dashboard listens for live reloads" "$(ls /tmp/weaver-$(id -u)/ | grep -c "^${SESSION}\.fzf\..*\.sock$")" "1"
+hook 1 PermissionRequest "$T/repo-wt-b"
+hookj 1 "{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-1\"}" >/dev/null
+settle
+sleep 0.5
+ok "an agent finishing reloads the open dashboard" \
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -E '^ *>? +[!✓●○] ' | awk '{print ($1==">") ? $2 : $1}' | tr -d '\n')" "✓✓●"
+key 03 # ctrl-c: close it
+sleep 1
+ok "...and its socket goes with it" "$(ls /tmp/weaver-$(id -u)/ | grep -c "^${SESSION}\.fzf\..*\.sock$")" "0"
+key 1b79
+sleep 2.5
+key 1b5b42 # down
 sleep 0.3
 key 1b5b42
 sleep 0.3
@@ -103,9 +97,8 @@ ok "ctrl-e on agent C (other tab): new nvim focused there" \
 ok "...in C's worktree" "$(nvst 2 | cut -d'|' -f1)" "repo-wt-b"
 key 1b79
 sleep 2.5
-key 1b5b42
-sleep 0.3
-key 0d
+key 0d # A is first: done and unseen, like B, and its branch sorts first
 sleep 1.5
 ok "Enter on agent A from tab two jumps across tabs" "$(client)" "terminal_0"
+ok "...and marks it seen" "$(st 0 seen)" "true"
 done_suite

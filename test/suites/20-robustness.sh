@@ -1,7 +1,9 @@
 #!/bin/bash
-# Failure modes found in review: other sessions' files, stale swap files,
-# deleted files, diff reviews, symlinked paths. Runs after 10-core.sh.
+# Failure modes: other sessions' files, corrupt state, stale and held locks,
+# racing hooks, nested sessions, agents that die without a word, stale nvim
+# files, odd paths, and a partial pane list.
 . "$(dirname "$0")/../lib.sh"
+fresh
 
 rows() { weaver ls | grep -c -E '^[!✓●○] '; }
 
@@ -9,9 +11,9 @@ rows() { weaver ls | grep -c -E '^[!✓●○] '; }
 # named one is gone, so the test shim must refuse.
 ZELLIJ_SESSION_NAME=weaver-no-such-session zellij action list-tabs >/dev/null 2>&1
 ok "test shim refuses actions on a session that isn't running" "$?" "1"
-capture_notify() {
-	nvq 0 "luaeval('(function() local o = vim.notify; _G.__cap = {}; vim.notify = function(m, ...) table.insert(_G.__cap, m); return o(m, ...) end; return 1 end)()')" >/dev/null
-}
+
+feed >/dev/null
+settle
 
 # A session whose name extends ours must not be listed or garbage-collected.
 cp "$SD/${SESSION}_1.json" "$SD/${SESSION}_x_12.json"
@@ -19,63 +21,120 @@ ok "other session's file not listed" "$(rows)" "3"
 ok "other session's file not deleted" "$([ -f "$SD/${SESSION}_x_12.json" ] && echo kept)" "kept"
 rm -f "$SD/${SESSION}_x_12.json"
 
-# A stale swap file must not raise the blocking ATTENTION dialog.
-SW=$T/repo-wt-a/src/swapme.txt
-printf 'swap me\n' >"$SW"
-XDG_STATE_HOME=$AT/state nvim --clean --headless "+normal Gochanged" "+sleep 30" "$SW" &
-sp=$!
-sleep 1.5
-kill -9 $sp 2>/dev/null
-wait $sp 2>/dev/null
-ok "swap file left behind" "$(ls "$AT/state/nvim/swap/" 2>/dev/null | grep -c swapme)" "1"
-hook 0 PostToolUse "$T/repo" "$SW"
-sleep 1
-ok "follow into swapped file: nvim responsive, read-only" "$(nvq 0 'fnamemodify(bufname("%"), ":t") . "|" . &readonly')" "swapme.txt|1"
+# --- one corrupt state file must not empty the dashboard (defect 6)
+cp "$SD/${SESSION}_2.json" "$AT/c2.json"
+printf '{"pane":2,"state":"wor' >"$SD/${SESSION}_2.json"
+ok "a corrupt state file: the other agents are still listed" "$(rows)" "2"
+ok "...and the next event rewrites it" \
+	"$(hook 2 UserPromptSubmit "$T/repo" "" "again" && st 2 state)" "working"
 
-# Same at startup (agent B has no nvim yet).
-Z new-pane --close-on-exit -- "$AT/bin/weaver" nvim 1 "$SW" >/dev/null
-sleep 4
-unstick 1
-ok "startup on swapped file: responsive, read-only" "$(nvq 1 'fnamemodify(bufname("%"), ":t") . "|" . &readonly')" "swapme.txt|1"
-ok "startup swap override removed afterwards" "$(nvq 1 'exists("#weaver_start")')" "0"
-nvsend 1 '<Esc>:qa!<CR>'
-sleep 1
+# --- locks (defect 10): a dead owner's lock is removed at once; a live one is
+# waited for, however long, and never stolen.
+SF2="$SD/${SESSION}_2.json"
+sleep 0.2 &
+dead=$!
+wait $dead
+printf '%s\n' "$dead" >"$SF2.lock"
+t=$(ms /bin/bash -c "printf '%s' '{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-2\"}' | ZELLIJ_PANE_ID=2 weaver hook >/dev/null")
+ok "a lock left by a dead hook is taken over at once" "$([ "$t" -lt 1000 ] && echo y)|$(st 2 state)" "y|done"
+live_pid
+printf '%s\n' "$LIVE_PID" >"$SF2.lock"
+hook 2 UserPromptSubmit "$T/repo" "" "held" >/dev/null &
+waiter=$!
+sleep 1.2
+ok "a lock held by a live hook is waited for, not stolen" "$(st 2 state)|$(cat "$SF2.lock")" "done|$LIVE_PID"
+rm -f "$SF2.lock"
+wait $waiter
+ok "...and the waiting hook goes ahead once it is released" "$(st 2 state)|$(st 2 prompt)" "working|held"
+kill "$LIVE_PID"
 
-# A deleted file is reported once, not on every check.
-capture_notify
-rm -f "$AT"/state/nvim/swap/*swapme* "$SW"
-sleep 3.5
-ok "deleted file reported once, not every second" \
-	"$(nvq 0 "luaeval('#vim.tbl_filter(function(m) return m:find(\"deleted on disk\") ~= nil end, _G.__cap)')")" "1"
-
-# AgentReview includes uncommitted work; following leaves a diff review alone.
-nvsend 0 "<Esc>:cd $T/repo-wt-a<CR>:AgentReview<CR>"
-sleep 3
-ok "AgentReview lists uncommitted app.txt" \
-	"$(Z dump-screen --pane-id "terminal_$(nvim_pane 0)" | grep -q 'app.txt' && echo listed)" "listed"
-# tiled windows only: a notification popup is a floating window in this tab
-wins() {
-	nvq 0 "luaeval('vim.fn.tabpagenr() .. \"|\" .. table.concat(vim.tbl_map(function(w) return vim.fn.fnamemodify(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(w)), \":t\") .. (vim.wo[w].diff and \"1\" or \"0\") end, vim.tbl_filter(function(w) return vim.api.nvim_win_get_config(w).relative == \"\" end, vim.api.nvim_tabpage_list_wins(0))), \",\")')"
-}
-before=$(wins)
-hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/README.md"
-sleep 1
-ok "following leaves the diff tab's windows alone" "$(wins)" "$before"
-nvsend 0 '<Esc>:DiffviewClose<CR>'
-sleep 1
-
-# A path through a symlink (like /tmp vs /private/tmp) is not dropped by edit.
-ln -s "$T" "$AT/tlink"
-hook 0 PostToolUse "$AT/tlink/repo" "$AT/tlink/repo-wt-a/src/app.txt"
-sleep 0.8
-nvsend 0 "<Esc>:e! $T/repo-wt-a/README.md<CR>"
-sleep 0.8
-for _ in 1 2 3; do
-	[ "$(client)" = terminal_0 ] && break
-	key 1b6c
-	sleep 0.4
+# --- racing hooks lose nothing: 12 edits at once all land in the file list
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+	hook 2 PostToolUse "$T/repo" "$T/repo/src/race$i.txt" &
 done
-key 1b76
-sleep 2.5
-ok "Alt v with a symlinked path reopens the agent's file" "$(nvq 0 'fnamemodify(bufname("%"), ":t")')" "app.txt"
+wait
+settle
+ok "12 concurrent edits: valid state, every file listed" \
+	"$(jq -r '.files | map(select(test("race"))) | length' "$SF2")" "12"
+ok "...and no lock or temp file left behind" "$(ls "$SD" | grep -c -E '\.lock$|\.tmp$')" "0"
+
+# --- a session nested in the pane's agent (claude -p, an SDK script) inherits
+# ZELLIJ_PANE_ID, but must not take the pane over (defect 7)
+live_pid
+AGENT=$LIVE_PID
+nested() { printf '%s' "$2" | CLAUDE_PID=$1 ZELLIJ_PANE_ID=1 weaver hook >/dev/null; }
+nested "$AGENT" "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-real\"}"
+nested "$AGENT" "{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"the real work\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-real\"}"
+ok "the pane's agent records its pid" "$(st 1 pid)" "$AGENT"
+nested 424242 "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-nested\"}"
+nested 424242 "{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-nested\"}"
+ok "a nested session's events are ignored" "$(st 1 session_id)|$(st 1 state)|$(st 1 prompt)" "sid-real|working|the real work"
+kill "$AGENT"
+wait "$AGENT" 2>/dev/null
+live_pid
+NEXT=$LIVE_PID
+nested "$NEXT" "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-next\"}"
+ok "once the pane's agent is gone, a new one takes the pane" "$(st 1 session_id)|$(st 1 pid)" "sid-next|$NEXT"
+kill "$NEXT"
+
+# --- an agent killed without SessionEnd is forgotten (defect 5)
+live_pid
+GHOST=$LIVE_PID
+printf '{"hook_event_name":"UserPromptSubmit","prompt":"doomed","cwd":"%s","session_id":"sid-ghost"}' "$T/repo" |
+	CLAUDE_PID=$GHOST ZELLIJ_PANE_ID=2 weaver hook >/dev/null
+ok "a live agent is listed" "$(weaver ls | grep -c 'doomed')" "1"
+kill "$GHOST"
+wait "$GHOST" 2>/dev/null
+ok "killed without SessionEnd: no longer listed" "$(weaver ls | grep -c 'doomed')" "0"
+ok "...and its state is gone" "$([ -f "$SD/${SESSION}_2.json" ] && echo kept || echo gone)" "gone"
+
+# --- an agent cleaned up while the dashboard reads the others hides nothing
+jq -c '.pane = 3' "$SD/${SESSION}_0.json" >"$SD/${SESSION}_3.json"
+FOUND_RACE=$(WEAVER_SOURCED=1 bash -c '. "$1"; session_files json; rm -f "$2"; CLAUDE_LIVE="[]"; list_panes;
+	jq -rRn --argjson panes "$PANES" --argjson claude "[]" --argjson now 0 "$JQ_ROWS" "${FOUND[@]}" 2>/dev/null | grep -c "^0"' _ \
+	"$AT/bin/weaver" "$SD/${SESSION}_3.json")
+ok "a state file removed while the rows are read: the others are still read" "$FOUND_RACE" "1"
+
+# --- a pid reused by an unrelated process is not the agent
+live_pid
+printf '{"hook_event_name":"UserPromptSubmit","prompt":"reused","cwd":"%s","session_id":"sid-reuse","pid":0}' "$T/repo" |
+	CLAUDE_PID=$LIVE_PID ZELLIJ_PANE_ID=2 weaver hook >/dev/null
+jq '.proc_start = "Thu Jan  1 00:00:00 1970"' "$SD/${SESSION}_2.json" >"$AT/r.json" && mv "$AT/r.json" "$SD/${SESSION}_2.json"
+ok "a pid now running something else: forgotten" "$(weaver ls | grep -c 'reused')" "0"
+kill "$LIVE_PID"
+
+# --- a stale nvim file (that nvim has exited) never renames a pane
+hook 2 UserPromptSubmit "$T/repo" "" "renaming"
+title=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id==1) | .title')
+printf '1\n424242\n' >"$SD/${SESSION}_2.nvim"
+hook 2 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
+settle
+ok "a stale nvim file: the pane it names keeps its title" \
+	"$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id==1) | .title')" "$title"
+rm -f "$SD/${SESSION}_2.nvim"
+
+# --- state from a zellij session that no longer exists (a reused name has
+# new pane ids) is cleaned up
+cp "$SD/${SESSION}_0.json" "$SD/weaver-gone-session_0.json"
+weaver gc >/dev/null
+ok "state of a session that is gone: cleaned up" "$([ -f "$SD/weaver-gone-session_0.json" ] && echo kept || echo gone)" "gone"
+ok "...and ours kept" "$([ -f "$SD/${SESSION}_0.json" ] && echo kept)" "kept"
+
+# --- a pane that is gone is cleaned up, but only on a pane list that has our
+# own pane in it: never on a partial answer
+jq '.pane = 77' "$SD/${SESSION}_0.json" >"$SD/${SESSION}_77.json"
+ZELLIJ_PANE_ID=999999 weaver ls >/dev/null
+ok "a pane list without our own pane: nothing cleaned up" "$([ -f "$SD/${SESSION}_77.json" ] && echo kept)" "kept"
+ZELLIJ_PANE_ID=0 weaver ls >/dev/null
+ok "a full pane list: the closed pane's agent is cleaned up" "$([ -f "$SD/${SESSION}_77.json" ] && echo kept || echo gone)" "gone"
+
+# --- paths with spaces and unicode
+W="$T/wt é space"
+git -C "$T/repo" worktree add -q -b odd-path "$W" 2>/dev/null
+printf 'x\n' >"$W/naïve file.txt"
+hook 2 UserPromptSubmit "$T/repo" "" "unicode: é ü 漢字"
+hook 2 PostToolUse "$T/repo" "$W/naïve file.txt"
+ok "a root and file with spaces and unicode" "$(st 2 root)|$(st 2 file)" "$W|$W/naïve file.txt"
+ok "...the prompt survives" "$(st 2 prompt)" "unicode: é ü 漢字"
+ok "...and the activity log stays valid JSON" "$(jq -s 'length > 0' "$(st 2 log)")" "true"
 done_suite

@@ -11,6 +11,8 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in zellij pane `<pane>` of session `<skey>` (session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
+| `$STATE_DIR/<skey>.status` | the session's counts for zjstatus: `needs-you done-unseen working` |
+| `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
 
 ## State file
@@ -57,6 +59,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`? | any state change |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed |
+| `focus` | `root`, `file` (may be `""`) | `weaver edit` (Alt v, Alt V, dashboard ctrl-e): go there now unless that would take over typing, a diff review or unsaved changes |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
 `AgentFollow(root, file)` and `AgentChecktime()` remain as aliases for one
@@ -102,9 +105,19 @@ So: turn N's diff is `end_N^..end_N`; the live turn is tip..worktree; since
 reviewed is `reviewed..worktree`; `git blame` against the tip maps a line to
 its turn and prompt.
 
+A root first touched mid-turn (a subagent in a fresh worktree) whose chain
+does not exist yet gets a `start` commit with HEAD's tree, so the turn there
+has a parent to diff against. An `end` on top of an `end` of the same turn
+(a turn that resumes after background work) replaces it: one `end` per turn.
+
 `weaver snapshot --reviewed [dir]` snapshots `dir` (default: cwd) onto
-`refs/worktree/weaver/reviewed` and prints the commit; it exits non-zero with a
-message when `dir` is not in a repo.
+`refs/worktree/weaver/reviewed` and prints the commit, or the existing tip when
+the tree is unchanged; it exits non-zero with a message when `dir` is not in a
+repo. `Weaver-Point: reviewed` commits appear only on the reviewed chain, so
+any other point is `start` or `end`.
+
+Untracked files larger than `WEAVER_SNAPSHOT_MAX_KB` (5 MB) are left out;
+`WEAVER_SNAPSHOTS=0` turns snapshots off.
 
 ## Activity log
 
@@ -188,3 +201,41 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 - 2026-10-14: The bar shows a finished turn's size and the review key
   (`2 files ␣at`), from the end snapshot (one `git diff --shortstat`), and
   task progress while the agent works (`tasks` in the state file).
+- 2026-10-13: Edits and every other tool-call event go to the async hook
+  (`async: true`), so following costs the agent nothing; the synchronous hook
+  keeps the events whose state must be in place before the agent goes on, or
+  that ring the bell. nvim, zellij, Worktrunk, git and the status counts all
+  run in a background fork after the state is written.
+- 2026-10-13: Hook latency, median of 15 spaced runs in a real zellij session
+  (test/suites/05-latency.sh): before, 12-14 ms for an ordinary event and
+  26-58 ms for an Edit that moved roots (synchronous nvim and zellij calls);
+  after, 15-17 ms for an ordinary event (one jq over a richer state, one mv,
+  one fork) and nothing for an Edit, whose async hook takes about 20 ms of its
+  own; a tool call that can change nothing exits in 7-9 ms without jq.
+  Measured savings: the hook runs in the C locale (2 ms of bash pattern
+  matching), parses only the code above its dispatch (the rest is sourced in
+  the background fork), and finds repository roots without git.
+- 2026-10-13: Done rings the bell too (`WEAVER_BELL=needs-you` for the old
+  behaviour): with Rob's alerts limited to the status bar and the tab mark,
+  the tab mark is what makes a finished agent "unread", and zellij clears it
+  when you look. A done agent whose pane is focused when the counts are
+  computed counts as seen.
+- 2026-10-14: The zjstatus counts come from zjstatus's command widget running
+  `weaver status --zjstatus` every 2 s, not from `zellij pipe`. Measured with
+  zellij 0.45.1 and zjstatus 0.25.0: the pipe client never returns while
+  zjstatus is loaded (zjstatus never releases CLI pipes), the server logs
+  "Action CliPipe did not complete within 1s timeout" for every pipe, and after
+  about 100 pushes a test session's server deadlocked twice (kill-session hung,
+  SIGTERM ignored; `zellij list-sessions` hung for everyone meanwhile). The
+  widget's command only reads a counts file the hooks keep (no external
+  command, bounded read, empty output and status 0 on any error). zjstatus
+  issue #247 (a Mutex panic in command widgets under wasmi, reported on 0.22
+  with zellij 0.44.1, still open, not mentioned in the 0.24 or 0.25 notes) is
+  the known risk; see test/soak/zjstatus.sh. If it bites, lengthen the
+  interval rather than drop the segment.
+- 2026-10-14: zjstatus soak (test/soak/zjstatus.sh): 10 minutes, 5 tabs, the
+  widget every 2 s, 1079 hook events; zellij always answered within 3 s, no
+  "ERROR IN PLUGIN", no plugin panic in the log, counts on screen at every
+  check. Not covered: detaching and re-attaching a client, the trigger in
+  zjstatus issue #247's report.
+
