@@ -139,7 +139,7 @@ q "execute('messages clear')" >/dev/null
 rm -f "$AT"/state/nvim/swap/*swapme* "$SW"
 sleep 3.5
 ok "deleted file reported once" \
-	"$(q "luaeval('#vim.tbl_filter(function(m) return m:find(\"deleted on disk\") ~= nil end, _G.__cap) + #vim.tbl_filter(function(m) return m:find(\"deleted on disk\") ~= nil end, vim.split(vim.fn.execute(\"messages\"), \"\\n\"))')")" "1"
+	"$(q "luaeval('(function() local function n(list) return #vim.tbl_filter(function(m) return m:find(\"deleted on disk\") ~= nil end, list) end local c = n(_G.__cap) return c > 0 and c or n(vim.split(vim.fn.execute(\"messages\"), \"\\n\")) end)()')")" "1"
 # (show another file first: wiping the only window's buffer would close the tab)
 q "execute('silent! edit $A/src/app.txt | silent! bwipeout! $SW')" >/dev/null
 

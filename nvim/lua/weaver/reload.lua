@@ -188,6 +188,9 @@ function M.setup()
   -- With 'autoread' on, nvim reloads an unchanged buffer without asking
   -- FileChangedShell, so the change could not be located. The handler below
   -- makes the same choice (reload unless you have unsaved changes).
+  if M.autoread == nil then
+    M.autoread = vim.o.autoread
+  end
   vim.o.autoread = false
   for _, buf in ipairs(api.nvim_list_bufs()) do
     if api.nvim_buf_is_loaded(buf) then
@@ -257,6 +260,9 @@ end
 
 function M.teardown()
   M.stop_all()
+  if M.autoread ~= nil then
+    vim.o.autoread = M.autoread
+  end
 end
 
 return M
