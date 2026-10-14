@@ -162,5 +162,11 @@ T.run(function()
   C.poke()
   T.ok('AgentChecktime: a checktime event', C.lua('return _G.got.ev'), 'checktime')
 
+  -- :checkhealth weaver
+  local health = C.lua("vim.cmd('checkhealth weaver'); return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\\n')")
+  T.ok('checkhealth: git is checked', health:find('OK git version', 1, true) ~= nil, true)
+  T.ok('...the bound agent is reported', health:find('bound to an agent: session ' .. sid, 1, true) ~= nil, true)
+  C.cmd('bwipeout')
+
   C.close()
 end)

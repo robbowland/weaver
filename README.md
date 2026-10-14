@@ -70,6 +70,9 @@ The branch is compared against `$WEAVER_BASE`, else
 `git config branch.<branch>.weaverbase`, else the default branch of the
 `upstream` or `origin` remote, else `main` or `master`.
 
+`:checkhealth weaver` says whether diffview-plus, the snacks picker, the
+weaver script and the agent binding are in place.
+
 Your own config can use the same one-view review:
 `require('weaver.diffview').show({ key = ..., label = ..., root = ..., compare = { kind = 'branch', base = 'origin/main' } })`
 (see `nvim/lua/weaver/diffview.lua`). `require('weaver.status').statusline()`
