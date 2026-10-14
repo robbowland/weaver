@@ -151,6 +151,17 @@ when there is room for 150 columns, else under it, and gives way to the list
 when space is short (`s` still shows it). `weaver ls | cat` prints the board
 as text.
 
+### Sidebar and home
+
+In the `weaver` session every thread tab has a sidebar on its left: every
+thread in its own number's order, its state, name and age, the tab's own
+thread inverted; what a thread waits on shows under it. Under 16 columns it
+narrows to a rail of numbers and glyphs. Click or move into it and `j`/`k`,
+`enter` or a digit go to a thread. The home tab holds the dashboard at full
+size, numbered the same way, so a digit means the same thread everywhere. The
+status line shows the current thread (`2 Add a CLI flag · try/add-a-cli-flag`),
+the counts and zellij's mode.
+
 ### Status bar
 
 `weaver status` prints the counts (`! 1  ✓ 2  ● 3`: needs you, done and
