@@ -35,6 +35,9 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `file` | string | the last file it edited |
 | `files` | [string] | absolute paths edited this session, most recent last, at most 200 |
 | `subagents` | [{id, type, since}] | subagents running now |
+| `tasks` | [{id, subject, done}] | its task list (TaskCreated, TaskCompleted), at most 30 |
+| `turn_ended` | int | the last turn that got its `end` snapshot |
+| `turn_roots` | [string] | the roots the current (or last) turn touched |
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
