@@ -121,9 +121,9 @@ ok "sidebar: open at 200 columns" "$(columns "$S1")" "32"
 Z next-swap-layout -t "$T1"
 sleep 0.3
 ok "sidebar: Alt ] (next swap layout) folds it to a rail, the agent keeps its width" \
-	"$(columns "$S1")|$(columns "$A1")" "8|44"
+	"$(columns "$S1")|$(columns "$A1")" "10|44"
 ZELLIJ_PANE_ID=$S1 weaver _sidefit
-ok "sidebar: your rail holds while the window stays wide" "$(columns "$S1")" "8"
+ok "sidebar: your rail holds while the window stays wide" "$(columns "$S1")" "10"
 echo rail >"$SD/${SESSION}.side.$T1"
 ZELLIJ_PANE_ID=$S1 weaver _sidefit
 sleep 0.3

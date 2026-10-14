@@ -4109,7 +4109,7 @@ $tpl
 # session's new-tab template (its status line) becomes a named tab template,
 # which the swap layout needs. Into LAYOUT; $1 the agent's size, and self,
 # name, ktok and kkind from thread_layout.
-SIDE_OPEN=16 SIDE_RAIL=4
+SIDE_OPEN=16 SIDE_RAIL=5
 thread_layout_side() {
 	local size=$1 tpl
 	tpl=$(zellij action dump-layout 2>/dev/null | awk "$AWK_TEMPLATE" |

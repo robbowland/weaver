@@ -429,7 +429,7 @@ without the marker (from before this layout) is left to you.
 - **Thread tabs:** `weaver new` builds the tab from the session's
   `new_tab_template` as a named `tab_template` (`weaver_thread`), with a vertical
   split: `weaver sidebar` at 16%, the nvim, the agent; and a
-  `swap_tiled_layout name="rail"` with the sidebar at 4%.
+  `swap_tiled_layout name="rail"` with the sidebar at 5% (its content needs 3 columns at 80).
   `zellij action next-swap-layout -t TAB` (and Alt [ / Alt ]) toggles the two
   with the panes kept. The tab then moves (`move-tab -t TAB left`) to its
   place: after the last thread tab with a lower number, else after home.
