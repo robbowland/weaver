@@ -2,6 +2,7 @@
 # weaver: keep track of the coding agents running in zellij panes, and open
 # neovim in the worktree each agent is really editing.
 #
+#   weaver new [task...]            start a thread: a tab with nvim and a new agent, in a new worktree
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
 #   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
@@ -1430,8 +1431,25 @@ cmd_snapshot() {
 
 cmd_nvim() {
 	[ $# -ge 1 ] || die "usage: weaver nvim <agent-pane-id> [file]"
-	local agent=${1#terminal_} file=${2:-} lua dir rc
+	local agent=${1#terminal_} file=${2:-} lua dir rc d i
 	need_session
+	# The left pane of a new thread's tab: wait for the agent beside it to say
+	# which pane it is in.
+	if [ "$1" = --thread ]; then
+		d="$THREADS_NEW/${SKEY}_${2:-}"
+		agent="" file=""
+		for ((i = 0; i < 100; i++)); do
+			[ -f "$d/pane" ] && break
+			sleep 0.1
+		done
+		{ read -r agent <"$d/pane"; } 2>/dev/null
+		rm -rf "$d"
+		case $agent in '' | *[!0-9]*)
+			echo "weaver: the agent did not start; this nvim is not bound to it" >&2
+			exec nvim
+			;;
+		esac
+	fi
 	mkdir -p "$SOCK_DIR" || die "cannot create $SOCK_DIR"
 	[ -O "$SOCK_DIR" ] || die "$SOCK_DIR is not owned by you"
 	chmod 700 "$SOCK_DIR"
@@ -1561,21 +1579,9 @@ cmd_edit() {
 		[ -n "$target" ] || die "cannot find the focused pane"
 	fi
 
-	state_file "$target"
-	if [ -f "$SF" ]; then
-		agent=$target
-	else
-		# Pressed on an agent's nvim: act for that agent.
-		session_files nvim
-		for f in ${FOUND[@]+"${FOUND[@]}"}; do
-			read -r p <"$f" || continue
-			if [ "$p" = "$target" ]; then
-				agent=${f#"$STATE_DIR/${SKEY}_"}
-				agent=${agent%.nvim}
-				break
-			fi
-		done
-	fi
+	# The agent, or the agent whose nvim this is (a new thread's agent has an
+	# nvim and a thread record before its first hook).
+	agent_of_pane "$target" && agent=$AGENT
 
 	if [ -z "$agent" ]; then
 		cwd=$(printf '%s' "$PANES" | jq -r --arg p "$target" \
@@ -1585,8 +1591,12 @@ cmd_edit() {
 	else
 		mark_seen "$agent"
 		state_file "$agent"
-		info=$(jq -r '[.root // .cwd // "", .file // "", .session_id // "", .turn // 0, .state // ""]
-			| map(tostring) | join("\u001f")' "$SF") || die "cannot read $SF"
+		if [ -f "$SF" ]; then
+			info=$(jq -r '[.root // .cwd // "", .file // "", .session_id // "", .turn // 0, .state // ""]
+				| map(tostring) | join("\u001f")' "$SF") || die "cannot read $SF"
+		else
+			info=$(jq -r '.worktree // ""' "$STATE_DIR/${SKEY}_$agent.thread" 2>/dev/null)
+		fi
 		IFS=$US read -r root file sid turn state <<<"$info"
 		[ -d "$root" ] || root=$PWD
 		# git gives the root as a real path; the agent may have used a symlinked
@@ -1609,7 +1619,8 @@ cmd_edit() {
 			edit_unlock
 			pane=$agent aid="" seq=$(jq -n 'now * 1000 | floor') agent_kind=claude
 			nvim_edit_event focus "$root" "$file" ""
-			focus_pane "$nv"
+			focus_pane "$nv" "$(printf '%s' "$PANES" | jq -r --arg p "$nv" \
+				'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id // empty')"
 		else
 			open_left_of "$agent" "$root" "nvim: ${root##*/}" "$SELF" nvim "$agent" ${file:+"$file"}
 			read_nvim_pane "$agent"
@@ -1706,7 +1717,7 @@ forget() {
 		drop_lock
 		return 0
 	fi
-	rm -f "$1" "$b.nvim" "$b.bash" "$b.prompt"
+	rm -f "$1" "$b.nvim" "$b.bash" "$b.prompt" "$b.thread"
 	rm -rf "$b.opening"
 	drop_lock
 }
@@ -1795,6 +1806,21 @@ gc_states() {
 		{ read -r _ && read -r pid; } <"$f" 2>/dev/null
 		[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || rm -f "$f"
 	done
+	# A thread whose agent never reported (no state) goes with its session.
+	for f in "$STATE_DIR"/*_*.thread; do
+		[ -f "$f" ] || continue
+		[ -f "${f%.thread}.json" ] && continue
+		base=${f##*/}
+		skey=${base%_*}
+		if [ -z "$sessions" ]; then
+			sessions=$NL$(zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g')$NL
+		fi
+		case $sessions in "$NL$NL" | *"$NL$skey$NL"*) ;; *) rm -f "$f" ;; esac
+	done
+	# Tabs that never finished opening leave their meeting place behind.
+	[ -d "$THREADS_NEW" ] && find "$THREADS_NEW" -mindepth 1 -maxdepth 1 -mmin +1440 -exec rm -rf {} + 2>/dev/null
+	find "$STATE_DIR" -maxdepth 1 -name 'form.*' -mmin +1440 -exec rm -f {} + 2>/dev/null
+	[ -f "$STATE_DIR/close.log" ] && [ "$(wc -c <"$STATE_DIR/close.log")" -gt 100000 ] && rm -f "$STATE_DIR/close.log"
 	[ -d "$LOG_DIR" ] && find "$LOG_DIR" -name '*.jsonl' -mtime +30 -exec rm -f {} + 2>/dev/null
 	[ "${1:-}" = quiet ] || echo "weaver: cleaned up"
 	return 0
@@ -2126,11 +2152,643 @@ EOF2
 	push_status
 }
 
+# ---------------------------------------------------------------- threads
+#
+# A thread is one task for a new agent, in a tab of its own: the agent's nvim
+# on the left, the agent on the right, in a new worktree (Worktrunk, else git)
+# or in the current checkout. See docs/design.md#threads.
+
+# Where the panes of a tab being made meet: $THREADS_NEW/<skey>_<token>/ holds
+# the task and the thread record until the agent's pane takes them, then the
+# agent's pane id for the nvim beside it.
+THREADS_NEW="$STATE_DIR/new"
+
+FORM_COLOR='fg:-1,bg:-1,hl:#ffffff,fg+:#ffffff,bg+:#303030,hl+:#ffffff,info:#616161,prompt:#999999,pointer:#ffffff,marker:#39d97a,spinner:#616161,header:#999999,footer:#616161,ghost:#616161,border:#303030,gutter:-1'
+
+# KDL string literal for $1, into K.
+kdl_str() {
+	local s=${1//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$NL/\\n}
+	s=${s//$TAB/\\t}
+	K="\"$s\""
+}
+
+# The task $1 as a branch name, into SLUG: lowercase ASCII letters and digits
+# joined by '-', at most 48 characters, cut at a '-' (as Rob's `wi` does).
+slugify() {
+	local s
+	s=$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -cs 'a-z0-9' '-')
+	s=${s#-}
+	s=${s%-}
+	if [ ${#s} -gt 48 ]; then
+		s=${s:0:49}
+		case ${s:0:48} in *-*) s=${s%-*} ;; *) s=${s:0:48} ;; esac
+	fi
+	SLUG=${s%-}
+}
+
+# $1 with $HOME as ~, into TILDE.
+tildify() {
+	case $1 in
+	"$HOME") TILDE="~" ;;
+	"$HOME"/*) TILDE="~${1#"$HOME"}" ;;
+	*) TILDE=$1 ;;
+	esac
+}
+
+# The checkout holding directory $1 into CHECKOUT, and its repository's main
+# checkout into REPO (the checkout itself for a bare repository's worktree).
+# Returns 1, both empty, outside a repository.
+repo_of() {
+	local common
+	REPO=""
+	CHECKOUT=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || {
+		CHECKOUT=""
+		return 1
+	}
+	common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+	case $common in
+	*/.git) REPO=${common%/.git} ;;
+	*) REPO=$CHECKOUT ;;
+	esac
+	[ -d "$REPO" ] || REPO=$CHECKOUT
+}
+
+# Is agent $1 installed?
+agent_installed() {
+	case $1 in claude | codex) command -v "$1" >/dev/null 2>&1 ;; *) return 1 ;; esac
+}
+
+# Repositories used for threads, most recent first, at most 20.
+remember_repo() {
+	local f="$STATE_DIR/repos"
+	[ -n "$1" ] || return 0
+	mkdir -p "$STATE_DIR"
+	{
+		printf '%s\n' "$1"
+		[ -f "$f" ] && grep -vxF -- "$1" "$f"
+	} | head -n 20 >"$f.$$" && mv -f "$f.$$" "$f"
+}
+
+# Repositories to offer, one per line as "path<TAB>name  ~/path": $1 first,
+# then those of recent threads and running agents, then git repositories zoxide
+# knows.
+recent_repos() {
+	local d
+	{
+		[ -n "${1:-}" ] && printf '%s\n' "$1"
+		[ -f "$STATE_DIR/repos" ] && cat "$STATE_DIR/repos"
+		for d in "$STATE_DIR"/*_*.json "$STATE_DIR"/*_*.thread; do
+			[ -f "$d" ] || continue
+			jq -r '.repo // .root // .cwd // empty' "$d" 2>/dev/null
+		done | awk '!seen[$0]++' | while IFS= read -r d; do
+			[ -d "$d" ] && repo_of "$d" && printf '%s\n' "$REPO"
+		done
+		command -v zoxide >/dev/null 2>&1 && zoxide query -l 2>/dev/null | head -n 100 |
+			while IFS= read -r d; do [ -d "$d/.git" ] && printf '%s\n' "$d"; done
+	} | awk 'NF && !seen[$0]++' | while IFS= read -r d; do
+		[ -d "$d" ] || continue
+		form_path "$d"
+		printf '%s\t%s  %s%s%s\n' "$d" "${d##*/}" "$C_GREY" "$TILDE" "$C_OFF"
+	done
+}
+
+# ------------------------------------------------ the new-thread form
+
+# While the form is open its fields live in a file, one per line:
+#   repo     the main checkout of the repository (empty: not in one)
+#   here     the checkout (or directory) "this checkout" means
+#   branch   as you edited it (empty: from the task)
+#   where    worktree | here
+#   agent    claude | codex
+#   base     the new branch's base (empty: Worktrunk's default)
+# and a long task written in $EDITOR in FILE.task.
+form_load() {
+	F_REPO="" F_HERE="" F_BRANCH="" F_WHERE=worktree F_AGENT=claude F_BASE=""
+	{
+		IFS= read -r F_REPO
+		IFS= read -r F_HERE
+		IFS= read -r F_BRANCH
+		IFS= read -r F_WHERE
+		IFS= read -r F_AGENT
+		IFS= read -r F_BASE
+	} <"$1" 2>/dev/null
+	return 0
+}
+form_save() {
+	printf '%s\n' "$F_REPO" "$F_HERE" "$F_BRANCH" "$F_WHERE" "$F_AGENT" "$F_BASE" >"$1.$$" && mv -f "$1.$$" "$1"
+}
+
+# The branch a thread for task $1 gets, into BRANCH.
+form_branch() {
+	if [ -n "$F_BRANCH" ]; then
+		BRANCH=$F_BRANCH
+	else
+		slugify "$1"
+		BRANCH=$SLUG
+	fi
+}
+
+# One row of the form: label, value (plain, for widths), value (coloured), key.
+form_row() {
+	R_L[R_N]=$1 R_P[R_N]=$2 R_C[R_N]=$3 R_K[R_N]=$4
+	[ ${#2} -gt "$R_W" ] && R_W=${#2}
+	R_N=$((R_N + 1))
+}
+
+# A path as the form shows it: with ~, and only its last two parts when long.
+form_path() {
+	local p=${1%/*}
+	tildify "$1"
+	[ ${#TILDE} -gt 40 ] && TILDE="…/${p##*/}/${1##*/}"
+	return 0
+}
+
+# The form's header for form file $1 and the task typed so far $2, with error
+# $3 on top: right-aligned labels under the prompt's, then the key for each.
+form_header() {
+	local task=${2:-} err=${3:-} cur i pad lines=0 first="" where
+	local -a R_L R_P R_C R_K
+	local R_N=0 R_W=0
+	form_load "$1"
+	[ -n "$err" ] && printf '%8s%s%s%s\n' "" "$C_RED" "$err" "$C_OFF"
+	if [ -f "$1.task" ]; then
+		{ IFS= read -r first; } <"$1.task"
+		lines=$(wc -l <"$1.task" | tr -d ' ')
+		if [ "$first" = "$task" ] && [ "$lines" -gt 0 ]; then
+			form_row '' "+$lines more lines" "${C_GREY}+$lines more lines${C_OFF}" '^e'
+		fi
+	fi
+	if [ -n "$F_REPO" ]; then
+		form_path "$F_REPO"
+		form_row repo "${F_REPO##*/}  $TILDE" "${C_BOLD}${F_REPO##*/}${C_OFF}  ${C_GREY}$TILDE${C_OFF}" '^r'
+	else
+		form_row repo "none" "${C_GREY}not in a git repository${C_OFF}" '^r'
+	fi
+	if [ "$F_WHERE" = here ]; then
+		cur=$(git -C "$F_HERE" symbolic-ref --short -q HEAD 2>/dev/null)
+		where="this checkout${cur:+ · $cur}"
+		if [ "$F_HERE" = "$F_REPO" ]; then
+			form_row where "$where" "$where" 'tab'
+		else
+			form_path "$F_HERE"
+			form_row where "$where  $TILDE" "$where  ${C_GREY}$TILDE${C_OFF}" 'tab'
+		fi
+	else
+		form_row where "new worktree" "new worktree" 'tab'
+		form_branch "$task"
+		if [ -z "$BRANCH" ]; then
+			form_row branch "from the task" "${C_GREY}from the task${C_OFF}" '^b'
+		elif [ -n "$F_REPO" ] && git -C "$F_REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+			form_row branch "$BRANCH  exists: continue on it" "$BRANCH  ${C_GREY}exists: continue on it${C_OFF}" '^b'
+		else
+			form_row branch "$BRANCH" "$BRANCH" '^b'
+		fi
+	fi
+	if agent_installed "$F_AGENT"; then
+		form_row agent "$F_AGENT" "$F_AGENT" '^o'
+	else
+		form_row agent "$F_AGENT  not installed" "$F_AGENT  ${C_GREY}not installed${C_OFF}" '^o'
+	fi
+	[ "$R_W" -gt 60 ] && R_W=60
+	for ((i = 0; i < R_N; i++)); do
+		pad=$((R_W - ${#R_P[i]}))
+		[ $pad -lt 0 ] && pad=0
+		printf '%s%6s%s  %s%*s   %s%s%s\n' "$C_GREY" "${R_L[i]}" "$C_OFF" "${R_C[i]}" "$pad" "" "$C_DIM" "${R_K[i]}" "$C_OFF"
+	done
+}
+
+# What the form's keys do (`weaver _form OP FILE [QUERY]`), run by fzf.
+cmd_form() {
+	local op=$1 sf=$2 q=${3:-} out sel d first ed
+	form_load "$sf"
+	case $op in
+	header) form_header "$sf" "$q" ;;
+	where)
+		if [ "$F_WHERE" = here ]; then F_WHERE=worktree; else F_WHERE=here; fi
+		form_save "$sf"
+		;;
+	agent)
+		case $F_AGENT in claude) F_AGENT=codex ;; *) F_AGENT=claude ;; esac
+		form_save "$sf"
+		;;
+	branch)
+		# A branch means a new worktree.
+		if [ "$F_WHERE" = here ]; then
+			F_WHERE=worktree
+			form_save "$sf"
+		fi
+		form_branch "$q"
+		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
+			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FORM_COLOR" \
+			--header "        ${C_GREY}names the branch and its worktree; an existing branch continues${C_OFF}" \
+			--footer 'enter keep   esc back' --bind 'enter:print-query' </dev/null) || return 0
+		if [ -n "$out" ] && git check-ref-format --branch "$out" >/dev/null 2>&1; then
+			F_BRANCH=$out
+			slugify "$q"
+			[ "$out" = "$SLUG" ] && F_BRANCH=""
+			form_save "$sf"
+		fi
+		;;
+	repo)
+		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse --no-info --no-separator --ansi --height 100% \
+			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      repo  ' --ghost 'a repository, or a path' \
+			--color "$FORM_COLOR" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
+		sel=${out#*"$NL"}
+		[ "$sel" != "$out" ] && [ -n "$sel" ] && d=${sel%%"$TAB"*} || d=${out%%"$NL"*}
+		case $d in "~") d=$HOME ;; "~/"*) d="$HOME/${d#\~/}" ;; esac
+		[ -n "$d" ] && [ -d "$d" ] || return 0
+		if repo_of "$d"; then
+			F_REPO=$REPO F_HERE=$CHECKOUT
+		else
+			F_REPO="" F_HERE=$(cd "$d" && pwd -P)
+		fi
+		form_save "$sf"
+		;;
+	editor)
+		if [ -f "$sf.task" ]; then { IFS= read -r first; } <"$sf.task"; fi
+		[ -f "$sf.task" ] && [ "${first:-}" = "$q" ] || printf '%s\n' "$q" >"$sf.task"
+		ed=${VISUAL:-${EDITOR:-vi}}
+		# $EDITOR may carry arguments ("code -w").
+		$ed "$sf.task" </dev/tty >/dev/tty
+		;;
+	query)
+		first=$q
+		[ -f "$sf.task" ] && { IFS= read -r first; } <"$sf.task"
+		printf '%s\n' "$first"
+		;;
+	esac
+	return 0
+}
+
+# The form: fills TASK and the F_* fields from form file $1. Returns 130 when
+# you cancel.
+new_form() {
+	local sf=$1 q h out rc err="" query=$TASK hd first
+	q=$(printf '%q' "$SELF")
+	hd="$q _form header $(printf '%q' "$sf") {q}"
+	while :; do
+		h=$(form_header "$sf" "$query" "$err")
+		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
+			--prompt '      task  ' --ghost 'what should the agent do?' --query "$query" \
+			--header "$h" --footer 'enter start   ^e write it in $EDITOR   esc cancel' \
+			--color "$FORM_COLOR" \
+			--bind "change:transform-header($hd)" \
+			--bind "tab:execute-silent($q _form where $(printf '%q' "$sf"))+transform-header($hd)" \
+			--bind "ctrl-o:execute-silent($q _form agent $(printf '%q' "$sf"))+transform-header($hd)" \
+			--bind "ctrl-b:execute($q _form branch $(printf '%q' "$sf") {q})+transform-header($hd)" \
+			--bind "ctrl-r:execute($q _form repo $(printf '%q' "$sf"))+transform-header($hd)" \
+			--bind "ctrl-e:execute($q _form editor $(printf '%q' "$sf") {q})+transform-query($q _form query $(printf '%q' "$sf") {q})+transform-header($hd)" \
+			--bind 'enter:print-query' </dev/null)
+		rc=$?
+		[ $rc = 130 ] && return 130
+		[ $rc -gt 1 ] && die "fzf failed"
+		query=${out%%"$NL"*}
+		form_load "$sf"
+		TASK=$query
+		if [ -f "$sf.task" ]; then
+			first=""
+			{ IFS= read -r first; } <"$sf.task"
+			[ "$first" = "$query" ] && TASK=$(cat "$sf.task")
+		fi
+		thread_check && return 0
+		err=$CHECK_ERR
+	done
+}
+
+# Can a thread start from TASK and the F_* fields? Into CHECK_ERR: why not.
+thread_check() {
+	CHECK_ERR=""
+	case $TASK in *[![:space:]]*) ;; *)
+		CHECK_ERR="say what the agent should do"
+		return 1
+		;;
+	esac
+	agent_installed "$F_AGENT" || {
+		CHECK_ERR="$F_AGENT is not installed"
+		return 1
+	}
+	if [ "$F_WHERE" = here ]; then
+		[ -d "$F_HERE" ] || CHECK_ERR="no such directory: $F_HERE"
+	elif [ -z "$F_REPO" ]; then
+		CHECK_ERR="not in a git repository: pick one (^r), or work in this checkout (tab)"
+	else
+		form_branch "$TASK"
+		if [ -z "$BRANCH" ]; then
+			CHECK_ERR="name the branch (^b): the task has no letters to name it after"
+		elif ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
+			CHECK_ERR="not a valid branch name: $BRANCH"
+		fi
+	fi
+	[ -z "$CHECK_ERR" ]
+}
+
+# ------------------------------------------------ making the thread
+
+# The worktree for branch $2 of repository $1, made unless it exists (from
+# base $3, if given): with Worktrunk when it is installed (your worktree-path
+# template and hooks), else with git at Worktrunk's default path. Into WT_DIR,
+# and WT_CREATED (true when this made it).
+thread_worktree() {
+	local repo=$1 branch=$2 base=${3:-} create="" json rc path line wtp=""
+	WT_DIR="" WT_CREATED=false
+	git -C "$repo" show-ref --verify --quiet "refs/heads/$branch" || create=1
+	if [ "${WEAVER_WORKTRUNK:-1}" != 0 ] && command -v wt >/dev/null 2>&1; then
+		json=$(wt -C "$repo" switch ${create:+--create} ${base:+--base "$base"} --no-cd --format json "$branch")
+		rc=$?
+		[ $rc = 0 ] || return $rc
+		WT_DIR=$(printf '%s' "$json" | jq -r '.path // empty' 2>/dev/null)
+		[ "$(printf '%s' "$json" | jq -r '.action // empty' 2>/dev/null)" = created ] && WT_CREATED=true
+		[ -d "$WT_DIR" ] || {
+			echo "weaver: Worktrunk did not say where the worktree is" >&2
+			return 1
+		}
+		return 0
+	fi
+	# The branch's own worktree, when it has one.
+	while IFS= read -r line; do
+		case $line in
+		"worktree "*) wtp=${line#worktree } ;;
+		"branch refs/heads/$branch")
+			WT_DIR=$wtp
+			return 0
+			;;
+		esac
+	done <<EOF2
+$(git -C "$repo" worktree list --porcelain 2>/dev/null)
+EOF2
+	path="${repo%/*}/${repo##*/}.${branch//\//-}"
+	if [ -n "$create" ]; then
+		git -C "$repo" worktree add -b "$branch" "$path" ${base:+"$base"} >&2 || return 1
+	else
+		git -C "$repo" worktree add "$path" "$branch" >&2 || return 1
+	fi
+	WT_DIR=$(cd "$path" && pwd -P)
+	WT_CREATED=true
+}
+
+# The session's template for a new tab (so its status bar, zjstatus or
+# another, stays), from `zellij action dump-layout`: the lines inside
+# new_tab_template, where a bare `pane` is the tab's content. Braces inside
+# strings and after // don't count.
+AWK_TEMPLATE='
+function depth(s,   i, c, d, q) {
+	d = 0; q = 0
+	for (i = 1; i <= length(s); i++) {
+		c = substr(s, i, 1)
+		if (q) { if (c == "\\") i++; else if (c == "\"") q = 0 }
+		else if (c == "\"") q = 1
+		else if (c == "/" && substr(s, i + 1, 1) == "/") break
+		else if (c == "{") d++
+		else if (c == "}") d--
+	}
+	return d
+}
+!inb && /^[[:space:]]*new_tab_template[[:space:]]*[{]/ { inb = 1; d = depth($0); next }
+inb { d += depth($0); if (d <= 0) exit; print }'
+
+# The new thread tab's layout, into LAYOUT: nvim on the left, the agent on the
+# right ($WEAVER_AGENT_WIDTH of the width: 20% by default; a plain number is
+# columns) with the focus, in the session's new-tab template. $1 the token,
+# $2 the agent, $3 the directory.
+thread_layout() {
+	local tok=$1 kind=$2 dir=$3 w=${WEAVER_AGENT_WIDTH:-20%} size self name ktok kkind split tpl
+	case $w in
+	[1-9]% | [1-9][0-9]%) size="\"$w\"" ;;
+	[1-9] | [1-9][0-9] | [1-9][0-9][0-9]) size=$w ;;
+	*) size='"20%"' ;;
+	esac
+	kdl_str "$SELF"
+	self=$K
+	kdl_str "nvim: ${dir##*/}"
+	name=$K
+	kdl_str "$tok"
+	ktok=$K
+	kdl_str "$kind"
+	kkind=$K
+	split="pane split_direction=\"vertical\" {
+    pane name=$name command=$self close_on_exit=true {
+        args \"nvim\" \"--thread\" $ktok
+    }
+    pane size=$size focus=true command=$self {
+        args \"_agent\" $ktok $kkind
+    }
+}"
+	tpl=$(zellij action dump-layout 2>/dev/null | awk "$AWK_TEMPLATE")
+	case $tpl in
+	*[![:space:]]*)
+		tpl=$(printf '%s\n' "$tpl" | SPLIT=$split awk '
+			!done && /^[[:space:]]*pane[[:space:]]*$/ { print ENVIRON["SPLIT"]; done = 1; next }
+			{ print }
+			END { if (!done) exit 1 }') || tpl=$split
+		;;
+	*) tpl=$split ;;
+	esac
+	LAYOUT="layout {
+tab {
+$tpl
+}
+}"
+}
+
+# Start the thread from TASK and the F_* fields: its worktree (unless here),
+# then its tab. Prints where it went.
+thread_create() {
+	local dir name branch="" created=false tok d tab
+	if [ "$F_WHERE" = here ]; then
+		dir=$F_HERE
+		slugify "$TASK"
+		name=${SLUG:-thread-$(date +%H%M%S)}
+		branch=$(git -C "$dir" symbolic-ref --short -q HEAD 2>/dev/null)
+	else
+		form_branch "$TASK"
+		branch=$BRANCH
+		printf '%sweaver: worktree for %s%s\n' "$C_GREY" "$branch" "$C_OFF" >&2
+		thread_worktree "$F_REPO" "$branch" "$F_BASE" || return 1
+		dir=$WT_DIR created=$WT_CREATED name=$branch
+	fi
+	tok="$(date +%s)$$$RANDOM"
+	d="$THREADS_NEW/${SKEY}_$tok"
+	mkdir -p "$d" || die "cannot create $d"
+	printf '%s' "$TASK" >"$d/task"
+	jq -nc --arg name "$name" --arg task "$TASK" --arg repo "$F_REPO" --arg branch "$branch" \
+		--arg dir "$dir" --argjson here "$([ "$F_WHERE" = here ] && echo true || echo false)" \
+		--argjson created "$created" --arg agent "$F_AGENT" --argjson now "$(date +%s)" \
+		'{name: $name, task: $task, repo: $repo, branch: $branch, worktree: $dir, here: $here,
+		  worktree_created: $created, agent: $agent, created: $now}' >"$d/thread.json" ||
+		die "cannot write the thread record"
+	thread_layout "$tok" "$F_AGENT" "$dir"
+	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
+		rm -rf "$d"
+		[ "$created" = true ] && die "zellij could not open the tab for $name (its new worktree stays: $dir)"
+		die "zellij could not open the tab for $name"
+	}
+	remember_repo "$F_REPO"
+	tildify "$dir"
+	printf 'weaver: thread %s in %s (tab %s)\n' "$name" "$TILDE" "${tab:-?}"
+}
+
+# weaver new [options] [task...]
+cmd_new() {
+	local repo="" from="" branch="" base="" where="" agent="" edit=0 sf start rc f
+	TASK="" NOFOCUS=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--repo | --from | --branch | -b | --base | --agent)
+			[ $# -ge 2 ] || die "$1 needs a value"
+			case $1 in
+			--repo) repo=$2 ;;
+			--from) from=${2#terminal_} ;;
+			--branch | -b) branch=$2 ;;
+			--base) base=$2 ;;
+			--agent) agent=$2 ;;
+			esac
+			shift
+			;;
+		--here) where=here ;;
+		--worktree) where=worktree ;;
+		--no-focus) NOFOCUS=1 ;;
+		--edit | -e) edit=1 ;;
+		--)
+			shift
+			TASK="${TASK:+$TASK }$*"
+			break
+			;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		-*) die "unknown option: $1 (see weaver help)" ;;
+		*) TASK="${TASK:+$TASK }$1" ;;
+		esac
+		shift
+	done
+	[ -n "$SESSION" ] || die "not inside zellij: start it with \`weaver\`, then Alt N (or weaver new) there"
+	case ${agent:-claude} in claude | codex) ;; *) die "unknown agent: $agent (claude or codex)" ;; esac
+
+	# Where it starts: --repo; the agent of --from's repository; else here.
+	start=$PWD
+	if [ -n "$repo" ]; then
+		start=$repo
+		[ -d "$start" ] || die "no such directory: $repo"
+	elif [ -n "$from" ]; then
+		state_file "$from"
+		f=$(jq -r '.root // .cwd // empty' "$SF" 2>/dev/null)
+		[ -d "$f" ] || f=$(jq -r '.worktree // empty' "$STATE_DIR/${SKEY}_$from.thread" 2>/dev/null)
+		[ -d "$f" ] && start=$f
+	fi
+	F_BRANCH=$branch F_WHERE=${where:-worktree} F_AGENT=${agent:-claude} F_BASE=$base
+	if repo_of "$start"; then
+		F_REPO=$REPO F_HERE=$CHECKOUT
+	else
+		[ -n "$repo" ] && die "not a git repository: $repo"
+		F_REPO="" F_HERE=$(cd "$start" && pwd -P)
+		# Not in a repository: the one you used last, for a new worktree.
+		if [ -f "$STATE_DIR/repos" ]; then
+			read -r f <"$STATE_DIR/repos" && [ -d "$f" ] && repo_of "$f" && F_REPO=$REPO
+		fi
+	fi
+
+	if [ $edit = 1 ]; then
+		f=$(mktemp "${TMPDIR:-/tmp}/weaver-task.XXXXXX") || die "cannot make a temporary file"
+		[ -n "$TASK" ] && printf '%s\n' "$TASK" >"$f"
+		${VISUAL:-${EDITOR:-vi}} "$f" </dev/tty >/dev/tty
+		TASK=$(cat "$f")
+		rm -f "$f"
+		case $TASK in *[![:space:]]*) ;; *) return 130 ;; esac
+	fi
+
+	if [ -z "$TASK" ]; then
+		[ -t 0 ] && [ -t 1 ] && command -v fzf >/dev/null 2>&1 ||
+			die "what should the agent do? weaver new \"<task>\" (the form needs a terminal and fzf)"
+		mkdir -p "$STATE_DIR"
+		sf=$(mktemp "$STATE_DIR/form.XXXXXX") || die "cannot make the form's file"
+		form_save "$sf"
+		while :; do
+			new_form "$sf"
+			rc=$?
+			[ $rc = 0 ] || {
+				rm -f "$sf" "$sf.task"
+				return $rc
+			}
+			thread_create && break
+			# The worktree could not be made: its message is on screen.
+			printf '\n%sweaver: no thread started.%s enter: back to the form   esc: cancel ' "$C_RED" "$C_OFF" >&2
+			IFS= read -r -s -n 1 f </dev/tty
+			case $f in $'\e') rm -f "$sf" "$sf.task" && return 130 ;; esac
+		done
+		rm -f "$sf" "$sf.task"
+		return 0
+	fi
+	thread_check || die "$CHECK_ERR"
+	thread_create || exit 1
+}
+
+# The agent's pane of a new thread (`weaver _agent TOKEN AGENT`). First run:
+# record the thread for this pane, tell the nvim beside it where the agent is,
+# and start the agent with the task. Run again (zellij offers to rerun an
+# exited command): resume the agent's conversation, never send the task twice.
+cmd_agent_pane() {
+	local tok=${1:-} kind=${2:-claude} d task sid="" pane
+	need_session
+	pane=${ZELLIJ_PANE_ID:-}
+	d="$THREADS_NEW/${SKEY}_$tok"
+	case $kind in claude | codex) ;; *) die "unknown agent: $kind" ;; esac
+	if [ -n "$tok" ] && [ -n "$pane" ] && [ -f "$d/task" ]; then
+		task=$(cat "$d/task")
+		if [ -f "$d/thread.json" ]; then
+			jq -c --argjson pane "$pane" '. + {pane: $pane}' "$d/thread.json" >"$STATE_DIR/${SKEY}_$pane.thread.$$" &&
+				mv -f "$STATE_DIR/${SKEY}_$pane.thread.$$" "$STATE_DIR/${SKEY}_$pane.thread"
+		fi
+		rm -f "$d/task" || die "cannot take the task from $d"
+		printf '%s\n' "$pane" >"$d/pane.$$" && mv -f "$d/pane.$$" "$d/pane"
+		# A task starting with "-" is not an option.
+		case $task in -*) task=" $task" ;; esac
+		exec "$kind" "$task"
+	fi
+	[ -n "$pane" ] && sid=$(jq -r '.session_id // empty' "$STATE_DIR/${SKEY}_$pane.json" 2>/dev/null)
+	case $kind in
+	claude) if [ -n "$sid" ]; then exec claude --resume "$sid"; else exec claude --continue; fi ;;
+	codex) if [ -n "$sid" ]; then exec codex resume "$sid"; else exec codex resume --last; fi ;;
+	esac
+}
+
+# The agent of pane $1 into AGENT: the pane itself when it is an agent (it
+# has state, a thread record or an nvim), or the agent whose nvim it is.
+agent_of_pane() {
+	local p=$1 f q
+	AGENT=""
+	case $p in '' | *[!0-9]*) return 1 ;; esac
+	for f in json thread nvim; do
+		if [ -f "$STATE_DIR/${SKEY}_$p.$f" ]; then
+			AGENT=$p
+			return 0
+		fi
+	done
+	session_files nvim
+	for f in ${FOUND[@]+"${FOUND[@]}"}; do
+		q=""
+		{ read -r q <"$f"; } 2>/dev/null
+		if [ "$q" = "$p" ]; then
+			AGENT=${f#"$STATE_DIR/${SKEY}_"}
+			AGENT=${AGENT%.nvim}
+			return 0
+		fi
+	done
+	return 1
+}
+
 # ---------------------------------------------------------------- main
 
 usage() {
 	cat <<'EOF2'
 usage: weaver <command>
+  new [task...]                start a thread: a new tab with nvim and an agent, in a new
+                               worktree; with no task, a form. Options: --repo DIR,
+                               --branch NAME, --base REF, --here (the current checkout),
+                               --agent claude|codex, --edit (write the task in $EDITOR),
+                               --from PANE (that agent's repository), --no-focus
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
@@ -2148,6 +2806,9 @@ EOF2
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
+new) cmd_new "$@" ;;
+_agent) cmd_agent_pane "$@" ;;
+_form) cmd_form "$@" ;;
 hook) cmd_hook "$@" ;;
 edit) cmd_edit "$@" ;;
 nvim) cmd_nvim "$@" ;;

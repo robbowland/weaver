@@ -39,6 +39,11 @@ mkdir -p "$AT/bin" "$AT/state" "$AT/claude/sessions"
 export CLAUDE_CONFIG_DIR=$AT/claude
 # Follow edits after 0.3s of idle instead of 3s.
 export WEAVER_FOLLOW_IDLE_MS=300
+# Worktrunk with its defaults, not your config, and approvals of its own.
+export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
+: >"$WORKTRUNK_CONFIG_PATH"
+# Nor your zoxide history (the new-thread form offers its repositories).
+export _ZO_DATA_DIR=$AT/zoxide
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi
@@ -82,7 +87,11 @@ zellij --config "$AT/zellij.kdl" setup --check 2>&1 | grep -q 'Well defined' || 
 # of each tab; it needs zellij's permission, granted once by pressing y.
 agent='echo FAKE AGENT; exec bash --noprofile --norc -i'
 ZJSTATUS=${XDG_CONFIG_HOME:-$HOME/.config}/zellij/plugins/zjstatus.wasm
-bar=""
+# A status bar in every tab, as in a real layout: a new thread's tab must keep it.
+bar="default_tab_template {
+        children
+        pane size=1 borderless=true { plugin location=\"zellij:compact-bar\"; }
+    }"
 if [ -f "$ZJSTATUS" ] && [ "${WEAVER_TEST_ZJSTATUS:-0}" = 1 ]; then
 	bar="default_tab_template {
         children
