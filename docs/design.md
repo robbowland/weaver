@@ -580,3 +580,13 @@ tab: about 120 ms for a fit, nothing to fit on an ordinary reload.
   `change-header` from a transform), so searching moves nothing. The list
   has priority over the card: at 80 x 30 the old 10-line card minimum cut
   the list mid-group.
+- 2026-10-14 (visual QA): `worktree_users` interpolated `.id` inside the
+  `$skip` string's own filter, so jq failed on every pane and the in-use
+  guard never fired; fixed and tested, and no other filter does it. The
+  close prompt is a card in the form's style; the form's keys sit in a
+  fixed column at its right edge; a thread's agent gets at least
+  `WEAVER_AGENT_MIN_COLS` (44) while nvim keeps 60, still as a percentage in
+  the layout (a fixed-column pane keeps its columns when its neighbour
+  closes). The Alt N form fits its floating pane with the shared `float_fit`
+  (rows from its header, 96 columns; the pickers and `$EDITOR` get more rows
+  while open) and draws its own sharp fzf border, the pane borderless.
