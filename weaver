@@ -3177,17 +3177,19 @@ fetch_file() {
 }
 
 # Fetch repository $1's remote in the background, unless that is under way
-# or done in the last minute. Its own session, so ssh can never ask for a
-# passphrase on the form's terminal. When it is done it redraws form $2's
-# header, if the form is open.
+# or succeeded in the last minute (a failure is tried again: you may be back
+# online). Its own session, so ssh can never ask for a passphrase on the
+# form's terminal. When it is done it redraws form $2's header, if the form
+# is open.
 fetch_start() {
-	local repo=$1 pid=""
+	local repo=$1 pid="" rc=""
 	[ -n "$repo" ] || return 0
 	fetch_file "$repo"
 	mkdir -p "${FETCHF%/*}" || return 0
 	{ read -r pid <"$FETCHF.pid"; } 2>/dev/null
 	[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && return 0
-	[ -n "$(find "$FETCHF.rc" -mmin -1 2>/dev/null)" ] && return 0
+	{ read -r rc <"$FETCHF.rc"; } 2>/dev/null
+	[ "$rc" = 0 ] && [ -n "$(find "$FETCHF.rc" -mmin -1 2>/dev/null)" ] && return 0
 	rm -f "$FETCHF.rc" "$FETCHF.pid"
 	if ! preferred_remote "$repo"; then
 		echo none >"$FETCHF.rc"

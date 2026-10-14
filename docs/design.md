@@ -199,7 +199,8 @@ after `git fetch --prune`. The form starts that fetch as it opens (and again
 when the repository changes), in its own session so ssh cannot prompt on the
 form's terminal, and redraws its header through fzf's `--listen` socket when
 the fetch is done; enter waits for it at most `$WEAVER_FETCH_TIMEOUT` seconds
-(10), and a fetch less than a minute old is reused. Offline, too slow, or
+(10), and a successful fetch less than a minute old is reused (a failed one
+is tried again). Offline, too slow, or
 without a remote, the branch starts from the local default branch (the one
 the remote's `HEAD` names, else `main` or `master`) and one dim line says so.
 An explicit base (`--base`, the form's `alt-B`) is used as it is: `@` is the
