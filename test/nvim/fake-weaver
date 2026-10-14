@@ -1,0 +1,26 @@
+#!/bin/bash
+# Stand-in for `weaver snapshot --reviewed [dir]` in the headless specs, to
+# the contract in docs/design.md (the specs test the Neovim side alone).
+[ "${1:-}" = snapshot ] && [ "${2:-}" = --reviewed ] || exit 2
+cd "${3:-$PWD}" 2>/dev/null || exit 1
+top=$(git rev-parse --show-toplevel 2>/dev/null) || {
+	echo "not in a git repository" >&2
+	exit 1
+}
+gd=$(git rev-parse --path-format=absolute --git-path weaver) && mkdir -p "$gd" || exit 1
+idx="$gd/index-reviewed-fake"
+real=$(git rev-parse --path-format=absolute --git-path index)
+[ -f "$idx" ] || cp "$real" "$idx" 2>/dev/null
+GIT_INDEX_FILE=$idx git -C "$top" add --all || exit 1
+tree=$(GIT_INDEX_FILE=$idx git -C "$top" write-tree) || exit 1
+ref=refs/worktree/weaver/reviewed
+tip=$(git rev-parse -q --verify "$ref")
+if [ -n "$tip" ] && [ "$(git rev-parse "$tip^{tree}")" = "$tree" ]; then
+	echo "$tip"
+	exit 0
+fi
+c=$(printf 'weaver: reviewed\n\nWeaver-Point: reviewed\n' |
+	GIT_AUTHOR_NAME=weaver GIT_AUTHOR_EMAIL=weaver@localhost GIT_COMMITTER_NAME=weaver GIT_COMMITTER_EMAIL=weaver@localhost \
+		git commit-tree "$tree" ${tip:+-p "$tip"}) || exit 1
+git update-ref "$ref" "$c" || exit 1
+echo "$c"
