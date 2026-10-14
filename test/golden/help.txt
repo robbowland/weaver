@@ -3,7 +3,8 @@ keys
   j k  g G    move; first, last
   /           search (esc: back)
   n           new thread (weaver new)
-  x           close the thread: its tab and nvim (offers to remove a merged worktree)
+  x           close the thread, its nvim and its tab
+              (and offers to remove a merged worktree)
   e  ^e       jump and open its nvim
   s  tab      resume card ↔ screen
   ^r          reload
@@ -14,4 +15,4 @@ threads
   !  needs you    ✓  done, not yet seen    ●  working
   ✓  done, seen   ○  idle    ◌  interrupted
 
-  ×2 after a branch: two agents share the worktree; their turn diffs mix.
+  ×2  two agents share the worktree: their turn diffs mix

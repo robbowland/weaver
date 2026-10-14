@@ -2480,7 +2480,8 @@ ${g}keys$o
   ${g}j k  g G$o    move; first, last
   $g/$o           search ${d}(esc: back)$o
   ${g}n$o           new thread ${d}(weaver new)$o
-  ${g}x$o           close the thread: its tab and nvim ${d}(offers to remove a merged worktree)$o
+  ${g}x$o           close the thread, its nvim and its tab
+              ${d}(and offers to remove a merged worktree)$o
   ${g}e  ^e$o       jump and open its nvim
   ${g}s  tab$o      resume card ↔ screen
   ${g}^r$o          reload
@@ -2491,7 +2492,7 @@ ${g}threads$o
   $C_RED$G_NEED$o  needs you    $C_GREEN$G_DONE$o  done, not yet seen    $G_WORK  working
   $d$G_DONE$o  done, seen   $d$G_IDLE$o  idle    $g$G_INT$o  interrupted
 
-  ${d}×2 after a branch: two agents share the worktree; their turn diffs mix.$o
+  ${d}×2$o  ${d}two agents share the worktree: their turn diffs mix$o
 EOF2
 }
 
