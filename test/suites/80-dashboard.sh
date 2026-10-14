@@ -164,4 +164,10 @@ ok "empty board: stays open and says how to start a thread" \
 press 71 1 # q
 ok "q closes it" "$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and .is_floating and (.exited|not))] | length')" "0"
 
+# The first thread of the day: its record alone, no agent state anywhere yet.
+jq -nc --argjson c $(($(date +%s) - 5)) --arg w "$T/dash-flag" \
+	'{name: "first", task: "The first thread", worktree: $w, agent: "claude", created: $c, pane: 2}' >"$SD/${SESSION}_2.thread"
+ok "a thread's record alone is on the board" "$(LS_MODE=plain weaver _rows | grep -c '^●  The first thread  *starting')" "1"
+rm -f "$SD/${SESSION}_2.thread"
+
 done_suite

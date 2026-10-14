@@ -1760,11 +1760,12 @@ agent_rows() {
 	local rows line kind f pid start st trusted=0 now
 	AGENT_ROWS=""
 	local -a files
+	# State files, and the records of threads whose agent may not have one yet.
 	session_files json
-	[ ${#FOUND[@]} -gt 0 ] || return 0
-	files=("${FOUND[@]}")
+	files=(${FOUND[@]+"${FOUND[@]}"})
 	session_files thread
-	[ ${#FOUND[@]} -gt 0 ] && files=("${files[@]}" "${FOUND[@]}")
+	files=(${files[@]+"${files[@]}"} ${FOUND[@]+"${FOUND[@]}"})
+	[ ${#files[@]} -gt 0 ] || return 0
 	list_panes || return 0
 	panes_trusted && trusted=1
 	claude_live
@@ -1962,12 +1963,17 @@ cmd_status() {
 
 G_NEED='!' G_DONE='✓' G_WORK='●' G_IDLE='○' G_INT='◌'
 
-# Character counts and cuts need a UTF-8 locale.
+# Character counts and cuts need a UTF-8 locale: keep the one in place when it
+# counts 'é' as one character, else try en_US.UTF-8, then C.UTF-8 (quietly:
+# bash warns when a locale is missing).
 ls_utf8() {
-	case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in
-	*[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) ;;
-	*) LC_ALL=en_US.UTF-8 ;;
-	esac
+	local t='é'
+	[ ${#t} = 1 ] && return 0
+	{ LC_ALL=en_US.UTF-8; } 2>/dev/null
+	t='é'
+	[ ${#t} = 1 ] && return 0
+	{ LC_ALL=C.UTF-8; } 2>/dev/null
+	return 0
 }
 
 # TEXT cut to N characters (… at the cut) and padded to N, into FIT.
