@@ -147,7 +147,23 @@ T.run(function()
   )
   C.cmd('cclose')
 
-  -- :AgentTurns: one row per turn with changes; picking one opens that turn.
+  -- :AgentTurns in the snacks picker: a row per turn with changes, newest
+  -- first; confirming opens that turn alone.
+  if C.lua('return _G.Snacks ~= nil and Snacks.picker ~= nil') then
+    C.cmd('AgentTurns')
+    local rows = C.lua([[
+      local picker
+      vim.wait(2000, function() picker = Snacks.picker.get()[1]; return picker ~= nil and picker:count() == 2 end)
+      return picker and vim.tbl_map(function(it) return it.turn .. ' ' .. it.prompt end, picker:items()) or {}
+    ]])
+    T.ok('AgentTurns lists the turns, newest first', rows, { '2 second prompt', '1 first prompt' })
+    C.lua("Snacks.picker.get()[1]:action('confirm')")
+    T.ok('...confirming opens that turn alone', { shows({ 'A other.txt', 'M new.txt' }), label() }, { { 'A other.txt', 'M new.txt' }, 'turn 2 only' })
+  else
+    T.skip('AgentTurns in snacks', 'snacks.nvim not found')
+  end
+
+  -- :AgentTurns without snacks: vim.ui.select.
   C.lua([[
     _G.Snacks = nil
     vim.ui.select = function(items, opts, cb)

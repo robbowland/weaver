@@ -31,6 +31,7 @@ end
 local plugins = {
   diffview = find({ 'diffview-plus.nvim', 'diffview.nvim' }),
   gitsigns = find({ 'gitsigns.nvim' }),
+  snacks = find({ 'snacks.nvim' }),
 }
 vim.g.weaver_test_plugins = plugins
 for _, path in pairs(plugins) do
@@ -39,4 +40,8 @@ end
 
 if plugins.gitsigns then
   pcall(function() require('gitsigns').setup({}) end)
+end
+-- Only its picker (:AgentTurns); its notifier would change how messages show.
+if plugins.snacks then
+  pcall(function() require('snacks').setup({ picker = { enabled = true } }) end)
 end
