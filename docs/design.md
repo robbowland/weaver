@@ -395,6 +395,10 @@ reload from the rows about 20 ms.
 enter, digits and `e` go to a thread and leave it running, `n` runs `weaver
 new` inside it, `q` and `esc` do nothing.
 
+The PR and issue Inbox, when it comes, is a second tab beside home (`inbox`,
+before the threads, out of the thread numbering and of Alt j/k's thread
+order), so home stays the board of threads and the sidebar does not list it.
+
 The status line is zjstatus showing the current tab only: `{tabs}` with
 `tab_normal ""` and `tab_active "{name}"`, then `{command_weaver}` (the counts)
 and `{mode}`. So the tab's name is the line: push_status renames each thread's
