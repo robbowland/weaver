@@ -4097,7 +4097,7 @@ $tpl
 # session's new-tab template (its status line) becomes a named tab template,
 # which the swap layout needs. Into LAYOUT; $1 the agent's size, and self,
 # name, ktok and kkind from thread_layout.
-SIDE_OPEN=13 SIDE_RAIL=3
+SIDE_OPEN=16 SIDE_RAIL=4
 thread_layout_side() {
 	local size=$1 tpl
 	tpl=$(zellij action dump-layout 2>/dev/null | awk "$AWK_TEMPLATE" |
@@ -4849,10 +4849,11 @@ cmd_go() {
 }
 
 # The sidebar's own tab, to the window (`weaver _sidefit`, from the sidebar,
-# at its start and when it is resized): open from 160 columns, a rail below.
-# A toggle of yours (Alt [ / Alt ]) holds until the window crosses 160 again.
+# at its start and when it is resized): open from 160 columns, a rail below
+# (a toggle of yours, Alt [ / Alt ], holds until the window crosses 160
+# again); and the agent at its width (thread_width).
 cmd_sidefit() {
-	local info tab cols width want have mem=""
+	local info tab cols width want have mem="" agent
 	weaver_session || return 0
 	list_panes || return 0
 	info=$(printf '%s' "$PANES" | jq -r --arg me "${ZELLIJ_PANE_ID:-}" \
@@ -4866,9 +4867,17 @@ cmd_sidefit() {
 	have=open
 	[ $((width * 100 / cols)) -lt $(((SIDE_OPEN + SIDE_RAIL) / 2)) ] && have=rail
 	{ read -r mem <"$STATE_DIR/$SKEY.side.$tab"; } 2>/dev/null
-	[ "$mem" = "$want" ] && return 0
-	printf '%s\n' "$want" >"$STATE_DIR/$SKEY.side.$tab"
-	[ "$have" = "$want" ] || zellij action next-swap-layout -t "$tab" >/dev/null 2>&1
+	if [ "$mem" != "$want" ]; then
+		printf '%s\n' "$want" >"$STATE_DIR/$SKEY.side.$tab"
+		[ "$have" = "$want" ] || zellij action next-swap-layout -t "$tab" >/dev/null 2>&1
+	fi
+	# The agent keeps its share of the new width, and at least its minimum
+	# (a percentage alone would narrow it with the window).
+	agent=$(printf '%s' "$PANES" | jq -r --argjson t "$tab" '.[] | select((.is_plugin | not) and .tab_id == $t) | .id' |
+		while read -r p; do [ -f "$STATE_DIR/${SKEY}_$p.thread" ] && echo "$p" && break; done)
+	[ -n "$agent" ] || return 0
+	read_nvim_pane "$agent"
+	[ -n "$NV" ] && thread_width "$agent" "$NV"
 	return 0
 }
 

@@ -95,7 +95,7 @@ ok "session: threads are numbered in turn" "$(num "$A1")$(num "$A2")$(num "$A3")
 ok "session: their tabs follow home, in their numbers' order" \
 	"$(position "$home")$(position "$T1")$(position "$T2")$(position "$T3")" "0123"
 ok "session: a thread's tab has the sidebar, nvim and the agent" \
-	"$(columns "$S1")|$([ "$(columns "$N1")" -gt 100 ] && echo wide)|$(columns "$A1")" "26|wide|44"
+	"$(columns "$S1")|$([ "$(columns "$N1")" -gt 100 ] && echo wide)|$(columns "$A1")" "32|wide|44"
 weaver close --yes "$A2" >/dev/null 2>&1
 ok "session: closing a thread takes its whole tab, sidebar and all" \
 	"$(Z list-tabs -j | jq "[.[] | select(.tab_id == $T2)] | length")" "0"
@@ -117,17 +117,17 @@ ok "Alt y again: back to the thread you came from" "$(Z list-tabs -j | jq -r '.[
 
 # The sidebar to the window: open from 160 columns; your toggle holds.
 ZELLIJ_PANE_ID=$S1 weaver _sidefit
-ok "sidebar: open at 200 columns" "$(columns "$S1")" "26"
+ok "sidebar: open at 200 columns" "$(columns "$S1")" "32"
 Z next-swap-layout -t "$T1"
 sleep 0.3
 ok "sidebar: Alt ] (next swap layout) folds it to a rail, the agent keeps its width" \
-	"$(columns "$S1")|$(columns "$A1")" "6|44"
+	"$(columns "$S1")|$(columns "$A1")" "8|44"
 ZELLIJ_PANE_ID=$S1 weaver _sidefit
-ok "sidebar: your rail holds while the window stays wide" "$(columns "$S1")" "6"
+ok "sidebar: your rail holds while the window stays wide" "$(columns "$S1")" "8"
 echo rail >"$SD/${SESSION}.side.$T1"
 ZELLIJ_PANE_ID=$S1 weaver _sidefit
 sleep 0.3
-ok "sidebar: a window grown past 160 opens it again" "$(columns "$S1")" "26"
+ok "sidebar: a window grown past 160 opens it again" "$(columns "$S1")" "32"
 
 # Alt v brings nvim back between the sidebar and the agent.
 Z close-pane --pane-id "terminal_$N1"

@@ -45,7 +45,7 @@ replaced by weaver: `zellij delete-session weaver`, then `weaver`.
 | Key | Does |
 | --- | --- |
 | `Alt N` | Start a thread: a form for the task, then a tab with nvim and the agent |
-| `Alt j` / `Alt k` | In the weaver session: the next / previous tab, so the threads in their numbers' order (home included) |
+| `Alt j` / `Alt k` | In the weaver session: the next / previous tab, so the threads in their numbers' order (home included). There they no longer move between panes; `Alt ↓` / `Alt ↑` still do |
 | `Alt y` (weaver session) | Home, and from home back to the tab you came from |
 | `Alt y` | The dashboard: every agent in the session, grouped by state, with a resume card for the selected one. `enter` or `1`-`9` jumps, `e` jumps and opens nvim, `?` lists its keys |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
