@@ -2574,7 +2574,7 @@ cmd_ls() {
 			--bind "resize:reload($q _rows)" --bind "load:transform-footer($q _footer)" \
 			--bind "focus:transform:case {1} in a*) ;; *) case \$FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n \"\$t\" ] || t={5} ;; *) t={5}; [ -n \"\$t\" ] || t={4} ;; esac; [ -n \"\$t\" ] && echo \"pos(\$t)\" ;; esac" \
 			--bind 'j:down,k:up,g,home:first,G,end:last,q:abort' \
-			--bind "enter:transform:case {1} in a*) echo 'print(jump)+accept' ;; esac" \
+			--bind "enter,double-click:transform:case {1} in a*) echo 'print(jump)+accept' ;; esac" \
 			--bind "1:transform(sed -n 1p '$base.keys'),2:transform(sed -n 2p '$base.keys'),3:transform(sed -n 3p '$base.keys')" \
 			--bind "4:transform(sed -n 4p '$base.keys'),5:transform(sed -n 5p '$base.keys'),6:transform(sed -n 6p '$base.keys')" \
 			--bind "7:transform(sed -n 7p '$base.keys'),8:transform(sed -n 8p '$base.keys'),9:transform(sed -n 9p '$base.keys')" \
@@ -2589,9 +2589,12 @@ cmd_ls() {
 		rc=$?
 		rm -f "$sock" "$base.keys" "$base.view"
 		[ -n "$out" ] || return 0
-		key=${out%%"$NL"*}
-		sel=${out#*"$NL"}
-		[ "$sel" = "$out" ] && sel=""
+		# A key fzf printed (print), then the item; a bare item when fzf
+		# accepted on its own (a double click).
+		case $out in
+		*"$NL"*) key=${out%%"$NL"*} sel=${out#*"$NL"} ;;
+		*) key=jump sel=$out ;;
+		esac
 		pane="" tab=""
 		case $sel in
 		a*)

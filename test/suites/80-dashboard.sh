@@ -71,11 +71,11 @@ thread() {
 		'{name: "flaky", task: "Fix the flaky test", repo: "", branch: "flaky", worktree: $w, here: false,
 		  worktree_created: true, agent: $a, created: $c, pane: $p}' >"$SD/${SESSION}_$NP.thread"
 }
-thread 10 claude
+thread 70 claude
 ok "a new thread, before its agent reports: working, starting" \
 	"$(LS_MODE=plain weaver _rows | grep -c '^●  Fix the flaky test  *starting ')" "1"
 ok "...and its card says what it was asked" \
-	"$(weaver _preview "$NP" | strip | sed -n '1p;3p')" "starting · 10s
+	"$(weaver _preview "$NP" | strip | sed -n '1p;3p')" "starting · 1m
 asked      Fix the flaky test"
 thread 300 codex
 ok "a Codex thread that never reports: its hooks need trusting" \
