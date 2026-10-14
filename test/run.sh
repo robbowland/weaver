@@ -117,9 +117,7 @@ EOF
 
 echo "$SESSION" >"$AT/session"
 mkfifo "$AT/keys.fifo"
-# Agents' nvims follow after 0.3s of idleness instead of 3s.
 ZELLIJ_CONFIG_FILE="$AT/zellij.kdl" XDG_STATE_HOME="$AT/state" PATH="$AT/bin:$PATH" TERM=xterm-256color \
-	WEAVER_FOLLOW_IDLE_MS=300 \
 	python3 -I "$HERE/pty_drive.py" "$AT/keys.fifo" "$AT/screen.log" \
 	zellij --config "$AT/zellij.kdl" --session "$SESSION" --new-session-with-layout "$AT/layout.kdl" &
 driver=$!
