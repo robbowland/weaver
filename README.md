@@ -101,26 +101,30 @@ zellij marks its tab until you look at it.
 ### The dashboard
 
 ```
-weaver · 10 threads                                           ! 2  ✓ 2  ● 3
-
-NEEDS YOU 2
-1 !  Add a CLI flag                 Bash: python app.py --name rob         4m
-2 !  Tidy the fish config           question: Which config file should …  40s
-
-DONE 2
-3 ✓  Audit yabai config             1 file · Removed two dead rules; th…  12m
-4 ✓  Add a README                   2 files · Wrote README.md and CONTR…   1m
-
-WORKING 3
-5 ●  Add weaver new and close       1 in background                        2m
-6 ●  Fix the flaky test in the pa…  starting                              25s
-7 ●  Refine the dashboard ui        2 subagents                            8s
-
-IDLE 3
-8 ◌  bump fzf to 0.74 and check t…  interrupted                           40m
-9 ✓  Fix zjstatus colours           Fixed: the working count is #999999…   3h
-  ○  new claude session             no prompt yet                          2d
-↵ jump  1-9  n new  x close  / search  s screen  e nvim  ? help
+┌─ weaver · 5 threads ───────────────────────────────── ! 2  ✓ 1  ● 1 ─┐
+│                                                                      │
+│   NEEDS YOU 2                                                        │
+│   1 !  Add a CLI flag           Bash: python app.py --name rob  11m  │
+│   2 !  Tidy the fish config     question: Which config file s…   8m  │
+│                                                                      │
+│   DONE 1                                                             │
+│   3 ✓  Add a README             Wrote README.md and CONTRIBUT…   8m  │
+│                                                                      │
+│   WORKING 1                                                          │
+│   4 ●  Group the dashboard ro…  2 subagents                      9m  │
+│                                                                      │
+│   IDLE 1                                                             │
+│   5 ✓  Audit yabai float rules  Removed two dead rules; the r…  47m  │
+│   ↵ jump  1-9  n new  x close  / search  s screen  ? help            │
+│ ─────────────────────────────────────────────────────────────────────│
+│ Add a CLI flag · try/add-a-cli-flag · turn 3                         │
+│ needs you · 11m                                                      │
+│                                                                      │
+│ asked      add a CLI flag to app.py, then run it to check it works   │
+│ waits      Bash: python app.py --name rob                            │
+│ said       Added --name and --shout; running it to check.            │
+│ tasks      ✓ parse the flag  ✓ wire it into main  ○ run it           │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 Agents are grouped under NEEDS YOU, DONE (finished, not yet seen), WORKING
@@ -142,9 +146,10 @@ one.
 
 The resume card says what the agent was asked, what it waits on, what it last
 said, its tasks, subagents and files, and its worktree's git status in one
-line. In a dashboard narrower than about 160 columns it sits under the list,
-otherwise beside it.
-`weaver ls | cat` prints the board as text.
+line. The dashboard's pane fits what it shows: the card sits beside the list
+when there is room for 150 columns, else under it, and gives way to the list
+when space is short (`s` still shows it). `weaver ls | cat` prints the board
+as text.
 
 ### Status bar
 

@@ -270,11 +270,20 @@ worktree themselves. The branch always stays.
 `weaver ls` (Alt y) is fzf in a floating pane. `push_status`, run by every hook
 that changes a state, reloads it through its `--listen` socket.
 
-From the top: the title (`weaver · N threads`, the status bar's counts at the
-right), the agents under a heading per group, groups apart by one blank line,
-fzf's footer with the keys that work now, and the preview: on the right when
-it gets 72 columns there, else below, as tall as the list leaves (at least 10
-lines, at most 60%).
+The pane fits its content (`float_fit`, below): as wide as the rows need, as
+tall as the list, its header and footer and the card, at most 90% x 85% of
+the tab, centred; re-fitted when a reload changes the list. It is borderless
+(the Alt y binding: `borderless true; name "weaver"`) and fzf draws one sharp
+border in faint grey: `┌─ weaver · 5 threads ──── ! 2  ✓ 1  ● 1 ─┐`, the
+title and the status bar's counts in its label. Inside, from the top: a blank
+line (the search input takes its place, so nothing moves), the agents under a
+heading per group, groups apart by one blank line, fzf's footer with the keys
+that work now, then the card. The card goes beside the list when the pane can
+be 150 columns wide (74 of them), else below it, where it gets what the list
+leaves: under 6 lines it is hidden, and `s`, `tab` or `?` show it over the
+list. When even the list would not fit, the gaps between groups go first, so
+a heading never shows without its rows. With no agents, the pane is one small
+box saying how to start one, with nothing to select.
 
 | Group | Glyph | Who | Order |
 | --- | --- | --- | --- |
@@ -301,8 +310,7 @@ Weaver-Point trailers) and kept in `$STATE_DIR/turns/`. Only a tip that is the
 
 ### Items
 
-`weaver _rows` prints two header lines (title, gap), then one item per line,
-TAB-separated: `id pane tab prev next label display`. `id` is `a<pane>` for an
+`weaver _rows` prints one item per line, TAB-separated: `id pane tab prev next label display`. `id` is `a<pane>` for an
 agent, `h<group>` a heading, `g<group>` the gap above it, `e` the empty
 board's line; fzf tracks the selection by it (`--track --id-nth 1`). A heading
 or gap has the list positions of the agents before and after it in `prev` and
@@ -310,7 +318,12 @@ or gap has the list positions of the agents before and after it in `prev` and
 a TAB after the glyph; fzf shows it with `--tabstop 1` and searches only what
 follows (`--nth 2`), which headings and gaps leave empty. The first nine
 agents are numbered and `<sock>.keys` holds, line by line, the action that
-picks each (`pos(N)+print(jump)+accept`).
+picks each (`pos(N)+print(jump)+accept`). It also fits the pane and leaves
+next to the socket what fzf shows around the list: `.label` (the border's
+label), `.title` (the header: what to do on an empty board), `.room` and
+`.tight` (the card's `--preview-window`, and whether it is hidden for want of
+room), `.vp` (the tab's size, asked of zellij again only on a resize). On each
+load, `weaver _chrome` turns them into fzf actions.
 
 ### Keys
 
@@ -340,8 +353,19 @@ then aligned fields (asked, waits, background, said, tasks, subagents, files,
 git), each wrapped under itself, at most a few lines. `git` is the worktree's
 `git status` in one line: branch, ahead/behind, changed and new files. A
 thread whose agent has not reported shows its record (task, worktree).
-`s`/`tab` swap in the agent's screen (`zellij action dump-screen`), as many
-lines as fit; `?` the keys.
+`s`/`tab` swap in the agent's screen (`zellij action dump-screen`) under
+`screen · name · repo/branch · turn`, as many lines as fit; `?` the keys.
+
+### Floating panes
+
+`float_fit ROWS COLS` (shared with `weaver new`'s form) fits the floating pane
+it runs in: at most 85% of the tab's rows and 90% of its columns, at least 3 x
+20, centred, borderless, in one `zellij action change-floating-pane-coordinates
+-p terminal_<pane> -b true -x -y --width --height`; FIT_ROWS and FIT_COLS get
+the size it took. It does nothing in a tiled pane or when zellij does not
+answer. The tab's size (without its bars) is `list-tabs -j`'s
+`viewport_columns` and `viewport_rows` (`pane_view`). Measured in a 120x40
+tab: about 120 ms for a fit, nothing to fit on an ordinary reload.
 
 ## Decisions
 
@@ -547,3 +571,12 @@ lines as fit; `?` the keys.
   reopen. Only when the agent and its nvim are the tab's only tiled panes; the
   agent is never touched otherwise. `open_left_of` now goes to the agent's
   tab first, so `weaver edit <pane>` from another tab opens nvim there.
+- 2026-10-14: The dashboard fits its pane (visual QA: a fixed 90% x 85% pane
+  left most of it empty). Borderless with fzf's own border, because zellij's
+  frame repeated "weaver ls" and "PIN [ ]" over the dashboard's title; the
+  binding opens it borderless and named, so the frame never flashes. The
+  title moved to the border's label, freeing the header for a blank line
+  that the search input replaces (fzf 0.74.5: `--header-first`, and
+  `change-header` from a transform), so searching moves nothing. The list
+  has priority over the card: at 80 x 30 the old 10-line card minimum cut
+  the list mid-group.
