@@ -375,7 +375,7 @@ in the session (`weaver new`). Wherever a row is numbered (the sidebar, the
 home board, the floating dashboard) the number is the thread's `num` when any
 agent has one, else the row's place as before, and the digits go by it.
 
-`weaver sidebar`, at the left of every thread tab, lists the session in its
+`weaver sidebar`, at the left of every thread tab when `WEAVER_SIDEBAR=1`, lists the session in its
 tabs' order (`thread_order`: the threads by number, then the other tabs; home
 left out): number, glyph, name and age, and for one that needs you a faint
 second line with what it waits on; a tab without an agent is a faint `·` and
@@ -393,7 +393,8 @@ reload from the rows about 20 ms.
 
 `weaver home`, in the home tab, is the dashboard at full size that never ends:
 enter, digits and `e` go to a thread and leave it running, `n` runs `weaver
-new` inside it, `q` and `esc` do nothing.
+new` inside it (also on an empty board), `q` and `esc` go back to the tab you
+came from, as Alt y does.
 
 The PR and issue Inbox, when it comes, is a second tab beside home (`inbox`,
 before the threads, out of the thread numbering and of Alt j/k's thread
@@ -428,7 +429,8 @@ without the marker (from before this layout) is left to you.
   home`, and a `default_tab_template` with the status line.
 - **Thread tabs:** `weaver new` builds the tab from the session's
   `new_tab_template` as a named `tab_template` (`weaver_thread`), with a vertical
-  split: `weaver sidebar` at 16%, the nvim, the agent; and a
+  split: the nvim and the agent; with `WEAVER_SIDEBAR=1`, `weaver sidebar` at 16%
+  before them, and a
   `swap_tiled_layout name="rail"` with the sidebar at 5% (its content needs 3 columns at 80).
   `zellij action next-swap-layout -t TAB` (and Alt [ / Alt ]) toggles the two
   with the panes kept. The tab then moves (`move-tab -t TAB left`) to its
@@ -705,3 +707,10 @@ without the marker (from before this layout) is left to you.
   while a second `keybinds` block loses to the first (measured).
 - 2026-10-14: a fixed-column pane keeps its columns when its neighbour closes
   (measured), so the agent's and the sidebar's widths are percentages.
+- 2026-10-14: After trying the weaver session, Rob turned the sidebar off: home
+  on Alt y already shows every thread when he wants it. Thread tabs are nvim
+  and the agent again; `WEAVER_SIDEBAR=1` brings the sidebar back.
+- 2026-10-14: On an empty board fzf skips any action whose template names a
+  field (`{1}`, `{2}`), `transform` included (measured on 0.74.5 with
+  `--with-shell`), so home's `n` decides on `$FZF_TOTAL_COUNT` and prints the
+  `{2}` it needs.

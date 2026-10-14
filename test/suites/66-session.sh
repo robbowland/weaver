@@ -1,8 +1,8 @@
 #!/bin/bash
 # The weaver session: `weaver` starts zellij with weaver's layout and keys. In
-# it a thread gets a number, a tab in its number's order and the thread
-# sidebar, which collapses to a rail on a narrow window; Alt y goes home and
-# back. The test session stands in for one: its .layout file says weaver.
+# it a thread gets a number and a tab in its number's order (with
+# WEAVER_SIDEBAR=1, the thread sidebar too, which collapses to a rail on a
+# narrow window); Alt y goes home and back. The test session stands in for one: its .layout file says weaver.
 . "$(dirname "$0")/../lib.sh"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
 fresh
@@ -85,6 +85,11 @@ ok "weaver: your layouts/weaver.kdl when you have one" \
 echo weaver >"$SD/${SESSION}.layout"
 home=$(Z new-tab --name home -- bash --noprofile --norc -i)
 while [ "$(position "$home")" -gt 0 ]; do Z move-tab -t "$home" left; done
+thread plain
+ok "session: by default a thread's tab is nvim and the agent, no sidebar" \
+	"${SB:-none}|$([ "$(columns "$NVP")" -gt 100 ] && echo wide)|$(columns "$AG")" "none|wide|44"
+weaver close --yes "$AG" >/dev/null 2>&1
+export WEAVER_SIDEBAR=1
 thread alpha
 T1=$TAB A1=$AG S1=$SB N1=$NVP
 thread beta

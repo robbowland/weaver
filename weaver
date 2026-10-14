@@ -4098,7 +4098,7 @@ thread_layout() {
         args \"_agent\" $ktok $kkind
     }
 }"
-	if weaver_session; then
+	if weaver_session && [ "${WEAVER_SIDEBAR:-0}" = 1 ]; then
 		thread_layout_side "$size"
 		return
 	fi
@@ -4119,7 +4119,8 @@ $tpl
 }"
 }
 
-# In the weaver session, a thread tab has the thread sidebar on its left:
+# In the weaver session with WEAVER_SIDEBAR=1, a thread tab has the thread
+# sidebar on its left:
 # SIDE_OPEN% of the width, or SIDE_RAIL% once it collapses (a swap layout, so
 # `next-swap-layout`, Alt [ and Alt ] toggle it with the panes kept). The
 # session's new-tab template (its status line) becomes a named tab template,

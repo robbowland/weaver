@@ -24,9 +24,10 @@ another). Inside zellij it opens the dashboard.
 The weaver session has no tab bar; weaver does the switching:
 
 - **home**, the first tab: the board of every thread, full size;
-- one tab per thread, in its number's order: the thread sidebar on the left,
-  its nvim, the agent on the right. Below 160 columns the sidebar folds to a
-  rail of numbers and glyphs; `Alt [` / `Alt ]` fold or open it yourself;
+- one tab per thread, in its number's order: its nvim, the agent on the
+  right. With `WEAVER_SIDEBAR=1` a thread sidebar lists every thread on the
+  left; below 160 columns it folds to a rail of numbers and glyphs, and
+  `Alt [` / `Alt ]` fold or open it yourself;
 - one status line: the current thread, its repo and branch, the counts, the
   mode.
 
@@ -303,6 +304,7 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as nvim keeps 60 columns |
+| `WEAVER_SIDEBAR` | `0` | `1`: thread tabs in the weaver session get the thread sidebar on their left |
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
