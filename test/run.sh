@@ -127,6 +127,20 @@ EOF
 
 echo "$SESSION" >"$AT/session"
 mkfifo "$AT/keys.fifo"
+
+# Whatever happens (a failed suite, Ctrl-C, a kill), the throwaway session
+# goes: only this run's own, by its exact name.
+driver=""
+cleanup() {
+	trap - EXIT INT TERM HUP
+	zellij kill-session "$SESSION" >/dev/null 2>&1
+	sleep 0.5
+	zellij delete-session --force "$SESSION" >/dev/null 2>&1
+	[ -n "$driver" ] && kill "$driver" 2>/dev/null
+	[ -n "$driver" ] && wait "$driver" 2>/dev/null
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
 ZELLIJ_CONFIG_FILE="$AT/zellij.kdl" XDG_STATE_HOME="$AT/state" PATH="$AT/bin:$PATH" TERM=xterm-256color \
 	python3 -I "$HERE/pty_drive.py" "$AT/keys.fifo" "$AT/screen.log" \
 	zellij --config "$AT/zellij.kdl" --session "$SESSION" --new-session-with-layout "$AT/layout.kdl" &
@@ -155,10 +169,7 @@ for suite in "$@"; do
 	bash "$suite" || failed=$((failed + 1))
 done
 
-zellij kill-session "$SESSION" >/dev/null 2>&1
-sleep 0.5
-zellij delete-session "$SESSION" >/dev/null 2>&1
-wait "$driver" 2>/dev/null
+cleanup
 echo "scratch dir: $AT"
 if [ $failed -gt 0 ]; then
 	echo "$failed suite(s) failed"
