@@ -17,20 +17,36 @@ any other agent can report through `weaver event`
 weaver
 ```
 
-Outside zellij, `weaver` attaches to the zellij session `weaver`, or starts it
-with your default layout (`WEAVER_SESSION`, or `weaver start NAME`, for
+Outside zellij, `weaver` starts the zellij session `weaver` with weaver's own
+layout, or attaches to it (`WEAVER_SESSION`, or `weaver start NAME`, for
 another). Inside zellij it opens the dashboard.
 
+The weaver session has no tab bar; weaver does the switching:
+
+- **home**, the first tab: the board of every thread, full size;
+- one tab per thread, in its number's order: the thread sidebar on the left,
+  its nvim, the agent on the right. Below 160 columns the sidebar folds to a
+  rail of numbers and glyphs; `Alt [` / `Alt ]` fold or open it yourself;
+- one status line: the current thread, its repo and branch, the counts, the
+  mode.
+
 Then `Alt N`: say what the agent should do, press enter, and a new tab opens
-for that thread, with its nvim on the left and the agent on the right, started
-with your task as its first prompt, in a new worktree on a branch named after
-the task.
+for that thread, with its nvim and the agent, started with your task as its
+first prompt, in a new worktree on a branch named after the task.
+
+The layout is `layouts/weaver.kdl` in your zellij config directory (weaver's
+own when you have none), and the session's keys `weaver-keys.kdl` beside your
+config (weaver's otherwise), added after your own keybindings for this session
+only. An exited session named `weaver` from before this layout is never
+replaced by weaver: `zellij delete-session weaver`, then `weaver`.
 
 ## Keys
 
 | Key | Does |
 | --- | --- |
 | `Alt N` | Start a thread: a form for the task, then a tab with nvim and the agent |
+| `Alt j` / `Alt k` | In the weaver session: the next / previous tab, so the threads in their numbers' order (home included) |
+| `Alt y` (weaver session) | Home, and from home back to the tab you came from |
 | `Alt y` | The dashboard: every agent in the session, grouped by state, with a resume card for the selected one. `enter` or `1`-`9` jumps, `e` jumps and opens nvim, `?` lists its keys |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |

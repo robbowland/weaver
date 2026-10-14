@@ -404,6 +404,47 @@ the label changed (labels kept in `$STATE_DIR/<skey>.tabs`), and only in the
 weaver session. zjstatus prints `#[...]` in a tab name as it is, so the line is
 one colour.
 
+## The weaver session
+
+`weaver` (outside zellij) starts `zellij --config <session config> --session
+weaver --new-session-with-layout <layout>`, or attaches to a running one. A
+session made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; the
+sidebar, the tab labels, numbered placement and `_sidefit` act only there. An
+exited weaver session is resurrected with the session config; an exited one
+without the marker (from before this layout) is left to you.
+
+- **Config:** `$STATE_DIR/zellij-session.kdl`, rebuilt at every start: your
+  config (`$ZELLIJ_CONFIG_FILE`, else `config.kdl`) with the session keys
+  (`weaver-keys.kdl` beside it, else `config/zellij-session-keys.kdl`) added
+  before the brace that closes its first `keybinds` block, then `layout_dir` and
+  `theme_dir` pointing at your config directory's, when they exist and are
+  not set.
+- **Layout:** `$WEAVER_LAYOUT`, else `layouts/weaver.kdl` in your zellij config
+  directory, else `config/weaver-layout.kdl`: a `home` tab running `weaver
+  home`, and a `default_tab_template` with the status line.
+- **Thread tabs:** `weaver new` builds the tab from the session's
+  `new_tab_template` as a named `tab_template` (`weaver_thread`), with a vertical
+  split: `weaver sidebar` at 13%, the nvim, the agent; and a
+  `swap_tiled_layout name="rail"` with the sidebar at 3%.
+  `zellij action next-swap-layout -t TAB` (and Alt [ / Alt ]) toggles the two
+  with the panes kept. The tab then moves (`move-tab -t TAB left`) to its
+  place: after the last thread tab with a lower number, else after home.
+- **Numbers:** `num` in the thread record, the lowest free among the
+  session's thread records (those being opened included), under
+  `$STATE_DIR/<skey>.num.lock`.
+- **Folding:** `weaver _sidefit`, run by the sidebar at its start and on
+  resize: open from 160 columns, the rail below. The decision is kept in
+  `$STATE_DIR/<skey>.side.<tab>`; while the window stays on the same side of
+  160 the layout is left as you set it.
+- **Alt y:** `weaver go home` from a 1x1 borderless floating pane: one
+  `list-tabs` for the active tab and home; from home to the tab in
+  `$STATE_DIR/<skey>.last`, else home (made again if it was closed).
+- **Order:** `thread_order` fills THREAD_ORDER from $PANES (else list-panes)
+  and the state and thread files, one line per entry in tab position order,
+  home left out, US-separated: `kind num tab pane label`, kind `thread`,
+  `agent` or `tab`. A tab without an agent is labelled by its name, or for
+  zellij's `Tab #N`, its first pane's directory and command.
+
 ## Decisions
 
 - 2026-10-13: WorktreeCreate and WorktreeRemove hooks are not registered.
@@ -644,3 +685,19 @@ one colour.
 - 2026-10-14: Inside `--border`, fzf's FZF_COLUMNS and FZF_LINES leave out
   the border and the padding next to it (4 columns, 2 lines; measured on
   0.74.5), so the dashboard adds them back to size itself.
+- 2026-10-14 (hybrid layout): the sidebar folds with a swap layout. Measured
+  on zellij 0.45.1: `swap_tiled_layout` in a `new-tab --layout-string` works
+  when the tab's template is named (an inline template with a plugin pane
+  fails to parse), `next-swap-layout -t TAB` takes ~45 ms, keeps the panes
+  and works on tabs you are not looking at; resizing in 5% steps could not
+  reach a 3-column rail, and `override-layout` changed nothing. Both widths
+  are percentages so the sidebar is resized, and told, whenever the window is.
+- 2026-10-14: Alt j / Alt k in the weaver session are zellij's own
+  GoToNextTab / GoToPreviousTab (instant, no floating pane), which is why
+  thread tabs are kept in their numbers' order; home is in that cycle. Alt y
+  needs a choice (home or back), so it runs `weaver go home` (~230 ms).
+- 2026-10-14: the session's keys are added at the end of your own keybinds
+  block, not in a second one: within a block the later binding of a key wins,
+  while a second `keybinds` block loses to the first (measured).
+- 2026-10-14: a fixed-column pane keeps its columns when its neighbour closes
+  (measured), so the agent's and the sidebar's widths are percentages.
