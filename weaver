@@ -63,9 +63,10 @@ C_GREEN=$'\033[38;2;57;217;122m'
 C_GREY=$'\033[38;2;153;153;153m'
 C_DIM=$'\033[38;2;97;97;97m'
 C_BOLD=$'\033[1m'
+C_INK=$'\033[38;2;255;255;255m'
 C_OFF=$'\033[0m'
 # fzf in Micrographics: the current line pure-inverted, greys for the chrome.
-FZF_COLORS='fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161'
+FZF_COLORS='fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999'
 
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
 
@@ -1995,7 +1996,8 @@ push_status() {
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
 		[ -S "$s" ] || continue
 		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $(printf '%q' "$SELF") _rows)+refresh-preview" \
-			http://localhost >/dev/null 2>&1 || rm -f "$s" "${s%.sock}.keys" "${s%.sock}.view"
+			http://localhost >/dev/null 2>&1 || rm -f "$s" "${s%.sock}".keys "${s%.sock}".view "${s%.sock}".title \
+			"${s%.sock}".label "${s%.sock}".room "${s%.sock}".shown "${s%.sock}".tight "${s%.sock}".vp
 	done
 	return 0
 }
@@ -2142,37 +2144,141 @@ turn_files() {
 	TURN_FILES=$total
 }
 
-# The width of the dashboard's list, into LS_WIDTH: fzf's, less the preview
-# when that is on the right. Before fzf has drawn (FZF_COLUMNS is 0 at its
-# start), the terminal's, with the preview where fzf will put it: on the right
-# when it gets 72 columns there (cmd_ls's --preview-window).
-ls_width() {
-	local cols=${FZF_COLUMNS:-0} left=${FZF_PREVIEW_LEFT:-0} size
-	case $cols$left in *[!0-9]*) cols=0 left=0 ;; esac
-	if [ "$left" -gt 0 ]; then
-		LS_WIDTH=$((left - 2))
-		return 0
+# The dashboard's size, into LS_COLS and LS_LINES: fzf's (FZF_COLUMNS and
+# FZF_LINES are 0 before it has drawn), else the terminal's.
+ls_size() {
+	local size
+	LS_COLS=${FZF_COLUMNS:-0} LS_LINES=${FZF_LINES:-0}
+	case $LS_COLS$LS_LINES in *[!0-9]*) LS_COLS=0 LS_LINES=0 ;; esac
+	if [ "$LS_COLS" -eq 0 ] || [ "$LS_LINES" -eq 0 ]; then
+		size=$({ stty size </dev/tty; } 2>/dev/null)
+		LS_LINES=${size%% *} LS_COLS=${size#* }
+		case $LS_COLS in '' | *[!0-9]*) LS_COLS=${COLUMNS:-100} ;; esac
+		case $LS_LINES in '' | *[!0-9]*) LS_LINES=${LINES:-40} ;; esac
+		case $LS_COLS$LS_LINES in *[!0-9]*) LS_COLS=100 LS_LINES=40 ;; esac
 	fi
-	if [ "$cols" -eq 0 ]; then
-		size=$(stty size </dev/tty 2>/dev/null)
-		cols=${size#* }
-		case $cols in '' | *[!0-9]*) cols=${COLUMNS:-100} ;; esac
-		case $cols in '' | *[!0-9]*) cols=100 ;; esac
-		[ $((cols * 45 / 100 - 2)) -ge 72 ] && cols=$((cols - cols * 45 / 100))
-	fi
-	LS_WIDTH=$cols
 }
 
-# The dashboard's lines. LS_MODE=fzf (the default for `weaver _rows`): two
-# header lines (the title, a gap), then one TAB-separated item per line:
+# The card: beside the list in a dashboard 150 columns wide or more (74 of
+# them, its border included), else below it, in about 12 lines.
+LS_CARD_W=74 LS_CARD_H=12
+ls_card_right() { [ "$1" -ge 150 ]; }
+
+# The width of the dashboard's list, into LS_WIDTH: LS_COLS, less the card
+# when that is beside it.
+ls_width() {
+	LS_WIDTH=$LS_COLS
+	ls_card_right "$LS_COLS" && LS_WIDTH=$((LS_COLS - LS_CARD_W - 2))
+	return 0
+}
+
+# Where the card goes in a dashboard of LS_COLS x LS_LINES with a list of
+# ITEMS lines, into LS_PW (fzf's --preview-window) and LS_PHIDE (1 when it is
+# hidden for want of room); kept next to the socket (.room, .tight) for
+# `weaver _chrome` and `weaver _view`. The list comes first: below it, the
+# card gets what the border, the header line, the list and the footer leave,
+# and is hidden when that is under 6 lines; s, tab and ? still show it, over
+# the list.
+ls_card_room() {
+	local items=$1 p base=${FZF_SOCK:-}
+	base=${base%.sock}
+	LS_PHIDE=""
+	if [ "$items" = 0 ]; then
+		LS_PW="down,50%,border-top,wrap,hidden"
+	elif ls_card_right "$LS_COLS"; then
+		LS_PW="right,$LS_CARD_W,border-left,wrap"
+	else
+		p=$((LS_LINES - items - 5))
+		if [ $p -lt 6 ]; then
+			LS_PHIDE=1 LS_PW="down,50%,border-top,wrap,hidden"
+		else
+			LS_PW="down,$p,border-top,wrap"
+		fi
+	fi
+	[ -n "$base" ] || return 0
+	printf '%s\n' "$LS_PW" >"$base.room"
+	if [ -n "$LS_PHIDE" ]; then : >"$base.tight"; else rm -f "$base.tight"; fi
+}
+
+# The tab's size and whether the dashboard's pane floats (pane_view), kept
+# next to the socket (.vp) so that reloads don't ask zellij again; asked
+# again with LS_REMEASURE=1 (fzf's resize).
+ls_view() {
+	local base=${FZF_SOCK:-}
+	base=${base%.sock}
+	if [ -n "$base" ] && [ -z "${LS_REMEASURE:-}" ] && [ -f "$base.vp" ]; then
+		WEAVER_VIEW=$(cat "$base.vp" 2>/dev/null) pane_view "${ZELLIJ_PANE_ID:-}"
+		return
+	fi
+	pane_view "${ZELLIJ_PANE_ID:-}" || return 1
+	[ -n "$base" ] && printf '%s %s %s\n' "$VIEW_COLS" "$VIEW_ROWS" "$VIEW_FLOAT" >"$base.vp"
+	return 0
+}
+
+# The dashboard's layout, for ls_rows (whose variables it shares: n, groups,
+# wn, wf and ww in; width, cw and gaps out). A floating dashboard first fits
+# its pane (float_fit) to the list, its header and footer, fzf's border and
+# the card: the card beside the list when the pane can be 150 columns wide,
+# else below it, given 6 lines at least. Then: the rows' width, repo/branch
+# when there is room, the gaps between groups when they fit, and the card's
+# room (ls_card_room).
+ls_plan() {
+	local items=0 nn nf=0 nw=0 lt cols rows vmc vmr
+	nn=$((wn + 2 > 42 ? 42 : wn + 2))
+	[ $wf -gt 0 ] && nf=$((wf + 2 > 58 ? 58 : wf + 2))
+	[ $ww -gt 0 ] && nw=$((ww + 2 > 30 ? 30 : ww + 2))
+	[ $n -gt 0 ] && items=$((n + groups * 2 - 1))
+	ls_size
+	if ls_view && [ -n "$VIEW_FLOAT" ]; then
+		vmc=$((VIEW_COLS * 90 / 100)) vmr=$((VIEW_ROWS * 85 / 100))
+		# The rows, and fzf's border, padding and pointer around them.
+		lt=$((pre + nn + nf + nw + age_w + 7))
+		if [ $n = 0 ]; then
+			cols=72 rows=7
+		elif [ $vmc -ge 150 ]; then
+			cols=$((lt + LS_CARD_W))
+			[ $cols -lt 150 ] && cols=150
+			rows=$((items + 2))
+			[ $rows -lt $LS_CARD_H ] && rows=$LS_CARD_H
+			rows=$((rows + 2))
+		else
+			cols=$lt
+			[ $cols -lt 72 ] && cols=72
+			rows=$((items + 4 + 1 + LS_CARD_H))
+			[ $rows -gt $vmr ] && [ $((vmr - items - 5)) -lt 6 ] && rows=$((items + 4))
+		fi
+		[ $cols -gt $vmc ] && cols=$vmc
+		[ $rows -gt $vmr ] && rows=$vmr
+		if [ "$rows $cols" != "$LS_LINES $LS_COLS" ]; then
+			float_fit "$rows" "$cols"
+			[ -n "$FIT_ROWS" ] && LS_LINES=$FIT_ROWS LS_COLS=$FIT_COLS
+		fi
+	fi
+	gaps=1
+	if [ $n -gt 0 ] && [ $((items + 4)) -gt "$LS_LINES" ]; then
+		gaps=0 items=$((n + groups))
+	fi
+	# fzf's border and its padding, the pointer's columns, a spare one.
+	ls_width
+	width=$((LS_WIDTH - 7))
+	cw=0
+	# Repo/branch only when the name and the fact keep 24 and 20 columns.
+	[ $nw -gt 0 ] && [ $((width - nw)) -ge $((pre + (nn < 24 ? nn : 24) + (nf < 20 ? nf : 20) + age_w)) ] && cw=$nw
+	ls_card_room "$items"
+}
+
+# The dashboard's lines. LS_MODE=fzf (the default for `weaver _rows`): one
+# TAB-separated item per line:
 #   id  pane  tab  prev  next  label  display
 # id is a<pane> for an agent, h<group> for a heading, g<group> for the gap
-# above one, e for the empty board; prev and next are the list positions of
-# the agents around a heading or gap, for the cursor to skip it; label is the
-# resume card's title. The display has a TAB after the glyph: fzf searches
-# only what follows (--nth 2), which headings and gaps leave empty. The first
-# nine agents are numbered, and $FZF_SOCK's .keys file holds the fzf actions
-# that pick them (one per line, for the 1-9 keys). Width: fzf's list
+# above one; prev and next are the list positions of the agents around a
+# heading or gap, for the cursor to skip it; label is the resume card's
+# title. The display has a TAB after the glyph: fzf searches only what
+# follows (--nth 2), which headings and gaps leave empty. When the list would
+# not fit the dashboard, the gaps go. The title (and, with no agents, what to
+# do) goes to $FZF_SOCK's .title file, for fzf's header (`weaver _title`);
+# the first nine agents are numbered, and the .keys file holds the fzf
+# actions that pick them (one per line, for the 1-9 keys). Width: fzf's list
 # (ls_width). LS_MODE=plain: the board as text, $COLUMNS wide (100 when
 # unset). Micrographics colours for fzf, else only with COLOR=1.
 ls_rows() {
@@ -2183,18 +2289,13 @@ ls_rows() {
 	local wn=0 wf=0 ww=0 cn cf cw pre lead age_w=3 out="" keys="" title_l title_r gap
 	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root order
 	local -a counts=(0 0 0 0) heads=("NEEDS YOU" "DONE" "WORKING" "IDLE")
+	local gaps=1 groups=0
 	ls_utf8
 	# Colours for fzf, and on request (COLOR=1).
 	[ "${COLOR:-$([ "$mode" = fzf ] && echo 1)}" = 1 ] &&
 		red=$C_RED green=$C_GREEN grey=$C_GREY dim=$C_DIM bold=$C_BOLD off=$C_OFF
-	if [ "$mode" = fzf ]; then
-		ls_width
-		# fzf takes the pointer and marker columns, and one for a scrollbar.
-		width=$((LS_WIDTH - 3))
-	else
-		width=${COLUMNS:-100}
-		case $width in '' | *[!0-9]*) width=100 ;; esac
-	fi
+	width=${COLUMNS:-100}
+	case $width in '' | *[!0-9]*) width=100 ;; esac
 	[ $width -lt 40 ] && width=40
 	agent_rows
 	now=$(date +%s)
@@ -2290,9 +2391,14 @@ EOF2
 	# fzf searches only what follows the TAB after the glyph (--nth 2,
 	# --tabstop 1): headings and gaps have nothing there, so a search shows
 	# the agents alone.
-	if [ "$mode" = fzf ]; then pre=5 sep=" $TAB"; else pre=3; fi
-	cw=0
-	[ $width -ge 96 ] && [ $ww -gt 0 ] && cw=$((ww + 2 > 30 ? 30 : ww + 2))
+	if [ "$mode" = fzf ]; then
+		pre=5 sep=" $TAB"
+		for g in 0 1 2 3; do [ ${counts[g]} -gt 0 ] && groups=$((groups + 1)); done
+		ls_plan
+	else
+		pre=3 cw=0
+		[ $width -ge 96 ] && [ $ww -gt 0 ] && cw=$((ww + 2 > 30 ? 30 : ww + 2))
+	fi
 	k=$((width - pre - age_w - cw))
 	# The name comes first: at least 24 columns (less only if no name needs
 	# them), 45% of the room once there is plenty, but never past 40 characters.
@@ -2316,27 +2422,44 @@ EOF2
 	[ ${counts[1]} -gt 0 ] && title_r="$title_r$G_DONE ${counts[1]}  "
 	[ ${counts[2]} -gt 0 ] && title_r="$title_r$G_WORK ${counts[2]}  "
 	title_r=${title_r%  }
-	k=$((width - ${#title_l} - ${#title_r} - (pre > 3 ? 2 : 0)))
-	[ $k -lt 2 ] && k=2
-	printf -v gap '%*s' $k ''
+	if [ "$mode" = fzf ]; then
+		# On fzf's top border: ┌─ weaver · 5 threads ──── ! 2  ✓ 1  ● 1 ─┐
+		k=$((LS_COLS - 4 - ${#title_l} - ${#title_r} - 4))
+		[ $k -lt 1 ] && k=1
+		gap=""
+		while [ ${#gap} -lt $k ]; do gap="${gap}─"; done
+		gap=" $dim$gap$off "
+		[ -n "$title_r" ] || gap=""
+	else
+		k=$((width - ${#title_l} - ${#title_r}))
+		[ $k -lt 2 ] && k=2
+		printf -v gap '%*s' $k ''
+	fi
 	# In the status bar's colours.
 	title_r=${title_r/"$G_NEED "/"$red$G_NEED$off "}
 	title_r=${title_r/"$G_DONE "/"$green$G_DONE$off "}
 	title_r=${title_r/"$G_WORK "/"$grey$G_WORK$off "}
 	title_l="$bold${title_l%% · *}$off${title_l#weaver}"
 	title_l=${title_l/ · /"$dim · $off"}
+	# On fzf's border, whose label is grey: weaver in ink.
+	[ "$mode" = fzf ] && [ -n "$bold" ] && title_l=${title_l/"$bold"/"$C_BOLD$C_INK"}
 	if [ "$mode" = fzf ]; then
-		printf 't\t\t\t\t\t\t%s\nt2\t\t\t\t\t\t\n' "$title_l$gap$title_r"
+		# The border's label, and (no agents) what to do, for the header.
+		if [ -n "${FZF_SOCK:-}" ]; then
+			printf '%s\n' " $title_l$gap$title_r " >"${FZF_SOCK%.sock}.label.$$" &&
+				mv -f "${FZF_SOCK%.sock}.label.$$" "${FZF_SOCK%.sock}.label"
+			out=""
+			[ $n = 0 ] && out="${grey}No threads yet.$off ${C_OFF}n$grey starts one here, ${C_OFF}Alt N$grey from anywhere;$off$NL${grey}or start claude or codex in any pane.$off"
+			printf '%s\n' "$out" >"${FZF_SOCK%.sock}.title.$$" && mv -f "${FZF_SOCK%.sock}.title.$$" "${FZF_SOCK%.sock}.title"
+			[ $n = 0 ] && : >"${FZF_SOCK%.sock}.keys"
+		fi
+		[ $n = 0 ] && return 0
 	else
 		printf '%s\n\n' "$title_l$gap$title_r"
-	fi
-	if [ $n = 0 ]; then
-		if [ "$mode" = fzf ]; then
-			printf 'e\t\t\t\t\t\t%s\n' "${grey}No threads yet.$off  ${dim}n$off starts one."
-		else
+		if [ $n = 0 ]; then
 			printf '%s\n' "No agents in zellij session $SESSION."
+			return 0
 		fi
-		return 0
 	fi
 
 	# Positions first (headings and gaps take one each), so each heading and
@@ -2346,7 +2469,7 @@ EOF2
 	for i in "${order[@]}"; do
 		g=${r_group[i]}
 		if [ "$g" != "$last_g" ]; then
-			if [ $last_g != -1 ]; then
+			if [ $last_g != -1 ] && [ $gaps = 1 ]; then
 				l_id[m]="g$g" l_text[m]="" l_isagent[m]=0
 				m=$((m + 1))
 			fi
@@ -2419,8 +2542,10 @@ cmd_preview() {
 		;;
 	screen)
 		[ -n "$pane" ] || return 0
+		# Whose screen it is, then as much of its end as fits.
+		printf '%sscreen · %s%s%s%s%s\n' "$C_DIM" "$C_OFF$C_BOLD" "${title%% · *}" "$C_OFF" "$C_DIM${title#"${title%% · *}"}" "$C_OFF"
 		zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null |
-			awk 'NF { last = NR } { l[NR] = $0 } END { s = last - '"$lines"' + 1; if (s < 1) s = 1; for (i = s; i <= last; i++) print l[i] }'
+			awk 'NF { last = NR } { l[NR] = $0 } END { s = last - '"$((lines - 1))"' + 1; if (s < 1) s = 1; for (i = s; i <= last; i++) print l[i] }'
 		return 0
 		;;
 	esac
@@ -2558,14 +2683,61 @@ ${g}threads$o
 EOF2
 }
 
-# The dashboard's preview shows VIEW (screen, help); the same again goes back
-# to the card.
+# The preview's next view, as fzf actions (a transform): `weaver _view
+# screen` (s, tab) goes card, screen, card; `weaver _view help` (?) shows the
+# keys, and again goes back to the card. When the card is hidden for want of
+# room, either shows it (over the list), and s after the screen hides it
+# again. The view is kept next to the dashboard's socket.
 cmd_view() {
-	local f cur=""
+	local f cur="" hidden="" next
 	[ -n "${FZF_SOCK:-}" ] || return 0
 	f=${FZF_SOCK%.sock}.view
 	{ IFS= read -r cur <"$f"; } 2>/dev/null
-	if [ "$cur" = "$1" ]; then rm -f "$f"; else printf '%s\n' "$1" >"$f"; fi
+	[ "${FZF_PREVIEW_LINES:-0}" = 0 ] && hidden=1
+	case $1:$cur in
+	screen:screen | help:help) next="" ;;
+	*) next=$1 ;;
+	esac
+	if [ -n "$hidden" ]; then
+		# Shown on request: the card first.
+		[ "$1" = screen ] && next=""
+		ls_size
+		printf 'change-preview-window(down,%d,border-top,wrap)+' $((LS_LINES / 2))
+	elif [ "$1:$cur" = screen:screen ] && [ -f "${FZF_SOCK%.sock}.tight" ]; then
+		printf 'hide-preview+'
+	fi
+	if [ -n "$next" ]; then printf '%s\n' "$next" >"$f"; else rm -f "$f"; fi
+	printf 'refresh-preview+transform-footer(%s _footer)\n' "$(printf '%q' "$SELF")"
+}
+
+# The dashboard's header (a transform): with no agents, what to do; else a
+# blank line while browsing, whose place the search input takes, so nothing
+# moves. (The title is on fzf's border.)
+ls_title() {
+	local f="${FZF_SOCK:-}" t=""
+	f=${f%.sock}.title
+	t=$(cat "$f" 2>/dev/null)
+	if [ -n "$t" ]; then
+		printf '%s\n' "$t"
+	elif [ "${FZF_INPUT_STATE:-hidden}" = hidden ]; then
+		printf '%s\n' "$C_OFF"
+	fi
+}
+
+# What a reload changes besides the list (a transform on fzf's load): the
+# header, the footer, the title on the border, and the card's room when the
+# reload changed it (ls_card_room).
+ls_chrome() {
+	local base=${FZF_SOCK%.sock} pw="" last="" q
+	q=$(printf '%q' "$SELF")
+	printf 'transform-header(%s _title)+transform-footer(%s _footer)' "$q" "$q"
+	{ IFS= read -r pw <"$base.room"; } 2>/dev/null
+	{ IFS= read -r last <"$base.shown"; } 2>/dev/null
+	if [ -n "$pw" ] && [ "$pw" != "$last" ]; then
+		printf '%s\n' "$pw" >"$base.shown"
+		printf '+change-preview-window(%s)' "$pw"
+	fi
+	printf '+change-border-label:%s\n' "$(cat "$base.label" 2>/dev/null)"
 }
 
 # Jump to pane PANE in tab TAB and count it as seen.
@@ -2579,14 +2751,18 @@ jump_to() {
 ls_footer() {
 	local width k w item out="" end="" g=$C_GREY d=$C_DIM o=$C_OFF IFS='|'
 	local browse='↵ jump|1-9|n new|x close|/ search|s screen|e nvim' search='↵ jump|esc back|tab screen|^e nvim'
+	# The card hidden for want of room: s shows it.
+	[ -n "${FZF_SOCK:-}" ] && [ -f "${FZF_SOCK%.sock}.tight" ] && [ "${FZF_PREVIEW_LINES:-0}" = 0 ] &&
+		browse='↵ jump|1-9|n new|x close|/ search|s card|e nvim'
 	ls_utf8
+	ls_size
 	ls_width
-	width=$((LS_WIDTH - 2)) w=0
+	width=$((LS_WIDTH - 6)) w=0
 	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
 		set -- $search
-	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-}" = 1 ]; then
+	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-1}" = 0 ]; then
 		set -- 'n new thread' 'q quit'
-		end="${g}?$o ${d}help$o" w=6
+		end="" w=0
 	else
 		set -- $browse
 		end="${g}?$o ${d}help$o" w=6
@@ -2604,8 +2780,7 @@ ls_footer() {
 LS_KEYS='j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9'
 
 cmd_ls() {
-	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows
-	local foot size lines=40 items=0
+	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows foot items=0
 	need_session
 	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
 	if [ $fzf = 0 ]; then
@@ -2619,32 +2794,33 @@ cmd_ls() {
 	base="$SOCK_DIR/${SKEY}.fzf.$$"
 	sock="$base.sock"
 	# Its files go with it, also when its pane is closed under it.
-	trap 'rm -f "$sock" "$base.keys" "$base.view"' EXIT
+	trap 'rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp' EXIT
 	trap 'exit 129' HUP
 	trap 'exit 143' TERM
 	ls_utf8
 	while :; do
-		rm -f "$sock" "$base.keys" "$base.view"
+		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
+		# Fits the pane, and leaves the title, the header and the card's
+		# room next to the socket.
 		rows=$(FZF_SOCK=$sock ls_rows)
-		case $rows in *"${NL}a"[0-9]*) foot=$(ls_footer) ;; *) foot=$(LS_EMPTY=1 ls_footer) ;; esac
-		# Below a narrow list, the preview takes what the list leaves, at
-		# least 10 lines (fzf puts it on the right when it gets 72 columns).
-		size=$(stty size </dev/tty 2>/dev/null)
-		case ${size%% *} in '' | *[!0-9]*) ;; *) lines=${size%% *} ;; esac
-		items=$(printf '%s\n' "$rows" | wc -l)
-		size=$((lines - items - 2))
-		[ $size -lt 10 ] && size=10
-		[ $size -gt $((lines * 6 / 10)) ] && size=$((lines * 6 / 10))
+		items=0
+		[ -n "$rows" ] && items=$(printf '%s\n' "$rows" | wc -l)
+		if [ "$items" -gt 0 ]; then foot=$(ls_footer); else foot=$(LS_EMPTY=1 ls_footer); fi
+		LS_PW=$(cat "$base.room" 2>/dev/null)
+		printf '%s\n' "$LS_PW" >"$base.shown"
 		# A heading or gap never keeps the cursor: it moves on to the agent
-		# beyond, in the direction it was going.
-		out=$(printf '%s\n' "$rows" | fzf --listen "$sock" --with-shell "$sh -c" \
+		# beyond, in the direction it was going. The title is fzf's header,
+		# above the search input (which takes the blank line below it).
+		out=$({ [ "$items" -gt 0 ] && printf '%s\n' "$rows"; } | fzf --listen "$sock" --with-shell "$sh -c" \
 			--track --id-nth 1 --delimiter "$TAB" --with-nth 7.. --nth 2 --tabstop 1 --no-sort --ansi --layout reverse \
-			--no-input --header-lines 2 --highlight-line --pointer ' ' --marker ' ' --ellipsis '…' \
+			--no-input --header "$(FZF_SOCK=$sock ls_title)" --header-first \
+			--border sharp --border-label "$(cat "$base.label" 2>/dev/null)" --border-label-pos 3 \
+			--highlight-line --pointer ' ' --marker ' ' --ellipsis '…' \
 			--no-scrollbar --footer "$foot" --footer-border none \
 			--color "$FZF_COLORS" \
 			--prompt '/ ' --ghost 'search threads' --info hidden --no-separator \
-			--preview "$q _preview {2} {6}" --preview-window "right,45%,border-left,wrap,<72(down,$size,border-top,wrap)" \
-			--bind "resize:reload($q _rows)" --bind "load:transform-footer($q _footer)" \
+			--preview "$q _preview {2} {6}" --preview-window "${LS_PW:-down,50%,border-top,wrap,hidden}" \
+			--bind "resize:reload(LS_REMEASURE=1 $q _rows)" --bind "load:transform($q _chrome)" \
 			--bind "focus:transform:case {1} in a*) ;; *) case \$FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n \"\$t\" ] || t={5} ;; *) t={5}; [ -n \"\$t\" ] || t={4} ;; esac; [ -n \"\$t\" ] && echo \"pos(\$t)\" ;; esac" \
 			--bind 'j:down,k:up,g,home:first,G,end:last,q:abort' \
 			--bind "enter,double-click:transform:case {1} in a*) echo 'print(jump)+accept' ;; esac" \
@@ -2654,18 +2830,20 @@ cmd_ls() {
 			--bind "n:print(new)+accept" \
 			--bind "x:transform:case {1} in a*) echo 'execute($q close {2})+reload($q _rows)' ;; esac" \
 			--bind "e,ctrl-e:transform:case {1} in a*) echo 'print(ctrl-e)+accept' ;; esac" \
-			--bind "s,tab:execute-silent($q _view screen)+refresh-preview" \
-			--bind "?:execute-silent($q _view help)+refresh-preview" \
+			--bind "s,tab:transform($q _view screen)" \
+			--bind "?:transform($q _view help)" \
 			--bind "ctrl-r:reload($q _rows)+refresh-preview" \
-			--bind "/:show-input+unbind($LS_KEYS)+transform-footer($q _footer)" \
-			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo abort; else echo 'hide-input+rebind($LS_KEYS)+transform-footer($q _footer)'; fi}")
+			--bind "/:show-input+unbind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)" \
+			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo abort; else echo 'hide-input+rebind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)'; fi}")
 		rc=$?
-		rm -f "$sock" "$base.keys" "$base.view"
+		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
 		[ -n "$out" ] || return 0
-		# A key fzf printed (print), then the item; a bare item when fzf
-		# accepted on its own (a double click).
+		# A key fzf printed (print), then the item; the key alone on an
+		# empty board; a bare item when fzf accepted on its own (a double
+		# click).
 		case $out in
 		*"$NL"*) key=${out%%"$NL"*} sel=${out#*"$NL"} ;;
+		new | jump | ctrl-e) key=$out sel="" ;;
 		*) key=jump sel=$out ;;
 		esac
 		pane="" tab=""
@@ -4003,6 +4181,8 @@ _rows) need_session && ls_rows ;;
 _preview) need_session && cmd_preview "$@" ;;
 _view) cmd_view "$@" ;;
 _footer) ls_footer ;;
+_title) ls_title ;;
+_chrome) ls_chrome ;;
 _focus) need_session && focus_pane "$@" ;;
 -h | --help | help) usage ;;
 *)

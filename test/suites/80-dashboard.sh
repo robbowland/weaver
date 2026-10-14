@@ -56,11 +56,11 @@ done
 # For fzf: id, pane, tab, then for a heading or gap the list positions of the
 # agents around it (the cursor skips to them), the card's title, the row (a
 # TAB after the glyph: search sees only what follows).
-golden items-120.txt "$(FZF_COLUMNS=120 FZF_INPUT_STATE=hidden weaver _rows | strip)"
+golden items-120.txt "$(FZF_COLUMNS=120 FZF_LINES=40 FZF_INPUT_STATE=hidden weaver _rows | strip)"
 for p in 0 1 2; do
 	golden "card-$p-60.txt" "$(FZF_PREVIEW_COLUMNS=60 weaver _preview $p "$(FZF_COLUMNS=120 weaver _rows | awk -F '\t' -v id=a$p '$1 == id { print $6 }')" | strip)"
 done
-golden help.txt "$(FZF_SOCK=$AT/x.sock weaver _view help && FZF_SOCK=$AT/x.sock weaver _preview 0 | strip)"
+golden help.txt "$(FZF_SOCK=$AT/x.sock weaver _view help >/dev/null && FZF_SOCK=$AT/x.sock weaver _preview 0 | strip)"
 golden empty-card.txt "$(weaver _preview '' | strip)"
 
 # A thread whose agent has not reported yet: starting, then not reporting.
@@ -85,6 +85,12 @@ sleep 0.3
 ok "...and gone with its pane" "$(LS_MODE=plain weaver _rows | grep -c 'flaky')" "0"
 rm -f "$SD/${SESSION}_$NP.thread"
 
+# The card gets what the list leaves, and only when that is 6 lines or more.
+room() { bash -c 'WEAVER_SOURCED=1 . "$(command -v weaver)"; LS_COLS=$1 LS_LINES=$2; ls_card_room $3; echo "$LS_PW${LS_PHIDE:+ hidden}"' _ "$@"; }
+ok "card: below the list, in what it leaves" "$(room 72 30 12)" "down,13,border-top,wrap"
+ok "card: hidden under 6 lines (s still shows it)" "$(room 72 22 12)" "down,50%,border-top,wrap,hidden hidden"
+ok "card: beside the list from 150 columns" "$(room 160 20 12)" "right,74,border-left,wrap"
+
 # --- the dashboard itself
 focus 2
 key 1b79 # Alt y
@@ -98,6 +104,9 @@ press() {
 	sleep "${2:-0.4}"
 }
 ok "Alt y: the dashboard opens on the first agent" "$(cur)" "a0"
+ok "Alt y: a borderless pane named weaver, fitted to the list and the card beside it" \
+	"$(Z list-panes -a -j | jq -r ".[] | select(.id == $FL) | \"\\(.title) \\(.pane_rows == .pane_content_rows) \\(.pane_rows) \\(.pane_columns < 180)\"")" \
+	"weaver true 14 true"
 ok "...with the title, headings and counts on screen" \
 	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'weaver · 3 threads|NEEDS YOU 1|DONE 1|WORKING 1')" "4"
 press 6b # k at the top
@@ -132,15 +141,19 @@ ok "a reload keeps the selection on the same agent" "$(cur)|$(fz '[.matches[].te
 # s (and ctrl-s): the agent's screen in place of the card, and back.
 press 73 0.8
 ok "s: the screen instead of the card" "$(cat "${S%.sock}.view" 2>/dev/null)" "screen"
-ok "...on screen" "$(Z dump-screen --pane-id "terminal_$FL" | grep -c 'FAKE AGENT')" "1"
+ok "...on screen, under whose it is" "$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'FAKE AGENT|screen · Refine the dashboard')" "2"
 press 09 0.8 # tab
 ok "tab: back to the card" "$(cat "${S%.sock}.view" 2>/dev/null)|$(Z dump-screen --pane-id "terminal_$FL" | grep -c 'asked      group the rows')" "|1"
 press 3f 0.8 # ?
-ok "?: the keys" "$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'this help|done, not yet seen')" "2"
+ok "?: the keys" "$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'this help|jump to the thread')" "2"
 press 3f 0.8
 
-# / searches: the agents alone; esc goes back to browsing.
+# / searches: the agents alone; esc goes back to browsing. The input takes
+# the blank line under the border: the list does not move.
+row() { Z dump-screen --pane-id "terminal_$FL" | grep -n "$1" | head -n 1 | cut -d: -f1; }
+before=$(row 'DONE 1')
 press 2f 0.8
+ok "/: the list stays where it was" "$(row 'DONE 1')" "$before"
 press 63 0.2 # c
 press 6c 0.2 # l
 press 69 0.6 # i
@@ -160,7 +173,10 @@ key 1b79
 sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating and (.exited|not)) | .id')
 ok "empty board: stays open and says how to start a thread" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\.  n starts one\.|n new thread  q quit')" "2"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\. n starts one here|n new thread  q quit')" "2"
+S=$(ls /tmp/weaver-$(id -u)/${SESSION}.fzf.*.sock 2>/dev/null | head -n 1)
+ok "...in a small pane, with nothing to select" \
+	"$(Z list-panes -a -j | jq -r ".[] | select(.id == $FL) | .pane_rows")|$(fz '.matches | length')" "7|0"
 press 71 1 # q
 ok "q closes it" "$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and .is_floating and (.exited|not))] | length')" "0"
 
