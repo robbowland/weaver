@@ -1,0 +1,4 @@
+1 ●  Refine the dash… 10m
+[2 !  Add a CLI flag    4m ]
+[     Bash: python app.py… ]
+3 ✓  Add a README      1m
