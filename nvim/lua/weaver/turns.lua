@@ -14,7 +14,7 @@ end
 
 local function sid_or_warn()
   local sid = require('weaver.status').agent.sid
-  if not sid or sid == '' then
+  if not sid then
     util.msg('no agent session is bound to this nvim', util.WARN)
     return nil
   end
@@ -239,36 +239,51 @@ end
 
 local ZERO = string.rep('0', 40)
 
--- The body of a snapshot commit without its trailers: the full prompt.
+-- The body of a snapshot commit without its trailer block: the full prompt.
+-- The trailers are the last paragraph, and only when every line of it is a
+-- "Key: value" trailer, so a prompt that ends "Note: keep it short" keeps it.
 local function prompt_of(root, sha)
-  local body = util.git(root, { 'log', '-1', '--format=%b', sha }) or ''
-  local lines = vim.split(body, '\n', { plain = true })
-  while #lines > 0 and (lines[#lines] == '' or lines[#lines]:match('^[%w-]+: ')) do
-    lines[#lines] = nil
+  local body = vim.trim(util.git(root, { 'log', '-1', '--format=%b', sha }) or '')
+  local paragraphs = vim.split(body, '\n%s*\n')
+  local last = paragraphs[#paragraphs]
+  local is_trailers = #paragraphs > 1 and last ~= ''
+  for line in (last or ''):gmatch('[^\n]+') do
+    if not line:match('^[%w-]+: ') then
+      is_trailers = false
+    end
   end
-  return vim.trim(table.concat(lines, '\n'))
+  if is_trailers then
+    paragraphs[#paragraphs] = nil
+  end
+  return vim.trim(table.concat(paragraphs, '\n\n'))
 end
 
--- What last changed line LNUM of BUF: { turn, prompt, sha, point } or a
--- reason string.
+-- What last changed line LNUM of BUF. One of
+--   { kind = 'unknown', reason }             it cannot be said (and why)
+--   { kind = 'unsaved', line }               after the last snapshot
+--   { kind = 'turn', line, turn, prompt, time, root, sha, parent }
+--   { kind = 'between', line, turn }         between turns, before TURN
+--   { kind = 'before', line }                before the agent started here
 function M.why(buf, lnum)
+  local function unknown(reason)
+    return { kind = 'unknown', reason = reason }
+  end
   local sid = require('weaver.status').agent.sid
-  if not sid or sid == '' then
-    return 'no agent session is bound to this nvim'
+  if not sid then
+    return unknown('no agent session is bound to this nvim')
   end
   local path = api.nvim_buf_get_name(buf)
   if path == '' or vim.bo[buf].buftype ~= '' then
-    return 'not a file'
+    return unknown('not a file')
   end
   local root = util.toplevel(fn.fnamemodify(path, ':p:h'))
   if not root then
-    return 'not in a git repository'
+    return unknown('not in a git repository')
   end
   local tip = util.first_line(util.git(root, { 'rev-parse', '--verify', '--quiet', M.ref(sid) }))
   if not tip then
-    return 'no snapshots of this agent in ' .. fn.fnamemodify(root, ':t') .. ' yet'
+    return unknown('no snapshots of this agent in ' .. fn.fnamemodify(root, ':t') .. ' yet')
   end
-  local rel = util.real(path):sub(#root + 2)
   local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
   local out, err = util.git(root, {
     'blame',
@@ -279,56 +294,59 @@ function M.why(buf, lnum)
     '-',
     tip,
     '--',
-    rel,
+    util.real(path):sub(#root + 2),
   }, { stdin = table.concat(lines, '\n') .. '\n' })
-  if not out then
-    return 'git blame failed: ' .. vim.trim(err or '')
-  end
-  local sha = out:match('^(%x+)')
+  local sha = out and out:match('^(%x+)')
   if not sha then
-    return 'git blame gave nothing'
+    return unknown('git blame failed: ' .. vim.trim(err or ''))
   end
   if sha == ZERO then
-    return { point = 'live', line = lnum }
+    return { kind = 'unsaved', line = lnum }
   end
-  local info = util.git(root, { 'log', '-1', '--format=%P' .. '%x1f' .. trailer('Weaver-Turn') .. '%x1f' .. trailer('Weaver-Point') .. '%x1f%ct', sha })
+  local info = util.git(root, { 'log', '-1', '--format=%P%x1f' .. trailer('Weaver-Turn') .. '%x1f' .. trailer('Weaver-Point') .. '%x1f%ct', sha })
   local f = vim.split(vim.trim(info or ''), US, { plain = true })
-  return {
-    sha = sha,
-    parent = (f[1] or ''):match('^(%x+)'),
-    turn = tonumber(vim.trim(f[2] or '')),
-    point = vim.trim(f[3] or ''),
-    time = tonumber(f[4]),
-    prompt = prompt_of(root, sha),
-    root = root,
-    line = lnum,
-  }
+  local parent, turn, point = (f[1] or ''):match('^(%x+)'), tonumber(vim.trim(f[2] or '')), vim.trim(f[3] or '')
+  if point == 'end' and parent then
+    return {
+      kind = 'turn',
+      line = lnum,
+      turn = turn,
+      prompt = prompt_of(root, sha),
+      time = tonumber(f[4]),
+      root = root,
+      sha = sha,
+      parent = parent,
+    }
+  end
+  if not parent then
+    return { kind = 'before', line = lnum }
+  end
+  return { kind = 'between', line = lnum, turn = turn }
 end
+
+local DESCRIBE = {
+  unknown = function(w) return w.reason end,
+  unsaved = function(w) return 'line ' .. w.line .. ': changed after the last snapshot (the turn in progress, or your own edit)' end,
+  turn = function(w) return ('line %d: turn %s, %s ago\n%s'):format(w.line, w.turn or '?', ago(w.time), w.prompt) end,
+  between = function(w)
+    return ('line %d: changed between turns, before turn %s (your edit, or another agent)'):format(w.line, w.turn or '?')
+  end,
+  before = function(w) return 'line ' .. w.line .. ': unchanged since the agent started here' end,
+}
 
 function M.describe(w)
-  if type(w) == 'string' then
-    return w
-  end
-  local head = 'line ' .. w.line .. ': '
-  if w.point == 'live' then
-    return head .. 'changed after the last snapshot (the turn in progress, or your own edit)'
-  end
-  if w.point == 'end' then
-    return head .. 'turn ' .. (w.turn or '?') .. ', ' .. ago(w.time) .. ' ago\n' .. w.prompt
-  end
-  if not w.parent then
-    return head .. 'unchanged since the agent started here'
-  end
-  return head .. 'changed between turns, before turn ' .. (w.turn or '?') .. ' (your edit, or another agent)'
+  return DESCRIBE[w.kind](w)
 end
 
+-- :AgentWhy[!]: say what last changed the cursor's line; with !, open that
+-- turn's diff.
 function M.why_cmd(bang)
   local w = M.why(api.nvim_get_current_buf(), api.nvim_win_get_cursor(0)[1])
-  if bang and type(w) == 'table' and w.point == 'end' and w.parent then
+  if bang and w.kind == 'turn' then
     require('weaver.review').open_turn(w.root, { commit = w.sha, parent = w.parent, turn = w.turn })
     return
   end
-  util.msg(M.describe(w), type(w) == 'string' and util.WARN or util.INFO)
+  util.msg(M.describe(w), w.kind == 'unknown' and util.WARN or util.INFO)
 end
 
 return M

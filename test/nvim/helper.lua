@@ -105,7 +105,7 @@ function T.snapshot(root, sid, turn, point, prompt, ref)
   local msg = ('weaver: turn %d %s: %s\n\n%s\n\nWeaver-Session: %s\nWeaver-Turn: %d\nWeaver-Point: %s\n'):format(
     turn,
     point,
-    prompt,
+    prompt:match('^[^\n]*'),
     prompt,
     sid,
     turn,

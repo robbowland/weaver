@@ -134,6 +134,15 @@ T.run(function()
   idle()
   T.ok('an older event never wins', wait_file('app.txt'), 'app.txt')
 
+  -- ...even when a call from the previous release (no seq) comes between.
+  C.event({ ev = 'edit', root = R.main, file = app, seq = 9e12 + 0.5 })
+  C.lua('return AgentFollow(...)', R.main, app)
+  C.poke()
+  idle()
+  C.event({ ev = 'edit', root = R.main, file = readme, seq = 9e12 - 7 })
+  idle()
+  T.ok('...even after a call without seq', wait_file('app.txt'), 'app.txt')
+
   -- focus (Alt v): no idle wait, but never out of insert mode.
   C.cmd('edit ' .. readme)
   C.input('gg')

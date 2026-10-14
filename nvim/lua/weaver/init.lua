@@ -9,11 +9,34 @@ local util = require('weaver.util')
 
 local modules = { 'status', 'reload', 'follow', 'review' }
 
--- Handle one event from the hook (see docs/design.md, Hook to Neovim).
-function M.dispatch(ev)
-  if type(ev) ~= 'table' then
-    return
+local STRING_FIELDS = {
+  'sid', 'root', 'file', 'tool', 'agent_id', 'prompt', 'waiting', 'title', 'ref', 'commit', 'point', 'agent',
+}
+local STATES = { working = true, ['needs-you'] = true, done = true, idle = true, interrupted = true, ended = true }
+
+-- A hook event (docs/design.md, Hook to Neovim) from its JSON: the contract's
+-- fields with the right types (a field of the wrong type is dropped), seq a
+-- number (0 when absent), anything else passed through. nil if it is not an
+-- event at all.
+function M.parse_event(json)
+  local ok, raw = pcall(vim.json.decode, json or '', { luanil = { object = true, array = true } })
+  if not ok or type(raw) ~= 'table' or type(raw.ev) ~= 'string' then
+    return nil
   end
+  local ev = raw
+  for _, k in ipairs(STRING_FIELDS) do
+    if type(ev[k]) ~= 'string' or ev[k] == '' then
+      ev[k] = nil
+    end
+  end
+  ev.seq = tonumber(ev.seq) or 0
+  ev.turn = tonumber(ev.turn)
+  ev.state = STATES[ev.state] and ev.state or nil
+  return ev
+end
+
+-- Handle one parsed event.
+function M.dispatch(ev)
   local status = require('weaver.status')
   status.update(ev)
   local kind = ev.ev
@@ -35,24 +58,24 @@ function M.dispatch(ev)
   pcall(api.nvim_exec_autocmds, 'User', { pattern = 'WeaverEvent', data = ev, modeline = false })
 end
 
-local function decode(json)
-  local ok, ev = pcall(vim.json.decode, json or '', { luanil = { object = true, array = true } })
-  return ok and ev or nil
-end
-
 local function define_entry_points()
   function _G.WeaverEvent(json)
-    vim.schedule(function() M.dispatch(decode(json)) end)
+    vim.schedule(function()
+      local ev = M.parse_event(json)
+      if ev then
+        M.dispatch(ev)
+      end
+    end)
     return 0
   end
   -- The calls of the previous release, for a hook that predates WeaverEvent.
   function _G.AgentFollow(root, path)
-    local ev = { ev = (path and path ~= '') and 'edit' or 'root', root = root or '', file = path }
+    local ev = M.parse_event(vim.json.encode({ ev = (path and path ~= '') and 'edit' or 'root', root = root, file = path }))
     vim.schedule(function() M.dispatch(ev) end)
     return 0
   end
   function _G.AgentChecktime()
-    vim.schedule(function() M.dispatch({ ev = 'checktime' }) end)
+    vim.schedule(function() M.dispatch({ ev = 'checktime', seq = 0 }) end)
     return 0
   end
 end
@@ -127,6 +150,7 @@ local function keys()
   end
   local leader = vim.g.mapleader == ' ' and '␣' or (vim.g.mapleader or '\\')
   vim.g.weaver_jump_key_label = ((prefix .. 'j'):gsub('<[Ll]eader>', leader))
+  vim.g.weaver_review_key_label = ((prefix .. 't'):gsub('<[Ll]eader>', leader))
 end
 
 function M.setup()

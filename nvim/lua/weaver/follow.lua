@@ -6,7 +6,7 @@
 --
 -- Following never types into nvim and never switches away from your windows
 -- while you work. It never replaces a buffer with unsaved changes, a
--- terminal, quickfix, help, diff or git UI window, and checks all of that
+-- terminal, quickfix, help, diff or git UI window, and decides all of that
 -- before it switches tabs. A tab that is not the current one is brought up
 -- to date in the background, without switching to it.
 --
@@ -20,12 +20,11 @@ local uv = vim.uv or vim.loop
 local util = require('weaver.util')
 
 local following = true
-local pending -- { root, file, seq }
-local last_target -- the last target followed or pending, for :AgentJump
+local pending -- the Target waiting to be followed
+local last_target -- the last Target, for :AgentJump when nothing is pending
 local last_seq = 0
 local last_input = uv.now()
-local warned = {} -- target key -> true, so a blocked follow warns once
-local poll
+local poll -- retries the pending Target; runs exactly while one is pending
 local ns = api.nvim_create_namespace('weaver_follow_input')
 
 function M.enabled()
@@ -33,26 +32,32 @@ function M.enabled()
 end
 
 local function idle_ms()
-  local v = tonumber(vim.g.weaver_follow_idle_ms or vim.env.WEAVER_FOLLOW_IDLE_MS)
-  return v or 3000
+  return tonumber(vim.g.weaver_follow_idle_ms or vim.env.WEAVER_FOLLOW_IDLE_MS) or 3000
 end
 
 function M.jump_key_label()
   return vim.g.weaver_jump_key_label or '␣aj'
 end
 
+-- Targets -------------------------------------------------------------------
+
+-- A place the agent went: { root = existing directory or nil, file = absolute
+-- path or nil, seq }, never both nil. Built only by target_of.
+local function target_of(ev)
+  local root = type(ev.root) == 'string' and ev.root ~= '' and util.is_dir(ev.root) and ev.root or nil
+  local file = type(ev.file) == 'string' and ev.file ~= '' and ev.file:sub(1, 1) == '/' and ev.file or nil
+  if not root and not file then
+    return nil
+  end
+  return { root = root, file = file, seq = tonumber(ev.seq) or 0 }
+end
+
+-- The pending target as the bar shows it: its file name, or its worktree.
 function M.pending_label()
   if not pending then
     return nil
   end
-  if pending.file and pending.file ~= '' then
-    return fn.fnamemodify(pending.file, ':t')
-  end
-  return fn.fnamemodify(pending.root, ':t') .. '/'
-end
-
-function M.pending()
-  return pending
+  return pending.file and fn.fnamemodify(pending.file, ':t') or (fn.fnamemodify(pending.root, ':t') .. '/')
 end
 
 -- Conditions ------------------------------------------------------------------
@@ -71,10 +76,10 @@ local function reviewing_diff()
   end
   return n >= 2
 end
-M.reviewing_diff = reviewing_diff
 
--- Why following has to wait, or nil when it may go ahead now. The reasons
--- are checked most binding first: on_focus overrides only the last two.
+-- Why following has to wait ('mode', 'state', 'cmdwin', 'float', 'diff',
+-- 'window' or 'busy'), or nil when it may go ahead now. Most binding first:
+-- you asking (Alt v) overrides only the last two.
 function M.why_wait()
   local mode = api.nvim_get_mode()
   if mode.blocking or mode.mode ~= 'n' then
@@ -105,42 +110,38 @@ end
 -- Planning ----------------------------------------------------------------
 
 -- The tab whose working directory is ROOT.
-local function tab_for(root)
+function M.tab_for(root)
   for _, tab in ipairs(api.nvim_list_tabpages()) do
     if util.same_path(util.tab_cwd(tab), root) and not util.diffview_view(tab) then
       return tab
     end
   end
 end
-M.tab_for = tab_for
 
--- What following TARGET would do, decided before anything changes:
--- { tab = tab or nil (a new tab), win = win or nil, split = win or nil }.
+-- What going to TARGET means, decided before anything changes. One of
+--   { kind = 'new_tab' }                       its worktree has no tab yet
+--   { kind = 'tab', tab, show = Show or nil }  that tab (nil show: root only)
+--   { kind = 'blocked' }                       only windows with unsaved changes
+-- where Show is { kind = 'in', win } or { kind = 'beside', win } (a tab with
+-- only a terminal, quickfix or git UI gets a split, never a replacement).
 local function plan(target)
-  local p = {}
-  local root = target.root
-  if root and root ~= '' and util.is_dir(root) and not util.same_path(root, util.tab_cwd(0)) then
-    p.tab = tab_for(root)
-    p.new_tab = p.tab == nil
-  else
-    p.tab = api.nvim_get_current_tabpage()
+  local tab = api.nvim_get_current_tabpage()
+  if target.root and not util.same_path(target.root, util.tab_cwd(0)) then
+    tab = M.tab_for(target.root)
+    if not tab then
+      return { kind = 'new_tab' }
+    end
   end
-  if not target.file or target.file == '' then
-    return p
+  if not target.file then
+    return { kind = 'tab', tab = tab }
   end
-  if p.new_tab then
-    return p
-  end
-  local win, why = util.window_for(p.tab, target.file)
+  local win, why = util.window_for(tab, target.file)
   if win then
-    p.win = win
+    return { kind = 'tab', tab = tab, show = { kind = 'in', win = win } }
   elseif why == 'nowindow' then
-    -- Only a terminal, quickfix or git UI here: open beside it, never over it.
-    p.split = api.nvim_tabpage_get_win(p.tab)
-  else
-    p.blocked = why
+    return { kind = 'tab', tab = tab, show = { kind = 'beside', win = api.nvim_tabpage_get_win(tab) } }
   end
-  return p
+  return { kind = 'blocked' }
 end
 
 -- Doing -------------------------------------------------------------------
@@ -171,65 +172,67 @@ local function change_line(buf, root, path, cb)
   if line then
     return cb(line)
   end
-  local top = root and root ~= '' and root or fn.fnamemodify(path, ':h')
+  local top = root or fn.fnamemodify(path, ':h')
   local sid = require('weaver.status').agent.sid
   local function diff_against(rev)
     util.git_async(top, { 'diff', '-U0', '--no-color', '--no-ext-diff', rev, '--', path }, function(out)
       cb(out and tonumber(out:match('\n@@ %-[%d,]+ %+(%d+)')))
     end)
   end
-  if sid and sid ~= '' then
-    util.git_async(top, { 'rev-parse', '--verify', '--quiet', 'refs/worktree/weaver/sessions/' .. sid }, function(out)
-      diff_against(util.first_line(out) or 'HEAD')
-    end)
-  else
-    diff_against('HEAD')
+  if not sid then
+    return diff_against('HEAD')
   end
+  util.git_async(top, { 'rev-parse', '--verify', '--quiet', 'refs/worktree/weaver/sessions/' .. sid }, function(out)
+    diff_against(util.first_line(out) or 'HEAD')
+  end)
 end
 
+-- Put WIN's cursor on the agent's change, unless you have typed since.
 local function place_cursor(win, path, root)
-  if not api.nvim_win_is_valid(win) then
-    return
-  end
   local buf = api.nvim_win_get_buf(win)
   local asked = uv.now()
   change_line(buf, root, path, function(line)
-    if not line or not api.nvim_win_is_valid(win) or api.nvim_win_get_buf(win) ~= buf then
+    if not line or last_input > asked or not api.nvim_win_is_valid(win) or api.nvim_win_get_buf(win) ~= buf then
       return
     end
-    -- You may have started working there in the meantime.
-    if last_input > asked then
-      return
-    end
-    line = math.min(line, api.nvim_buf_line_count(buf))
-    pcall(api.nvim_win_set_cursor, win, { line, 0 })
+    pcall(api.nvim_win_set_cursor, win, { math.min(line, api.nvim_buf_line_count(buf)), 0 })
     pcall(api.nvim_win_call, win, function() vim.cmd('normal! zz') end)
   end)
 end
 
-local function show_file(win, path, root)
-  if not util.same_path(api.nvim_buf_get_name(api.nvim_win_get_buf(win)), path) then
-    local ok, err = edit_in(win, path)
+-- Show TARGET's file in WIN, at the change. Returns whether it is shown.
+local function show_file(win, target)
+  if not util.same_path(api.nvim_buf_get_name(api.nvim_win_get_buf(win)), target.file) then
+    local ok, err = edit_in(win, target.file)
     if not ok then
       util.msg(tostring(err), util.WARN)
       return false
     end
   end
-  place_cursor(win, path, root)
+  place_cursor(win, target.file, target.root)
   return true
 end
 
-local function key_of(t)
-  return (t.root or '') .. '\0' .. (t.file or '')
+-- A window beside WIN for TARGET's file.
+local function split_beside(win, target)
+  local buf = fn.bufadd(target.file)
+  vim.bo[buf].buflisted = true
+  local ok, new = pcall(api.nvim_open_win, buf, false, { split = 'left', win = win })
+  if not ok then
+    util.msg(tostring(new), util.WARN)
+    return nil
+  end
+  pcall(api.nvim_win_call, new, function() vim.cmd('silent! edit') end)
+  return new
 end
 
 local function set_pending(target)
   pending = target
-  require('weaver.status').redraw()
   if not poll then
     poll = uv.new_timer()
     poll:start(250, 250, vim.schedule_wrap(function() M.retry() end))
   end
+  require('weaver.status').redraw()
 end
 
 local function clear_pending()
@@ -244,126 +247,96 @@ local function clear_pending()
   require('weaver.status').redraw()
 end
 
--- Bring a tab that is not the current one up to date without switching to it.
-local function update_in_background(target, p)
-  if not target.file or target.file == '' or not p.tab or p.tab == api.nvim_get_current_tabpage() then
-    return
-  end
-  if p.win then
-    show_file(p.win, target.file, target.root)
-  end
-end
-
--- Follow TARGET now. FORCE (you asked) skips the idle rule but never the
--- unsaved-changes rule. Returns true when it was followed.
-local function follow_now(target, force)
+-- Go to TARGET now, as BY wants it: 'agent' (following) or 'you' (you asked:
+-- you are told every time something is in the way, and the cursor moves even
+-- out of a terminal). Returns true when TARGET is shown.
+local function go(target, by)
   local p = plan(target)
-  if p.blocked then
-    local k = key_of(target)
-    if force or not warned[k] then
-      warned[k] = true
+  if p.kind == 'blocked' then
+    if by == 'you' or not target.warned then
+      target.warned = true
       util.msg('not opening ' .. util.short(target.file) .. ': you have unsaved changes there', util.WARN)
     end
     return false
   end
-  if p.new_tab then
+  if p.kind == 'new_tab' then
     vim.cmd('tabnew')
     vim.cmd('silent tcd ' .. fn.fnameescape(target.root))
-    if target.file and target.file ~= '' then
-      show_file(api.nvim_get_current_win(), target.file, target.root)
-    end
-    return true
+    return not target.file or show_file(api.nvim_get_current_win(), target)
   end
   if p.tab ~= api.nvim_get_current_tabpage() then
     api.nvim_set_current_tabpage(p.tab)
   end
-  if not target.file or target.file == '' then
+  if not p.show then
     return true
   end
-  local win = p.win
-  if p.split then
-    local buf = fn.bufadd(target.file)
-    vim.bo[buf].buflisted = true
-    local ok, w = pcall(api.nvim_open_win, buf, false, { split = 'left', win = p.split })
-    if not ok then
-      util.msg(tostring(w), util.WARN)
-      return false
-    end
-    win = w
-    pcall(api.nvim_win_call, win, function() vim.cmd('silent! edit') end)
-  end
-  if not show_file(win, target.file, target.root) then
+  local win = p.show.kind == 'in' and p.show.win or split_beside(p.show.win, target)
+  if not win or not show_file(win, target) then
     return false
   end
-  -- Focus moves to the file only from another file window; a terminal or
-  -- git UI you were in keeps the cursor.
-  if util.plain_window(api.nvim_get_current_win()) or force then
+  -- The cursor moves to the file only from another file window (or when you
+  -- asked); a terminal or git UI you were in keeps it.
+  if by == 'you' or util.plain_window(api.nvim_get_current_win()) then
     api.nvim_set_current_win(win)
   end
   return true
 end
 
--- Try the pending target again (the idle poll, and after you return).
-function M.retry()
-  if not pending then
-    return clear_pending()
-  end
-  if not following then
-    return
-  end
-  if M.why_wait() then
-    return
-  end
-  local target = pending
+-- Show TARGET in its worktree's tab when that is not the current tab,
+-- without switching to it.
+local function update_in_background(target)
   local p = plan(target)
-  if p.blocked then
-    -- Stays pending until the change is saved; warn once.
-    follow_now(target)
+  if p.kind == 'tab' and p.tab ~= api.nvim_get_current_tabpage() and p.show and p.show.kind == 'in' then
+    show_file(p.show.win, target)
+  end
+end
+
+-- The idle poll: follow the pending target once nothing is in the way.
+function M.retry()
+  if not pending or not following or M.why_wait() then
     return
   end
-  clear_pending()
-  follow_now(target)
+  if go(pending, 'agent') then
+    clear_pending()
+  end
 end
 
 -- An edit or root event from the hook.
 function M.on_event(ev)
-  local s = tonumber(ev.seq) or 0
-  if s ~= 0 and s < last_seq then
-    return
+  local seq = tonumber(ev.seq) or 0
+  if seq ~= 0 then
+    if seq < last_seq then
+      return
+    end
+    last_seq = seq
   end
-  last_seq = s
-  local target = { root = ev.root or '', file = ev.ev == 'edit' and ev.file or nil, seq = s }
-  if target.root == '' and not target.file then
+  local target = target_of({ root = ev.root, file = ev.ev == 'edit' and ev.file or nil, seq = seq })
+  if not target then
     return
   end
   last_target = target
   if not following then
     return
   end
-  local wait = M.why_wait()
-  if not wait then
-    if follow_now(target) then
-      clear_pending()
-    else
-      set_pending(target)
-    end
+  if not M.why_wait() and go(target, 'agent') then
+    clear_pending()
     return
   end
-  update_in_background(target, plan(target))
+  update_in_background(target)
   set_pending(target)
 end
 
 -- You asked to see the agent (Alt v): go now without waiting for idleness,
--- even from a terminal window, but not out of insert or visual mode, a
--- float or a diff review, and never over unsaved changes.
+-- even from a terminal window, but not out of insert or visual mode, a float
+-- or a diff review, and never over unsaved changes.
 function M.on_focus(ev)
-  local target = { root = ev.root or '', file = (ev.file ~= '' and ev.file) or nil, seq = tonumber(ev.seq) or 0 }
-  if target.root == '' and not target.file then
+  local target = target_of(ev)
+  if not target then
     return
   end
   last_target = target
   local wait = M.why_wait()
-  if (wait == nil or wait == 'busy' or wait == 'window') and follow_now(target, true) then
+  if (wait == nil or wait == 'busy' or wait == 'window') and go(target, 'you') then
     clear_pending()
     return
   end
@@ -377,7 +350,7 @@ function M.jump()
     util.msg('the agent has not edited anything yet')
     return
   end
-  if follow_now(target, true) then
+  if go(target, 'you') then
     clear_pending()
   end
 end
@@ -393,39 +366,41 @@ end
 
 -- Tabs of removed worktrees -----------------------------------------------
 
--- Close tabs whose tab-local directory no longer exists (a removed worktree)
--- unless they hold unsaved changes, and unload that worktree's buffers.
-function M.prune_tabs()
-  local tabs = api.nvim_list_tabpages()
-  if #tabs < 2 then
-    return
+local function has_unsaved(tab)
+  for _, win in ipairs(api.nvim_tabpage_list_wins(tab)) do
+    if vim.bo[api.nvim_win_get_buf(win)].modified then
+      return true
+    end
   end
+  return false
+end
+
+-- Close tabs whose tab-local directory no longer exists (a removed worktree)
+-- unless they hold unsaved changes, and unload that worktree's hidden buffers.
+function M.prune_tabs()
   local cur = api.nvim_get_current_tabpage()
-  for _, tab in ipairs(tabs) do
+  for _, tab in ipairs(api.nvim_list_tabpages()) do
     local nr = api.nvim_tabpage_get_number(tab)
     local dir = fn.getcwd(-1, nr)
-    if tab ~= cur and fn.haslocaldir(-1, nr) == 1 and not util.is_dir(dir) and #api.nvim_list_tabpages() > 1 then
-      local dirty = false
-      for _, win in ipairs(api.nvim_tabpage_list_wins(tab)) do
-        if vim.bo[api.nvim_win_get_buf(win)].modified then
-          dirty = true
+    if
+      tab ~= cur
+      and #api.nvim_list_tabpages() > 1
+      and fn.haslocaldir(-1, nr) == 1
+      and not util.is_dir(dir)
+      and not has_unsaved(tab)
+    then
+      pcall(vim.cmd, 'tabclose ' .. nr)
+      for _, buf in ipairs(api.nvim_list_bufs()) do
+        if
+          api.nvim_buf_is_loaded(buf)
+          and not vim.bo[buf].modified
+          and api.nvim_buf_get_name(buf):sub(1, #dir + 1) == dir .. '/'
+          and fn.bufwinid(buf) == -1
+        then
+          pcall(api.nvim_buf_delete, buf, {})
         end
       end
-      if not dirty then
-        pcall(vim.cmd, 'tabclose ' .. api.nvim_tabpage_get_number(tab))
-        for _, buf in ipairs(api.nvim_list_bufs()) do
-          local name = api.nvim_buf_get_name(buf)
-          if
-            api.nvim_buf_is_loaded(buf)
-            and not vim.bo[buf].modified
-            and name:sub(1, #dir + 1) == dir .. '/'
-            and fn.bufwinid(buf) == -1
-          then
-            pcall(api.nvim_buf_delete, buf, {})
-          end
-        end
-        util.msg('closed the tab of removed worktree ' .. fn.fnamemodify(dir, ':t'))
-      end
+      util.msg('closed the tab of removed worktree ' .. fn.fnamemodify(dir, ':t'))
     end
   end
 end
