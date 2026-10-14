@@ -11,14 +11,69 @@ weaver drives Claude Code through its hooks, and Codex through an adapter;
 any other agent can report through `weaver event`
 ([docs/design.md](docs/design.md#events-from-other-agents)).
 
+## Start
+
+```sh
+weaver
+```
+
+Outside zellij, `weaver` attaches to the zellij session `weaver`, or starts it
+with your default layout (`WEAVER_SESSION`, or `weaver start NAME`, for
+another). Inside zellij it opens the dashboard.
+
+Then `Alt N`: say what the agent should do, press enter, and a new tab opens
+for that thread, with its nvim on the left and the agent on the right, started
+with your task as its first prompt, in a new worktree on a branch named after
+the task.
+
 ## Keys
 
 | Key | Does |
 | --- | --- |
+| `Alt N` | Start a thread: a form for the task, then a tab with nvim and the agent |
 | `Alt y` | Live dashboard of every agent in the session, with a resume card for the selected one. `enter` jumps, `ctrl-e` jumps and opens nvim, `ctrl-r` reloads |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
+
+## Threads
+
+A thread is one task for one agent, in a tab of its own: the agent's nvim on
+the left, the agent on the right (a fifth of the width), in a worktree of its
+own or in the checkout you are in. The tab is named after the branch (after
+the task, in this checkout), keeps your status bar, and you land on the agent.
+
+The form (`Alt N`, `weaver new`, or `n` in the dashboard) starts in the
+repository of the pane you were on (else the one you used last):
+
+| Key | Does |
+| --- | --- |
+| `enter` | Start the thread |
+| `tab` | New worktree, or this checkout (for a quick question) |
+| `ctrl-b` | Edit the branch name (from the task by default); an existing branch continues in its own worktree |
+| `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
+| `ctrl-o` | Claude Code or Codex |
+| `ctrl-e` | Write a long task in `$EDITOR` |
+| `esc` | Cancel |
+
+From a shell: `weaver new "fix the flaky test"`, with `--repo DIR`,
+`--branch NAME`, `--base REF`, `--here`, `--agent codex`, `--edit` (write the
+task in `$EDITOR`) or `--no-focus`.
+
+New worktrees come from [Worktrunk](https://worktrunk.dev) when it is
+installed (`wt switch --create`, so your `worktree-path` and hooks apply),
+else from `git worktree add` at `../<repo>.<branch>`. The nvim on the left is
+the agent's own weaver nvim, so following, the bar, reviews and `Alt v` all
+work from the first prompt.
+
+`weaver close` (`x` in the dashboard) closes an agent, its nvim and its
+thread's tab, after asking; panes you added to the tab stay. For a worktree
+weaver made, and only when nothing would be lost (nothing uncommitted, and
+merged into the default branch or pushed), it then offers to remove it
+(`wt remove`, else `git worktree remove`); the branch always stays.
+
+When the agent exits its pane stays; enter there resumes its conversation
+(`claude --resume`, `codex resume`), never sending the task twice.
 
 ## What it tracks
 
@@ -161,6 +216,9 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_SNAPSHOT_MAX_KB` | `5120` | Untracked files bigger than this stay out of snapshots |
 | `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (🤖 working, 💬 needs you) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
+| `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
+| `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |
+| `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 
 ## Tests
 

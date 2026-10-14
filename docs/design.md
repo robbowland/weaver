@@ -14,6 +14,10 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/<skey>.status` | the session's counts for zjstatus: `needs-you done-unseen working` |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
+| `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `weaver new` started it (below) |
+| `$STATE_DIR/new/<skey>_<token>/` | a thread tab being opened: `task` and `thread.json` until the agent's pane takes them, then `pane` (the agent's pane id) until the nvim beside it reads it |
+| `$STATE_DIR/repos` | repositories threads were started in, most recent first |
+| `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
 
 ## State file
 
@@ -174,6 +178,74 @@ cannot ring through their hook output.
 Code event the state machine already handles, so every agent gets the same
 states, turns, snapshots, log and nvim events.
 
+## Threads
+
+`weaver new` makes the worktree (Worktrunk's `wt switch [--create] <branch>
+--no-cd --format json`, whose `path` and `action` say where and whether it was
+made; else `git worktree add` at `<repo>/../<repo>.<branch with / as ->`), then
+one tab: `zellij action new-tab --layout-string <kdl> --cwd <dir> --name
+<name>`. The layout is the session's `new_tab_template` from `zellij action
+dump-layout`, its bare `pane` (the tab's content) replaced by a vertical split:
+`weaver nvim --thread <token>` on the left (close on exit), `weaver _agent
+<token> <agent>` on the right at `$WEAVER_AGENT_WIDTH` (default `20%`) with the
+focus. Without a template, the split alone.
+
+Neither pane knows the other's id when the layout spawns them, so they meet
+in `$STATE_DIR/new/<skey>_<token>/`: the agent's pane moves `thread.json` to
+`<skey>_<its pane>.thread`, deletes `task` (read first), writes `pane`, then
+execs the agent with the task as its prompt (`claude "<task>"`, `codex
+"<task>"`); the nvim's pane waits up to 10 s for `pane`, removes the directory
+and goes on as `weaver nvim <agent pane>`. So the agent's `.nvim` file and
+socket exist before its first hook. Run again (zellij reruns an exited command
+on enter), the agent's pane finds no `task` and resumes instead: `claude
+--resume <session_id>` (`--continue` when unknown), `codex resume <id>`
+(`--last`).
+
+### Thread record
+
+`$STATE_DIR/<skey>_<pane>.thread`, one JSON object on one line, removed with
+the agent's other files. Readers ignore fields they don't know.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | the tab's name as `weaver new` set it: the branch, or the task's slug for a thread in the current checkout |
+| `task` | string | what you asked, in full |
+| `repo` | string | the repository's main checkout; `""` when not in one |
+| `branch` | string | the thread's branch (`""` on a detached HEAD) |
+| `worktree` | string | the directory the thread runs in (the checkout itself when `here`) |
+| `here` | bool | started in the current checkout, not a new worktree |
+| `worktree_created` | bool | `weaver new` made this worktree (only then may `weaver close` offer to remove it) |
+| `agent` | string | `claude` or `codex` |
+| `created` | int | epoch s |
+| `pane` | int | the agent's pane |
+
+The tab's current name is zellij's (`tab_name` in `list-panes`); weaver never
+renames it.
+
+A task's slug: lowercase ASCII letters and digits, every other run of
+characters one `-`, at most 48 characters, cut at a `-`.
+
+### Commands for the dashboard
+
+- `weaver new [--from PANE]`: with no task and a terminal, the form. Exit 0
+  started (you are on the new tab unless `--no-focus`), 130 cancelled (nothing
+  made), 1 error (one line on stderr). `--from` starts in that agent's
+  repository.
+- `weaver close [--yes] [--remove-worktree] [PANE]`: PANE is an agent or its
+  nvim (default: the focused one). It says what goes and asks `close it?
+  [y/N]` (`--yes` skips only that); then, for a worktree it may remove, `remove
+  its worktree … too? [y/N]` (or `--remove-worktree`). Exit 0 closed, 130
+  declined, 1 error. When the tab would close with the pane it runs in, the
+  rest happens in a detached process (log: `close.log`).
+
+`weaver close` removes a worktree only when the thread record says weaver made
+it, it is a linked worktree (not the main checkout), not locked, `git status
+--porcelain` is empty, HEAD is an ancestor of `origin/HEAD`, `upstream/HEAD`,
+`main` or `master`, or of its upstream with nothing unpushed, and no other pane
+is in it. It checks again after the agent has exited, and never forces:
+Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
+worktree themselves. The branch always stays.
+
 ## Decisions
 
 - 2026-10-13: WorktreeCreate and WorktreeRemove hooks are not registered.
@@ -293,4 +365,26 @@ states, turns, snapshots, log and nvim events.
   back on a floating pane); install.sh swaps the install in with two renames,
   so a hook firing in the milliseconds between them fails (harmlessly: hooks
   never block Claude Code).
-
+- 2026-10-14: A thread tab keeps the session's status bar. `new-tab
+  --layout-string` with a bare layout drops `default_tab_template` (measured on
+  zellij 0.45.1: no bar), and a layout string with its own
+  `default_tab_template` but no `tab` ignores it; a `tab` block wrapped in the
+  dumped `new_tab_template` keeps it, plugin configuration and all. Percentage
+  sizes work only in layouts, which is why the tab is one layout rather than
+  `new-pane` splits.
+- 2026-10-14: The thread key is `Alt N`, beside Rob's `Alt n` (new pane). Alt
+  t would have been the mnemonic, but Claude Code binds meta+t (thinking),
+  meta+p (model), meta+o (fast mode) and meta+w; skhd owns Alt a/s/d/f/g/q/e/z/r.
+- 2026-10-14: Closing a tab's last tiled pane closes the tab, floating panes
+  included (measured), so `weaver close` asks everything first and, when it
+  runs in a floating pane of the tab it closes, finishes in a detached
+  process that ignores the hangup.
+- 2026-10-14: `weaver close` offers to remove only worktrees `weaver new`
+  made: Rob's Worktrunk notes leave agent tools' own worktrees (Claude Code's
+  `--worktree`, Codex) to those tools, and hand-made ones to him. Branches are
+  never deleted (Rob's `remove.delete-branch = false`), and `wt merge` is not
+  used (his workflow keeps merging in git and gh-stack).
+- 2026-10-14: The form is one fzf, its fields kept in a file that `weaver
+  _form` updates from fzf's key bindings (`execute`, `transform-header`), so
+  every field is a key away and enter starts at once; bash 3.2 has no `read
+  -i` for prefilled fields.
