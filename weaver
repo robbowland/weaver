@@ -3107,7 +3107,7 @@ form_base_row() {
 # The form's header for form file $1 and the task typed so far $2, with error
 # $3 on top: right-aligned labels under the prompt's, then the key for each.
 form_header() {
-	local task=${2:-} err=${3:-} cur i pad lines=0 first="" where
+	local task=${2:-} err=${3:-} cur i pad lines=0 first="" where w room
 	local -a R_L R_P R_C R_K
 	local R_N=0 R_W=0
 	form_load "$1"
@@ -3123,7 +3123,7 @@ form_header() {
 		form_path "$F_REPO"
 		form_row repo "${F_REPO##*/}  $TILDE" "${C_BOLD}${F_REPO##*/}${C_OFF}  ${C_GREY}$TILDE${C_OFF}" '^r'
 	else
-		form_row repo "none" "${C_GREY}not in a git repository${C_OFF}" '^r'
+		form_row repo "not in a git repository" "${C_GREY}not in a git repository${C_OFF}" '^r'
 	fi
 	if [ "$F_WHERE" = here ]; then
 		cur=$(git -C "$F_HERE" symbolic-ref --short -q HEAD 2>/dev/null)
@@ -3153,11 +3153,20 @@ form_header() {
 	else
 		form_row agent "$F_AGENT  not installed" "$F_AGENT  ${C_GREY}not installed${C_OFF}" 'shift-tab'
 	fi
-	[ "$R_W" -gt 60 ] && R_W=60
+	# The keys in a column of their own at the right edge, wherever the
+	# values end: fzf's width (its header's, less its border and margins).
+	w=${FZF_COLUMNS:-}
+	case $w in '' | *[!0-9]*)
+		w=$(stty size </dev/tty 2>/dev/null)
+		w=${w#* }
+		;;
+	esac
+	case $w in '' | *[!0-9]*) w=96 ;; esac
+	room=$((w - 6 - 8 - 10))
 	for ((i = 0; i < R_N; i++)); do
-		pad=$((R_W - ${#R_P[i]}))
-		[ $pad -lt 0 ] && pad=0
-		printf '%s%6s%s  %s%*s   %s%s%s\n' "$C_GREY" "${R_L[i]}" "$C_OFF" "${R_C[i]}" "$pad" "" "$C_DIM" "${R_K[i]}" "$C_OFF"
+		pad=$((room - ${#R_P[i]}))
+		[ $pad -lt 1 ] && pad=1
+		printf '%s%6s%s  %s%*s %s%9s%s\n' "$C_GREY" "${R_L[i]}" "$C_OFF" "${R_C[i]}" "$pad" "" "$C_DIM" "${R_K[i]}" "$C_OFF"
 	done
 }
 
@@ -3195,9 +3204,11 @@ cmd_form() {
 			form_save "$sf"
 		fi
 		[ -n "$F_REPO" ] || return 0
-		out=$(form_bases | SHELL=/bin/sh fzf --reverse --no-info --no-separator --ansi --height 100% \
+		# shellcheck disable=SC2086
+		out=$(form_bases | SHELL=/bin/sh fzf --reverse $FORM_FZF \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      base  ' --ghost 'where the new branch starts' \
-			--color "$FZF_COLORS" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
+			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
 		if [ "$sel" != "$out" ] && [ -n "$sel" ]; then
 			d=${sel%%"$TAB"*}
@@ -3221,10 +3232,11 @@ cmd_form() {
 			form_save "$sf"
 		fi
 		form_branch "$q"
-		out=$(SHELL=/bin/sh fzf --disabled --reverse --no-info --no-separator --ansi --height 100% \
+		# shellcheck disable=SC2086
+		out=$(SHELL=/bin/sh fzf --disabled --reverse $FORM_FZF \
 			--prompt '    branch  ' --query "$BRANCH" --ghost 'branch name' --color "$FZF_COLORS" \
 			--header "        ${C_GREY}names the branch and its worktree; an existing branch continues${C_OFF}" \
-			--footer 'enter keep   esc back' --bind 'enter:print-query' </dev/null) || return 0
+			--footer "${C_GREY}↵$C_OFF ${C_DIM}keep$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF" --bind 'enter:print-query' </dev/null) || return 0
 		if [ -n "$out" ] && git check-ref-format --branch "$out" >/dev/null 2>&1; then
 			F_BRANCH=$out
 			slugify "$q"
@@ -3233,9 +3245,11 @@ cmd_form() {
 		fi
 		;;
 	repo)
-		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse --no-info --no-separator --ansi --height 100% \
+		# shellcheck disable=SC2086
+		out=$(recent_repos "$F_REPO" | SHELL=/bin/sh fzf --reverse $FORM_FZF \
 			--delimiter "$TAB" --with-nth 2 --print-query --prompt '      repo  ' --ghost 'a repository, or a path' \
-			--color "$FZF_COLORS" --footer 'enter pick   esc back') || [ -n "$out" ] || return 0
+			--color "$FZF_COLORS" --footer "${C_GREY}↵$C_OFF ${C_DIM}pick$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}back$C_OFF")
+		[ -n "$out" ] || return 0
 		sel=${out#*"$NL"}
 		[ "$sel" != "$out" ] && [ -n "$sel" ] && d=${sel%%"$TAB"*} || d=${out%%"$NL"*}
 		case $d in "~") d=$HOME ;; "~/"*) d="$HOME/${d#\~/}" ;; esac
@@ -3266,6 +3280,10 @@ cmd_form() {
 	return 0
 }
 
+# The form's footer: its keys, in the dashboard's style.
+FORM_FOOTER="${C_GREY}↵$C_OFF ${C_DIM}start$C_OFF   $C_GREY^e$C_OFF ${C_DIM}write it in \$EDITOR$C_OFF   ${C_GREY}esc$C_OFF ${C_DIM}cancel$C_OFF"
+FORM_FZF="--no-info --no-separator --ansi --height 100%"
+
 # The form: fills TASK and the F_* fields from form file $1. Returns 130 when
 # you cancel. Its keys stay clear of zellij's (Ctrl b, g, h, n, o, p, q, s, t
 # switch modes) and of fzf's line editing.
@@ -3281,9 +3299,10 @@ new_form() {
 		form_sock "$sf"
 		mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
 		rm -f "$FORM_SOCK"
-		out=$(SHELL=/bin/sh fzf --listen "$FORM_SOCK" --disabled --reverse --no-info --no-separator --ansi --height 100% \
+		# shellcheck disable=SC2086
+		out=$(SHELL=/bin/sh fzf --listen "$FORM_SOCK" --disabled --reverse $FORM_FZF \
 			--prompt '      task  ' --ghost 'what should the agent do?' --query "$query" \
-			--header "$h" --footer 'enter start   ^e write it in $EDITOR   esc cancel' \
+			--header "$h" --footer "$FORM_FOOTER" \
 			--color "$FZF_COLORS" \
 			--bind "change:bg-cancel+bg-transform-header($hd)" \
 			--bind "tab:execute-silent($q _form where $(printf '%q' "$sf"))+transform-header($hd)" \
