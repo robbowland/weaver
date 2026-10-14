@@ -115,9 +115,13 @@ rm -f "$SD/${SESSION}_2.nvim"
 
 # --- state from a zellij session that no longer exists (a reused name has
 # new pane ids) is cleaned up
-cp "$SD/${SESSION}_0.json" "$SD/weaver-gone-session_0.json"
+jq -c '.ts -= 7200' "$SD/${SESSION}_0.json" >"$SD/weaver-gone-session_0.json"
+cp "$SD/${SESSION}_0.json" "$SD/weaver-busy-session_0.json"
 weaver gc >/dev/null
 ok "state of a session that is gone: cleaned up" "$([ -f "$SD/weaver-gone-session_0.json" ] && echo kept || echo gone)" "gone"
+ok "...but not within the hour (zellij's list can miss a busy session)" \
+	"$([ -f "$SD/weaver-busy-session_0.json" ] && echo kept)" "kept"
+rm -f "$SD/weaver-busy-session_0.json"
 ok "...and ours kept" "$([ -f "$SD/${SESSION}_0.json" ] && echo kept)" "kept"
 
 # --- a pane that is gone is cleaned up, but only on a pane list that has our

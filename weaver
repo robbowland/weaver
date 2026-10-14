@@ -1829,12 +1829,16 @@ gc_states() {
 			if [ -z "$sessions" ]; then
 				sessions=$NL$(zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g')$NL
 			fi
+			# Only an hour after its last event: zellij's list can miss a
+			# session that is busy (seen under load in the tests).
 			case $sessions in
 			"$NL$NL") ;; # zellij did not answer: keep everything
 			*"$NL$skey$NL"*) ;;
 			*)
-				forget "$f" ""
-				continue
+				if [ $((now - ts)) -gt 3600 ]; then
+					forget "$f" ""
+					continue
+				fi
 				;;
 			esac
 		fi
