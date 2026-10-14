@@ -2936,12 +2936,21 @@ cmd_ls() {
 
 # The session's agents, as agent_rows has them, kept by push_status for the
 # sidebars (one agent_rows per change, not one per sidebar), into SIDE_ROWS.
-side_cache() { SIDE_ROWS="$STATE_DIR/$SKEY.rows"; }
+side_cache() { SIDE_ROWS="$STATE_DIR/$SKEY.rows" SIDE_ORDER="$STATE_DIR/$SKEY.order"; }
 side_cache_write() {
 	side_cache
 	agent_rows
+	side_order
 	mkdir -p "$STATE_DIR"
 	printf '%s' "$AGENT_ROWS" >"$SIDE_ROWS.$$" && mv -f "$SIDE_ROWS.$$" "$SIDE_ROWS"
+	printf '%s' "$THREAD_ORDER" >"$SIDE_ORDER.$$" && mv -f "$SIDE_ORDER.$$" "$SIDE_ORDER"
+}
+# The weaver session's order (thread_order, from the layout's side) for the
+# PANES agent_rows just listed; empty where there is none.
+side_order() {
+	THREAD_ORDER=""
+	type thread_order >/dev/null 2>&1 && thread_order
+	return 0
 }
 
 # A state's glyph, in its colour, into GLYPH, and plain, into GCHAR (the
@@ -2955,6 +2964,7 @@ glyph_of() {
 		;;
 	working | starting) GCHAR=$G_WORK GLYPH=$G_WORK ;;
 	interrupted) GCHAR=$G_INT GLYPH="$C_GREY$G_INT$C_OFF" ;;
+	tab) GCHAR="·" GLYPH="$C_DIM·$C_OFF" ;;
 	*) GCHAR=$G_IDLE GLYPH="$C_DIM$G_IDLE$C_OFF" ;;
 	esac
 }
@@ -2966,8 +2976,8 @@ glyph_of() {
 # rows push_status kept. Into $FZF_SOCK's .keys, the actions for 1-9 (by
 # thread number) and .cur, the current thread's position.
 side_rows() {
-	local now n=0 i j a=0 cur="" numw=1 w rail="" name line2 key out base num pl
-	local pane tab state root since seen prompt waiting title tnum ttask agent
+	local now n=0 i j a=0 cur="" numw=1 w rail="" name line2 key out base num pl e=0 kind label
+	local pane tab state root since seen prompt waiting title tnum ttask agent pos=" "
 	local -a k_key k_pane k_tab k_state k_seen k_name k_wait k_since k_num order
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
 	ls_utf8
@@ -2977,10 +2987,29 @@ side_rows() {
 	side_cache
 	if [ "${1:-}" = --cached ] && [ -f "$SIDE_ROWS" ]; then
 		AGENT_ROWS=$(cat "$SIDE_ROWS")
+		THREAD_ORDER=$(cat "$SIDE_ORDER" 2>/dev/null)
 	else
 		agent_rows
+		side_order
 	fi
 	now=$(date +%s)
+	# The layout's order, where there is one: each entry's place, and the
+	# tabs without an agent as rows of their own.
+	while IFS=$US read -r kind tnum tab pane label; do
+		[ -n "$kind" ] || continue
+		e=$((e + 1))
+		if [ "$kind" = tab ]; then
+			printf -v key '0%08d' "$e"
+			k_key[n]=$key k_pane[n]="" k_tab[n]=$tab k_state[n]=tab k_seen[n]="" k_name[n]=$label
+			k_wait[n]="" k_since[n]="" k_num[n]=""
+			n=$((n + 1))
+		else
+			printf -v key '%s%s=%08d ' "$pos" "$pane" "$e"
+			pos="$key"
+		fi
+	done <<EOF2
+$THREAD_ORDER
+EOF2
 	while IFS=$US read -r pane tab state root since seen prompt waiting _ title _ _ _ _ _ _ _ _ _ _ _ agent _ \
 		ttask _ tnum _; do
 		[ -n "$pane" ] || continue
@@ -2988,7 +3017,14 @@ side_rows() {
 		case $tnum in '' | *[!0-9]*) tnum="" ;; esac
 		name=${title:-${ttask:-$prompt}}
 		[ -n "$name" ] || name="new ${agent:-claude} session"
-		if [ -n "$tnum" ]; then printf -v key '0%08d' "$tnum"; else printf -v key '1%08d' "$pane"; fi
+		# Its place in the layout's order; else by number, then by pane.
+		case $pos in
+		*" $pane="*)
+			key=${pos#*" $pane="}
+			key=0${key%% *}
+			;;
+		*) if [ -n "$tnum" ]; then printf -v key '1%08d' "$tnum"; else printf -v key '2%08d' "$pane"; fi ;;
+		esac
 		k_key[n]=$key k_pane[n]=$pane k_tab[n]=$tab k_state[n]=$state k_seen[n]=$seen k_name[n]=$name
 		k_wait[n]=$waiting k_since[n]=$since k_num[n]=$tnum
 		[ ${#tnum} -gt $numw ] && numw=${#tnum}
@@ -3014,6 +3050,10 @@ EOF2
 		line2=""
 		if [ -n "$rail" ]; then
 			pl="$num$GCHAR" out="$C_DIM$num$C_OFF$GLYPH"
+		elif [ "${k_state[i]}" = tab ]; then
+			# A tab without an agent: its name, faint.
+			fit "${k_name[i]}" $((w - numw - 5))
+			pl="$num$GCHAR  $FIT" out="$C_DIM$num$GLYPH  $C_DIM$FIT$C_OFF"
 		else
 			age $((now - k_since[i]))
 			fit "${k_name[i]}" $((w - numw - 9))
@@ -3032,7 +3072,8 @@ EOF2
 		elif [ -n "$line2" ]; then
 			line2="$C_DIM$line2$C_OFF"
 		fi
-		printf 'a%s\t%s\t%s\t%s%s\0' "${k_pane[i]}" "${k_pane[i]}" "${k_tab[i]}" "$out" "${line2:+$NL$line2}"
+		if [ -n "${k_pane[i]}" ]; then key="a${k_pane[i]}"; else key="t${k_tab[i]}"; fi
+		printf '%s\t%s\t%s\t%s%s\0' "$key" "${k_pane[i]}" "${k_tab[i]}" "$out" "${line2:+$NL$line2}"
 	done
 	[ -n "${FZF_SOCK:-}" ] || return 0
 	base=${FZF_SOCK%.sock}
@@ -3071,8 +3112,13 @@ EOF2
 	[ "$new" = "$old$NL" ] || [ "$new" = "$old" ] || printf '%s' "$new" >"$f"
 }
 
-# Go to agent PANE in tab TAB from the sidebar or the home tab (they stay).
+# Go to agent PANE in tab TAB from the sidebar or the home tab (they stay);
+# with no PANE, to the tab.
 cmd_goto() {
+	if [ -z "${1:-}" ]; then
+		zellij action go-to-tab-by-id "${2:-}" >/dev/null 2>&1
+		return 0
+	fi
 	jump_to "$1" "$2"
 	push_status
 }
