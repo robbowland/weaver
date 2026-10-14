@@ -3953,14 +3953,17 @@ worktree_removable() {
 	return 1
 }
 
-# Panes of this session (other than $2, a space-separated list) whose
-# directory is in $1, into USERS.
+# Panes of this session whose directory is in $1, into USERS: not those in
+# $2 (a space-separated list), and not the floating panes of tab $3 (they
+# close with it).
 worktree_users() {
-	USERS=$(printf '%s' "$PANES" | jq -r --arg d "$1" --arg skip " $2 " '
-		[.[] | select((.is_plugin | not) and (.exited | not)
-			and ($skip | contains(" \(.id) ") | not)
+	USERS=$(printf '%s' "$PANES" | jq -r --arg d "$1" --arg skip " $2 " --arg tab "${3:-}" '
+		[.[] | (.id | tostring) as $i
+		| select((.is_plugin | not) and (.exited | not)
+			and ($skip | contains(" " + $i + " ") | not)
+			and ((.is_floating and (.tab_id | tostring) == $tab) | not)
 			and ((.pane_cwd // "") as $c | $c == $d or ($c | startswith($d + "/"))))
-		| .id] | join(" ")')
+		| $i] | join(" ")')
 }
 
 # Is there a terminal to ask on?
@@ -4025,7 +4028,7 @@ cmd_close() {
 	# Its worktree may go only if weaver made it and nothing would be lost.
 	if [ "$TH_CREATED" = true ] && [ "$TH_HERE" != true ] && [ -n "$TH_DIR" ]; then
 		tildify "$TH_DIR"
-		worktree_users "$TH_DIR" "$AGENT ${nv:-}"
+		worktree_users "$TH_DIR" "$AGENT ${nv:-} ${ZELLIJ_PANE_ID:-}" "$tab"
 		if ! worktree_removable "$TH_DIR"; then
 			keep="$TILDE stays: $WT_WHY"
 		elif [ -n "$USERS" ]; then

@@ -233,6 +233,20 @@ out=$(weaver close --yes --remove-worktree "$GIT_AG" 2>&1)
 ok "close: a clean, merged worktree goes when asked; its branch stays" \
 	"$([ -d "$T/repo.plain-git" ] || echo removed)|$(git -C "$T/repo" branch --list plain-git | wc -l | tr -d ' ')" "removed|1"
 
+# A pane of yours in the worktree (another tab) keeps it, and close says why
+# on stdout, nothing on stderr.
+out=$(cd "$T/repo" && weaver new --no-focus "someone is in it" 2>&1)
+tab=$(tab_named someone-is-in-it)
+thread_panes "$tab"
+waitfor "[ -f '$SD/${SESSION}_$AG.thread' ]"
+inside=$(Z new-tab --name inside --cwd "$T/repo.someone-is-in-it" -- bash --noprofile --norc -i)
+TABS="$TABS $inside"
+sleep 0.5
+user=$(tabpanes "$inside" | jq -r '.[0]')
+out=$(weaver close --yes --remove-worktree "$AG" 2>"$AT/close.err")
+ok "close: a worktree another pane is in stays, and it says which" \
+	"$([ -d "$T/repo.someone-is-in-it" ] && echo kept)|$(printf '%s' "$out" | grep -c "pane $user is in it")|$(wc -c <"$AT/close.err" | tr -d ' ')" "kept|1|0"
+
 # A thread's commits that are neither merged nor pushed keep its worktree.
 out=$(cd "$T/repo" && weaver new --no-focus "commit something" 2>&1)
 tab=$(tab_named commit-something)
