@@ -69,7 +69,7 @@ func (e *Env) hookBg() {
 		}
 	}
 	if h.Event == "SessionStart" {
-		e.ScriptRun("gc")
+		e.GC()
 	}
 	e.hookSnapshots(h)
 }

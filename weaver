@@ -6281,6 +6281,7 @@ sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;
 _boot) need_session && home_boot "$@" ;;
+_resume) need_session && resume_session nopush ;;
 _fit) cmd_fit "$@" ;;
 _panes) need_session && list_panes && printf '%s\n' "$PANES" ;;
 _seen) cmd_seen "$@" ;;

@@ -1001,3 +1001,9 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   socket from Go, where the script ran curl. Measured on the lab agent, a
   sync hook about 50 ms to 10 ms, an async one that changes nothing about
   65 ms to 13 ms. The script keeps its hook for zellij.
+- 2026-10-15: Compiled too: the board's card and views (`_preview`,
+  `_view`, the help and the lost card), its jumps (`_goto`), Alt y (`go
+  home`), Alt 1 (`next`), tmux's hooks as you look and resize (`_seen`,
+  `_fit`), `status --push`, and the home board's start (`_boot`: the sweep of
+  tmux sessions' old states, `gc`'s, is Go; a restore of lost threads, which
+  starts agents, is the script's `_resume`, run only when there is one).

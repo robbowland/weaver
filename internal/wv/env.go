@@ -112,6 +112,9 @@ func (e *Env) Tmux(args ...string) ([]byte, error) {
 	return exec.Command("tmux", args...).Output()
 }
 
+// runTmux runs a tmux client with these arguments as they are.
+func runTmux(args ...string) ([]byte, error) { return exec.Command("tmux", args...).Output() }
+
 // StateFile is the state file of the agent in pane p of this session.
 func (e *Env) StateFile(p string) string { return e.StateDir + "/" + e.SKey + "_" + p + ".json" }
 

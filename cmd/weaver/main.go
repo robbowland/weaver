@@ -69,6 +69,73 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 			return 1, true
 		}
 		fmt.Println(c)
+	case "_preview":
+		if !needSession() {
+			return 1, true
+		}
+		fmt.Print(e.Preview(args[1:]))
+	case "_view":
+		w := ""
+		if len(args) > 1 {
+			w = args[1]
+		}
+		fmt.Print(wv.View(w))
+	case "_goto":
+		if !needSession() {
+			return 1, true
+		}
+		p, t := "", ""
+		if len(args) > 1 {
+			p = args[1]
+		}
+		if len(args) > 2 {
+			t = args[2]
+		}
+		e.Goto(p, t)
+	case "go":
+		if len(args) < 2 || args[1] != "home" {
+			fmt.Fprintln(os.Stderr, "weaver: usage: weaver go home")
+			return 1, true
+		}
+		if !needSession() {
+			return 1, true
+		}
+		e.GoHome()
+	case "next":
+		if !needSession() {
+			return 1, true
+		}
+		e.Next()
+	case "_seen", "_fit":
+		if !needSession() {
+			return 1, true
+		}
+		w := ""
+		if len(args) > 1 {
+			w = args[1]
+		}
+		if cmd == "_seen" {
+			e.Seen(w)
+		} else {
+			e.Fit(w)
+		}
+	case "_boot":
+		if !needSession() {
+			return 1, true
+		}
+		sock := ""
+		if len(args) > 1 {
+			sock = args[1]
+		}
+		e.Boot(sock)
+	case "status":
+		if len(args) < 2 || args[1] != "--push" {
+			return 0, false
+		}
+		if !needSession() {
+			return 1, true
+		}
+		e.PushStatus(false)
 	case "_rows":
 		if !needSession() {
 			return 1, true
