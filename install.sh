@@ -107,6 +107,29 @@ install_files() {
 	esac
 }
 
+# Before weaver was one binary, install.sh copied its script, itself and
+# config/ into $DEST and linked the script into $BIN. The binary carries
+# them now ($DEST/nvim stays: the binary keeps it, for Neovim configs).
+# Remove those copies, but only ones that look like what it wrote.
+remove_old_copies() {
+	local f gone=()
+	for f in "$DEST/weaver" "$DEST/install.sh"; do
+		if [ -f "$f" ] && [ ! -L "$f" ] && head -n 1 "$f" 2>/dev/null | grep -q '^#!.*bash'; then
+			gone+=("$f")
+		fi
+	done
+	if [ -d "$DEST/config" ] && [ -f "$DEST/config/claude-hooks.json" ]; then
+		gone+=("$DEST/config")
+	fi
+	[ ${#gone[@]} -gt 0 ] || return 0
+	if [ $dry = 1 ]; then
+		say "would remove the old install's copies: ${gone[*]}"
+		return
+	fi
+	rm -rf "${gone[@]}"
+	say "removed the old install's copies: ${gone[*]}"
+}
+
 # weaver was called agentnav: remove that install, but only the copy and the
 # link install.sh made, never a file it did not create.
 remove_agentnav() {
@@ -264,6 +287,7 @@ configure_codex() {
 
 check_deps
 install_files
+remove_old_copies
 remove_agentnav
 if [ $configure = 1 ]; then
 	[ -n "$zconfs" ] || zconfs="${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}$NL"

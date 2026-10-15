@@ -1064,3 +1064,6 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   screen (snacks.nvim's dashboard, dashboard-nvim, alpha, mini.starter): a
   new thread's nvim opens on one, and its agent's first edits waited
   behind it for good.
+  `install.sh` removes what the install before the binary copied into
+  `$XDG_DATA_HOME/weaver` (its script, itself and `config/`), once nothing
+  ran from there any more.
