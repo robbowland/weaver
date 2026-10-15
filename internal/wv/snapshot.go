@@ -52,6 +52,9 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 
 	label := point
 	tip, _ := gitOut(top, nil, "", "rev-parse", "-q", "--verify", ref+"^{commit}")
+	if tip == "" && key != "reviewed" {
+		pruneSnapshots(top, gd, time.Now().Add(-snapKeep))
+	}
 	var tree string
 	if point == "base" {
 		label = "start"
@@ -168,6 +171,39 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 }
 
 func firstRunes(s string, n int) string { return runeSlice(s, n) }
+
+// snapKeep is how long a session's snapshots outlive its last turn: as long
+// as weaver keeps its activity logs and turns.
+const snapKeep = 31 * 24 * time.Hour
+
+// pruneSnapshots drops this worktree's session chains whose last snapshot is
+// older than before, and the private indexes (gd/index-*) no snapshot has
+// used since: without it a main checkout would keep every session's chain,
+// and a copy of its index for each, for good. Run as a chain starts, which
+// is once per session in each worktree.
+func pruneSnapshots(top, gd string, before time.Time) {
+	out, err := gitOut(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/")
+	if err == nil {
+		for _, l := range strings.Split(out, "\n") {
+			f := strings.Fields(l)
+			if len(f) != 3 {
+				continue
+			}
+			if t, ok := atoi(f[2]); ok && int64(t) < before.Unix() {
+				gitOut(top, nil, "", "update-ref", "-d", f[0], f[1])
+			}
+		}
+	}
+	ms, _ := filepath.Glob(gd + "/index-*")
+	for _, m := range ms {
+		if strings.HasSuffix(m, ".lock.d") || strings.HasSuffix(m, "index-reviewed") {
+			continue
+		}
+		if st, err := os.Lstat(m); err == nil && st.Mode().IsRegular() && st.ModTime().Before(before) {
+			os.Remove(m)
+		}
+	}
+}
 
 // snapRoots snapshots each root (RS-separated) onto the session's chain;
 // logs and tells nvim about each new commit.
