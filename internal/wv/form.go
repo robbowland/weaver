@@ -557,48 +557,75 @@ func checkThread(task string, fm form) string {
 	return ""
 }
 
-// New is `weaver new` without a task: the form, then the thread (started
-// by the script, given the form's choices). With a task, --edit or no
-// terminal, the script's.
+// New is `weaver new [options] [TASK]`: a thread for TASK (or, without
+// one, the form's), its worktree and its window. ok false for --help (the
+// script's usage).
 func (e *Env) New(args []string) (int, bool) {
-	from, repoArg := "", ""
-	var plain []string
+	var repoArg, from, branch, base, agent, where string
+	var task []string
+	nofocus, edit := false, false
+	die := func(m string) (int, bool) {
+		fmt.Fprintln(os.Stderr, "weaver: "+m)
+		return 1, true
+	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
 		case "--repo", "--from", "--branch", "-b", "--base", "--agent":
 			if i+1 >= len(args) {
-				return 0, false
+				return die(a + " needs a value")
 			}
+			v := args[i+1]
 			switch a {
-			case "--from":
-				from = strings.TrimPrefix(args[i+1], "terminal_")
 			case "--repo":
-				repoArg = args[i+1]
-			default:
-				return 0, false
+				repoArg = v
+			case "--from":
+				from = strings.TrimPrefix(v, "terminal_")
+			case "--branch", "-b":
+				branch = v
+			case "--base":
+				base = v
+			case "--agent":
+				agent = v
 			}
 			i++
-		case "--here", "--worktree", "--no-focus", "--edit", "-e", "-h", "--help", "--":
+		case "--here":
+			where = "here"
+		case "--worktree":
+			where = "worktree"
+		case "--no-focus":
+			nofocus = true
+		case "--edit", "-e":
+			edit = true
+		case "--":
+			task = append(task, args[i+1:]...)
+			i = len(args)
+		case "-h", "--help":
 			return 0, false
 		default:
 			if strings.HasPrefix(a, "-") {
-				return 0, false
+				return die("unknown option: " + a + " (see weaver help)")
 			}
-			plain = append(plain, a)
+			task = append(task, a)
 		}
 	}
-	if len(plain) > 0 || !isTTY(0) || !isTTY(1) {
-		return 0, false
+	if e.Session == "" {
+		return die("not inside zellij or tmux: start it with `weaver`, then Alt N (or weaver new) there")
 	}
-	if _, err := exec.LookPath("fzf"); err != nil {
-		return 0, false
+	if agent == "" {
+		agent = "claude"
+	}
+	if agent != "claude" && agent != "codex" {
+		return die("unknown agent: " + agent + " (claude or codex)")
 	}
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()
 	switch {
 	case repoArg != "":
 		start = repoArg
+		if st, err := os.Stat(start); err != nil || !st.IsDir() {
+			return die("no such directory: " + repoArg)
+		}
 	case from != "":
 		f := ""
 		if b, err := os.ReadFile(e.StateFile(from)); err == nil {
@@ -618,12 +645,15 @@ func (e *Env) New(args []string) (int, bool) {
 			start = f
 		}
 	}
-	fm := form{where: "worktree", agent: "claude"}
+	if where == "" {
+		where = "worktree"
+	}
+	fm := form{branch: branch, where: where, agent: agent, base: base}
 	if r, c, ok := repoOf(start); ok {
 		fm.repo, fm.here = r, c
 	} else {
 		if repoArg != "" {
-			return 0, false
+			return die("not a git repository: " + repoArg)
 		}
 		if d, err := filepath.EvalSymlinks(start); err == nil {
 			fm.here = d
@@ -632,16 +662,61 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 		// Not in a repository: the one you used last, for a new worktree.
 		if l, err := firstLine(e.StateDir + "/repos"); err == nil && l != "" {
-			if r, _, ok := repoOf(l); ok {
-				fm.repo = r
+			if st, err := os.Stat(l); err == nil && st.IsDir() {
+				if r, _, ok := repoOf(l); ok {
+					fm.repo = r
+				}
 			}
 		}
+	}
+	t := strings.Join(task, " ")
+	if edit {
+		f, err := os.CreateTemp("", "weaver-task.")
+		if err != nil {
+			return die("cannot make a temporary file")
+		}
+		if t != "" {
+			f.WriteString(t + "\n")
+		}
+		f.Close()
+		defer os.Remove(f.Name())
+		ed := os.Getenv("VISUAL")
+		if ed == "" {
+			ed = os.Getenv("EDITOR")
+		}
+		if ed == "" {
+			ed = "vi"
+		}
+		w := strings.Fields(ed)
+		c := exec.Command(w[0], append(w[1:], f.Name())...)
+		if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+			c.Stdin, c.Stdout = tty, tty
+			defer tty.Close()
+		}
+		c.Stderr = os.Stderr
+		c.Run()
+		b, _ := readTrim(f.Name())
+		if strings.TrimSpace(b) == "" {
+			return 130, true
+		}
+		t = b
+	}
+	if t != "" {
+		if m := checkThread(t, fm); m != "" {
+			return die(m)
+		}
+		if !e.threadCreate(t, fm, nofocus) {
+			return 1, true
+		}
+		return 0, true
+	}
+	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(0) || !isTTY(1) {
+		return die(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
 	}
 	os.MkdirAll(e.StateDir, 0o755)
 	tf, err := os.CreateTemp(e.StateDir, "form.")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: cannot make the form's file")
-		return 1, true
+		return die("cannot make the form's file")
 	}
 	sf := tf.Name()
 	tf.Close()
@@ -651,42 +726,11 @@ func (e *Env) New(args []string) (int, bool) {
 		os.Remove(sf + ".task")
 	}()
 	for {
-		task, rc := e.newForm(sf)
+		t, rc := e.newForm(sf)
 		if rc != 0 {
 			return rc, true
 		}
-		fm = loadForm(sf)
-		// The thread itself: the script's, given the form's choices.
-		a := []string{"new", "--agent", fm.agent}
-		if fm.where == "here" {
-			a = append(a, "--here")
-		} else {
-			a = append(a, "--worktree")
-			if fm.branch != "" {
-				a = append(a, "--branch", fm.branch)
-			}
-			if fm.base != "" {
-				a = append(a, "--base", fm.base)
-			}
-		}
-		// From the checkout it names (its HEAD is the @ base), else the
-		// repository; outside one, from that directory.
-		dir := ""
-		if r, _, ok := repoOf(fm.here); fm.repo != "" && ok && r == fm.repo {
-			a = append(a, "--repo", fm.here)
-		} else if fm.repo != "" && fm.where == "worktree" {
-			a = append(a, "--repo", fm.repo)
-		} else {
-			dir = fm.here
-		}
-		a = append(a, "--", task)
-		c := e.scriptCmd(a...)
-		if c == nil {
-			return 1, true
-		}
-		c.Dir = dir
-		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-		if c.Run() == nil {
+		if e.threadCreate(t, loadForm(sf), nofocus) {
 			return 0, true
 		}
 		// The worktree could not be made: its message is on screen.

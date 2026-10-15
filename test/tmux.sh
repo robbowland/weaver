@@ -260,6 +260,24 @@ key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "
 
+# --- a thread in a worktree of its own (its branch from the task), then
+# closed with its worktree, which is clean and merged
+tx run-shell -t "=$S:" "cd '$AT/repo' && weaver new --no-focus 'Fix the flaky test' >'$AT/new2.out' 2>&1"
+waitfor '[ "$(panes 2 2>/dev/null | wc -l | tr -d " ")" = 2 ]' 100
+AG2=$(pane_at 2 1)
+waitfor '[ -f "$SD/tmux-${S}_$AG2.thread" ]'
+WT2=$(jq -r .worktree "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)
+ok "new: a worktree for the task's branch, made by weaver, its window 2" \
+	"$(jq -r '"\(.branch) \(.worktree_created) \(.here) \(.num)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)|$(git -C "$WT2" symbolic-ref --short HEAD 2>/dev/null)|$(windows)" \
+	"fix-the-flaky-test true false 2|fix-the-flaky-test|0 1 2 " ||
+	sed 's/^/  new: /' "$AT/new2.out"
+tx run-shell -t "=$S:" "weaver close --yes --remove-worktree $AG2 >'$AT/close2.out' 2>&1"
+waitfor '[ "$(windows)" = "0 1 " ] && [ ! -d "$WT2" ]' 100
+ok "close: its window, its files and its worktree go; its branch stays" \
+	"$(windows)|$(ls "$SD" | grep -c "^tmux-${S}_$AG2\.")|$([ -d "$WT2" ] && echo kept || echo gone)|$(git -C "$AT/repo" branch --list fix-the-flaky-test | tr -d ' *')" \
+	"0 1 |0|gone|fix-the-flaky-test" ||
+	sed 's/^/  close: /' "$AT/close2.out"
+
 # --- the server crashes: the board lists the lost thread, and enter resumes it
 crash
 attach WEAVER_RESTORE=0

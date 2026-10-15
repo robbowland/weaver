@@ -137,9 +137,6 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		}
 		e.PushStatus(false)
 	case "new":
-		if e.Session == "" {
-			return 0, false
-		}
 		return e.New(args[1:])
 	case "_form":
 		if len(args) < 3 {
@@ -178,6 +175,52 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 			return 1, true
 		}
 		return e.Nvim(args[1:]), true
+	case "_agent":
+		if !needSession() {
+			return 1, true
+		}
+		tok, kind := "", ""
+		if len(args) > 1 {
+			tok = args[1]
+		}
+		if len(args) > 2 {
+			kind = args[2]
+		}
+		return e.AgentPane(tok, kind), true
+	case "resume":
+		for _, a := range args[1:] {
+			if a == "-h" || a == "--help" {
+				return 0, false
+			}
+		}
+		return e.Resume(args[1:]), true
+	case "_resume":
+		if !needSession() {
+			return 1, true
+		}
+		e.ResumeSession()
+	case "close":
+		if !needSession() {
+			return 1, true
+		}
+		return e.Close(args[1:]), true
+	case "_close":
+		if !needSession() {
+			return 1, true
+		}
+		return e.CloseTail(args[1:]), true
+	case "send":
+		if !needSession() {
+			return 1, true
+		}
+		return e.Send(args[1:]), true
+	case "quit":
+		for _, a := range args[1:] {
+			if a == "-h" || a == "--help" {
+				return 0, false
+			}
+		}
+		return e.Quit(args[1:]), true
 	case "_rows":
 		if !needSession() {
 			return 1, true

@@ -151,8 +151,7 @@ func (e *Env) Boot(sock string) {
 		also := strings.TrimPrefix(e.SKey, "tmux-")
 		for _, l := range e.LostRows() {
 			if l.Skey == e.SKey || l.Skey == also {
-				// Restoring starts agents in new windows: the script's.
-				e.ScriptRun("_resume")
+				e.ResumeSession()
 				break
 			}
 		}

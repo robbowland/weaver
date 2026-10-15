@@ -194,6 +194,31 @@ func nvimEval(sock, expr string, d time.Duration) int {
 	}
 }
 
+// nvimEvalInt is expr's value in the nvim at sock, as a number.
+func nvimEvalInt(sock, expr string, d time.Duration) (int, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	v, err := nvim.Dial(sock, nvim.DialContext(ctx), nvim.DialLogf(func(string, ...any) {}))
+	if err != nil {
+		return 0, false
+	}
+	defer v.Close()
+	done := make(chan int, 1)
+	go func() {
+		var r int
+		if v.Eval(expr, &r) != nil {
+			r = -1
+		}
+		done <- r
+	}()
+	select {
+	case r := <-done:
+		return r, r >= 0
+	case <-ctx.Done():
+		return 0, false
+	}
+}
+
 // nvimEditEvent: an edit (or a focus) at file f in root r.
 func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
 	x := `,"root":` + jsonStr(r) + `,"file":` + jsonStr(f) + `,"tool":` + jsonStr(tool)

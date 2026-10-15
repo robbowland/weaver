@@ -1019,3 +1019,9 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   one tmux query, then tmux in place of weaver), `edit` (Alt v) and the
   agent's `nvim` (its liveness check over RPC, then nvim in place of
   weaver).
+- 2026-10-15: Compiled: threads (`new` with every option, the thread's
+  worktree with Worktrunk or git, its window, `_agent`), `resume` and the
+  session's restore, `close` (its card, the worktree's removal) and
+  `_close`, `send` and `quit`. On tmux the script now does only what the Go
+  binary hands it: `help`, plain `status`, an explicit `gc` (zellij's states
+  too), and zellij's own commands (sidebar, layout); under zellij, all of it.
