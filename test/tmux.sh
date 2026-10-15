@@ -130,6 +130,9 @@ waitfor '[ "$(tx display -p -t "=$S:1" "#{window_name}")" = "01 say hello · rep
 ok "hook: the thread's window takes its label" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
 ok "status: the counts for tmux's status line" "$(weaver status --tmux "$S")" \
 	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
+ok "...set on the session for its status line to show, nothing polled" \
+	"$(tx show -v -t "=$S:" @weaver-counts)|$(tx show -gv status-interval)" \
+	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  |0"
 
 # --- the keys
 tx select-window -t "=$S:1" \; select-pane -t "%$AG"

@@ -235,8 +235,7 @@ narrows to a rail of numbers and glyphs. Click or move into it and `j`/`k`,
 
 `weaver status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
 unseen, working). weaver's tmux status line shows them in Micrographics signal
-colours with `#(weaver status --tmux '#{session_name}')`, every two seconds and
-at once when an agent changes. In zellij,
+colours, set by weaver as they change, so nothing polls. In zellij,
 [zjstatus](https://github.com/dj95/zjstatus)'s command widget shows them:
 
 ```kdl
@@ -250,9 +249,9 @@ tab_normal_bell    "#[fg=#ffffff,bold][{index}] {name}{bell_indicator} "
 tab_bell_indicator " *"
 ```
 
-`weaver status --tmux` and `--zjstatus` only read a small file the hooks
-keep, so running them every two seconds costs a few milliseconds each. They
-need `weaver` on the PATH the multiplexer was started with.
+`weaver status --zjstatus` only reads a small file the hooks keep, so
+running it every two seconds costs a few milliseconds each. It needs `weaver`
+on the PATH zellij was started with.
 
 ### Turns and the activity log
 

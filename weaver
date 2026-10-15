@@ -27,12 +27,23 @@
 #   [ ] idle              [-] interrupted, or ended
 G_NEED='[!]' G_DONE='[x]' G_SEEN='[x]' G_WORK='[/]' G_IDLE='[ ]' G_INT='[-]' G_END='[-]'
 
+# The counts (needs you, done, working) in the status line's #[...] styles,
+# zjstatus's and tmux's, into COUNTS_FMT: each count's cell faint brackets,
+# its mark in the signal colour.
+counts_fmt() {
+	COUNTS_FMT=""
+	[ "${1:-0}" -gt 0 ] && COUNTS_FMT="$COUNTS_FMT#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] $1  "
+	[ "${2:-0}" -gt 0 ] && COUNTS_FMT="$COUNTS_FMT#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] $2  "
+	[ "${3:-0}" -gt 0 ] && COUNTS_FMT="$COUNTS_FMT#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] $3  "
+	return 0
+}
+
 # zjstatus runs `weaver status --zjstatus` every couple of seconds in every
 # tab: answer from the counts the hooks keep, before parsing anything else.
 # It must never fail or hang zjstatus: no external command, only a file read
 # (bounded by read -t), empty output and status 0 on anything unexpected.
-# tmux's status line runs `weaver status --tmux SESSION` the same way (its
-# #[...] styles are zjstatus's).
+# `weaver status --tmux SESSION` answers the same for a tmux session (whose
+# status line weaver sets itself, push_status).
 if [ "${1:-}" = status ] && { [ "${2:-}" = --zjstatus ] || [ "${2:-}" = --tmux ]; }; then
 	n=0 d=0 w=0
 	k=${ZELLIJ_SESSION_NAME:-}
@@ -40,12 +51,8 @@ if [ "${1:-}" = status ] && { [ "${2:-}" = --zjstatus ] || [ "${2:-}" = --tmux ]
 	f="${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/weaver/${k//\//_}.status"
 	[ -n "$k" ] && [ -f "$f" ] && { read -r -t 1 n d w _ <"$f"; } 2>/dev/null
 	case "${n:-0}${d:-0}${w:-0}" in *[!0-9]*) n=0 d=0 w=0 ;; esac
-	out=""
-	# Each count's cell: faint brackets, its mark in the signal colour.
-	[ "${n:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] $n  "
-	[ "${d:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] $d  "
-	[ "${w:-0}" -gt 0 ] && out="$out#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] $w  "
-	printf '%s\n' "$out"
+	counts_fmt "$n" "$d" "$w"
+	printf '%s\n' "$COUNTS_FMT"
 	exit 0
 fi
 
@@ -207,13 +214,22 @@ mux_screen() {
 	fi
 }
 
-# The panes your clients are looking at, space-separated.
-mux_client_panes() {
-	if [ "$MUX" = tmux ]; then
-		tm list-clients -F '#{pane_id}' 2>/dev/null | tr -d '%' | tr '\n' ' '
-	else
-		zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }'
+# Your clients, into MUX_CLIENT_PANES (the panes they look at, " 3 7 ") and,
+# in tmux, MUX_CLIENT_NAMES (those on this session, to refresh). One call.
+mux_clients() {
+	local out name pane sess
+	MUX_CLIENT_PANES=" " MUX_CLIENT_NAMES=""
+	if [ "$MUX" != tmux ]; then
+		MUX_CLIENT_PANES=" $(zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }')"
+		return 0
 	fi
+	out=$(tm list-clients -F "#{client_name}$US#{pane_id}$US#{session_name}" 2>/dev/null)
+	while IFS=$US read -r name pane sess; do
+		[ -n "$name" ] || continue
+		MUX_CLIENT_PANES="$MUX_CLIENT_PANES${pane#%} "
+		[ "$sess" = "$SESSION" ] && MUX_CLIENT_NAMES="$MUX_CLIENT_NAMES $name"
+	done <<<"$out"
+	return 0
 }
 
 # The running sessions' keys (SKEY), one per line, of both: zellij's, and
@@ -1148,13 +1164,17 @@ bounded() {
 
 toplevel() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 
-# All panes as a JSON array, into PANES. Retried: list-panes has once been
-# seen returning output that was not JSON.
+# All panes as a JSON array, into PANES. Retried: zellij's list-panes has once
+# been seen returning output that was not JSON (tmux's is jq's own).
 list_panes() {
 	local i
 	for i in 1 2 3; do
-		PANES=$(mux_panes) &&
-			printf '%s' "$PANES" | jq -e 'type == "array"' >/dev/null 2>&1 && return 0
+		if [ "$MUX" = tmux ]; then
+			PANES=$(mux_panes) && [ -n "$PANES" ] && return 0
+		else
+			PANES=$(mux_panes) &&
+				printf '%s' "$PANES" | jq -e 'type == "array"' >/dev/null 2>&1 && return 0
+		fi
 		sleep 0.1
 	done
 	PANES=""
@@ -1330,7 +1350,11 @@ hook_bg() {
 		fi
 	fi
 	if [ "$state" != "$o_state" ] || [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] ||
-		[ "$title" != "$o_title" ]; then
+		[ "$title" != "$o_title" ] || [ "$root" != "$o_root" ]; then
+		# A thread's label is its title (else its task or prompt) and branch.
+		LABELS=""
+		{ [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] || [ "$title" != "$o_title" ] ||
+			[ "$root" != "$o_root" ]; } && LABELS=1
 		push_status
 	fi
 	if [ -n "$NV" ] && [ "$root" != "$o_root" ] && same_root; then
@@ -2007,6 +2031,11 @@ JQ_ROWS='
 panes_trusted() {
 	[ -n "$PANES" ] || return 1
 	[ -n "${MY_PANE:-}" ] || return 0
+	# tmux's list is jq's, each pane opening with its id.
+	if [ "$MUX" = tmux ]; then
+		case $PANES in *"{\"id\":$MY_PANE,"*) return 0 ;; esac
+		return 1
+	fi
 	printf '%s' "$PANES" | jq -e --arg me "$MY_PANE" \
 		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me)' >/dev/null 2>&1
 }
@@ -2161,6 +2190,7 @@ agent_rows() {
 	panes_trusted && trusted=1
 	claude_live
 	now=$(date +%s)
+	ROWS_NOW=$now
 	# A file removed meanwhile (an agent cleaned up) makes jq fail at the end,
 	# after it has printed the others: keep them.
 	rows=$(jq -rRn --argjson panes "$PANES" --argjson claude "$CLAUDE_LIVE" --argjson now "$now" \
@@ -2271,12 +2301,14 @@ gc_states() {
 status_counts() {
 	local f line st seen pid pane re_s='"state":"([a-z-]+)"' re_p='"pid":([0-9]+)' re_n='"seen":true'
 	local re_c='"status":"([a-z]+)"' cs clients
-	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW=""
+	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW="" clients=" " MUX_CLIENT_NAMES=""
+	# The clients (for push_status to refresh) even with no agents to count.
+	if [ "${1:-}" = mark ]; then
+		mux_clients
+		clients=$MUX_CLIENT_PANES
+	fi
 	session_files json
 	[ ${#FOUND[@]} -gt 0 ] || return 0
-	clients=" "
-	[ "${1:-}" = mark ] &&
-		clients=" $(mux_client_panes)"
 	for f in "${FOUND[@]}"; do
 		line="" st="" pid="" seen=""
 		{ IFS= read -r line <"$f"; } 2>/dev/null
@@ -2320,24 +2352,29 @@ status_text() {
 	STATUS=${STATUS%  }
 }
 
-# Keep the counts zjstatus shows (weaver status --zjstatus) and reload any
-# open dashboard. Agents you are looking at count as seen.
+# Keep the counts the status line shows (weaver status --tmux, --zjstatus) and
+# reload any open dashboard. Agents you are looking at count as seen. With
+# LABELS set (a title, prompt or branch changed, or the session started), the
+# thread tabs' labels too.
 push_status() {
 	local p s q side=""
 	status_counts mark
 	for p in $SEEN_NOW; do mark_seen "$p"; done
-	mkdir -p "$STATE_DIR"
+	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR"
 	printf '%s %s %s\n' "$N_NEED" "$N_DONE" "$N_WORK" >"$STATE_DIR/$SKEY.status.$$" &&
 		mv -f "$STATE_DIR/$SKEY.status.$$" "$STATE_DIR/$SKEY.status"
-	# tmux reads the counts every few seconds: now, for its clients on us.
+	# tmux's status line shows the session's @weaver-counts: set them, and
+	# redraw its clients' status lines, in one call (no polling).
 	if [ "$MUX" = tmux ]; then
-		for s in $(tm list-clients -t "=$SESSION" -F '#{client_name}' 2>/dev/null); do
-			tm refresh-client -S -t "$s" >/dev/null 2>&1
-		done
+		counts_fmt "$N_NEED" "$N_DONE" "$N_WORK"
+		set -- set-option -t "=$SESSION:" @weaver-counts "$COUNTS_FMT"
+		for s in $MUX_CLIENT_NAMES; do set -- "$@" \; refresh-client -S -t "$s"; done
+		tm "$@" >/dev/null 2>&1
 	fi
+	printf -v q '%q' "$SELF"
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
 		[ -S "$s" ] || continue
-		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $(printf '%q' "$SELF") _rows)+refresh-preview" \
+		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $q _rows)+refresh-preview" \
 			http://localhost >/dev/null 2>&1 || rm -f "$s" "${s%.sock}".keys "${s%.sock}".view "${s%.sock}".title \
 			"${s%.sock}".label "${s%.sock}".room "${s%.sock}".shown "${s%.sock}".tight "${s%.sock}".vp
 	done
@@ -2345,12 +2382,11 @@ push_status() {
 	# session labels its thread windows either way: its status line shows them.
 	for s in "$SOCK_DIR/${SKEY}".side.*.sock; do [ -S "$s" ] && side=1 && break; done
 	if [ -z "$side" ]; then
-		[ "$MUX" = tmux ] && weaver_session && agent_rows && thread_tab_labels
+		[ -n "${LABELS:-}" ] && [ "$MUX" = tmux ] && weaver_session && agent_rows && thread_tab_labels
 		return 0
 	fi
 	side_cache_write
 	thread_tab_labels
-	q=$(printf '%q' "$SELF")
 	for s in "$SOCK_DIR/${SKEY}".side.*.sock; do
 		[ -S "$s" ] || continue
 		curl -s -m 1 --unix-socket "$s" -X POST -d "reload($q _side --cached)" http://localhost >/dev/null 2>&1 ||
@@ -2669,8 +2705,9 @@ ls_rows() {
 	width=${COLUMNS:-100}
 	case $width in '' | *[!0-9]*) width=100 ;; esac
 	[ $width -lt 40 ] && width=40
+	ROWS_NOW=""
 	agent_rows
-	now=$(date +%s)
+	now=${ROWS_NOW:-$(date +%s)}
 	while IFS=$US read -r pane tab state root since seen prompt waiting bg title nsub _ _ _ \
 		turn last tdone ttotal file sid tabname agent bgtasks ttask tname tnum troots; do
 		[ -n "$pane" ] || continue
@@ -3278,8 +3315,9 @@ cmd_home() {
 	if weaver_session; then
 		gc_states quiet
 		[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session
-		# The counts the status line shows may be a session that went's.
-		push_status
+		# The counts the status line shows may be a session that went's,
+		# and the tabs' labels too.
+		LABELS=1 push_status
 	fi
 	LS_HOME=1 cmd_ls
 }
@@ -3600,7 +3638,7 @@ EOF2
 # so what it is called now decides, not what weaver last called it).
 thread_tab_labels() {
 	local pane tab state root prompt title ttask tnum label names
-	[ "$(cat "$STATE_DIR/$SKEY.layout" 2>/dev/null)" = weaver ] || return 0
+	weaver_session || return 0
 	ls_utf8
 	names=$(printf '%s' "${PANES:-[]}" | jq -r '[.[] | select(.is_plugin | not)
 		| "\(.tab_id)\t\(.tab_name // "" | gsub("[\t\n]"; " "))"] | unique | .[]' 2>/dev/null)
@@ -4865,7 +4903,7 @@ resume_session() {
 	while IFS= read -r f; do
 		NOFOCUS=1 thread_restore "$f" >/dev/null || echo "weaver: $RESTORE_ERR" >&2
 	done <<<"$files"
-	push_status
+	LABELS=1 push_status
 }
 
 # weaver resume [--all | --forget [--yes]] [WHICH]: the threads lost with
@@ -4941,7 +4979,7 @@ cmd_resume() {
 			failed=$((failed + 1))
 		}
 	done <<<"$MATCH"
-	push_status
+	LABELS=1 push_status
 	[ $failed = 0 ]
 }
 
