@@ -2048,19 +2048,19 @@ JQ_ROWS='
          elif $st0 == "working" and $c.status == "idle" and (($s.background // 0) == 0)
               and $cu > ($s.ts // 0) and ($now - $cu) > 3 then "interrupted"
          else $st0 end) as $st
-      | [$s.pane, $p.tab_id, $st, ($s.root // $s.cwd // ""),
-         (if $st == $st0 then ($s.since // $s.ts // 0) else $cu end),
-         ($s.seen // false), ($s.prompt // ""),
-         (if $st == "needs-you" and $st0 != "needs-you" then ($c.waitingFor // "input") else ($s.waiting // "") end),
-         ($s.background // 0), ($s.title // ""), (($s.subagents // []) | length),
-         ($s.pid // ""), ($s.proc_start // ""), $f,
-         ($s.turn // 0), ($s.last_message // ""),
-         ([($s.tasks // []) | arrays | .[] | objects | select(.done == true)] | length),
-         (($s.tasks // []) | arrays | length),
-         (($s.file // "") | tostring | split("/") | last // ""), ($s.session_id // ""),
-         ($p.tab_name // ""), ($s.agent // ""), ($s.background_tasks // ""),
-         (($t | objects | .task) // ""), (($t | objects | .name) // ""), (($t | objects | .num) // ""),
-         [($s.turn_roots // []) | arrays | .[] | tostring]]
+      | {pane: $s.pane, tab: $p.tab_id, state: $st, root: ($s.root // $s.cwd // ""),
+         since: (if $st == $st0 then ($s.since // $s.ts // 0) else $cu end),
+         seen: ($s.seen // false), prompt: ($s.prompt // ""),
+         waiting: (if $st == "needs-you" and $st0 != "needs-you" then ($c.waitingFor // "input") else ($s.waiting // "") end),
+         bg: ($s.background // 0), title: ($s.title // ""), nsub: (($s.subagents // []) | length),
+         pid: ($s.pid // ""), pstart: ($s.proc_start // ""), sfile: $f,
+         turn: ($s.turn // 0), last: ($s.last_message // ""),
+         tdone: ([($s.tasks // []) | arrays | .[] | objects | select(.done == true)] | length),
+         ttotal: (($s.tasks // []) | arrays | length),
+         file: (($s.file // "") | tostring | split("/") | last // ""), sid: ($s.session_id // ""),
+         tabname: ($p.tab_name // ""), agent: ($s.agent // ""), bgtasks: ($s.background_tasks // ""),
+         ttask: (($t | objects | .task) // ""), tname: (($t | objects | .name) // ""), tnum: (($t | objects | .num) // ""),
+         troots: [($s.turn_roots // []) | arrays | .[] | tostring]}
     end
   end),
   # A thread whose agent has not reported yet (its pane still open).
@@ -2071,13 +2071,21 @@ JQ_ROWS='
    | select(($t | type) == "object")
    | ($byid[($t.pane // "") | tostring]) as $p
    | select($p != null and ($p.exited | not))
-   | [$t.pane, $p.tab_id, "starting", ($t.worktree // ""), ($t.created // $now), false, ($t.task // ""), "",
-      0, "", 0, "", "", $f, 0, "", 0, 0, "", "", ($p.tab_name // ""), ($t.agent // ""), "",
-      ($t.task // ""), ($t.name // ""), ($t.num // ""), []]))
-| (if (.[-1] | type) == "array" then .[-1] else [] end) as $roots
-| (if (.[-1] | type) == "array" then .[:-1] else . end)
-| map(tostring | gsub("[\u0000-\u001f]+"; " "))
-  + (if ($roots | length) > 0 then [$roots | map(gsub("[\u0000-\u001f]+"; " ")) | join("\u001e")] else [] end)
+   | {pane: $t.pane, tab: $p.tab_id, state: "starting", root: ($t.worktree // ""), since: ($t.created // $now),
+      seen: false, prompt: ($t.task // ""), waiting: "", bg: 0, title: "", nsub: 0, pid: "", pstart: "", sfile: $f,
+      turn: 0, last: "", tdone: 0, ttotal: 0, file: "", sid: "", tabname: ($p.tab_name // ""), agent: ($t.agent // ""),
+      bgtasks: "", ttask: ($t.task // ""), tname: ($t.name // ""), tnum: ($t.num // ""), troots: []}))
+# A row: its fields in ROW_FIELDS order (a gone or corrupt agent, its kind
+# first). Its fields and ROW_FIELDS must be the same set: a field added on one
+# side only fails here, rather than shift every reader.
+| if type == "object" then
+    ($fields | split(" ")) as $f
+    | ((keys - $f) + ($f - keys)) as $odd
+    | if ($odd | length) > 0 then error("weaver rows: fields not in ROW_FIELDS, or missing: " + ($odd | join(" ")))
+      else [$f[] as $k | .[$k]] end
+  else . end
+| map(if type == "array" then map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001e")
+      else tostring | gsub("[\u0000-\u001f]+"; " ") end)
 | join("\u001f")'
 
 # Is our list of panes the whole truth? Only when it includes the pane we run
@@ -2237,10 +2245,17 @@ retire() {
 	forget "$1" "${2:-}"
 }
 
+# AGENT_ROWS' fields, in order: JQ_ROWS writes them by these names and every
+# reader reads them by them (`local $ROW_FIELDS; IFS=$US read -r $ROW_FIELDS`).
+# pid and pstart are the agent process, sfile its state file, file the last
+# file it edited (a name), troots the roots of its turn (RS-separated).
+ROW_FIELDS='pane tab state root since seen prompt waiting bg title nsub pid pstart sfile turn last tdone ttotal file sid tabname agent bgtasks ttask tname tnum troots'
+
 # The live agents of this session as JQ_ROWS lines, into AGENT_ROWS; the files
 # of agents that are gone (pane closed, or process dead) are removed.
 agent_rows() {
-	local rows line kind f pid start st trusted=0 now
+	local rows line kind f start st trusted=0 now
+	local $ROW_FIELDS
 	AGENT_ROWS=""
 	local -a files
 	# State files, and the records of threads whose agent may not have one yet.
@@ -2257,7 +2272,7 @@ agent_rows() {
 	# A file removed meanwhile (an agent cleaned up) makes jq fail at the end,
 	# after it has printed the others: keep them.
 	rows=$(jq -rRn --argjson panes "$PANES" --argjson claude "$CLAUDE_LIVE" --argjson now "$now" \
-		"$JQ_ROWS" "${files[@]}" 2>/dev/null)
+		--arg fields "$ROW_FIELDS" "$JQ_ROWS" "${files[@]}" 2>/dev/null)
 	while IFS= read -r line; do
 		[ -n "$line" ] || continue
 		case $line in
@@ -2269,11 +2284,11 @@ agent_rows() {
 			retire "$f" "$pid"
 			;;
 		*)
-			IFS=$US read -r _ _ _ _ _ _ _ _ _ _ _ pid start f _ <<<"$line"
-			if [ -n "$pid" ] && ! agent_alive "$pid" "$start"; then
+			IFS=$US read -r $ROW_FIELDS <<<"$line"
+			if [ -n "$pid" ] && ! agent_alive "$pid" "$pstart"; then
 				# Killed without a SessionEnd: it is not coming back (a thread
 				# lost with its zellij is kept, to resume).
-				retire "$f" "$pid"
+				retire "$sfile" "$pid"
 				continue
 			fi
 			AGENT_ROWS="$AGENT_ROWS$line$NL"
@@ -2363,16 +2378,17 @@ gc_states() {
 # (agent_rows), so a state is decided by one rule. With "mark", agents your
 # clients are looking at count as seen (SEEN_NOW).
 status_counts() {
-	local pane st seen clients
+	local clients
+	local $ROW_FIELDS
 	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW="" clients=" "
 	if [ "${1:-}" = mark ]; then
 		mux_clients
 		clients=$MUX_CLIENT_PANES
 	fi
 	agent_rows
-	while IFS=$US read -r pane _ st _ _ seen _; do
+	while IFS=$US read -r $ROW_FIELDS; do
 		[ -n "$pane" ] || continue
-		case $st in
+		case $state in
 		needs-you) N_NEED=$((N_NEED + 1)) ;;
 		working | starting) N_WORK=$((N_WORK + 1)) ;;
 		done)
@@ -2735,8 +2751,8 @@ ls_plan() {
 # unset). Micrographics colours for fzf, else only with COLOR=1.
 ls_rows() {
 	local mode=${LS_MODE:-fzf} width now i j k n=0 g c sep="  "
-	local pane tab state root since seen prompt waiting bg title nsub turn last tdone ttotal file sid
-	local tabname agent bgtasks ttask tname tnum troots name fact glyph key where lf lsid live
+	local $ROW_FIELDS
+	local name fact glyph key where lf lsid live
 	local red="" green="" grey="" dim="" bold="" off=""
 	local wn=0 wf=0 ww=0 cn cf cw pre lead age_w=3 out="" keys="" title_l title_r gap
 	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root r_num r_lost order
@@ -2754,8 +2770,7 @@ ls_rows() {
 	ROWS_NOW=""
 	agent_rows
 	now=${ROWS_NOW:-$(date +%s)}
-	while IFS=$US read -r pane tab state root since seen prompt waiting bg title nsub _ _ _ \
-		turn last tdone ttotal file sid tabname agent bgtasks ttask tname tnum troots; do
+	while IFS=$US read -r $ROW_FIELDS; do
 		[ -n "$pane" ] || continue
 		case $bg in '' | *[!0-9]*) bg=0 ;; esac
 		case $nsub in '' | *[!0-9]*) nsub=0 ;; esac
@@ -3558,7 +3573,8 @@ glyph_of() {
 # thread number) and .cur, the current thread's position.
 side_rows() {
 	local now n=0 i j a=0 cur="" numw=2 w rail="" name line2 key out base num pl e=0 kind label
-	local pane tab state root since seen prompt waiting title tnum ttask agent pos=" "
+	local $ROW_FIELDS
+	local pos=" "
 	local -a k_key k_pane k_tab k_state k_seen k_name k_wait k_since k_num order
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
 	ls_utf8
@@ -3598,8 +3614,7 @@ side_rows() {
 	done <<EOF2
 $THREAD_ORDER
 EOF2
-	while IFS=$US read -r pane tab state root since seen prompt waiting _ title _ _ _ _ _ _ _ _ _ _ _ agent _ \
-		ttask _ tnum _; do
+	while IFS=$US read -r $ROW_FIELDS; do
 		[ -n "$pane" ] || continue
 		case $since in '' | *[!0-9]*) since=$now ;; esac
 		case $tnum in '' | *[!0-9]*) tnum="" ;; esac
@@ -3685,12 +3700,13 @@ EOF2
 # is not its label already (tab ids start again with the multiplexer's server,
 # so what it is called now decides, not what weaver last called it).
 thread_tab_labels() {
-	local pane tab state root prompt title ttask tnum label names
+	local $ROW_FIELDS
+	local label names
 	weaver_session || return 0
 	ls_utf8
 	names=$(printf '%s' "${PANES:-[]}" | jq -r '[.[] | select(.is_plugin | not)
 		| "\(.tab_id)\t\(.tab_name // "" | gsub("[\t\n]"; " "))"] | unique | .[]' 2>/dev/null)
-	while IFS=$US read -r pane tab state root _ _ prompt _ _ title _ _ _ _ _ _ _ _ _ _ _ _ _ ttask _ tnum _; do
+	while IFS=$US read -r $ROW_FIELDS; do
 		[ -n "$pane" ] && [ -n "$tnum" ] || continue
 		label=${title:-${ttask:-$prompt}}
 		label=${label%%"$NL"*}
@@ -3774,7 +3790,8 @@ cmd_sidebar() {
 # finished longest ago and you haven't looked at yet. Pressed again on one of
 # those, go on to the next, round and round.
 cmd_next() {
-	local pane tab state since seen prompt waiting title ttask tnum class list="" i=0 n=0 at=-1 pick label
+	local $ROW_FIELDS
+	local class list="" i=0 n=0 at=-1 pick label
 	local -a c_pane c_tab c_label
 	need_session
 	# Pressed again while the last press is still at work: that one already
@@ -3782,7 +3799,7 @@ cmd_next() {
 	# press could wait out the first and move you twice.
 	ui_lock nowait || return 0
 	agent_rows
-	while IFS=$US read -r pane tab state _ since seen prompt waiting _ title _ _ _ _ _ _ _ _ _ _ _ _ _ ttask _ tnum _; do
+	while IFS=$US read -r $ROW_FIELDS; do
 		[ -n "$pane" ] || continue
 		case $state in
 		needs-you) class=0 ;;
@@ -5721,28 +5738,29 @@ tmux_start() {
 # answer, and the board says when it is free. --force sends anyway (Claude
 # Code queues what you type while it works).
 cmd_send() {
-	local pane="" force=0 text st="" p s
+	local want="" force=0 text st=""
+	local $ROW_FIELDS
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--force) force=1 ;;
 		-*) die "usage: weaver send [--force] PANE < TEXT" ;;
-		*) pane=${1#terminal_} pane=${pane#%} ;;
+		*) want=${1#terminal_} want=${want#%} ;;
 		esac
 		shift
 	done
-	case $pane in '' | *[!0-9]*) die "usage: weaver send [--force] PANE < TEXT" ;; esac
+	case $want in '' | *[!0-9]*) die "usage: weaver send [--force] PANE < TEXT" ;; esac
 	[ -t 0 ] && die "usage: weaver send [--force] PANE < TEXT"
 	need_session
 	[ "$MUX" = tmux ] || die "weaver send needs tmux"
 	text=$(cat)
 	case $text in *[![:space:]]*) ;; *) die "nothing to send" ;; esac
 	agent_rows
-	while IFS=$US read -r p _ s _; do
-		[ "$p" = "$pane" ] && st=$s && break
+	while IFS=$US read -r $ROW_FIELDS; do
+		[ "$pane" = "$want" ] && st=$state && break
 	done <<EOF2
 $AGENT_ROWS
 EOF2
-	[ -n "$st" ] || die "no agent in pane $pane"
+	[ -n "$st" ] || die "no agent in pane $want"
 	if [ $force = 0 ]; then
 		case $st in
 		idle | done | interrupted) ;;
@@ -5751,9 +5769,9 @@ EOF2
 		esac
 	fi
 	printf '%s' "$text" | tm load-buffer -b weaver-send - || die "tmux would not take the text"
-	tm paste-buffer -p -d -b weaver-send -t "%$pane" || die "tmux would not paste into pane $pane"
+	tm paste-buffer -p -d -b weaver-send -t "%$want" || die "tmux would not paste into pane $want"
 	sleep 0.2
-	tm send-keys -t "%$pane" Enter
+	tm send-keys -t "%$want" Enter
 }
 
 # weaver quit [--yes]: quit the zellij session you are in (outside zellij,

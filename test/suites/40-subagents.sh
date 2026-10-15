@@ -22,6 +22,8 @@ ev SubagentStart "$T/repo" ',"agent_id":"sub-b","agent_type":"Explore"'
 ok "subagents starting are listed" "$(st 0 'subagents | map(.id + ":" + .type) | join(",")')" "sub-a:general-purpose,sub-b:Explore"
 ev PostToolUse "$T/repo" "$(edit_by sub-a "$T/repo-wt-a/src/app.txt")"
 ok "a subagent's edit in a worktree: the root follows" "$(st 0 root)|$(st 0 file)" "$T/repo-wt-a|$T/repo-wt-a/src/app.txt"
+# Each edit reaches nvim from its own fork; let the first land before the next.
+settle
 ev PostToolUse "$T/repo" "$(edit_by sub-b "$T/repo-wt-b/README.md")"
 ok "another subagent in another worktree" "$(st 0 root)" "$T/repo-wt-b"
 ev SubagentStop "$T/repo" ',"agent_id":"sub-b","agent_type":"Explore","agent_transcript_path":"/dev/null"'

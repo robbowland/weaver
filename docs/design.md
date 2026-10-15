@@ -956,3 +956,8 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   as you look rather than as a hook next fires; tmux redraws on an option
   change, so no client is refreshed by hand; and popups run weaver without
   the user's shell.
+- 2026-10-15: An agent's row has named fields (`ROW_FIELDS`): `JQ_ROWS`
+  builds each row as an object and prints the fields in that order, and every
+  reader reads them by those names (`IFS=$US read -r $ROW_FIELDS`), so a field
+  added, moved or dropped is one change in one place and never a shifted
+  column. jq refuses to print a row whose fields and `ROW_FIELDS` disagree.
