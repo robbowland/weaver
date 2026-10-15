@@ -513,10 +513,12 @@ marker (from before this layout) is left to you.
 
 ## On tmux
 
-`MUX` is `tmux` or `zellij`: `$WEAVER_MUX`, else zellij when
-`$ZELLIJ_SESSION_NAME` is set, else tmux when `$TMUX` is, else zellij. Every
-call to the multiplexer goes through the `mux_*` functions, or a branch on
-`MUX` where tmux needs no workaround.
+tmux is weaver's default; the sections above describe zellij's session, which
+`WEAVER_MUX=zellij` keeps. `MUX` is `tmux` or `zellij`: `$WEAVER_MUX`, else
+zellij when `$ZELLIJ_SESSION_NAME` is set, else tmux (inside tmux or outside
+both). Every call to the multiplexer goes through the `mux_*` functions, or a
+branch on `MUX` where tmux needs no workaround. The zellij suites set
+`WEAVER_MUX=zellij`; `test/tmux.sh` tests tmux end to end.
 
 - **Identity:** `MY_PANE` is the pane weaver runs in (`$ZELLIJ_PANE_ID`, or
   `$TMUX_PANE` without its `%`; empty in a tmux popup or `run-shell`, which are
@@ -546,7 +548,33 @@ call to the multiplexer goes through the `mux_*` functions, or a branch on
   as well.
 - **Status line:** tmux's own, `#(weaver status --tmux '#{session_name}')`
   every 2 s (the zjstatus fast path, with zjstatus's `#[...]` styles), and
-  `push_status` refreshes each client on the session at once.
+  `push_status` refreshes each client on the session at once. Its left shows
+  the current window's name, so `push_status` labels the thread windows
+  (`thread_tab_labels`) in tmux's weaver session even without a sidebar; a
+  window is renamed when its name (from PANES' `tab_name`) is not its label,
+  since window and tab ids start again with each server. Its right shows
+  `[CPY]` in copy mode, `[PFX]` while the prefix is down, else `[NRM]`.
+- **Resizing:** tmux gives a narrower window's columns to the rightmost pane,
+  the agent, so a `window-resized` hook runs `weaver _fit <window>`, which
+  sets each thread agent there back to its width (`thread_width`, one
+  `resize-pane -x`), only while nvim and the agent are the window's only
+  panes.
+- **Look:** popups, menus and copy mode in Micrographics; tmux 3.8's theme
+  colours (`dark-theme-*`, server options) too, set inside `%if
+  "#{dark-theme-black}"`, which an older tmux, without them, reads as false.
+  `extended-keys-format csi-u` (3.5+, guarded the same way) gives apps keys
+  like Shift+Enter in the form they read.
+- **Keys:** `config/tmux.conf` binds them without a prefix (`bind -n`). Those
+  that run weaver use `run-shell -b` with their output discarded (tmux shows a
+  run-shell's output over the pane), passing `#{pane_id}`; Alt N is a
+  `display-popup -B -E` 96 x 18, tall enough for the form's pickers, since a
+  popup cannot be resized. Cmd+D and Cmd+Shift+D arrive as `ESC [ 100 ; 9 ~`
+  and `ESC [ 100 ; 10 ~` (Ghostty's `csi:100;9~`), caught as `user-keys`.
+- **Config:** `config/tmux.conf`, then `~/.config/weaver/tmux.conf`; read with
+  `-f` as the server starts and again (`source-file`) each time `weaver`
+  starts or attaches a session, so an install reaches a running server. Every
+  setting may be read twice: array options take explicit indices
+  (`terminal-features[90]`).
 - **Lost threads:** a `tmux-` session is lost when its server no longer has
   it, or has one of its name created after the agent's last event
   (`#{session_created}`). `resume_session` in a tmux session also takes the
@@ -871,3 +899,14 @@ call to the multiplexer goes through the `mux_*` functions, or a branch on
   and set aside: one server for every pane as in zellij, with open crashes of
   its own, and pre-1.0. zellij stays the default until the tmux session has
   been tried.
+- 2026-10-15: tmux is the default. After two more zellij crashes the same
+  afternoon (both in the test suite's own session, one in each of two runs of
+  `65-threads`), Rob asked to productise the tmux version and move to it as
+  soon as it was ready. zellij stays one setting away (`WEAVER_MUX=zellij`),
+  with its sidebar and fitted floating panes, which tmux does not have.
+- 2026-10-15: Cmd+D reaches tmux as `ESC [ 100 ; 9 ~`, not as the kitty
+  keyboard protocol's `ESC [ 100 ; 9 u` that zellij read as Super+d: tmux
+  decodes that before its user keys are matched, as Meta+d, which is Option+d
+  in Ghostty (`macos-option-as-alt`) and deletes a word in a shell. Nothing
+  else claims the `~` form, so `user-keys` catch it; zellij no longer splits
+  on Cmd+D once Ghostty sends it.

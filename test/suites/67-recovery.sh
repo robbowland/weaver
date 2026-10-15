@@ -104,7 +104,7 @@ ok "resume: alone, lists the lost threads" \
 	"$(printf '%s' "$o" | grep -c 'alpha')|$(printf '%s' "$o" | grep -c 'sid-lost')" "1|1"
 o=$(COLUMNS=120 weaver ls </dev/null | cat)
 ok "dashboard: lost threads under LOST, not counted as threads" \
-	"$(printf '%s' "$o" | grep -c 'LOST · 1')|$(printf '%s' "$o" | grep -c 'alpha.*lost with zellij')|$(printf '%s' "$o" | grep -c 'THREADS \] [0-9]')" \
+	"$(printf '%s' "$o" | grep -c 'LOST · 1')|$(printf '%s' "$o" | grep -c 'alpha.*its session went')|$(printf '%s' "$o" | grep -c 'THREADS \] [0-9]')" \
 	"1|1|0"
 ok "dashboard: a lost thread's card" \
 	"$(weaver _preview sid-lost-a 'alpha · repo · lost' | perl -pe 's/\e\[[0-9;]*m//g' |

@@ -5,7 +5,8 @@
 T=$AT/t
 SD=$AT/state/weaver
 SESSION=$(cat "$AT/session")
-export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
+# These suites test weaver on zellij, also where it runs outside a session.
+export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH" WEAVER_MUX=zellij
 pass=0 fail=0
 # weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
 eval "$(grep -m 1 "^G_NEED='" "$AT/bin/weaver")"

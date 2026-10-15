@@ -2,7 +2,7 @@
 
 **Pick up whichever thread needs you.**
 
-Run several coding agents side by side in zellij and weaver keeps track of them:
+Run several coding agents side by side in tmux (or zellij) and weaver keeps track of them:
 which are working, which are done, and which are waiting on you. One key shows
 them all, another jumps to whoever has waited longest, and a neovim bound to
 each agent follows it into the worktree and file it is really editing.
@@ -17,65 +17,70 @@ any other agent can report through `weaver event`
 weaver
 ```
 
-Outside zellij, `weaver` starts the zellij session `weaver` with weaver's own
-layout, or attaches to it (`WEAVER_SESSION`, or `weaver start NAME`, for
-another). Inside zellij it opens the dashboard.
+Outside tmux, `weaver` starts the tmux session `weaver`, or attaches to it
+(`WEAVER_SESSION`, or `weaver start NAME`, for another). Inside it opens the
+dashboard. The session runs on weaver's own tmux server (`tmux -L weaver`,
+configured by `config/tmux.conf`, then `~/.config/weaver/tmux.conf` when you
+have one), so it never touches a tmux of yours, and closing the terminal only
+detaches from it: `weaver` again picks up where you were.
 
 The weaver session has no tab bar; weaver does the switching:
 
-- **home**, the first tab: the board of every thread, full size;
-- one tab per thread, in its number's order: its nvim, the agent on the
-  right. With `WEAVER_SIDEBAR=1` a thread sidebar lists every thread on the
-  left; below 160 columns it folds to a rail of numbers and glyphs, and
-  `Alt [` / `Alt ]` fold or open it yourself;
-- one status line: the current thread, its repo and branch, the counts, the
-  mode.
+- **home**, window 0: the board of every thread, full size;
+- one window per thread, its index the thread's number: its nvim, the agent
+  on the right;
+- one status line: the current thread, its repo and branch, the counts, and
+  tmux's mode (`[NRM]`, `[PFX]` with the prefix down, `[CPY]` in copy mode).
 
-Then `Alt N`: say what the agent should do, press enter, and a new tab opens
-for that thread, with its nvim and the agent, started with your task as its
-first prompt, in a new worktree on a branch named after the task.
+Then `Alt N`: say what the agent should do, press enter, and a new window
+opens for that thread, with its nvim and the agent, started with your task as
+its first prompt, in a new worktree on a branch named after the task.
 
-The layout is `layouts/weaver.kdl` in your zellij config directory (weaver's
-own when you have none), and the session's keys `weaver-keys.kdl` beside your
-config (weaver's otherwise), added after your own keybindings for this session
-only. An exited session named `weaver` from before this layout is never
-replaced by weaver: `zellij delete-session weaver`, then `weaver`.
+Agents you start by hand in any tmux session report to weaver as well, and
+`weaver` inside such a session opens its dashboard.
 
-### On tmux
+### On zellij
 
-```sh
-WEAVER_MUX=tmux weaver
-```
-
-starts the same session in tmux instead, on weaver's own tmux server
-(`tmux -L weaver`, configured by `config/tmux.conf`, then
-`~/.config/weaver/tmux.conf` when you have one), so it never touches a tmux of
-yours. Home is window 0 and each thread's window index is its number; the keys
-are the same (`Ctrl q` quits the session), and Ghostty's Cmd+D splits panes.
-Inside tmux weaver finds its session by itself; agents started in any tmux
-session report as they do in zellij. Its threads are kept apart from a zellij
-session of the same name, and the tmux session, as it starts, also brings back
-the threads that zellij session lost. Not on tmux yet: the thread sidebar, and
-floating panes that fit what they show (tmux's popups have a fixed size).
+`WEAVER_MUX=zellij weaver` runs the same session in zellij (0.45+) instead,
+with weaver's layout (`layouts/weaver.kdl` in your zellij config directory,
+else weaver's) and keys (`weaver-keys.kdl` beside your config, else weaver's,
+added after your own keybindings for this session only), and in any zellij
+session weaver follows the agents as in tmux. zellij 0.45.1 on macOS crashes
+its server often ([zellij#5423](https://github.com/zellij-org/zellij/issues/5423)),
+taking every agent with it, which is why tmux is the default; weaver brings
+the threads back either way ([When the session goes](#when-the-session-goes)).
+Only zellij has the thread sidebar (`WEAVER_SIDEBAR=1`: every thread on the
+left of a thread's tab, folding to a rail below 160 columns; `Alt [` / `Alt
+]` fold or open it), and floating panes that fit what they show. A tmux and a
+zellij session of the same name keep their threads apart, and the tmux
+`weaver` session, as it starts, also brings back the threads the zellij one
+lost.
 
 ## Keys
 
 | Key | Does |
 | --- | --- |
-| `Alt N` | Start a thread: a form for the task, then a tab with nvim and the agent |
-| `Alt j` / `Alt k` | In the weaver session: the next / previous tab, so the threads in their numbers' order (home included). There they no longer move between panes; `Alt ↓` / `Alt ↑` still do |
-| `Alt y` (weaver session) | Home, and from home back to the tab you came from |
-| `Alt y` | The dashboard: every agent in the session, grouped by state, with a resume card for the selected one. `enter` or `1`-`9` jumps, `e` jumps and opens nvim, `?` lists its keys |
+| `Alt N` | Start a thread: a form for the task, then a window with nvim and the agent |
+| `Alt j` / `Alt k` | In the weaver session: the next / previous window (tab in zellij), so the threads in their numbers' order (home included). In zellij there they no longer move between panes; `Alt ↓` / `Alt ↑` still do |
+| `Alt h` / `Alt l` | The pane to the left / right |
+| `Alt y` (weaver session) | Home, and from home back to where you came from |
+| `Alt y` (another zellij session) | The dashboard: every agent in the session, grouped by state, with a resume card for the selected one. `enter` or `1`-`9` jumps, `e` jumps and opens nvim, `?` lists its keys |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
+| `Cmd D` / `Cmd Shift D` | Split the pane right / down (Ghostty sends them as `keybind = super+d=csi:100;9~` and `super+shift+d=csi:100;10~`) |
+| `Ctrl q` | Quit the session, every agent and nvim in it; the threads come back as `weaver` starts |
+
+tmux's own keys work behind its prefix, `Ctrl b` (`Ctrl b d` detaches, `Ctrl b
+[` scrolls back).
 
 ## Threads
 
-A thread is one task for one agent, in a tab of its own: the agent's nvim on
-the left, the agent on the right (a fifth of the width), in a worktree of its
-own or in the checkout you are in. The tab is named after the branch (after
-the task, in this checkout), keeps your status bar, and you land on the agent.
+A thread is one task for one agent, in a window (a tab, in zellij) of its own:
+the agent's nvim on the left, the agent on the right (a fifth of the width), in
+a worktree of its own or in the checkout you are in. The window is named after
+the thread (`01 Add a CLI flag · repo/add-a-cli-flag` once its agent reports),
+keeps your status bar, and you land on the agent.
 
 The form (`Alt N`, `weaver new`, or `n` in the dashboard) starts in the
 repository of the pane you were on (else the one you used last):
@@ -118,31 +123,31 @@ merged into the default branch or pushed), it then offers to remove it
 When the agent exits its pane stays; enter there resumes its conversation
 (`claude --resume`, `codex resume`), never sending the task twice.
 
-### When zellij goes
+### When the session goes
 
-A thread lasts until you close it. If zellij crashes, or you quit it, while
-a thread's agent runs, the thread is kept as lost rather than forgotten:
+A thread lasts until you close it. If the session's server crashes (tmux's,
+or zellij's), or you quit the session, while a thread's agent runs, the
+thread is kept as lost rather than forgotten:
 
 - `weaver` brings the `weaver` session back with its threads, each in its
-  tab, its number kept, its agent resuming its conversation beside a bound
+  window, its number kept, its agent resuming its conversation beside a bound
   nvim (`WEAVER_RESTORE=0` lists them on home instead). zellij does not
-  resurrect that session itself: it would rerun `claude <task>`, a new
+  resurrect weaver's session itself: it would rerun `claude <task>`, a new
   conversation sent the task again.
 - Anywhere else, lost threads are listed last on the dashboard, under `LOST`:
   enter resumes one in a new tab, `x` forgets it (its worktree stays).
 - `weaver resume` lists them; `weaver resume NAME` (a number, or a session
   id) brings one back, `--all` every one, `--forget NAME` drops one.
 
-An agent you ended yourself (`/exit`), or whose tab you closed while zellij
-ran on, is not lost. Agents you started by hand, outside a thread, are not
+An agent you ended yourself (`/exit`), or whose window you closed while the
+session ran on, is not lost. Agents you started by hand, outside a thread, are not
 kept: `claude --resume` finds them.
 
-So quitting everything is safe: `Ctrl q` (zellij's own key, from any pane)
-quits the session with every agent and nvim in it, and `weaver` brings its
-threads back next time. `weaver quit` does the same after asking, says what
-stops (turns under way, unsaved buffers in the agents' nvims), and from
-outside zellij quits the `weaver` session left running behind a closed
-window.
+So quitting everything is safe: `Ctrl q` (from any pane) quits the session
+with every agent and nvim in it, and `weaver` brings its threads back next
+time. `weaver quit` does the same after asking, says what stops (turns under
+way, unsaved buffers in the agents' nvims), and from outside the session
+quits the `weaver` session left running behind a closed window.
 
 ## What it tracks
 
@@ -156,7 +161,7 @@ hooks can't see (Esc while the model writes, a long tool you approved), the
 state is refined from Claude Code's own session files.
 
 An agent that starts needing you, or finishes, rings the terminal bell, so
-zellij marks its tab until you look at it.
+tmux (or zellij) marks its window until you look at it.
 
 ### The dashboard
 
@@ -189,8 +194,8 @@ zellij marks its tab until you look at it.
 
 Agents are grouped under NEEDS YOU, DONE (finished, not yet seen), WORKING
 and IDLE (seen, idle or interrupted), in the order `Alt 1` visits them; the
-headings' counts are the status bar's. Threads lost when zellij went come
-last, under LOST ([When zellij goes](#when-zellij-goes)). Each row is the thread's name, one fact
+headings' counts are the status bar's. Threads lost when their session went
+come last, under LOST ([When the session goes](#when-the-session-goes)). Each row is the thread's name, one fact
 (what it waits on, what its last turn changed and said, its subagents),
 repo/branch when there is room, and how long it has been in that state. The
 states are Micrographics task cells, which read without colour: `[!]` needs you,
@@ -203,7 +208,7 @@ reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 `j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
 (`weaver new`), `x` closes one (`weaver close`), `e` jumps and opens its nvim,
 `s` (or `tab`) swaps the resume card for the agent's screen, `?` lists them
-all, `q` or `esc` closes the dashboard, and `Ctrl q` quits zellij. With no
+all, `q` or `esc` closes the dashboard, and `Ctrl q` quits the session. With no
 agents, it says how to start one.
 
 The resume card says what the agent was asked, what it waits on, what it last
@@ -213,22 +218,26 @@ when there is room for 150 columns, else under it, and gives way to the list
 when space is short (`s` still shows it). `weaver ls | cat` prints the board
 as text.
 
-### Sidebar and home
+### Home, and zellij's sidebar
 
-In the `weaver` session every thread tab has a sidebar on its left: every
+Home, window 0 of the `weaver` session, holds the dashboard at full size,
+numbered by thread, so a digit means the same thread everywhere. The status
+line shows the current thread (`02 Add a CLI flag · try/add-a-cli-flag`) and
+the counts.
+
+In zellij, with `WEAVER_SIDEBAR=1`, every thread tab has a sidebar on its left: every
 thread in its own number's order, its state, name and age, the tab's own
 thread inverted; what a thread waits on shows under it. Under 16 columns it
 narrows to a rail of numbers and glyphs. Click or move into it and `j`/`k`,
-`enter` or a digit go to a thread. The home tab holds the dashboard at full
-size, numbered the same way, so a digit means the same thread everywhere. The
-status line shows the current thread (`2 Add a CLI flag · try/add-a-cli-flag`),
-the counts and zellij's mode.
+`enter` or a digit go to a thread.
 
 ### Status bar
 
 `weaver status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
-unseen, working). In [zjstatus](https://github.com/dj95/zjstatus), its command
-widget shows them in Micrographics signal colours:
+unseen, working). weaver's tmux status line shows them in Micrographics signal
+colours with `#(weaver status --tmux '#{session_name}')`, every two seconds and
+at once when an agent changes. In zellij,
+[zjstatus](https://github.com/dj95/zjstatus)'s command widget shows them:
 
 ```kdl
 format_right "{command_weaver}{mode} "
@@ -241,9 +250,9 @@ tab_normal_bell    "#[fg=#ffffff,bold][{index}] {name}{bell_indicator} "
 tab_bell_indicator " *"
 ```
 
-`weaver status --zjstatus` only reads a small file the hooks keep, so running
-it every two seconds in every tab costs a few milliseconds each. It needs
-`weaver` on the PATH zellij was started with.
+`weaver status --tmux` and `--zjstatus` only read a small file the hooks
+keep, so running them every two seconds costs a few milliseconds each. They
+need `weaver` on the PATH the multiplexer was started with.
 
 ### Turns and the activity log
 
@@ -317,25 +326,27 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Install
 
-Needs zellij 0.45+, neovim 0.10+, jq and git; fzf for the interactive
-dashboard, and diffview-plus.nvim in your nvim for reviews.
+Needs tmux 3.3+, neovim 0.10+, jq and git; fzf for the interactive
+dashboard, and diffview-plus.nvim in your nvim for reviews; zellij 0.45+ only
+to run weaver there.
 
 ```sh
 ./install.sh --configure
 ```
 
 This copies weaver to `~/.local/share/weaver`, links `~/.local/bin/weaver`, adds
-the keybindings to your zellij config and the hooks to
-`~/.claude/settings.json` (replacing any older weaver hooks), backing up each
-file it changes. The hooks run `~/.local/bin/weaver` directly, without a shell;
+the hooks to `~/.claude/settings.json` (replacing any older weaver hooks) and,
+when zellij is installed, the keybindings to your zellij config, backing up
+each file it changes. weaver's tmux needs no config of yours. The hooks run `~/.local/bin/weaver` directly, without a shell;
 the ones nobody needs to wait for run in the background. Pass
 `--zellij-config FILE` (repeatable) for other zellij configs and `--dry-run` to
 see the diff first. It is safe to rerun, and it replaces an install from when
 weaver was called agentnav.
 
 Restart running Claude Code sessions afterwards: they read hooks at start.
-An open home board starts again in the new weaver by itself, at its next
-reload.
+A running weaver tmux session reads weaver's tmux config again the next time
+`weaver` attaches to it, and an open home board starts again in the new
+weaver by itself, at its next reload.
 When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 (`--no-codex` to skip); trust them in Codex's `/hooks` before they run.
 
@@ -348,11 +359,13 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_SNAPSHOT_MAX_KB` | `5120` | Untracked files bigger than this stay out of snapshots |
 | `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
-| `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
-| `WEAVER_RESTORE` | `1` | `0`: the weaver session, starting again after zellij went, lists its lost threads on home instead of resuming them |
-| `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |
+| `WEAVER_MUX` | `tmux` | `zellij`: `weaver` starts (or attaches to) its session in zellij. Inside a session weaver uses the one it is in |
+| `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
+| `WEAVER_SESSION` | `weaver` | The session `weaver` attaches to or starts |
+| `WEAVER_RESTORE` | `1` | `0`: the weaver session, starting again after its server went, lists its lost threads on home instead of resuming them |
+| `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as nvim keeps 60 columns |
-| `WEAVER_SIDEBAR` | `0` | `1`: thread tabs in the weaver session get the thread sidebar on their left |
+| `WEAVER_SIDEBAR` | `0` | `1`: thread tabs in zellij's weaver session get the thread sidebar on their left |
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
@@ -367,9 +380,11 @@ End-to-end, in a throwaway zellij session with its own state, Claude Code
 config dir and minimal nvim config; your real sessions are not touched. Each
 suite starts from a clean slate, so any one can run alone.
 `test/suites/05-latency.sh` measures what each hook costs the agent.
-`test/tmux.sh` runs weaver on a throwaway tmux server of its own (a few
-seconds): threads, hooks, Alt v and Alt y, a crash and its resume, close and
-quit.
+`test/run.sh` with no suites also runs `test/tmux.sh`, which runs weaver on
+tmux end to end in about 40 seconds: `weaver` starts its session on a
+throwaway tmux server in a pseudo-terminal and the tests press its keys
+there (threads, hooks, Alt y, Alt v, Alt 1, Cmd+D, Alt N, the board, a crash
+and its threads resumed, Ctrl q).
 `test/nvim/run.sh` runs only the Neovim specs (headless, a few seconds); set
 `WEAVER_TEST_PLUGINS` to a directory holding `diffview-plus.nvim` if
 lazy.nvim's plugin directory doesn't have it.

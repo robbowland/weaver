@@ -160,8 +160,10 @@ if [ $up = 0 ]; then
 fi
 sleep 1
 
+all=""
 if [ $# -eq 0 ]; then
 	set -- "$HERE"/suites/*.sh
+	all=1
 fi
 failed=0
 for suite in "$@"; do
@@ -170,6 +172,11 @@ for suite in "$@"; do
 done
 
 cleanup
+# The whole run includes weaver on tmux, which needs no zellij session.
+if [ -n "$all" ] && command -v tmux >/dev/null 2>&1; then
+	echo "=== tmux.sh"
+	bash "$HERE/tmux.sh" || failed=$((failed + 1))
+fi
 echo "scratch dir: $AT"
 if [ $failed -gt 0 ]; then
 	echo "$failed suite(s) failed"

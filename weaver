@@ -65,7 +65,7 @@ LOG_DIR="$STATE_DIR/log"
 SOCK_DIR="/tmp/weaver-${UID:-$(id -u)}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # The multiplexer: tmux or zellij. $WEAVER_MUX says, else the session weaver
-# runs in; outside both, zellij. MY_PANE is the pane this runs in (empty in a
+# runs in; outside both, tmux. MY_PANE is the pane this runs in (empty in a
 # tmux popup or run-shell, which are not panes), SESSION its session's name.
 # A tmux session's files are keyed tmux-<name> (SKEY), so a zellij and a tmux
 # session of one name never mix their pane ids.
@@ -73,10 +73,8 @@ if [ -n "${WEAVER_MUX:-}" ]; then
 	MUX=$WEAVER_MUX
 elif [ -n "${ZELLIJ_SESSION_NAME:-}" ]; then
 	MUX=zellij
-elif [ -n "${TMUX:-}" ]; then
-	MUX=tmux
 else
-	MUX=zellij
+	MUX=tmux
 fi
 if [ "$MUX" = tmux ]; then
 	MY_PANE=${TMUX_PANE:-}
@@ -2343,9 +2341,13 @@ push_status() {
 			http://localhost >/dev/null 2>&1 || rm -f "$s" "${s%.sock}".keys "${s%.sock}".view "${s%.sock}".title \
 			"${s%.sock}".label "${s%.sock}".room "${s%.sock}".shown "${s%.sock}".tight "${s%.sock}".vp
 	done
-	# The sidebars: the session's rows once, for all of them.
+	# The sidebars: the session's rows once, for all of them. tmux's weaver
+	# session labels its thread windows either way: its status line shows them.
 	for s in "$SOCK_DIR/${SKEY}".side.*.sock; do [ -S "$s" ] && side=1 && break; done
-	[ -n "$side" ] || return 0
+	if [ -z "$side" ]; then
+		[ "$MUX" = tmux ] && weaver_session && agent_rows && thread_tab_labels
+		return 0
+	fi
 	side_cache_write
 	thread_tab_labels
 	q=$(printf '%q' "$SELF")
@@ -2766,7 +2768,7 @@ EOF2
 		[ -n "$lf" ] || continue
 		case $since in '' | *[!0-9]*) since=$now ;; esac
 		name=${tname:-${title:-$ttask}}
-		fact="lost with zellij · ⏎ resumes"
+		fact="its session went · ⏎ resumes"
 		paint "$G_END" "$grey" "$dim" "$off"
 		glyph=$PAINT
 		where_of "$root"
@@ -2853,6 +2855,8 @@ EOF2
 		title_r="$title_r$shown ${counts[g]}  " tc="$tc$PAINT $grey${counts[g]}$off  "
 	done
 	title_r=${title_r%  } tc=${tc%  }
+	# Home is in the weaver session, whose status line shows the counts.
+	[ -n "${LS_HOME:-}" ] && title_r="" tc=""
 	if [ "$mode" = fzf ]; then
 		# On fzf's top border: ┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐
 		k=$((LS_COLS - 4 - ${#title_l} - ${#title_r} - 4))
@@ -2880,7 +2884,7 @@ EOF2
 	else
 		printf '%s\n\n' "$tl$gap$tc"
 		if [ $n = 0 ]; then
-			printf '%s\n' "No agents in zellij session $SESSION."
+			printf '%s\n' "No agents in session $SESSION."
 			return 0
 		fi
 	fi
@@ -3000,12 +3004,13 @@ lost_card() {
 	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" --arg home "$HOME" \
 		--arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" "$JQ_CARD"'
 		def tilde: if . == $home then "~" elif startswith($home + "/") then "~" + .[($home | length):] else . end;
-		[ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its zellij went" + $off,
+		def tail($n): if length > $n then "…" + .[(length - $n + 1):] else . end;
+		[ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its session went" + $off,
 		  "",
 		  field("asked"; .thread.task // .state.prompt // ""; ""; 4),
 		  (if (.state.last_message // "") != "" then field("said"; .state.last_message; $grey; 6) else empty end),
-		  field("in"; (.state.start_cwd // .thread.worktree // "") | tilde; $grey; 2),
-		  field("session"; (.session // "") + " · " + (.state.session_id // ""); $dim; 2),
+		  field("in"; (.state.start_cwd // .thread.worktree // "") | tilde | tail([$w - 11, 20] | max); $grey; 1),
+		  field("session"; ((.session // "") | sub("^tmux-"; "")) + " · " + (.state.session_id // ""); $dim; 2),
 		  "",
 		  $dim + "⏎ resume it in a new tab   x forget it" + $off
 		] | .[]' "$f" 2>/dev/null
@@ -3119,11 +3124,11 @@ EOF2
 ls_intro() {
 	local d=$C_DIM g=$C_GREY o=$C_OFF
 	cat <<EOF2
-No agents in this zellij session yet.
+No agents in this session yet.
 
 ${g}n$o       start a thread: a task, its worktree, and a tab with
         nvim and the agent ${d}(weaver new)$o
-${g}Alt N$o   the same from anywhere in zellij
+${g}Alt N$o   the same from anywhere in the session
 
 ${d}Or start claude or codex in any pane: weaver follows it
 through its hooks.$o
@@ -3146,8 +3151,8 @@ ${g}keys$o
   ${g}^r$o          reload
   $g?$o           this help ${d}(? again: back)$o
   ${g}q  esc$o      close the dashboard
-  ${g}^q$o          quit zellij, every agent and nvim ${d}(the threads come$o
-              ${d}back as weaver starts; weaver quit asks first)$o
+  ${g}^q$o          quit the session, every agent and nvim ${d}(the threads$o
+              ${d}come back as weaver starts; weaver quit asks first)$o
 
 ${g}threads$o
   $(paint "$G_NEED" "$C_RED"; printf %s "$PAINT")  needs you    $(paint "$G_DONE" "$C_GREEN"; printf %s "$PAINT")  done, not yet seen    $(paint "$G_WORK" "$g"; printf %s "$PAINT")  working
@@ -3155,7 +3160,7 @@ ${g}threads$o
 
   ${d}×2$o  ${d}two agents share the worktree: their turn diffs mix$o
 
-${g}lost$o ${d}(its zellij went: a crash, or quit)$o
+${g}lost$o ${d}(its session went: a crash, or quit)$o
   ${g}⏎$o           resume it in a new tab ${d}(weaver resume)$o
   ${g}x$o           forget it ${d}(its worktree stays)$o
 EOF2
@@ -3270,9 +3275,11 @@ LS_KEYS='j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9'
 # quit) come back first, unless WEAVER_RESTORE=0 (then the board lists them).
 cmd_home() {
 	need_session
-	if weaver_session && [ "${WEAVER_RESTORE:-1}" != 0 ]; then
+	if weaver_session; then
 		gc_states quiet
-		resume_session
+		[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session
+		# The counts the status line shows may be a session that went's.
+		push_status
 	fi
 	LS_HOME=1 cmd_ls
 }
@@ -3587,15 +3594,16 @@ EOF2
 
 # In the weaver session (its layout says so in $STATE_DIR/<skey>.layout), a
 # thread's tab is its line on the status bar: "<num> <name> · <repo>/<branch>"
-# (zjstatus shows the current tab's name). From AGENT_ROWS (side_cache_write);
-# a tab is renamed only when its label changed, the labels kept in
-# $STATE_DIR/<skey>.tabs.
+# (zjstatus, or tmux's status line, shows the current tab's name). From
+# AGENT_ROWS and the PANES they came from; a tab is renamed only when its name
+# is not its label already (tab ids start again with the multiplexer's server,
+# so what it is called now decides, not what weaver last called it).
 thread_tab_labels() {
-	local pane tab state root prompt title ttask tnum label f old="" new="" line
+	local pane tab state root prompt title ttask tnum label names
 	[ "$(cat "$STATE_DIR/$SKEY.layout" 2>/dev/null)" = weaver ] || return 0
 	ls_utf8
-	f="$STATE_DIR/$SKEY.tabs"
-	old=$(cat "$f" 2>/dev/null)
+	names=$(printf '%s' "${PANES:-[]}" | jq -r '[.[] | select(.is_plugin | not)
+		| "\(.tab_id)\t\(.tab_name // "" | gsub("[\t\n]"; " "))"] | unique | .[]' 2>/dev/null)
 	while IFS=$US read -r pane tab state root _ _ prompt _ _ title _ _ _ _ _ _ _ _ _ _ _ _ _ ttask _ tnum _; do
 		[ -n "$pane" ] && [ -n "$tnum" ] || continue
 		label=${title:-${ttask:-$prompt}}
@@ -3605,14 +3613,11 @@ thread_tab_labels() {
 		where_of "$root"
 		printf -v tnum '%02d' "$tnum"
 		label="$tnum $label · $W_REPO${W_BRANCH:+/$W_BRANCH}"
-		line="$tab$TAB$label"
-		new="$new$line$NL"
-		case "$NL$old$NL" in *"$NL$line$NL"*) continue ;; esac
+		case "$NL$names$NL" in *"$NL$tab$TAB$label$NL"*) continue ;; esac
 		mux_rename_tab "$tab" "$label"
 	done <<EOF2
 $AGENT_ROWS
 EOF2
-	[ "$new" = "$old$NL" ] || [ "$new" = "$old" ] || printf '%s' "$new" >"$f"
 }
 
 # Go to agent PANE in tab TAB from the sidebar or the home tab (they stay);
@@ -3701,7 +3706,7 @@ EOF2
 	if [ -z "$list" ]; then
 		# From a tmux key (run-shell, no terminal): in tmux's message line.
 		if [ "$MUX" = tmux ] && ! [ -t 1 ]; then
-			tm display-message "weaver: no agent needs you" 2>/dev/null
+			tm display-message -d 2000 "weaver: no agent needs you" 2>/dev/null
 		else
 			echo "weaver: no agent needs you"
 			[ -t 1 ] && sleep 1
@@ -3987,7 +3992,9 @@ form_header() {
 		;;
 	esac
 	case $w in '' | *[!0-9]*) w=96 ;; esac
-	room=$((w - 6 - 8 - 10))
+	# fzf takes 8 of the width (its border, padding and gutter), the label 8
+	# and the keys 10.
+	room=$((w - 8 - 8 - 10))
 	for ((i = 0; i < R_N; i++)); do
 		pad=$((room - ${#R_P[i]}))
 		[ $pad -lt 1 ] && pad=1
@@ -4514,6 +4521,8 @@ thread_width() {
 	local agent=$1 nv=$2 round geo aw total target step d n i dir
 	agent_width
 	if [ "$MUX" = tmux ]; then
+		# Only while nvim and the agent are the window's only panes.
+		[ "$(tm list-panes -t "%$agent" 2>/dev/null | wc -l | tr -d ' ')" = 2 ] || return 0
 		total=$(tm display-message -p -t "%$agent" '#{window_width}' 2>/dev/null)
 		case $total in '' | *[!0-9]*) return 0 ;; esac
 		agent_cols "$total"
@@ -4644,31 +4653,48 @@ weaver_thread {
 }"
 }
 
+# tmux, as window $1 is resized (config/tmux.conf's window-resized hook): its
+# thread's agent back to its width, since tmux takes a narrower window's
+# columns from the rightmost pane, the agent's.
+cmd_fit() {
+	local win=${1:-} p
+	[ "$MUX" = tmux ] || return 0
+	need_session
+	win=${win#@}
+	for p in $(tm list-panes -t "@$win" -F '#{pane_id}' 2>/dev/null); do
+		p=${p#%}
+		[ -f "$STATE_DIR/${SKEY}_$p.thread" ] || continue
+		read_nvim_pane "$p"
+		[ -n "$NV" ] && thread_width "$p" "$NV"
+	done
+	return 0
+}
+
 # Open a thread's tab, named $4, in directory $3: nvim on the left (`weaver
 # nvim --thread $1`), the agent ($2) on the right at its width, with the
-# focus; not gone to when NOFOCUS is set. Its id into TAB; returns 1 when the
+# focus; not gone to when NOFOCUS is set. Its id into NEWTAB (TAB is the tab character); returns 1 when the
 # multiplexer would not open it.
 thread_tab() {
 	local tok=$1 kind=$2 dir=$3 name=$4 total
-	TAB=""
+	NEWTAB=""
 	if [ "$MUX" != tmux ]; then
 		thread_layout "$tok" "$kind" "$dir"
-		TAB=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) ||
+		NEWTAB=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) ||
 			return 1
 		return 0
 	fi
-	TAB=$(tm new-window ${NOFOCUS:+-d} -P -F '#{window_id}' -t "=$SESSION:" -n "$name" -c "$dir" \
+	NEWTAB=$(tm new-window ${NOFOCUS:+-d} -P -F '#{window_id}' -t "=$SESSION:" -n "$name" -c "$dir" \
 		-e "WEAVER_TMUX_SESSION=$SESSION" "$SELF" nvim --thread "$tok") || return 1
-	TAB=${TAB#@}
-	total=$(tm display-message -p -t "@$TAB" '#{window_width}' 2>/dev/null)
+	NEWTAB=${NEWTAB#@}
+	total=$(tm display-message -p -t "@$NEWTAB" '#{window_width}' 2>/dev/null)
 	case $total in '' | *[!0-9]*) total=200 ;; esac
 	agent_cols "$total"
-	tm split-window -h -t "@$TAB" -l "$AGENT_COLS" -c "$dir" -e "WEAVER_TMUX_SESSION=$SESSION" \
+	tm split-window -h -t "@$NEWTAB" -l "$AGENT_COLS" -c "$dir" -e "WEAVER_TMUX_SESSION=$SESSION" \
 		"$SELF" _agent "$tok" "$kind" >/dev/null || {
-		tm kill-window -t "@$TAB" >/dev/null 2>&1
+		tm kill-window -t "@$NEWTAB" >/dev/null 2>&1
 		return 1
 	}
-	tm select-pane -t "@$TAB.0" -T "nvim: ${dir##*/}" \; select-pane -t "@$TAB.1" >/dev/null 2>&1
+	tm select-pane -t "@$NEWTAB.0" -T "nvim: ${dir##*/}" \; select-pane -t "@$NEWTAB.1" >/dev/null 2>&1
 	return 0
 }
 
@@ -4716,7 +4742,7 @@ thread_create() {
 		[ "$created" = true ] && die "$MUX could not open the tab for $name (its new worktree stays: $dir)"
 		die "$MUX could not open the tab for $name"
 	}
-	tab=$TAB
+	tab=$NEWTAB
 	weaver_session && thread_place "$tab" "$NUM"
 	remember_repo "$F_REPO"
 	tildify "$dir"
@@ -4780,7 +4806,7 @@ thread_restore() {
 		RESTORE_ERR="$name: $MUX could not open its tab"
 		return 1
 	}
-	tab=$TAB
+	tab=$NEWTAB
 	rm -f "$d/lost.json"
 	weaver_session && thread_place "$tab" "$NUM"
 	tildify "$dir"
@@ -5524,7 +5550,8 @@ EOF2
 }
 
 # The weaver session in tmux, on weaver's own server (tmux -L weaver, with
-# config/tmux.conf): attach to it, or start it with home in window 0. Its
+# config/tmux.conf, read again each time, so an install reaches a running
+# server): attach to it, or start it with home in window 0. Its
 # panes know their session ($WEAVER_TMUX_SESSION); zellij's variables, from a
 # zellij this was started in, stay out of it.
 tmux_start() {
@@ -5542,7 +5569,7 @@ tmux_start() {
 	echo weaver >"$STATE_DIR/$SKEY.layout"
 	rm -f "${STATE_DIR:?}/${SKEY:?}.last"
 	exec "$@" new-session -s "$name" -n home -e "WEAVER_TMUX_SESSION=$name" "$SELF" home \; \
-		set-environment -t "=$name" WEAVER_TMUX_SESSION "$name"
+		set-environment -t "=$name" WEAVER_TMUX_SESSION "$name" \; source-file "$conf"
 }
 
 # weaver quit [--yes]: quit the zellij session you are in (outside zellij,
@@ -5803,8 +5830,9 @@ thread_order() {
 usage() {
 	cat <<'EOF2'
 usage: weaver [command]
-  (none)                       outside zellij: attach to, or start, the zellij session
-                               "weaver" ($WEAVER_SESSION); inside: the dashboard
+  (none)                       outside tmux and zellij: attach to, or start, the tmux
+                               session "weaver" ($WEAVER_SESSION; WEAVER_MUX=zellij: in
+                               zellij); inside either: the dashboard
   start [session]              the same, for another session
   new [task...]                start a thread: a new tab with nvim and an agent, in a new
                                worktree whose branch starts from the remote's default
@@ -5817,20 +5845,22 @@ usage: weaver [command]
                                close an agent (the focused one) with its nvim, and its
                                thread's tab; offers to remove a thread's worktree when it
                                is clean and merged or pushed
-  resume [--all] [which]       threads lost when their zellij went (a crash, or quit):
+  resume [--all] [which]       threads lost when their session went (a crash, or quit):
                                alone, list them; with a name, number or session id, bring
                                that one back in a new tab resuming its conversation;
                                --all, every one. --forget [--yes] which: drop one
-  quit [--yes]                 quit this zellij session (outside zellij, "weaver") with
+  quit [--yes]                 quit this session (outside it, "weaver") with
                                every agent and nvim in it, after asking; its threads are
                                kept and come back as the weaver session starts again
   hook [--async]              Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
-  ls                           live dashboard of the agents in this zellij session
+  ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
-  status [--zjstatus]          agent counts (formatted for zjstatus's command widget)
+  status [--zjstatus | --tmux SESSION]
+                               agent counts (for zjstatus's command widget, or tmux's
+                               status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
   gc                           forget agents that are gone, in every session
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
@@ -5870,6 +5900,7 @@ _chrome) ls_chrome ;;
 sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;
+_fit) cmd_fit "$@" ;;
 _side) need_session && side_rows "$@" ;;
 _goto) need_session && cmd_goto "$@" ;;
 _focus) need_session && focus_pane "$@" ;;

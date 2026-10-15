@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install weaver; with --configure, also wire it into zellij and Claude Code.
+# Install weaver; with --configure, also wire it into Claude Code (and zellij,
+# when you use weaver there).
 #
 #   ./install.sh                  copy to ~/.local/share/weaver, link ~/.local/bin/weaver
 #   ./install.sh --configure      also add the zellij keybindings and the Claude Code (and Codex) hooks
@@ -51,12 +52,22 @@ done
 
 check_deps() {
 	local c missing="" v major minor rest
-	for c in zellij nvim jq git; do
+	for c in tmux nvim jq git; do
 		command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
 	done
 	[ -z "$missing" ] || die "missing dependencies:$missing"
 	command -v fzf >/dev/null 2>&1 ||
 		warn "fzf not found: 'weaver ls' will print a table instead of the interactive dashboard"
+	v=$(tmux -V 2>/dev/null)
+	v=${v#tmux }
+	major=${v%%.*} rest=${v#*.}
+	minor=${rest%%[!0-9]*}
+	case "$major.$minor" in [0-9]*.[0-9]*) ;; *) die "cannot parse the tmux version '$v'" ;; esac
+	if [ "$major" -lt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -lt 3 ]; }; then
+		die "tmux $v is too old: weaver needs 3.3 or newer"
+	fi
+	# zellij is optional (WEAVER_MUX=zellij).
+	command -v zellij >/dev/null 2>&1 || return 0
 	v=$(zellij --version 2>/dev/null)
 	v=${v##* }
 	major=${v%%.*} rest=${v#*.}
@@ -259,14 +270,18 @@ install_files
 remove_agentnav
 if [ $configure = 1 ]; then
 	[ -n "$zconfs" ] || zconfs="${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}$NL"
-	printf '%s' "$zconfs" | while IFS= read -r z; do
-		[ -n "$z" ] && configure_zellij "$z"
-	done
+	if command -v zellij >/dev/null 2>&1; then
+		printf '%s' "$zconfs" | while IFS= read -r z; do
+			[ -n "$z" ] && configure_zellij "$z"
+		done
+	fi
 	configure_claude
 	[ $codex = 1 ] && configure_codex
 	[ $dry = 1 ] || cat <<'EOF'
 
 Done. To pick it up:
+  - a running weaver tmux session reads weaver's tmux config again the next time
+    `weaver` attaches to it
   - running zellij sessions reload their config file by themselves; restart zellij
     only if Alt y / Alt v do nothing
   - restart any Claude Code sessions that are already running: they read hooks at start

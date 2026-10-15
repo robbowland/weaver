@@ -10,8 +10,8 @@ keys
   ^r          reload
   ?           this help (? again: back)
   q  esc      close the dashboard
-  ^q          quit zellij, every agent and nvim (the threads come
-              back as weaver starts; weaver quit asks first)
+  ^q          quit the session, every agent and nvim (the threads
+              come back as weaver starts; weaver quit asks first)
 
 threads
   [!]  needs you    [x]  done, not yet seen    [/]  working
@@ -19,6 +19,6 @@ threads
 
   ×2  two agents share the worktree: their turn diffs mix
 
-lost (its zellij went: a crash, or quit)
+lost (its session went: a crash, or quit)
   ⏎           resume it in a new tab (weaver resume)
   x           forget it (its worktree stays)
