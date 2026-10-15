@@ -24,9 +24,9 @@ for ((r = 1; r <= rounds; r++)); do
 	for i in 0 1 2 3 4 5; do
 		cmd="nvim -u NONE --listen $AT/s.$r.$i -c 'luafile $LUA'"
 		if [ $i = 0 ]; then
-			$T new-session -d -x 200 -y 60 -e XDG_STATE_HOME="$AT/state" "$cmd"
+			$T new-session -d -x 200 -y 60 -c "$AT" -e XDG_STATE_HOME="$AT/state" "$cmd"
 		else
-			$T new-window -e XDG_STATE_HOME="$AT/state" "$cmd"
+			$T new-window -c "$AT" -e XDG_STATE_HOME="$AT/state" "$cmd"
 		fi
 	done
 	sleep 2

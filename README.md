@@ -312,7 +312,8 @@ of yours. The hooks run
 for run in the background. Pass `--dry-run` to see the diff first. It is safe
 to rerun, and it replaces an older install (from before weaver was one
 binary, or was called agentnav). A weaver installed some other way (a
-package) needs only `weaver setup`.
+package) needs only `weaver setup`. `packaging/homebrew/weaver.rb` is a
+Homebrew formula for a tap (tmux, fzf and Neovim as its dependencies).
 
 Restart running Claude Code sessions afterwards: they read hooks at start.
 A running weaver tmux session reads weaver's tmux config again the next time
