@@ -174,8 +174,38 @@ local function keys()
   vim.g.weaver_review_key_label = ((prefix .. 't'):gsub('<[Ll]eader>', leader))
 end
 
+-- No UI left (tmux closed the pane: a crash, quit or close) means nobody
+-- can answer a prompt, yet an error on the way out (most often a ShaDa file
+-- that several nvims, all told to go at once, race to write) makes nvim wait
+-- for a key, for good. So with no UI: write ShaDa with its errors silenced,
+-- then skip nvim's own write; and once the exit autocommands have run, end.
+local function orphaned()
+  return #api.nvim_list_uis() == 0 and not vim.tbl_contains(vim.v.argv, '--headless')
+end
+
+local function exit_guard()
+  api.nvim_create_autocmd('VimLeavePre', {
+    group = util.group,
+    callback = function()
+      if orphaned() then
+        pcall(vim.cmd, 'silent! wshada')
+        vim.o.shada = ''
+      end
+    end,
+  })
+  api.nvim_create_autocmd('VimLeave', {
+    group = util.group,
+    callback = function()
+      if orphaned() then
+        os.exit(tonumber(vim.v.exiting) or 1)
+      end
+    end,
+  })
+end
+
 function M.setup()
   define_entry_points()
+  exit_guard()
   for _, name in ipairs(modules) do
     require('weaver.' .. name).setup()
   end

@@ -1067,3 +1067,15 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   `install.sh` removes what the install before the binary copied into
   `$XDG_DATA_HOME/weaver` (its script, itself and `config/`), once nothing
   ran from there any more.
+- 2026-10-15: The nvims that hung in exit for good (`preserve_exit` →
+  `getout` → `wait_return`, a known limitation since 2026-10-14) were nvims
+  told to go all at once (tmux killed, a crash, quit) whose ShaDa writes
+  raced: E886 creating its directory, E136 renaming its temp file. Nvim's
+  exit then waits for a key, with no UI left to send one; reproduced in
+  about one nvim in ten with six at a time (`test/soak/nvim-exit.sh`). A
+  hung one also blocked Alt v for its pane number after a restart: its
+  socket took 2 s to time out and was then taken for a busy nvim. weaver's
+  nvims now, with no UI left (not `--headless`), write ShaDa themselves
+  with errors silenced, skip nvim's own write, and end once the exit
+  autocommands have run: none in 48 hung.
+
