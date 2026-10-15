@@ -366,21 +366,27 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if l == "" {
 			l = r.Prompt
 		}
-		if i := strings.IndexByte(l, '\n'); i >= 0 {
-			l = l[:i]
-		}
-		l = strings.TrimRight(fit(l, 30), " ")
-		w := whereOf(r.Root)
 		n, _ := strconv.Atoi(r.Tnum)
-		label := padNum(n) + " " + l + " · " + w.repo
-		if w.branch != "" {
-			label += "/" + w.branch
-		}
+		label := threadLabel(n, l, r.Root)
 		if names[r.Tab+"\t"+label] {
 			continue
 		}
 		e.Tmux("rename-window", "-t", "@"+r.Tab, label)
 	}
+}
+
+// threadLabel is a thread window's name in the weaver session: its number,
+// what it is about (the first line of text, fitted), and where it works.
+func threadLabel(n int, text, root string) string {
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		text = text[:i]
+	}
+	w := whereOf(root)
+	label := padNum(n) + " " + strings.TrimRight(fit(text, 30), " ") + " · " + w.repo
+	if w.branch != "" {
+		label += "/" + w.branch
+	}
+	return label
 }
 
 func padNum(n int) string {

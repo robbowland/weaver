@@ -131,6 +131,8 @@ ok "new: on a session id weaver chose, kept in the thread record, named for the 
 	"$(sed -n '1p;3p;4p' "$AT/args.$AG" | tr '\n' ' ')|$(sed -n 2p "$AT/args.$AG")" \
 	"--session-id -n say-hello |$(jq -r .session_id "$SD/tmux-${S}_$AG.thread")"
 
+ok "new: its window has its label at once" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
+
 # --- hooks: the agent's state under the session's tmux key and its pane
 hookj "$AG" "$(ev SessionStart ',"source":"startup"')"
 hookj "$AG" "$(ev UserPromptSubmit ',"prompt":"say hello"')"

@@ -3362,7 +3362,7 @@ EOF2
 ls_help() {
 	local d=$C_DIM g=$C_GREY o=$C_OFF
 	cat <<EOF2
-${g}keys$o
+${g}KEYS$o
   ${g}⏎  1-9${o}      jump to the thread ${d}(1-9: that row)$o
   ${g}j k  g G$o    move; first, last
   $g/$o           search ${d}(esc: back)$o
@@ -3373,17 +3373,17 @@ ${g}keys$o
   ${g}s  tab$o      resume card ↔ screen
   ${g}^r$o          reload
   $g?$o           this help ${d}(? again: back)$o
-  ${g}q  esc$o      close the dashboard
+  ${g}q  esc$o      close the dashboard ${d}(home: back to your thread)$o
   ${g}^q$o          quit the session, every agent and nvim ${d}(the threads$o
               ${d}come back as weaver starts; weaver quit asks first)$o
 
-${g}threads$o
+${g}THREADS$o
   $(paint "$G_NEED" "$C_RED"; printf %s "$PAINT")  needs you    $(paint "$G_DONE" "$C_GREEN"; printf %s "$PAINT")  done, not yet seen    $(paint "$G_WORK" "$g"; printf %s "$PAINT")  working
   $(paint "$G_SEEN" "$d"; printf %s "$PAINT")  done, seen   $(paint "$G_IDLE" "$d"; printf %s "$PAINT")  idle    $(paint "$G_INT" "$g"; printf %s "$PAINT")  interrupted
 
   ${d}×2$o  ${d}two agents share the worktree: their turn diffs mix$o
 
-${g}lost$o ${d}(its session went: a crash, or quit)$o
+${g}LOST$o ${d}(its session went: a crash, or quit)$o
   ${g}⏎$o           resume it in a new tab ${d}(weaver resume)$o
   ${g}x$o           forget it ${d}(its worktree stays)$o
 EOF2

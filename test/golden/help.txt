@@ -1,4 +1,4 @@
-keys
+KEYS
   ⏎  1-9      jump to the thread (1-9: that row)
   j k  g G    move; first, last
   /           search (esc: back)
@@ -9,16 +9,16 @@ keys
   s  tab      resume card ↔ screen
   ^r          reload
   ?           this help (? again: back)
-  q  esc      close the dashboard
+  q  esc      close the dashboard (home: back to your thread)
   ^q          quit the session, every agent and nvim (the threads
               come back as weaver starts; weaver quit asks first)
 
-threads
+THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working
   [x]  done, seen   [ ]  idle    [-]  interrupted
 
   ×2  two agents share the worktree: their turn diffs mix
 
-lost (its session went: a crash, or quit)
+LOST (its session went: a crash, or quit)
   ⏎           resume it in a new tab (weaver resume)
   x           forget it (its worktree stays)

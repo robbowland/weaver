@@ -384,7 +384,13 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 		return false
 	}
 	unlock()
-	tab, ok := e.threadTab(tok, fm.agent, dir, name, nofocus)
+	// In the weaver session its window has its label from the start, not
+	// once its agent first reports.
+	wname := name
+	if e.WeaverSession() {
+		wname = threadLabel(n, task, dir)
+	}
+	tab, ok := e.threadTab(tok, fm.agent, dir, wname, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -643,7 +649,18 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		return "", fmt.Errorf("%s: cannot write its records", nm)
 	}
 	unlock()
-	tab, ok := e.threadTab(tok, kind, dir, nm, nofocus)
+	wname := nm
+	if e.WeaverSession() {
+		t := str(st.get("title", ""))
+		if t == "" {
+			t = str(th.get("task", ""))
+		}
+		if t == "" {
+			t = nm
+		}
+		wname = threadLabel(n, t, dir)
+	}
+	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
 		back()
 		return "", fmt.Errorf("%s: tmux could not open its tab", nm)

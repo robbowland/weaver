@@ -87,7 +87,7 @@ func titleLine(t string) string {
 func Help() string {
 	d, g, o := CDim, CGrey, COff
 	p := func(cell, c string) string { return paint(cell, c, CDim, COff) }
-	return g + "keys" + o + "\n" +
+	return g + "KEYS" + o + "\n" +
 		"  " + g + "⏎  1-9" + o + "      jump to the thread " + d + "(1-9: that row)" + o + "\n" +
 		"  " + g + "j k  g G" + o + "    move; first, last\n" +
 		"  " + g + "/" + o + "           search " + d + "(esc: back)" + o + "\n" +
@@ -98,17 +98,17 @@ func Help() string {
 		"  " + g + "s  tab" + o + "      resume card ↔ screen\n" +
 		"  " + g + "^r" + o + "          reload\n" +
 		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
-		"  " + g + "q  esc" + o + "      close the dashboard\n" +
+		"  " + g + "q  esc" + o + "      close the dashboard " + d + "(home: back to your thread)" + o + "\n" +
 		"  " + g + "^q" + o + "          quit the session, every agent and nvim " + d + "(the threads" + o + "\n" +
 		"              " + d + "come back as weaver starts; weaver quit asks first)" + o + "\n" +
 		"\n" +
-		g + "threads" + o + "\n" +
+		g + "THREADS" + o + "\n" +
 		"  " + p(GNeed, CRed) + "  needs you    " + p(GDone, CGreen) + "  done, not yet seen    " + p(GWork, g) + "  working\n" +
 		"  " + p(GSeen, d) + "  done, seen   " + p(GIdle, d) + "  idle    " + p(GInt, g) + "  interrupted\n" +
 		"\n" +
 		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
 		"\n" +
-		g + "lost" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
+		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
 		"  " + g + "⏎" + o + "           resume it in a new tab " + d + "(weaver resume)" + o + "\n" +
 		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n"
 }

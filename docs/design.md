@@ -134,6 +134,13 @@ any other point is `start` or `end`.
 Untracked files larger than `WEAVER_SNAPSHOT_MAX_KB` (5 MB) are left out;
 `WEAVER_SNAPSHOTS=0` turns snapshots off.
 
+As a chain starts in a worktree (once per session there), that worktree's
+session chains whose last snapshot is more than 31 days old are deleted, and
+so are the private indexes no snapshot has written in that time (the
+compiled half only). A worktree's refs go with it when it is removed; this
+keeps a main checkout from holding every session's chain, and a copy of its
+index for each, for good. The reviewed chain stays.
+
 ## Activity log
 
 `$STATE_DIR/log/<session_id>.jsonl`, append-only, one object per line, each
@@ -1036,3 +1043,24 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   day (until gc); `threadNum` now ignores a record there older than 30 s,
   since a live one waits at most 10. Found by `test/tmux.sh` on the
   personal Mac, which is fast enough to close before nvim binds.
+- 2026-10-15: Visual QA on the personal Mac, from a rig that starts `weaver`
+  on a throwaway tmux server inside a hidden terminal of a set size, with
+  Rob's own Neovim config and fake agents. A thread's window is named with
+  its label (`01 task · repo/branch`) as it opens, not when its agent first
+  reports; the new-thread form and its pickers take the board's label
+  grammar (`[ WEAVER :: NEW THREAD ]`); the help's headings are uppercase
+  like the board's, and it says q and esc go back on home. Old snapshot
+  chains and private indexes are pruned (see Snapshots).
+- 2026-10-15: Neovim configs load weaver's plugin from
+  `$XDG_DATA_HOME/weaver/nvim` (lazy.nvim's `dir`), which only the old
+  install wrote: the Go binary unpacked its plugin under `runtime/<id>` and
+  left that copy stale, and `weaver.lua` appended its own directory to the
+  runtimepath, so `require` found the stale modules first, in every nvim,
+  a thread's included. Now the binary keeps `weaver/nvim` a copy of its own
+  plugin (marked `.weaver-runtime` with the build's id, swapped in whole when
+  the build changes; `install.sh` runs `weaver _runtime` to do it at once),
+  `weaver.lua` prepends its directory, and runtimes of other builds go once
+  nothing has unpacked them for a month. Following also replaces a start
+  screen (snacks.nvim's dashboard, dashboard-nvim, alpha, mini.starter): a
+  new thread's nvim opens on one, and its agent's first edits waited
+  behind it for good.

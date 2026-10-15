@@ -517,6 +517,13 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + CGrey + "^e" + COff + " " + CDim + "WRITE IT IN $EDITOR" + COff +
 	"   " + CGrey + "esc" + COff + " " + CDim + "CANCEL" + COff
 
+// formLabel is a form's border label in the board's grammar:
+// [ WHERE :: WHAT ], the brackets and :: faint, where in ink, what grey.
+func formLabel(where, what string) string {
+	return " " + CDim + "[" + COff + " " + CBold + CInk + where + COff + " " + CDim + "::" + COff + " " + CGrey + what + COff +
+		" " + CDim + "]" + COff + " "
+}
+
 var formFzf = []string{"--border", "sharp", "--border-label-pos", "2", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
 
 const pickFooter = CGrey + "⏎" + COff + " " + CDim + "PICK" + COff + "   " + CGrey + "esc" + COff + " " + CDim + "BACK" + COff
@@ -806,7 +813,7 @@ func (e *Env) newForm(sf string) (string, int) {
 		os.Remove(sock)
 		args := []string{"--listen", sock, "--disabled", "--reverse"}
 		args = append(args, formFzf...)
-		args = append(args, "--border-label", " new thread ", "--prompt", "      task  ", "--ghost", "what should the agent do?",
+		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD"), "--prompt", "      task  ", "--ghost", "what should the agent do?",
 			"--query", query, "--header", h, "--footer", formFooter, "--color", FzfColors,
 			"--bind", "change:bg-cancel+bg-transform-header("+hd+")",
 			"--bind", "tab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
@@ -880,7 +887,7 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.repo == "" {
 			return
 		}
-		out := e.pick(e.formBases(fm), " base ", "      base  ", "where the new branch starts")
+		out := e.pick(e.formBases(fm), formLabel("NEW THREAD", "BASE"), "      base  ", "where the new branch starts")
 		if out == "" {
 			return
 		}
@@ -907,7 +914,7 @@ func (e *Env) Form(op, sf, q string) {
 			br = Slugify(q)
 		}
 		args := append([]string{"--disabled", "--reverse"}, formFzf...)
-		args = append(args, "--border-label", " branch ", "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
+		args = append(args, "--border-label", formLabel("NEW THREAD", "BRANCH"), "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
 			"--color", FzfColors, "--header", "        "+CGrey+"names the branch and its worktree; an existing branch continues"+COff,
 			"--footer", CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff, "--bind", "enter:print-query")
 		c := exec.Command("fzf", args...)
@@ -926,7 +933,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 		}
 	case "repo":
-		out := e.pick(e.recentRepos(fm.repo), " repository ", "      repo  ", "a repository, or a path")
+		out := e.pick(e.recentRepos(fm.repo), formLabel("NEW THREAD", "REPOSITORY"), "      repo  ", "a repository, or a path")
 		if out == "" {
 			return
 		}
