@@ -35,5 +35,9 @@ const Usage = `usage: weaver [command]
   status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
   gc                           forget agents that are gone, in every session
+  setup [--dry-run] [--no-codex] [--bin PATH]
+                               add weaver's hooks to Claude Code (and Codex, when ~/.codex
+                               exists), run by this binary (or PATH), backing up each file
+                               it changes; --dry-run shows the changes only
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

@@ -1006,3 +1006,11 @@ else weaver's.
   nothing through the long commands (tests, builds) a turn spends most time
   in. The agent's nvim gets it too (the state event's `doing`): its bar says
   `running npm test` where it would say what the agent was asked.
+- 2026-10-15: `weaver setup` puts weaver's hooks into Claude Code's settings
+  and Codex's hooks, as `install.sh --configure` did with jq (the same
+  rules, byte for byte the same file: every weaver or agentnav hook out,
+  the current ones in, run by the binary's path, nobody else's touched,
+  members in their order, a backup first); `install.sh --configure` runs
+  it. So a weaver installed as a package needs only `weaver setup`, and
+  nothing of weaver needs jq any more but its tests.
+

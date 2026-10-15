@@ -294,7 +294,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Install
 
-Needs Go to build, tmux 3.3+, neovim 0.10+, jq and git; fzf for the
+Needs Go to build, tmux 3.3+, neovim 0.10+ and git; fzf for the
 interactive dashboard, and diffview-plus.nvim in your nvim for reviews.
 
 ```sh
@@ -304,13 +304,15 @@ interactive dashboard, and diffview-plus.nvim in your nvim for reviews.
 This builds weaver, one binary carrying everything it needs, into
 `~/.local/bin/weaver` (it unpacks its Neovim plugin and configs under
 `~/.local/share/weaver/runtime`, and keeps a copy of its Neovim plugin at
-`~/.local/share/weaver/nvim` for your Neovim config to load), adds
-the hooks to `~/.claude/settings.json` (replacing any older weaver hooks),
-backing it up first. weaver's tmux needs no config of yours. The hooks run
+`~/.local/share/weaver/nvim` for your Neovim config to load), then runs
+`weaver setup`, which adds the hooks to `~/.claude/settings.json` (replacing
+any older weaver hooks), backing it up first. weaver's tmux needs no config
+of yours. The hooks run
 `~/.local/bin/weaver` directly, without a shell; the ones nobody needs to wait
 for run in the background. Pass `--dry-run` to see the diff first. It is safe
 to rerun, and it replaces an older install (from before weaver was one
-binary, or was called agentnav).
+binary, or was called agentnav). A weaver installed some other way (a
+package) needs only `weaver setup`.
 
 Restart running Claude Code sessions afterwards: they read hooks at start.
 A running weaver tmux session reads weaver's tmux config again the next time
@@ -342,6 +344,8 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 ```sh
 test/run.sh
 ```
+
+(The tests need jq as well.)
 
 runs, in a few minutes, each with its own state and nothing of yours
 touched:

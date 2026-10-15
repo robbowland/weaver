@@ -2,7 +2,7 @@
 # Install weaver; with --configure, also wire it into Claude Code (and Codex).
 #
 #   ./install.sh                  build weaver (one binary) into ~/.local/bin/weaver
-#   ./install.sh --configure      also add the Claude Code (and Codex) hooks
+#   ./install.sh --configure      also add the Claude Code (and Codex) hooks (`weaver setup`)
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
@@ -12,10 +12,6 @@ set -eu
 SRC=$(cd "$(dirname "$0")" && pwd -P)
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/weaver"
 BIN="$HOME/.local/bin"
-CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
-CODEX_DONE=0
-TS=$(date +%Y%m%d-%H%M%S)
 
 say() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -42,7 +38,7 @@ done
 
 check_deps() {
 	local c missing="" v major minor rest
-	for c in go tmux nvim jq git; do
+	for c in go tmux nvim git; do
 		command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
 	done
 	[ -z "$missing" ] || die "missing dependencies:$missing"
@@ -125,90 +121,21 @@ remove_agentnav() {
 	fi
 }
 
-# show_or_apply LABEL FILE NEW: print the diff; unless --dry-run, back FILE up
-# and write NEW into it (through the file, so a symlinked config stays a link).
-show_or_apply() {
-	local label=$1 f=$2 new=$3
-	say "--- $label: $f"
-	diff -u "$([ -f "$f" ] && echo "$f" || echo /dev/null)" "$new" || true
-	[ $dry = 1 ] && return 1
-	# Inside `if`, set -e is off: check each step, never overwrite without a backup.
-	if [ -f "$f" ]; then
-		cp -p "$f" "$f.bak.$TS" || die "cannot back up $f; not changing it"
-		say "backed up to $f.bak.$TS"
-	else
-		mkdir -p "$(dirname "$f")" || die "cannot create $(dirname "$f")"
-	fi
-	cat "$new" >"$f" || die "cannot write $f (backup: $f.bak.$TS)"
-}
-
-# weaver ran on zellij too, once: say so where a zellij config still has
-# its keybindings (they run weaver commands it no longer has).
-warn_zellij() {
-	local f=${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}
-	if [ -f "$f" ] && grep -Eq 'Run "(weaver|agentnav)"' "$f"; then
-		warn "zellij: $f still has weaver's keybindings; weaver runs on tmux only now, so remove its '// weaver:' block"
-	fi
-}
-
-# Remove every weaver hook (whatever its form: "weaver hook", an exec-form
-# "weaver" with args, an absolute path to it, or agentnav, weaver's old name)
-# and add the current ones, so a changed matcher or event never leaves a stale
-# entry behind. Hooks of anything else are never touched; a matcher group left
-# empty is dropped.
-JQ_HOOKS='
-def ours: (.command? // "" | tostring) | test("^(\\S*/)?(weaver|agentnav)( |$)");
-($add[0] | walk(if type == "object" and (.command? | type) == "string" then
-    .command |= (if . == "weaver" then $bin elif startswith("weaver ") then $bin + .[6:] else . end)
-  else . end)) as $new
-| .hooks = ((.hooks // {})
-    | with_entries(.value |= (map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0))))
-    | with_entries(select(.value | length > 0)))
-| reduce ($new.hooks | to_entries[]) as $e (.; .hooks[$e.key] = ((.hooks[$e.key] // []) + $e.value))'
-
-# configure_hooks LABEL FILE HOOKS-JSON: weaver's hooks into an agent's JSON
-# hooks file (Claude Code's settings.json, Codex's hooks.json).
-configure_hooks() {
-	local label=$1 f=$2 hooks=$3 tmp
-	tmp=$(mktemp "${TMPDIR:-/tmp}/weaver.XXXXXX")
-	if [ -f "$f" ]; then cat "$f"; else echo '{}'; fi |
-		jq --slurpfile add "$hooks" --arg bin "$BIN/weaver" "$JQ_HOOKS" >"$tmp" ||
-		die "cannot parse $f"
-	if [ -f "$f" ] && jq -e --slurpfile new "$tmp" '. == $new[0]' "$f" >/dev/null; then
-		say "$label: $f already runs weaver on every event"
-	elif show_or_apply "$label" "$f" "$tmp"; then
-		jq empty "$f" || die "wrote invalid JSON to $f; the backup is $f.bak.$TS"
-	fi
-	rm -f "$tmp"
-}
-
-configure_claude() { configure_hooks claude "$CLAUDE_SETTINGS" "$SRC/config/claude-hooks.json"; }
-
-# Codex, when it is set up here: its hooks run `weaver adapt codex`. Codex
-# asks you to trust new hooks (in /hooks) before it runs them.
-configure_codex() {
-	[ -d "$CODEX_DIR" ] || return 0
-	configure_hooks codex "$CODEX_DIR/hooks.json" "$SRC/config/codex-hooks.json"
-	CODEX_DONE=1
-}
-
 check_deps
 install_files
 remove_old_copies
 remove_agentnav
 if [ $configure = 1 ]; then
-	warn_zellij
-	configure_claude
-	[ $codex = 1 ] && configure_codex
-	[ $dry = 1 ] || cat <<'EOF'
-
-Done. To pick it up:
-  - a running weaver tmux session reads weaver's tmux config again the next time
-    `weaver` attaches to it
-  - restart any Claude Code sessions that are already running: they read hooks at start
-EOF
-	[ $dry = 1 ] || [ $CODEX_DONE = 0 ] || cat <<'EOF'
-  - Codex: trust weaver's hooks in /hooks (Codex asks before running new hooks), then
-    restart running Codex sessions
-EOF
+	# The hooks: `weaver setup` (with --dry-run, by a build of this checkout
+	# that is not installed).
+	set -- --bin "$BIN/weaver"
+	[ $codex = 1 ] || set -- "$@" --no-codex
+	if [ $dry = 1 ]; then
+		tmp=$(mktemp -d "${TMPDIR:-/tmp}/weaver.XXXXXX")
+		(cd "$SRC" && go build -o "$tmp/weaver" ./cmd/weaver) || die "cannot build weaver"
+		"$tmp/weaver" setup --dry-run "$@"
+		rm -rf "$tmp"
+	else
+		"$BIN/weaver" setup "$@"
+	fi
 fi
