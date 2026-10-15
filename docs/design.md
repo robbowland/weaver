@@ -1078,4 +1078,8 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   nvims now, with no UI left (not `--headless`), write ShaDa themselves
   with errors silenced, skip nvim's own write, and end once the exit
   autocommands have run: none in 48 hung.
+- 2026-10-15: Rob chose one faint divider between a thread's nvim and its
+  agent over tmux's half-lit one (`pane-border-indicators off`, both border
+  styles #616161), and kept nvim's 60 columns below 104, where the agent
+  gets what is left.
 
