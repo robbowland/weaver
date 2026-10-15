@@ -86,7 +86,7 @@ ok "...and gone with its pane" "$(LS_MODE=plain weaver _rows | grep -c 'flaky')"
 rm -f "$SD/${SK}_$NP.thread"
 
 # The card gets what the list leaves, and only when that is 6 lines or more.
-room() { bash -c 'WEAVER_SOURCED=1 . "$(command -v weaver)"; LS_COLS=$1 LS_LINES=$2; ls_card_room $3; echo "$LS_PW${LS_PHIDE:+ hidden}"' _ "$@"; }
+room() { bash -c 'WEAVER_SOURCED=1 . "$WEAVER_SCRIPT"; LS_COLS=$1 LS_LINES=$2; ls_card_room $3; echo "$LS_PW${LS_PHIDE:+ hidden}"' _ "$@"; }
 ok "card: below the list, in what it leaves" "$(room 72 30 12)" "down,13,border-top,wrap"
 ok "card: hidden under 6 lines (s still shows it)" "$(room 72 22 12)" "down,50%,border-top,wrap,hidden hidden"
 ok "card: beside the list from 150 columns" "$(room 160 20 12)" "right,74,border-left,wrap"

@@ -51,6 +51,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
+| `server` | int | tmux only: the pid of the tmux server the agent runs on (from `$TMUX`); a server started again is another, however soon, so its threads count as lost (absent in older states: then a session made after `ts`) |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Hook to Neovim
@@ -974,3 +975,19 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   the header and footer inline (`fzf_act` picks a delimiter the text lacks).
   Home board start: 840 ms to 540 ms in the lab; next, the hot paths
   compiled.
+- 2026-10-15: weaver is one Go binary (Rob: "anything that can be should be
+  compiled", a standalone installable app, no symlinks). It carries the
+  shell script, the Neovim plugin and the configs (`go:embed`), unpacks them
+  once per build under `$XDG_DATA_HOME/weaver/runtime/<content hash>`, and
+  runs the script (by bash, with `WEAVER_SELF` the binary and
+  `WEAVER_RUNTIME` the unpacked files) for every command it does not do
+  itself yet; under zellij (benched) the script does everything. Compiled
+  first, the dashboard: its rows (`_rows`, with the agents' refinement by
+  Claude Code's session files and the retiring of agents gone), header,
+  footer and chrome, the board itself (`ls`, `home`, whose start-up work runs
+  behind it as `weaver _boot`) and the status line's counts; rows match the
+  script's byte for byte. Measured: `_rows` 78 ms to 18 ms (one tmux query
+  left, and no ps: process start times come from sysctl), `_chrome`,
+  `_footer` and `_hf` about 20 ms to 4 ms. Next: the hook engine, then the
+  rest of the script, then packaging (a Homebrew formula with the
+  dependencies).

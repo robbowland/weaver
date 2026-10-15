@@ -137,8 +137,20 @@ C_OFF=$'\033[0m'
 FZF_COLORS='fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999'
 
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
-# SELF as fzf's actions run it, quoted: by this bash, not through env.
-printf -v SELF_CMD '%q %q' "${BASH:-bash}" "$SELF"
+# This script's own file (SELF may be the binary that runs it).
+SCRIPT=$SELF
+# Run by the weaver binary (for what it does not do itself): SELF is the
+# binary, which runs every command, and the files it carries are unpacked in
+# WEAVER_RUNTIME. Neither goes on to what this runs.
+RUNTIME_DIR=${WEAVER_RUNTIME:-}
+if [ -n "${WEAVER_SELF:-}" ]; then
+	SELF=$WEAVER_SELF
+	printf -v SELF_CMD '%q' "$SELF"
+else
+	# SELF as fzf's actions run it, quoted: by this bash, not through env.
+	printf -v SELF_CMD '%q %q' "${BASH:-bash}" "$SELF"
+fi
+unset WEAVER_SELF WEAVER_RUNTIME
 
 
 die() {
@@ -283,7 +295,7 @@ mux_session_keys() {
 # tmux: the sessions of the server we run in (else weaver's), one
 # "<key> <epoch it was created>" per line.
 tmux_sessions() {
-	tm list-sessions -F '#S #{session_created}' 2>/dev/null | sed 's|/|_|g; s|^|tmux-|'
+	tm list-sessions -F '#S #{session_created} #{pid}' 2>/dev/null | sed 's|/|_|g; s|^|tmux-|'
 }
 
 state_file() { SF="$STATE_DIR/${SKEY}_$1.json"; }
@@ -453,7 +465,7 @@ load_rest() {
 	if [ "${LC_ALL-}" = C ] && [ -n "${WEAVER_LC_SET+x}" ]; then
 		if [ -n "$WEAVER_LC_SET" ]; then LC_ALL=$WEAVER_LC_ALL; else unset LC_ALL; fi
 	fi
-	[ -n "${WEAVER_REST:-}" ] || WEAVER_SOURCED=1 . "$SELF"
+	[ -n "${WEAVER_REST:-}" ] || WEAVER_SOURCED=1 . "$SCRIPT"
 }
 
 # ---------------------------------------------------------------- hook
@@ -1020,6 +1032,13 @@ write_state() {
 	case $bg in '' | *[!0-9]*) bg=0 ;; esac
 	json_str "$bgdesc" && out="$out,\"background\":$bg,\"background_tasks\":$J"
 	out="$out,\"nvim_pane\":${NV:-null}"
+	# The tmux server it runs on ($TMUX is "socket,pid,session"): a server
+	# started again is another, however soon (server_lost).
+	if [ "$MUX" = tmux ]; then
+		local srv=${TMUX:-}
+		srv=${srv#*,} srv=${srv%%,*}
+		case $srv in '' | 0 | *[!0-9]*) ;; *) out="$out,\"server\":$srv" ;; esac
+	fi
 	[ -n "$end_reason" ] && json_str "$end_reason" && out="$out,\"end_reason\":$J"
 	[ -n "$sid" ] && json_str "$LOG_DIR/$sid.jsonl" && out="$out,\"log\":$J"
 	out="$out,\"subagents\":${subs_json:-[]},\"tasks\":${tasks_json:-[]}"
@@ -1202,9 +1221,13 @@ session_files() {
 	done
 }
 
-# Directory holding the real script, following symlinks without GNU readlink -f.
+# Directory holding the script's files (nvim/, config/): the binary's
+# unpacked runtime, else the real script's, following symlinks without GNU
+# readlink -f.
 script_dir() {
-	local p=$SELF d
+	[ -n "$RUNTIME_DIR" ] && printf '%s\n' "$RUNTIME_DIR" && return 0
+	local p=$0 d
+	case $p in /*) ;; *) p="$PWD/$p" ;; esac
 	while [ -L "$p" ]; do
 		d=$(cd -P "${p%/*}" && pwd)
 		p=$(readlink "$p")
@@ -1848,7 +1871,7 @@ cmd_nvim() {
 	fi
 
 	dir=$(script_dir)
-	export WEAVER_PANE=$agent WEAVER_STATE=$SF WEAVER_BIN="$dir/weaver"
+	export WEAVER_PANE=$agent WEAVER_STATE=$SF WEAVER_BIN="$SELF"
 	lua="$dir/nvim/weaver.lua"
 	# The ATTENTION dialog for a stale swap file would block this nvim and every
 	# remote call: open the startup file read-only instead (weaver.lua reports
@@ -2201,15 +2224,22 @@ EOF2
 }
 
 # Did the zellij of session $1 go since $2 (epoch s, an agent's last event):
-# is no server running it, or one that started after?
+# is no server running it, or one that started after? For tmux, $3 is the
+# server (pid) the agent ran on, when its state says.
 server_lost() {
-	local name start
+	local name start spid
 	# A tmux session: lost when its server no longer has it, or has one of
-	# its name made since (the server went, and weaver started it again).
+	# its name made since (the server went, and weaver started it again):
+	# another server, or (older states) a session made after the agent's
+	# last event.
 	case $1 in tmux-*)
-		while IFS=' ' read -r name start; do
+		while IFS=' ' read -r name start spid; do
 			[ -n "$name" ] && [ "$name" = "$1" ] || continue
-			[ "$start" -gt "$2" ]
+			if [ -n "${3:-}" ] && [ -n "$spid" ]; then
+				[ "$spid" != "$3" ]
+			else
+				[ "$start" -gt "$2" ]
+			fi
 			return
 		done <<EOF2
 $(tmux_sessions)
@@ -2235,15 +2265,15 @@ EOF2
 # thread (it has a record) with a session to resume, not ended on purpose,
 # whose zellij has gone since its last event.
 lost_check() {
-	local b=${1%.json} base info sid ts why
+	local b=${1%.json} base info sid ts why srv
 	[ -f "$b.thread" ] && [ -f "$1" ] || return 1
-	info=$(jq -r '[.session_id // "", .ts // 0, .end_reason // ""] | map(tostring) | join("\u001f")' "$1" 2>/dev/null) ||
+	info=$(jq -r '[.session_id // "", .ts // 0, .end_reason // "", .server // ""] | map(tostring) | join("\u001f")' "$1" 2>/dev/null) ||
 		return 1
-	IFS=$US read -r sid ts why <<<"$info"
+	IFS=$US read -r sid ts why srv <<<"$info"
 	[ -n "$sid" ] || return 1
 	case $why in prompt_input_exit | logout | clear) return 1 ;; esac
 	base=${b##*/}
-	server_lost "${base%_*}" "${ts:-0}"
+	server_lost "${base%_*}" "${ts:-0}" "$srv"
 }
 
 # Keep the thread of the agent whose state file is $1 as lost, then remove
@@ -3507,9 +3537,10 @@ cmd_home() {
 # (unless WEAVER_RESTORE=0), and the status line's counts and the tabs'
 # labels, which may be a session that went's. The push reloads the board:
 # not before its fzf listens, a moment after it starts (its socket is named
-# for this process, as cmd_ls names it).
+# for this process, as cmd_ls names it, or $1: the board's, which started
+# this as `weaver _boot SOCKET`).
 home_boot() {
-	local i sock="$SOCK_DIR/${SKEY}.fzf.$$.sock"
+	local i sock=${1:-"$SOCK_DIR/${SKEY}.fzf.$$.sock"}
 	gc_states quiet
 	[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session nopush
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
@@ -6249,6 +6280,7 @@ _hf) ls_hf && printf '%s\n' "$FZF_ACT" ;;
 sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;
+_boot) need_session && home_boot "$@" ;;
 _fit) cmd_fit "$@" ;;
 _panes) need_session && list_panes && printf '%s\n' "$PANES" ;;
 _seen) cmd_seen "$@" ;;

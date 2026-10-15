@@ -2,7 +2,7 @@
 # Install weaver; with --configure, also wire it into Claude Code (and zellij,
 # when you use weaver there).
 #
-#   ./install.sh                  copy to ~/.local/share/weaver, link ~/.local/bin/weaver
+#   ./install.sh                  build weaver (one binary) into ~/.local/bin/weaver
 #   ./install.sh --configure      also add the zellij keybindings and the Claude Code (and Codex) hooks
 #     --zellij-config FILE        zellij config to edit; repeatable (default: $ZELLIJ_CONFIG_FILE,
 #                                 else ~/.config/zellij/config.kdl). FILE.in templates are
@@ -52,7 +52,7 @@ done
 
 check_deps() {
 	local c missing="" v major minor rest
-	for c in tmux nvim jq git; do
+	for c in go tmux nvim jq git; do
 		command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
 	done
 	[ -z "$missing" ] || die "missing dependencies:$missing"
@@ -80,33 +80,27 @@ check_deps() {
 
 install_files() {
 	if [ $dry = 1 ]; then
-		say "would install $SRC into $DEST and link $BIN/weaver"
+		say "would build $SRC into $BIN/weaver"
 		return
 	fi
-	if [ "$SRC" != "$(cd "$DEST" 2>/dev/null && pwd -P)" ]; then
-		# Into a fresh copy, then swapped in: a hook running meanwhile sees the
-		# old install or the new one, never half of each.
-		rm -rf "$DEST.new"
-		mkdir -p "$DEST.new/config"
-		cp "$SRC/weaver" "$SRC/install.sh" "$DEST.new/"
-		cp -R "$SRC/nvim" "$DEST.new/"
-		cp "$SRC"/config/* "$DEST.new/config/"
-		chmod 755 "$DEST.new/weaver" "$DEST.new/install.sh"
-		rm -rf "$DEST.old"
-		mkdir -p "$(dirname "$DEST")"
-		if [ -e "$DEST" ]; then mv "$DEST" "$DEST.old"; fi
-		mv "$DEST.new" "$DEST"
-		rm -rf "$DEST.old"
-	fi
 	mkdir -p "$BIN"
-	if [ -e "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ]; then
-		die "$BIN/weaver exists and is not a symlink; not replacing it"
+	# Only ever replace weaver: a link an older install made, or a weaver binary.
+	if [ -e "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ] &&
+		! go version -m "$BIN/weaver" 2>/dev/null | grep -q 'github.com/robbowland/weaver'; then
+		die "$BIN/weaver exists and is not weaver; not replacing it"
 	fi
-	ln -sfn "$DEST/weaver" "$BIN/weaver"
-	say "installed $DEST/weaver, linked from $BIN/weaver"
+	# Built beside it, then renamed over it: a hook running meanwhile runs the
+	# old binary or the new one, never half of either.
+	(cd "$SRC" && go build -trimpath -o "$BIN/.weaver.new" ./cmd/weaver) || die "cannot build weaver"
+	mv -f "$BIN/.weaver.new" "$BIN/weaver"
+	# The binary carries the script, the Neovim plugin and the configs (it
+	# unpacks them under $DEST/runtime). An older install's copies beside it
+	# stay while what it started may still use them (an nvim loaded its plugin
+	# from there).
+	say "installed $BIN/weaver"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
-	*) warn "$BIN is not on your PATH; zellij and Claude Code run 'weaver' from PATH" ;;
+	*) warn "$BIN is not on your PATH; tmux and Claude Code run 'weaver' from PATH" ;;
 	esac
 }
 

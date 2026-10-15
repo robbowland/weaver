@@ -14,7 +14,7 @@ ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-tmux.XXXXXX)
 SOCK=$AT/tmux.sock
 S=wt$$
-unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_MUX WEAVER_RESTORE
+unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_MUX WEAVER_RESTORE WEAVER_SH WEAVER_SELF WEAVER_RUNTIME
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
@@ -29,7 +29,10 @@ printf '%s\n' "\$@" >"$AT/args.\${TMUX_PANE#%}"
 exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
-ln -s "$ROOT/weaver" "$AT/bin/weaver"
+# weaver: the binary built from this checkout (carrying its script), its
+# files unpacked here.
+(cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
+export XDG_DATA_HOME=$AT/data WEAVER_SCRIPT=$ROOT/weaver
 export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
 
@@ -82,7 +85,7 @@ panes() { tx list-panes -t "=$S:$1" -F '#{pane_index} #{pane_id} #{pane_width} #
 pane_at() { panes "$1" | awk -v i="$2" '$1 == i { print substr($2, 2) }'; }
 # hookj PANE JSON [--async]: the agent in PANE reports, as Claude Code would.
 hookj() {
-	printf '%s' "$2" | CLAUDE_PID=$(tx display -p -t "%$1" '#{pane_pid}') TMUX="$(tx display -p '#{socket_path}'),0,0" \
+	printf '%s' "$2" | CLAUDE_PID=$(tx display -p -t "%$1" '#{pane_pid}') TMUX="$(tx display -p '#{socket_path},#{pid}'),0" \
 		TMUX_PANE="%$1" WEAVER_TMUX_SESSION=$S weaver hook ${3:-} >/dev/null
 }
 # A tmux server numbers its panes from 0 again: the agents' notes of the last one go.
@@ -272,7 +275,8 @@ waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
 AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ]'
 ok "restart: the thread comes back by itself, resumed, and you stay home" \
-	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--resume sid-1 |0"
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--resume sid-1 |0" ||
+	{ ls "$SD/lost" | sed 's/^/  lost: /'; tail -n 8 "$SD/hook.log" 2>/dev/null | sed 's/^/  log: /'; }
 
 # --- the board's x closes it (y to confirm); Ctrl q quits
 waitfor '[ "$(board_rows)" = 1 ]'

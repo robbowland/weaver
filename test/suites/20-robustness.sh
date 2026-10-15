@@ -95,7 +95,7 @@ ok "...and its state is gone" "$([ -f "$SD/${SK}_2.json" ] && echo kept || echo 
 jq -c '.pane = 3' "$SD/${SK}_0.json" >"$SD/${SK}_3.json"
 FOUND_RACE=$(WEAVER_SOURCED=1 bash -c '. "$1"; session_files json; rm -f "$2"; CLAUDE_LIVE="[]"; list_panes;
 	jq -rRn --argjson panes "$PANES" --argjson now 0 --arg fields "$ROW_FIELDS" "$JQ_ROWS" "${FOUND[@]}" 2>/dev/null | grep -c "^0"' _ \
-	"$AT/bin/weaver" "$SD/${SK}_3.json")
+	"$WEAVER_SCRIPT" "$SD/${SK}_3.json")
 ok "a state file removed while the rows are read: the others are still read" "$FOUND_RACE" "1"
 
 # --- a pid reused by an unrelated process is not the agent

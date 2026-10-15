@@ -30,7 +30,7 @@ as_pane() {
 pane_env() { if [ "$MUX_T" = tmux ]; then printf 'TMUX_PANE=%%%s' "$1"; else printf 'ZELLIJ_PANE_ID=%s' "$1"; fi; }
 pass=0 fail=0
 # weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
-eval "$(grep -m 1 "^G_NEED='" "$AT/bin/weaver")"
+eval "$(grep -m 1 "^G_NEED='" "$WEAVER_SCRIPT")"
 
 ok() {
 	if [ "$2" = "$3" ]; then
@@ -138,7 +138,9 @@ hooka() {
 settle() {
 	local i
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
-		pgrep -f "$AT/bin/weaver hook" >/dev/null 2>&1 || break
+		# The hook's background work: the binary's, or the script it runs
+		# (unpacked under $AT).
+		pgrep -f "$AT/.*weaver hook" >/dev/null 2>&1 || break
 		sleep 0.2
 	done
 	sleep 0.2

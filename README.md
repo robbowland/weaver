@@ -336,15 +336,17 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Install
 
-Needs tmux 3.3+, neovim 0.10+, jq and git; fzf for the interactive
-dashboard, and diffview-plus.nvim in your nvim for reviews; zellij 0.45+ only
-to run weaver there.
+Needs Go to build, tmux 3.3+, neovim 0.10+, jq and git; fzf for the
+interactive dashboard, and diffview-plus.nvim in your nvim for reviews;
+zellij 0.45+ only to run weaver there.
 
 ```sh
 ./install.sh --configure
 ```
 
-This copies weaver to `~/.local/share/weaver`, links `~/.local/bin/weaver`, adds
+This builds weaver, one binary carrying everything it needs, into
+`~/.local/bin/weaver` (it unpacks its Neovim plugin and configs under
+`~/.local/share/weaver/runtime` as it first needs them), adds
 the hooks to `~/.claude/settings.json` (replacing any older weaver hooks) and,
 when zellij is installed, the keybindings to your zellij config, backing up
 each file it changes. weaver's tmux needs no config of yours. The hooks run `~/.local/bin/weaver` directly, without a shell;

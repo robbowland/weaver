@@ -49,7 +49,10 @@ export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi
-ln -s "$ROOT/weaver" "$AT/bin/weaver"
+# weaver: the binary built from this checkout (carrying its script), its
+# files unpacked here.
+(cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
+export XDG_DATA_HOME=$AT/data WEAVER_SCRIPT=$ROOT/weaver
 
 # zellij shim, also first on PATH (weaver calls zellij through PATH too).
 # When the named session is gone, `zellij action` silently picks another

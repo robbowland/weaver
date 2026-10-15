@@ -16,7 +16,7 @@ set -u
 # These tests may run inside a Claude Code agent: nothing of its session may
 # leak into the fake agents.
 unset CLAUDE_PID CLAUDE_CODE_SESSION_ID CLAUDECODE CLAUDE_PROJECT_DIR CLAUDE_ENV_FILE
-unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_MUX WEAVER_TMUX_SESSION WEAVER_TMUX_SOCKET
+unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_MUX WEAVER_TMUX_SESSION WEAVER_TMUX_SOCKET WEAVER_SH WEAVER_SELF WEAVER_RUNTIME
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=${HERE%/test}
@@ -48,7 +48,10 @@ export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi
-ln -s "$ROOT/weaver" "$AT/bin/weaver"
+# weaver: the binary built from this checkout (carrying its script), its
+# files unpacked here.
+(cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
+export XDG_DATA_HOME=$AT/data WEAVER_SCRIPT=$ROOT/weaver
 export PATH="$AT/bin:$PATH"
 
 # The server: its own socket and weaver's tmux config (its keys and hooks);

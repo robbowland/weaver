@@ -2,7 +2,8 @@
 # The contracts between weaver's halves, which no single suite sees whole:
 # the states an agent can be in and their cells, as weaver (state_cell, the
 # G_* glyphs), Neovim (STATES, GLYPH in nvim/lua/weaver) and docs/design.md
-# have them. A second, copied list drifting from the first fails here.
+# have them, and the compiled half's glyphs. A second, copied list drifting
+# from the first fails here.
 #   test/contract.sh
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -38,6 +39,12 @@ for s in $lua_states; do
 done
 state_cell starting
 ok "a starting thread shows as working" "$GCELL" "$G_WORK"
+# The compiled half's glyphs (internal/wv): the script's.
+for g in Need:G_NEED Done:G_DONE Seen:G_SEEN Work:G_WORK Idle:G_IDLE Int:G_INT End:G_END; do
+	eval "want=\$${g#*:}"
+	ok "glyph ${g#*:}: the compiled half's is the script's" \
+		"$(sed -nE "s/^	G${g%%:*} += \"(.*)\"$/\1/p" "$ROOT/internal/wv/board.go")" "$want"
+done
 
 echo "-- $pass passed, $fail failed"
 exit $fail
