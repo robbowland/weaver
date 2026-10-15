@@ -7,6 +7,7 @@
 #   weaver close [pane-id]          close an agent, its nvim and its thread's tab
 #   weaver resume [--all] [which]   bring back threads lost when their zellij went
 #   weaver quit [--yes]             quit the zellij session and everything in it (threads come back)
+#   weaver send PANE < text         the text to an agent's prompt (review notes from its nvim)
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
 #   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
@@ -5712,6 +5713,48 @@ tmux_start() {
 		set-environment -t "=$name" WEAVER_TMUX_SESSION "$name" \; source-file "$conf"
 }
 
+# weaver send [--force] PANE < TEXT: the text to agent PANE's prompt, as if
+# you typed it (a bracketed paste, then enter): review notes from its nvim
+# (:AgentSend). Only while it waits for you to say more (idle, done,
+# interrupted, as the board has it): typed into a dialog it could choose an
+# answer, and the board says when it is free. --force sends anyway (Claude
+# Code queues what you type while it works).
+cmd_send() {
+	local pane="" force=0 text st="" p s
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--force) force=1 ;;
+		-*) die "usage: weaver send [--force] PANE < TEXT" ;;
+		*) pane=${1#terminal_} pane=${pane#%} ;;
+		esac
+		shift
+	done
+	case $pane in '' | *[!0-9]*) die "usage: weaver send [--force] PANE < TEXT" ;; esac
+	[ -t 0 ] && die "usage: weaver send [--force] PANE < TEXT"
+	need_session
+	[ "$MUX" = tmux ] || die "weaver send needs tmux"
+	text=$(cat)
+	case $text in *[![:space:]]*) ;; *) die "nothing to send" ;; esac
+	agent_rows
+	while IFS=$US read -r p _ s _; do
+		[ "$p" = "$pane" ] && st=$s && break
+	done <<EOF2
+$AGENT_ROWS
+EOF2
+	[ -n "$st" ] || die "no agent in pane $pane"
+	if [ $force = 0 ]; then
+		case $st in
+		idle | done | interrupted) ;;
+		needs-you) die "the agent waits on a dialog: answer it first (or --force)" ;;
+		*) die "the agent is $st: send when it waits for you (or --force)" ;;
+		esac
+	fi
+	printf '%s' "$text" | tm load-buffer -b weaver-send - || die "tmux would not take the text"
+	tm paste-buffer -p -d -b weaver-send -t "%$pane" || die "tmux would not paste into pane $pane"
+	sleep 0.2
+	tm send-keys -t "%$pane" Enter
+}
+
 # weaver quit [--yes]: quit the zellij session you are in (outside zellij,
 # the weaver session, $WEAVER_SESSION) with every agent and nvim in it, after
 # asking. Its threads are kept, as when zellij goes: the weaver session brings
@@ -5989,6 +6032,8 @@ usage: weaver [command]
                                alone, list them; with a name, number or session id, bring
                                that one back in a new tab resuming its conversation;
                                --all, every one. --forget [--yes] which: drop one
+  send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
+                               it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with
                                every agent and nvim in it, after asking; its threads are
                                kept and come back as the weaver session starts again
@@ -6016,6 +6061,7 @@ new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
 resume) cmd_resume "$@" ;;
 quit) cmd_quit "$@" ;;
+send) cmd_send "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
 go) cmd_go "$@" ;;

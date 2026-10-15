@@ -572,6 +572,13 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   so a worktree removed under it can never be its directory.
   `$WEAVER_TMUX_SOCKET` is a name (`-L`) or a socket's path (`-S`, which the
   tests use).
+- **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
+  its repository, lines, the version a review shows them in, the lines' text,
+  your note) and `:AgentSend` pipes them, as one message, to `$WEAVER_BIN send
+  $WEAVER_PANE`. `weaver send` checks the agent's state as the board has it
+  (`agent_rows`): only idle, done or interrupted take it (a dialog could take
+  pasted text as an answer), unless `--force`. Then `load-buffer`,
+  `paste-buffer -p -d` (bracketed, so its newlines do not submit) and `Enter`.
 - **Resume:** a lost thread whose directory has gone resumes in its
   repository's main checkout (`.thread.repo`), from which Claude Code finds
   the session in any of its worktrees (and since 2.1.223, in any project). Its left shows

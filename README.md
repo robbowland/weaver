@@ -305,6 +305,16 @@ replaces it. The view refreshes itself as the agent edits.
 | `<leader>aw` | `:AgentWhy` | Which turn and prompt last changed this line (`!` opens that turn) |
 | `<leader>aj` | `:AgentJump` | Go to the agent's latest edit now |
 | `<leader>af` | `:AgentFollow` | Toggle following |
+| `<leader>an` | `:AgentNote` | Note this line (or the selected lines) for the agent |
+| `<leader>as` | `:AgentSend` | Send your notes to the agent (`!` even while it works) |
+
+As you review, note what the agent should change: `<leader>an` on a line or
+a selection, in a review or in any file of its nvim, asks for the note and
+marks the line. `<leader>as` sends them all as one message, each with its
+file, lines and the code it is on, to the agent's prompt as if you typed it
+(`weaver send`), when it waits for you to say more; while it waits on a
+dialog or works, the notes stay for later. `:AgentNotes` lists them in
+quickfix, `:AgentNotesClear` drops them.
 
 In a review, `gf` opens the file at the same line in the tab of its own
 worktree. Untracked files the agent created are listed like any other (your

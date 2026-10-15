@@ -1,6 +1,21 @@
 #!/bin/bash
-# Stand-in for `weaver snapshot --reviewed [dir]` in the headless specs, to
-# the contract in docs/design.md (the specs test the Neovim side alone).
+# Stand-in for weaver in the headless specs, to the contracts in
+# docs/design.md (the specs test the Neovim side alone): `weaver send [--force]
+# PANE` records its arguments and the text in $WEAVER_FAKE_SEND (failing
+# without --force, as weaver does for a busy agent, with $WEAVER_FAKE_SEND_FAIL
+# set), and
+# `weaver snapshot --reviewed [dir]` takes the reviewed snapshot.
+if [ "${1:-}" = send ]; then
+	if [ -n "${WEAVER_FAKE_SEND_FAIL:-}" ] && [ "${2:-}" != --force ]; then
+		echo "weaver: the agent is working: send when it waits for you (or --force)" >&2
+		exit 1
+	fi
+	{
+		printf '%s\n' "$*"
+		cat
+	} >"${WEAVER_FAKE_SEND:?}"
+	exit 0
+fi
 [ "${1:-}" = snapshot ] && [ "${2:-}" = --reviewed ] || exit 2
 cd "${3:-$PWD}" 2>/dev/null || exit 1
 top=$(git rev-parse --show-toplevel 2>/dev/null) || {

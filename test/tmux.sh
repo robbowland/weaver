@@ -165,6 +165,12 @@ waitfor '[ "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" = true ]' 60
 ok "...staying on it, it is seen and the flag goes" \
 	"$(jq -r .seen "$SD/tmux-${S}_$AG.json")|$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" "true|"
 
+# --- review notes from its nvim reach its prompt (weaver send), as typed
+tx run-shell -t "=$S:" "printf 'Review notes: look at line 3' | weaver send $AG >/dev/null 2>&1"
+waitfor '[ "$(tx capture-pane -p -t "%$AG" | grep -c "Review notes: look at line 3")" -gt 0 ]'
+ok "send: the notes at the agent's prompt, entered" \
+	"$([ "$(tx capture-pane -p -t "%$AG" | grep -c 'Review notes: look at line 3')" -gt 0 ] && echo there)" "there"
+
 # --- the keys
 tx select-window -t "=$S:1" \; select-pane -t "%$AG"
 key 1b79 # Alt y
@@ -189,6 +195,11 @@ NV=$(pane_at 1 0)
 ok "Alt v: its nvim closed, back on the left, bound, the agent at its width" \
 	"$(panes 1 | awk '{ printf "%s:%s ", $1, $3 }')|$(head -n 1 "$SD/tmux-${S}_$AG.nvim")" "0:155 1:44 |$NV"
 hookj "$AG" "$(ev PermissionRequest ',"tool_name":"Bash","tool_input":{"command":"git push --force"}')"
+tx run-shell -t "=$S:" "printf 'a dialog answer' | weaver send $AG >$AT/send.out 2>&1; echo \$? >>$AT/send.out"
+sleep 0.5
+ok "send: not while it waits on a dialog" \
+	"$(tr '\n' '|' <"$AT/send.out")|$(tx capture-pane -p -t "%$AG" | grep -c 'a dialog answer')" \
+	"weaver: the agent waits on a dialog: answer it first (or --force)|1||0"
 key 1b79
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 n=$(grep -c 'weaver: \[1/1\] 01 say hello · needs you' "$AT/screen.log")

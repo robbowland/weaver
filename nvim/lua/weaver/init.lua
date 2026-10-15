@@ -115,6 +115,21 @@ local function commands()
     bang = true,
     desc = 'weaver: which turn and prompt last changed this line (! opens that turn)',
   })
+  cmd('AgentNote', function(o) require('weaver.notes').add(o.line1, o.line2, o.args ~= '' and o.args or nil) end, {
+    range = true,
+    nargs = '?',
+    desc = 'weaver: note these lines for the agent (the note, else asked for)',
+  })
+  cmd('AgentSend', function(o) require('weaver.notes').send(o.bang) end, {
+    bang = true,
+    desc = 'weaver: send your notes to the agent (! even while it works)',
+  })
+  cmd('AgentNotes', function() require('weaver.notes').list() end, {
+    desc = 'weaver: your notes in the quickfix list',
+  })
+  cmd('AgentNotesClear', function() require('weaver.notes').clear() end, {
+    desc = 'weaver: drop your notes',
+  })
 end
 
 M.KEYS = {
@@ -130,6 +145,8 @@ M.KEYS = {
   { 'l', 'AgentLog', 'Activity log' },
   { 'w', 'AgentWhy', 'Why is this line here' },
   { 'c', 'AgentChanges turn', 'Last turn hunks in quickfix' },
+  { 'n', 'AgentNote', 'Note this line for the agent' },
+  { 's', 'AgentSend', 'Send your notes to the agent' },
 }
 
 -- <leader>a… unless you have mapped those keys yourself.
@@ -142,6 +159,10 @@ local function keys()
     local lhs = prefix .. k[1]
     if vim.fn.maparg(lhs, 'n') == '' then
       vim.keymap.set('n', lhs, '<cmd>' .. k[2] .. '<cr>', { desc = 'weaver: ' .. k[3] })
+    end
+    -- A note on the lines you selected.
+    if k[2] == 'AgentNote' and vim.fn.maparg(lhs, 'x') == '' then
+      vim.keymap.set('x', lhs, ':AgentNote<cr>', { desc = 'weaver: Note these lines for the agent', silent = true })
     end
   end
   local ok, wk = pcall(require, 'which-key')
