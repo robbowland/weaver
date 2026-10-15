@@ -12,7 +12,7 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-tmux.XXXXXX)
-SOCK=weaver-test-$$
+SOCK=$AT/tmux.sock
 S=wt$$
 unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_MUX WEAVER_RESTORE
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
@@ -43,7 +43,7 @@ ok() {
 		fail=$((fail + 1))
 	fi
 }
-tx() { tmux -L "$SOCK" "$@"; }
+tx() { tmux -S "$SOCK" "$@"; }
 # waitfor CONDITION [TENTHS]: until it holds, at most TENTHS tenths of a second.
 waitfor() {
 	local i
@@ -79,10 +79,10 @@ windows() { tx list-windows -t "=$S" -F '#{window_index}' | tr '\n' ' '; }
 where() { tx display -p -t "=$S:" '#{window_index} #{pane_id}'; }
 panes() { tx list-panes -t "=$S:$1" -F '#{pane_index} #{pane_id} #{pane_width} #{pane_start_command}'; }
 pane_at() { panes "$1" | awk -v i="$2" '$1 == i { print substr($2, 2) }'; }
-# hookj PANE JSON: the agent in PANE reports, as Claude Code would.
+# hookj PANE JSON [--async]: the agent in PANE reports, as Claude Code would.
 hookj() {
 	printf '%s' "$2" | CLAUDE_PID=$(tx display -p -t "%$1" '#{pane_pid}') TMUX="$(tx display -p '#{socket_path}'),0,0" \
-		TMUX_PANE="%$1" WEAVER_TMUX_SESSION=$S weaver hook >/dev/null
+		TMUX_PANE="%$1" WEAVER_TMUX_SESSION=$S weaver hook ${3:-} >/dev/null
 }
 # A tmux server numbers its panes from 0 again: the agents' notes of the last one go.
 fresh_args() { rm -f "$AT"/args.*; }
@@ -110,6 +110,8 @@ attach
 ok "weaver: tmux by default, its own server, home in window 0 with the board" \
 	"$(tx list-windows -t "=$S" -F '#{window_index} #{window_name}')|$(panes 0 | grep -c ' home$')|$([ -S "$(board)" ] && echo board)" \
 	"0 home|1|board"
+ok "weaver: the server runs from /, never a worktree that may go" \
+	"$(lsof -a -p "$(tx display -p '#{pid}')" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')" "/"
 
 # --- a thread, as Alt N's form makes it (weaver new, here)
 tx run-shell -t "=$S:" "cd '$AT/repo' && weaver new --here 'say hello' >/dev/null 2>&1"
@@ -120,19 +122,48 @@ ok "new: window 1, nvim on the left, the agent on the right at its least width" 
 	"$(windows)|$(panes 1 | awk '{ printf "%s:%s ", $1, $3 }')|$(panes 1 | grep -c ' nvim --thread ')|$(panes 1 | grep -c ' _agent ')" \
 	"0 1 |0:155 1:44 |1|1"
 ok "new: the agent took the task, and its nvim is bound to it" \
-	"$(cat "$AT/args.$AG")|$(head -n 1 "$SD/tmux-${S}_$AG.nvim")" "say hello|$NV"
+	"$(tail -n 1 "$AT/args.$AG")|$(head -n 1 "$SD/tmux-${S}_$AG.nvim")" "say hello|$NV"
+ok "new: on a session id weaver chose, kept in the thread record, named for the thread" \
+	"$(sed -n '1p;3p;4p' "$AT/args.$AG" | tr '\n' ' ')|$(sed -n 2p "$AT/args.$AG")" \
+	"--session-id -n say-hello |$(jq -r .session_id "$SD/tmux-${S}_$AG.thread")"
 
 # --- hooks: the agent's state under the session's tmux key and its pane
 hookj "$AG" "$(ev SessionStart ',"source":"startup"')"
 hookj "$AG" "$(ev UserPromptSubmit ',"prompt":"say hello"')"
 ok "hook: working, turn 1, its nvim" "$(jq -r '"\(.state) \(.turn) \(.nvim_pane)"' "$SD/tmux-${S}_$AG.json" 2>/dev/null)" "working 1 $NV"
+# Async hooks land in any order: a tool event of a turn that has ended, late,
+# leaves it done (even past the 3 s that cover events without a prompt id).
+hookj "$AG" "$(ev Stop ',"prompt_id":"p1","last_assistant_message":"hello"')"
+jq -c '.since -= 10' "$SD/tmux-${S}_$AG.json" >"$AT/st.json" && mv "$AT/st.json" "$SD/tmux-${S}_$AG.json"
+hookj "$AG" "$(ev PostToolUse ',"prompt_id":"p1","tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}')" --async
+ok "hook: a late tool event of the turn that ended leaves it done" "$(jq -r .state "$SD/tmux-${S}_$AG.json")" "done"
+hookj "$AG" "$(ev UserPromptSubmit ',"prompt_id":"p2","prompt":"go on"')"
+ok "...and the next prompt is working again" "$(jq -r .state "$SD/tmux-${S}_$AG.json")" "working"
 waitfor '[ "$(tx display -p -t "=$S:1" "#{window_name}")" = "01 say hello · repo/main" ]'
 ok "hook: the thread's window takes its label" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
+waitfor '[ -n "$(weaver status --tmux "$S")" ]'
 ok "status: the counts for tmux's status line" "$(weaver status --tmux "$S")" \
 	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 ok "...set on the session for its status line to show, nothing polled" \
 	"$(tx show -v -t "=$S:" @weaver-counts)|$(tx show -gv status-interval)" \
 	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  |0"
+
+# --- seen when you look: a thread done while you are elsewhere stays new until
+# you stay on its window a moment (tmux's pane-focus-in hook)
+tx select-window -t "=$S:0"
+hookj "$AG" "$(ev Stop ',"prompt_id":"p2","last_assistant_message":"hello again"')"
+waitfor '[ "$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" = 1 ]'
+ok "seen: a thread done while you are elsewhere is flagged, and new" \
+	"$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)|$(jq -r .seen "$SD/tmux-${S}_$AG.json")" "1|false"
+tx select-window -t "=$S:1"
+sleep 0.3
+tx select-window -t "=$S:0"
+sleep 2.5
+ok "...passing through its window, it stays new" "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" "false"
+tx select-window -t "=$S:1"
+waitfor '[ "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" = true ]' 60
+ok "...staying on it, it is seen and the flag goes" \
+	"$(jq -r .seen "$SD/tmux-${S}_$AG.json")|$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" "true|"
 
 # --- the keys
 tx select-window -t "=$S:1" \; select-pane -t "%$AG"
@@ -160,9 +191,12 @@ ok "Alt v: its nvim closed, back on the left, bound, the agent at its width" \
 hookj "$AG" "$(ev PermissionRequest ',"tool_name":"Bash","tool_input":{"command":"git push --force"}')"
 key 1b79
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+n=$(grep -c 'weaver: \[1/1\] 01 say hello · needs you' "$AT/screen.log")
 key 1b31 # Alt 1
 waitfor '[ "$(where)" = "1 %$AG" ]'
 ok "Alt 1: to the agent that needs you" "$(where)" "1 %$AG"
+waitfor '[ "$(grep -c "weaver: \[1/1\] 01 say hello · needs you" "$AT/screen.log")" -gt "$n" ]'
+ok "...saying where it landed" "$([ "$(grep -c 'weaver: \[1/1\] 01 say hello · needs you' "$AT/screen.log")" -gt "$n" ] && echo said)" "said"
 key 1b5b3130303b397e # Cmd+D, as Ghostty sends it (csi:100;9~)
 waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 3 ]'
 ok "Cmd+D: splits the pane" "$(panes 1 | wc -l | tr -d ' ')" "3"
@@ -174,7 +208,7 @@ import os, pty, struct, fcntl, termios, sys, time
 pid, fd = pty.fork()
 if pid == 0:
     fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack('HHHH', 35, 120, 0, 0))
-    os.execvp('tmux', ['tmux', '-L', os.environ['WEAVER_TMUX_SOCKET'], 'attach', '-t', '=' + os.environ['WEAVER_SESSION']])
+    os.execvp('tmux', ['tmux', '-S', os.environ['WEAVER_TMUX_SOCKET'], 'attach', '-t', '=' + os.environ['WEAVER_SESSION']])
 while True:
     try:
         if not os.read(fd, 65536):
@@ -209,7 +243,7 @@ AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ]'
 ok "board: enter resumes it in its window, its conversation resumed" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(ls "$SD/lost" | wc -l | tr -d ' ')" "0 1 |--resume sid-1 |0"
-ok "...its turns carry on" "$(jq -r '"\(.turn) \(.session_id)"' "$SD/tmux-${S}_$AG.json")" "1 sid-1"
+ok "...its turns carry on" "$(jq -r '"\(.turn) \(.session_id)"' "$SD/tmux-${S}_$AG.json")" "2 sid-1"
 # Its agent reports as a resumed Claude Code does: its window takes its label
 # (window ids start again with the server, so its old one counts for nothing).
 hookj "$AG" "$(ev SessionStart ',"source":"resume"')"
@@ -236,6 +270,24 @@ ok "board: x closes the thread, its window and its files" "$(windows)|$(ls "$SD"
 key 11 # Ctrl q
 waitfor "! tx has-session -t =$S 2>/dev/null"
 ok "Ctrl q: the session goes" "$(tx has-session -t "=$S" 2>/dev/null && echo running || echo gone)" "gone"
+
+# --- a thread whose worktree has gone resumes from its repository (Claude Code
+# finds the session in any of its worktrees)
+waitfor '! kill -0 "$driver" 2>/dev/null'
+fresh_args
+mkdir -p "$SD/lost"
+jq -n --arg skey "tmux-$S" --arg gone "$AT/gone" --arg repo "$AT/repo" --argjson now "$(date +%s)" \
+	'{lost: $now, skey: $skey,
+	  state: {pane: 9, agent: "claude", state: "ended", session_id: "sid-g", turn: 1, cwd: $gone, root: $gone, start_cwd: $gone},
+	  thread: {num: 2, name: "gone-wt", task: "the old one", repo: $repo, worktree: $gone, agent: "claude", cmd: "claude"}}' \
+	>"$SD/lost/tmux-${S}_sid-g.json"
+attach
+waitfor '[ "$(panes 2 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+AG=$(pane_at 2 1)
+waitfor '[ -f "$AT/args.$AG" ]'
+ok "resume: its worktree gone, from its repository" \
+	"$(windows)|$(tx display -p -t "%$AG" '#{pane_current_path}')|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)" \
+	"0 2 |$(cd "$AT/repo" && pwd -P)|--resume sid-g "
 
 echo "-- $pass passed, $fail failed"
 exit $fail

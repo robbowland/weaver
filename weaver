@@ -154,12 +154,19 @@ need_session() {
 # is a tmux window (its id @N as N, its index as its position), a pane's id
 # %N is N, and nothing floats (tmux's popups are not panes).
 
-# tmux: the server we run in, else weaver's own ($WEAVER_TMUX_SOCKET).
+# weaver's own tmux server: $WEAVER_TMUX_SOCKET, a name (tmux -L) or a
+# socket's path (tmux -S); "weaver" by default.
+case ${WEAVER_TMUX_SOCKET:-weaver} in
+*/*) TSOCK=(-S "$WEAVER_TMUX_SOCKET") ;;
+*) TSOCK=(-L "${WEAVER_TMUX_SOCKET:-weaver}") ;;
+esac
+
+# tmux: the server we run in, else weaver's own.
 tm() {
 	if [ -n "${TMUX:-}" ]; then
 		tmux "$@"
 	else
-		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" "$@"
+		tmux "${TSOCK[@]}" "$@"
 	fi
 }
 
@@ -236,21 +243,16 @@ mux_screen() {
 	fi
 }
 
-# Your clients, into MUX_CLIENT_PANES (the panes they look at, " 3 7 ") and,
-# in tmux, MUX_CLIENT_NAMES (those on this session, to refresh). One call.
+# The panes your clients are looking at, into MUX_CLIENT_PANES (" 3 7 ").
 mux_clients() {
-	local out name pane sess
-	MUX_CLIENT_PANES=" " MUX_CLIENT_NAMES=""
-	if [ "$MUX" != tmux ]; then
+	local out
+	if [ "$MUX" = tmux ]; then
+		out=$(tm list-clients -F '#{pane_id}' 2>/dev/null)
+		out=${out//%/}
+		MUX_CLIENT_PANES=" ${out//$NL/ } "
+	else
 		MUX_CLIENT_PANES=" $(zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }')"
-		return 0
 	fi
-	out=$(tm list-clients -F "#{client_name}$US#{pane_id}$US#{session_name}" 2>/dev/null)
-	while IFS=$US read -r name pane sess; do
-		[ -n "$name" ] || continue
-		MUX_CLIENT_PANES="$MUX_CLIENT_PANES${pane#%} "
-		[ "$sess" = "$SESSION" ] && MUX_CLIENT_NAMES="$MUX_CLIENT_NAMES $name"
-	done <<<"$out"
 	return 0
 }
 
@@ -260,7 +262,7 @@ mux_session_keys() {
 	zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g'
 	command -v tmux >/dev/null 2>&1 || return 0
 	{
-		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" list-sessions -F '#S' 2>/dev/null
+		tmux "${TSOCK[@]}" list-sessions -F '#S' 2>/dev/null
 		[ -n "${TMUX:-}" ] && tmux list-sessions -F '#S' 2>/dev/null
 	} | sed 's|/|_|g; s|^|tmux-|'
 }
@@ -808,9 +810,17 @@ hook_run() {
 			# Another tool finished while one still waits for you.
 			state=needs-you
 		else
-			# A late async hook must not undo a Stop or an interrupt.
+			# A late async hook must not undo a Stop or an interrupt: async
+			# hooks run in parallel and land in any order. One of the turn
+			# that ended (its prompt_id) never does; without a prompt_id,
+			# one within 3 s of it.
 			case $o_state in
-			done | idle | interrupted) [ $((now - ${o_since:-0})) -lt 3 ] 2>/dev/null && state=$o_state ;;
+			done | idle | interrupted)
+				if { [ -n "$prompt_id" ] && [ "$prompt_id" = "$o_promptid" ]; } ||
+					[ $((now - ${o_since:-0})) -lt 3 ] 2>/dev/null; then
+					state=$o_state
+				fi
+				;;
 			ended) state=ended ;;
 			esac
 		fi
@@ -1378,6 +1388,15 @@ hook_bg() {
 		if [ "$state" != "$o_state" ] || [ "$turn" != "${o_turn:-0}" ] || [ "$prompt" != "$o_prompt" ] ||
 			[ "$title" != "$o_title" ]; then
 			nvim_state_event
+		fi
+	fi
+	# tmux: the window of an agent that has just finished is flagged, for
+	# config/tmux.conf's pane-focus-in hook to mark it seen when you look.
+	if [ "$MUX" = tmux ] && [ "$state" != "$o_state" ]; then
+		if [ "$state" = done ]; then
+			tm set-option -w -t "%$pane" @weaver-unseen 1 >/dev/null 2>&1
+		elif [ "$o_state" = done ]; then
+			tm set-option -w -u -t "%$pane" @weaver-unseen >/dev/null 2>&1
 		fi
 	fi
 	if [ "$state" != "$o_state" ] || [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] ||
@@ -2340,13 +2359,11 @@ gc_states() {
 
 # Counts for the status line, into N_NEED (needs you), N_DONE (done, not yet
 # seen) and N_WORK (working, or a thread starting): the board's rows
-# (agent_rows), so a state is decided by one rule. With "mark", the clients
-# too (MUX_CLIENT_PANES, MUX_CLIENT_NAMES): agents you are looking at count as
-# seen (SEEN_NOW).
+# (agent_rows), so a state is decided by one rule. With "mark", agents your
+# clients are looking at count as seen (SEEN_NOW).
 status_counts() {
 	local pane st seen clients
-	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW="" clients=" " MUX_CLIENT_NAMES=""
-	# The clients (for push_status to refresh) even with no agents to count.
+	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW="" clients=" "
 	if [ "${1:-}" = mark ]; then
 		mux_clients
 		clients=$MUX_CLIENT_PANES
@@ -2385,19 +2402,19 @@ status_text() {
 # "labels" (a title, prompt or branch changed, or the session started), the
 # thread tabs' labels too.
 push_status() {
-	local labels=${1:-} p s q side=""
+	local labels=${1:-} p s q side="" old="" o1 o2 o3
 	status_counts mark
 	for p in $SEEN_NOW; do mark_seen "$p"; done
 	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR"
+	{ read -r o1 o2 o3 _ <"$STATE_DIR/$SKEY.status" && old="$o1 $o2 $o3"; } 2>/dev/null
 	printf '%s %s %s\n' "$N_NEED" "$N_DONE" "$N_WORK" >"$STATE_DIR/$SKEY.status.$$" &&
 		mv -f "$STATE_DIR/$SKEY.status.$$" "$STATE_DIR/$SKEY.status"
-	# tmux's status line shows the session's @weaver-counts: set them, and
-	# redraw its clients' status lines, in one call (no polling).
-	if [ "$MUX" = tmux ]; then
+	# tmux's status line shows the session's @weaver-counts, and an option
+	# set redraws every client: set them when they change (and as the
+	# session starts, whose option is new).
+	if [ "$MUX" = tmux ] && { [ "$labels" = labels ] || [ "$N_NEED $N_DONE $N_WORK" != "$old" ]; }; then
 		counts_fmt "$N_NEED" "$N_DONE" "$N_WORK"
-		set -- set-option -t "=$SESSION:" @weaver-counts "$COUNTS_FMT"
-		for s in $MUX_CLIENT_NAMES; do set -- "$@" \; refresh-client -S -t "$s"; done
-		tm "$@" >/dev/null 2>&1
+		tm set-option -t "=$SESSION:" @weaver-counts "$COUNTS_FMT" >/dev/null 2>&1
 	fi
 	printf -v q '%q' "$SELF"
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
@@ -3756,18 +3773,24 @@ cmd_sidebar() {
 # finished longest ago and you haven't looked at yet. Pressed again on one of
 # those, go on to the next, round and round.
 cmd_next() {
-	local pane tab state since seen class list="" i=0 n=0 at=-1 pick
-	local -a c_pane c_tab
+	local pane tab state since seen prompt waiting title ttask tnum class list="" i=0 n=0 at=-1 pick label
+	local -a c_pane c_tab c_label
 	need_session
 	agent_rows
-	while IFS=$US read -r pane tab state _ since seen _; do
+	while IFS=$US read -r pane tab state _ since seen prompt waiting _ title _ _ _ _ _ _ _ _ _ _ _ _ _ ttask _ tnum _; do
 		[ -n "$pane" ] || continue
 		case $state in
 		needs-you) class=0 ;;
 		done) [ "$seen" = true ] && continue || class=1 ;;
 		*) continue ;;
 		esac
-		list="$list$class$TAB$(printf '%012d' "$since")$TAB$pane$TAB$tab$NL"
+		# What tmux's message line says as you land: whose, and why.
+		label=${title:-${ttask:-$prompt}}
+		label=${label%%"$NL"*}
+		[ ${#label} -gt 40 ] && label="${label:0:39}…"
+		[ -n "$tnum" ] && printf -v label '%02d %s' "$tnum" "$label"
+		if [ "$state" = needs-you ]; then label="$label · needs you${waiting:+ · ${waiting:0:50}}"; else label="$label · done"; fi
+		list="$list$class$TAB$(printf '%012d' "$since")$TAB$pane$TAB$tab$TAB$label$NL"
 	done <<EOF2
 $AGENT_ROWS
 EOF2
@@ -3787,9 +3810,9 @@ EOF2
 	# Where you are now, to go on from there (this hides the floating panes).
 	list_panes
 	focused_pane
-	while IFS=$TAB read -r _ _ pane tab; do
+	while IFS=$TAB read -r _ _ pane tab label; do
 		[ -n "$pane" ] || continue
-		c_pane[n]=$pane c_tab[n]=$tab
+		c_pane[n]=$pane c_tab[n]=$tab c_label[n]=$label
 		n=$((n + 1))
 	done <<EOF2
 $(printf '%s' "$list" | sort -t "$TAB" -k1,1n -k2,2n)
@@ -3800,6 +3823,7 @@ EOF2
 	done
 	pick=$(((at + 1) % n))
 	jump_to "${c_pane[pick]}" "${c_tab[pick]}"
+	[ "$MUX" = tmux ] && tm display-message -d 2500 "weaver: [$((pick + 1))/$n] ${c_label[pick]}" >/dev/null 2>&1
 	push_status
 }
 
@@ -4721,6 +4745,28 @@ weaver_thread {
 }"
 }
 
+# tmux, 1.5 s after you focus window $1, flagged as holding an agent done and
+# unseen (config/tmux.conf's pane-focus-in hook): if you are still on it, its
+# done agents are seen and the counts say so. Passing through, they stay new.
+cmd_seen() {
+	local win=${1:-} p line="" re_s='"state":"done"' re_n='"seen":true'
+	[ "$MUX" = tmux ] || return 0
+	need_session
+	win=${win#@}
+	case $(tm display-message -p -t "@$win" '#{window_active}:#{session_attached}' 2>/dev/null) in
+	1:[1-9]*) ;;
+	*) return 0 ;;
+	esac
+	for p in $(tm list-panes -t "@$win" -F '#{pane_id}' 2>/dev/null); do
+		p=${p#%}
+		line=""
+		{ IFS= read -r line <"$STATE_DIR/${SKEY}_$p.json"; } 2>/dev/null
+		[[ $line =~ $re_s ]] && ! [[ $line =~ $re_n ]] && mark_seen "$p"
+	done
+	tm set-option -w -u -t "@$win" @weaver-unseen >/dev/null 2>&1
+	push_status
+}
+
 # tmux, as window $1 is resized (config/tmux.conf's window-resized hook): its
 # thread's agent back to its width, since tmux takes a narrower window's
 # columns from the rightmost pane, the agent's.
@@ -4824,7 +4870,7 @@ thread_create() {
 # last reply) carries on. Prints where it went; returns 1 with RESTORE_ERR
 # when it cannot (its record stays).
 thread_restore() {
-	local lf=$1 tok d info sid kind dir num name tab now
+	local lf=$1 tok d info sid kind dir num name repo tab now
 	RESTORE_ERR=""
 	tok="$(date +%s)$$$RANDOM"
 	d="$THREADS_NEW/${SKEY}_$tok"
@@ -4836,9 +4882,12 @@ thread_restore() {
 		return 1
 	fi
 	info=$(jq -r "$JQ_LOST"'[.state.session_id // "", .thread.agent // .state.agent // "claude",
-		lost_dir, .thread.num // "", .thread.name // ""]
+		lost_dir, .thread.num // "", .thread.name // "", .thread.repo // ""]
 		| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' "$d/lost.json" 2>/dev/null)
-	IFS=$US read -r sid kind dir num name <<<"$info"
+	IFS=$US read -r sid kind dir num name repo <<<"$info"
+	# Its worktree gone (removed, renamed): its repository's main checkout,
+	# from where Claude Code finds a session in any worktree of it.
+	[ -d "$dir" ] || { [ -n "$repo" ] && [ -d "$repo" ] && dir=$repo; }
 	name=${name:-thread}
 	agent_cmd "$kind" || {
 		kind=claude
@@ -5114,7 +5163,8 @@ cmd_new() {
 # and start the agent with the task. Run again (zellij offers to rerun an
 # exited command): resume the agent's conversation, never send the task twice.
 cmd_agent_pane() {
-	local tok=${1:-} kind=${2:-claude} d task sid="" pane c
+	local tok=${1:-} kind=${2:-claude} d task sid="" pane c name=""
+	local -a ident=()
 	need_session
 	pane=${MY_PANE:-}
 	d="$THREADS_NEW/${SKEY}_$tok"
@@ -5124,8 +5174,19 @@ cmd_agent_pane() {
 		task=$(cat "$d/task")
 		c=$(jq -r '.cmd // empty' "$d/thread.json" 2>/dev/null)
 		[ -n "$c" ] && AGENT_CMD=$c
+		# Claude Code starts on a session id weaver chose, named for the
+		# thread: the thread knows its conversation before its first hook, so
+		# it can be resumed (never `--continue`, which takes the directory's
+		# latest conversation, maybe another's).
+		if [ "$kind" = claude ]; then
+			sid=$(uuidgen 2>/dev/null | tr 'A-F' 'a-f')
+			name=$(jq -r '.name // empty' "$d/thread.json" 2>/dev/null)
+			[ -n "$sid" ] && ident=(--session-id "$sid")
+			[ -n "$name" ] && ident=(${ident[@]+"${ident[@]}"} -n "$name")
+		fi
 		if [ -f "$d/thread.json" ]; then
-			jq -c --argjson pane "$pane" '. + {pane: $pane}' "$d/thread.json" >"$STATE_DIR/${SKEY}_$pane.thread.$$" &&
+			jq -c --argjson pane "$pane" --arg sid "$sid" '. + {pane: $pane} + (if $sid != "" then {session_id: $sid} else {} end)' \
+				"$d/thread.json" >"$STATE_DIR/${SKEY}_$pane.thread.$$" &&
 				mv -f "$STATE_DIR/${SKEY}_$pane.thread.$$" "$STATE_DIR/${SKEY}_$pane.thread"
 		fi
 		rm -f "$d/task" || die "cannot take the task from $d"
@@ -5133,7 +5194,7 @@ cmd_agent_pane() {
 		# A task starting with "-" is not an option.
 		case $task in -*) task=" $task" ;; esac
 		# shellcheck disable=SC2086
-		exec $AGENT_CMD "$task"
+		exec $AGENT_CMD ${ident[@]+"${ident[@]}"} "$task"
 	fi
 	# A lost thread brought back (weaver resume): its record and its state for
 	# this pane, then its conversation, resumed.
@@ -5159,7 +5220,10 @@ cmd_agent_pane() {
 		codex) exec $AGENT_CMD resume "$sid" ;;
 		esac
 	fi
+	# Its pane again (enter on an exited agent): the conversation it was in,
+	# else the one weaver started it on.
 	[ -n "$pane" ] && sid=$(jq -r '.session_id // empty' "$STATE_DIR/${SKEY}_$pane.json" 2>/dev/null)
+	[ -n "$pane" ] && [ -z "$sid" ] && sid=$(jq -r '.session_id // empty' "$STATE_DIR/${SKEY}_$pane.thread" 2>/dev/null)
 	c=$(jq -r '.cmd // empty' "$STATE_DIR/${SKEY}_$pane.thread" 2>/dev/null)
 	[ -n "$c" ] && AGENT_CMD=$c
 	# shellcheck disable=SC2086
@@ -5623,20 +5687,24 @@ EOF2
 # panes know their session ($WEAVER_TMUX_SESSION); zellij's variables, from a
 # zellij this was started in, stay out of it.
 tmux_start() {
-	local name=$1 conf
+	local name=$1 conf here
 	command -v tmux >/dev/null 2>&1 || die "tmux is not installed"
 	SKEY="tmux-${name//\//_}"
 	conf="$(script_dir)/config/tmux.conf"
 	[ -f "$conf" ] || die "missing $conf"
 	set -- env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID -u TMUX -u TMUX_PANE \
-		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" -f "$conf"
+		tmux "${TSOCK[@]}" -f "$conf"
 	if "$@" has-session -t "=$name" 2>/dev/null; then
 		exec "$@" source-file "$conf" \; attach-session -t "=$name"
 	fi
 	mkdir -p "$STATE_DIR"
 	echo weaver >"$STATE_DIR/$SKEY.layout"
 	rm -f "${STATE_DIR:?}/${SKEY:?}.last"
-	exec "$@" new-session -s "$name" -n home -e "WEAVER_TMUX_SESSION=$name" "$SELF" home \; \
+	# The server keeps the directory it starts in: from /, never a worktree
+	# weaver close may remove under it (its new panes would die at once).
+	here=$PWD
+	cd / || die "cannot cd /"
+	exec "$@" new-session -s "$name" -n home -c "$here" -e "WEAVER_TMUX_SESSION=$name" "$SELF" home \; \
 		set-environment -t "=$name" WEAVER_TMUX_SESSION "$name" \; source-file "$conf"
 }
 
@@ -5969,6 +6037,7 @@ sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;
 _fit) cmd_fit "$@" ;;
+_seen) cmd_seen "$@" ;;
 _side) need_session && side_rows "$@" ;;
 _goto) need_session && cmd_goto "$@" ;;
 _focus) need_session && focus_pane "$@" ;;

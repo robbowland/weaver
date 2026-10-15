@@ -1,6 +1,6 @@
 # Helpers for the suites in test/suites/; sourced. Run the suites through
-# test/run.sh, which sets AT and starts the zellij session.
-: "${AT:?run the suites through test/run.sh}"
+# test/zellij.sh, which sets AT and starts the zellij session.
+: "${AT:?run the suites through test/zellij.sh}"
 
 T=$AT/t
 SD=$AT/state/weaver

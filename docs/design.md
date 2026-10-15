@@ -556,9 +556,25 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   is the session's active pane. weaver's keys pass `#{pane_id}` to `run-shell`
   as well.
 - **Status line:** tmux's own, showing the session's `@weaver-counts`, which
-  `push_status` sets (in zjstatus's `#[...]` styles, `counts_fmt`) and redraws
-  each client on the session with, in one tmux call; `status-interval` is 0,
-  so nothing polls. `weaver status --tmux SESSION` still prints them. Its left shows
+  `push_status` sets (in zjstatus's `#[...]` styles, `counts_fmt`) when the
+  counts change, or as the session starts; setting an option redraws every
+  client, and `status-interval` is 0, so nothing polls. `weaver status --tmux
+  SESSION` still prints them.
+- **Seen as you look:** when an agent finishes, hook_bg flags its window
+  (`@weaver-unseen`). tmux's `pane-focus-in` hook, on a flagged window, runs
+  `weaver _seen <window>` 1.5 s later, which marks its done agents seen only
+  if the window is still the session's current one: passing through with Alt
+  j/k leaves them new. (A thread that finishes while you are on it is seen at
+  once, as before: status_counts sees the clients' panes.)
+- **Alt 1** says where it landed in tmux's message line: `[2/3] 02 name ·
+  needs you · what it waits on`.
+- **Server:** started from `/` (the home window keeps your directory, `-c`),
+  so a worktree removed under it can never be its directory.
+  `$WEAVER_TMUX_SOCKET` is a name (`-L`) or a socket's path (`-S`, which the
+  tests use).
+- **Resume:** a lost thread whose directory has gone resumes in its
+  repository's main checkout (`.thread.repo`), from which Claude Code finds
+  the session in any of its worktrees (and since 2.1.223, in any project). Its left shows
   the current window's name, so `push_status` labels the thread windows
   (`thread_tab_labels`) in tmux's weaver session even without a sidebar; a
   window is renamed when its name (from PANES' `tab_name`) is not its label,
@@ -920,3 +936,16 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   in Ghostty (`macos-option-as-alt`) and deletes a word in a shell. Nothing
   else claims the `~` form, so `user-keys` catch it; zellij no longer splits
   on Cmd+D once Ghostty sends it.
+- 2026-10-15: zellij is benched (Rob: "focus on tmux"). Its code stays as it
+  is; its suites move to `test/zellij.sh` and no longer run by default.
+  `test/run.sh` is the contract test, the Neovim specs and the tmux suite.
+- 2026-10-15: A pass informed by prior art (workmux, agent-deck, herdr,
+  claude-squad, cmux, tmux-claude-hatch) and by Claude Code's, Codex's and
+  tmux's own documentation: async hooks land in any order, so a late tool
+  event of a finished turn (its prompt_id) never reopens it; Claude Code
+  starts on a session id weaver chose (`--session-id`, named with `-n`), so a
+  thread knows its conversation before its first hook and is never resumed
+  with `--continue`; the server starts from `/`; seen marks a finished agent
+  as you look rather than as a hook next fires; tmux redraws on an option
+  change, so no client is refreshed by hand; and popups run weaver without
+  the user's shell.

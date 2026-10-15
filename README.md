@@ -39,8 +39,9 @@ its first prompt, in a new worktree on a branch named after the task.
 Agents you start by hand in any tmux session report to weaver as well, and
 `weaver` inside such a session opens its dashboard.
 
-### On zellij
+### On zellij (benched)
 
+zellij is benched: kept as it is, no longer tested or developed.
 `WEAVER_MUX=zellij weaver` runs the same session in zellij (0.45+) instead,
 with weaver's layout (`layouts/weaver.kdl` in your zellij config directory,
 else weaver's) and keys (`weaver-keys.kdl` beside your config, else weaver's,
@@ -372,22 +373,23 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 ## Tests
 
 ```sh
-test/run.sh [suite...]
+test/run.sh
 ```
 
-End-to-end, in a throwaway zellij session with its own state, Claude Code
-config dir and minimal nvim config; your real sessions are not touched. Each
-suite starts from a clean slate, so any one can run alone.
-`test/suites/05-latency.sh` measures what each hook costs the agent.
-`test/run.sh` with no suites also runs `test/contract.sh` (the states and
-glyphs weaver, its Neovim side and this design agree on) and `test/tmux.sh`, which runs weaver on
-tmux end to end in about 40 seconds: `weaver` starts its session on a
-throwaway tmux server in a pseudo-terminal and the tests press its keys
-there (threads, hooks, Alt y, Alt v, Alt 1, Cmd+D, Alt N, the board, a crash
-and its threads resumed, Ctrl q).
-`test/nvim/run.sh` runs only the Neovim specs (headless, a few seconds); set
-`WEAVER_TEST_PLUGINS` to a directory holding `diffview-plus.nvim` if
-lazy.nvim's plugin directory doesn't have it.
-`WEAVER_TEST_ZJSTATUS=1 test/run.sh test/soak/zjstatus.sh` soaks the status
-bar widget in zjstatus for a few minutes (it asks zellij for zjstatus's
-permissions, and puts zellij's permission cache back as it was).
+runs, in about two minutes, each with its own state and nothing of yours
+touched:
+
+- `test/contract.sh`: the states and glyphs weaver, its Neovim side and the
+  design doc agree on;
+- `test/nvim/run.sh`: the Neovim specs, headless (set `WEAVER_TEST_PLUGINS`
+  to a directory holding `diffview-plus.nvim` if lazy.nvim's plugin
+  directory doesn't have it);
+- `test/tmux.sh`: weaver on tmux end to end. `weaver` starts its session on a
+  throwaway tmux server in a pseudo-terminal and the tests press its keys
+  there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
+  Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
+  their threads resumed, Ctrl q.
+
+zellij is benched: its end-to-end suites (`test/suites/`, which also cover
+the hooks' state machine in depth) still run with `test/zellij.sh [suite...]`
+in a throwaway zellij session, but are no longer kept up.

@@ -53,7 +53,10 @@ WT=$T/repo.fix-the-flaky-test
 ok "new: Worktrunk made the worktree, on a new branch" \
 	"$(git -C "$WT" symbolic-ref --short HEAD 2>/dev/null)" "fix-the-flaky-test"
 waitfor "[ -f '$AT/args.claude.$AG' ]"
-ok "new: the agent started with the task as its prompt" "$(cat "$AT/args.claude.$AG" 2>/dev/null)" "Fix the flaky test!"
+ok "new: the agent started with the task as its prompt" "$(tail -n 1 "$AT/args.claude.$AG" 2>/dev/null)" "Fix the flaky test!"
+ok "new: on a session id weaver chose, kept in the thread record, and named for the thread" \
+	"$(sed -n '1p;3p;4p' "$AT/args.claude.$AG" | tr '\n' ' ')|$(sed -n 2p "$AT/args.claude.$AG")" \
+	"--session-id -n $(th "$AG" name) |$(th "$AG" session_id)"
 ok "new: the thread record" \
 	"$(th "$AG" name)|$(th "$AG" task)|$(th "$AG" branch)|$(th "$AG" worktree)|$(th "$AG" here)|$(th "$AG" worktree_created)|$(th "$AG" agent)|$(th "$AG" repo)|$(th "$AG" pane)" \
 	"fix-the-flaky-test|Fix the flaky test!|fix-the-flaky-test|$WT|false|true|claude|$T/repo|$AG"
@@ -134,7 +137,7 @@ tab=$(tab_named other-command)
 TABS="$TABS $tab"
 thread_panes "$tab"
 waitfor "[ -f '$AT/args.codex.$AG' ]"
-ok "new: WEAVER_CLAUDE is the command a claude thread runs" "$(tr '\n' ' ' <"$AT/args.codex.$AG" 2>/dev/null)" "--from-env other command "
+ok "new: WEAVER_CLAUDE is the command a claude thread runs" "$(sed -n '1p;$p' "$AT/args.codex.$AG" 2>/dev/null | tr '\n' ' ')" "--from-env other command "
 
 # --- refusals
 out=$(cd "$AT" && weaver new --no-focus "outside" 2>&1)
@@ -239,7 +242,7 @@ ok "split: nvim back on the left, the agent a fifth of the width again" \
 	"$([ "$a" -ge 36 ] && [ "$a" -le 44 ] && [ "$n" -gt "$a" ] && echo yes)|$(Z list-panes -a -j | jq -r "[.[] | select((.is_plugin | not) and (.id == $nv or .id == $AG))] | sort_by(.pane_x) | map(.id | tostring) | join(\",\")")" \
 	"yes|$nv,$AG"
 ok "split: the same agent, still running" \
-	"$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin | not) and .id == $AG) | .exited")|$(cat "$AT/args.claude.$AG")" "false|split again"
+	"$(Z list-panes -a -j | jq -r ".[] | select((.is_plugin | not) and .id == $AG) | .exited")|$(tail -n 1 "$AT/args.claude.$AG")" "false|split again"
 # The agent's minimum (WEAVER_AGENT_MIN_COLS, 44 by default) wins over its
 # 20% when that is narrower: here 60 of 200 columns.
 Z close-pane --pane-id "terminal_$nv"
@@ -415,7 +418,7 @@ tab=$(tab_named long-one)
 TABS="$TABS $tab"
 thread_panes "$tab"
 waitfor "[ -f '$AT/args.claude.$AG' ]"
-ok "form: named after its first line; the agent gets all of it" "$(cat "$AT/args.claude.$AG" 2>/dev/null | tr '\n' '|')" "long one|second line|"
+ok "form: named after its first line; the agent gets all of it" "$(tail -n +5 "$AT/args.claude.$AG" 2>/dev/null | tr '\n' '|')" "long one|second line|"
 
 focus 0
 before=$(Z list-tabs -j | jq length)
