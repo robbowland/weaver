@@ -41,6 +41,7 @@ ok() {
 	else
 		echo "FAIL $1: got [$2] want [$3]"
 		fail=$((fail + 1))
+		return 1
 	fi
 }
 tx() { tmux -S "$SOCK" "$@"; }
@@ -155,13 +156,15 @@ hookj "$AG" "$(ev Stop ',"prompt_id":"p2","last_assistant_message":"hello again"
 waitfor '[ "$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" = 1 ]'
 ok "seen: a thread done while you are elsewhere is flagged, and new" \
 	"$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)|$(jq -r .seen "$SD/tmux-${S}_$AG.json")" "1|false"
+# (The Stop's own push done first: it counts what you look at as seen.)
+waitfor 'case $(tx show -v -t "=$S:" @weaver-counts) in *39d97a*) true ;; *) false ;; esac'
 tx select-window -t "=$S:1"
 sleep 0.3
 tx select-window -t "=$S:0"
 sleep 2.5
 ok "...passing through its window, it stays new" "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" "false"
 tx select-window -t "=$S:1"
-waitfor '[ "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" = true ]' 60
+waitfor '[ "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" = true ] && [ -z "$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" ]' 60
 ok "...staying on it, it is seen and the flag goes" \
 	"$(jq -r .seen "$SD/tmux-${S}_$AG.json")|$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" "true|"
 
@@ -254,7 +257,8 @@ AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ]'
 ok "board: enter resumes it in its window, its conversation resumed" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(ls "$SD/lost" | wc -l | tr -d ' ')" "0 1 |--resume sid-1 |0"
-ok "...its turns carry on" "$(jq -r '"\(.turn) \(.session_id)"' "$SD/tmux-${S}_$AG.json")" "2 sid-1"
+ok "...its turns carry on" "$(jq -r '"\(.turn) \(.session_id)"' "$SD/tmux-${S}_$AG.json")" "2 sid-1" ||
+	{ echo "  state: $(cat "$SD/tmux-${S}_$AG.json")"; tail -n 5 "$SD/log/sid-1.jsonl" 2>/dev/null | sed 's/^/  log: /'; }
 # Its agent reports as a resumed Claude Code does: its window takes its label
 # (window ids start again with the server, so its old one counts for nothing).
 hookj "$AG" "$(ev SessionStart ',"source":"resume"')"
