@@ -101,6 +101,25 @@ merged into the default branch or pushed), it then offers to remove it
 When the agent exits its pane stays; enter there resumes its conversation
 (`claude --resume`, `codex resume`), never sending the task twice.
 
+### When zellij goes
+
+A thread lasts until you close it. If zellij crashes, or you quit it, while
+a thread's agent runs, the thread is kept as lost rather than forgotten:
+
+- `weaver` brings the `weaver` session back with its threads, each in its
+  tab, its number kept, its agent resuming its conversation beside a bound
+  nvim (`WEAVER_RESTORE=0` lists them on home instead). zellij does not
+  resurrect that session itself: it would rerun `claude <task>`, a new
+  conversation sent the task again.
+- Anywhere else, lost threads are listed last on the dashboard, under `LOST`:
+  enter resumes one in a new tab, `x` forgets it (its worktree stays).
+- `weaver resume` lists them; `weaver resume NAME` (a number, or a session
+  id) brings one back, `--all` every one, `--forget NAME` drops one.
+
+An agent you ended yourself (`/exit`), or whose tab you closed while zellij
+ran on, is not lost. Agents you started by hand, outside a thread, are not
+kept: `claude --resume` finds them.
+
 ## What it tracks
 
 Each agent is **working**, **needs you** (a permission dialog, a question, an
@@ -146,7 +165,8 @@ zellij marks its tab until you look at it.
 
 Agents are grouped under NEEDS YOU, DONE (finished, not yet seen), WORKING
 and IDLE (seen, idle or interrupted), in the order `Alt 1` visits them; the
-headings' counts are the status bar's. Each row is the thread's name, one fact
+headings' counts are the status bar's. Threads lost when zellij went come
+last, under LOST ([When zellij goes](#when-zellij-goes)). Each row is the thread's name, one fact
 (what it waits on, what its last turn changed and said, its subagents),
 repo/branch when there is room, and how long it has been in that state. The
 states are Micrographics task cells, which read without colour: `[!]` needs you,
@@ -303,6 +323,7 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
 | `WEAVER_SESSION` | `weaver` | The zellij session `weaver` attaches to or starts |
+| `WEAVER_RESTORE` | `1` | `0`: the weaver session, starting again after zellij went, lists its lost threads on home instead of resuming them |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread tab's width (`25%`), or columns (`60`) |
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as nvim keeps 60 columns |
 | `WEAVER_SIDEBAR` | `0` | `1`: thread tabs in the weaver session get the thread sidebar on their left |

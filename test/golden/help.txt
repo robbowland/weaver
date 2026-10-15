@@ -16,3 +16,7 @@ threads
   [x]  done, seen   [ ]  idle    [-]  interrupted
 
   ×2  two agents share the worktree: their turn diffs mix
+
+lost (its zellij went: a crash, or quit)
+  ⏎           resume it in a new tab (weaver resume)
+  x           forget it (its worktree stays)

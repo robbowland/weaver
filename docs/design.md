@@ -21,6 +21,7 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
+| `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its zellij (see [Lost threads](#lost-threads)); pruned after 30 days |
 
 ## State file
 
@@ -48,6 +49,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
+| `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Hook to Neovim
 
@@ -265,6 +267,52 @@ is in it. It checks again after the agent has exited, and never forces:
 Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
 worktree themselves. The branch always stays.
 
+## Lost threads
+
+A thread lasts until you close it. When its agent dies because its zellij
+went (a crash of the server, or zellij quit), its thread is kept as lost
+rather than forgotten, so it can be resumed.
+
+- **When:** where an agent's files would be forgotten for a dead pid
+  (`agent_rows`, `gc_states`), `retire` keeps them as lost when the agent has a
+  thread record and a session id, its `end_reason` is not `prompt_input_exit`,
+  `logout` or `clear` (ended on purpose), and its zellij has gone since its last
+  event `ts`: no `zellij --server <socket dir>/<session>` process runs, or the
+  one that does started after `ts` (its age from `ps -o etime`). Anything else
+  is forgotten as before; a pane closed while its zellij runs on is not lost.
+  The hook does the same check before a new agent's state replaces a dead
+  one's in a reused pane id (a new zellij of the same name numbers panes
+  from 0 again), and only ever keeps there, never forgets.
+- **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json`, one object:
+  `lost` (epoch s), `session` (the zellij session key), `state` (the state
+  file) and `thread` (the thread record). The pane's files go.
+- **Resume:** `weaver resume [--all] [WHICH]` (WHICH: a session id or its first
+  4+ characters, a thread name, or a number; alone it lists them). Each is
+  claimed by moving its record into `new/<skey>_<token>/` (so two resumes never
+  take one), then opened like a new thread's tab in the directory its agent
+  started in (`start_cwd`, else the worktree): `thread.json` (its record with
+  `cmd` for now's agent command and its number when free, else the lowest
+  free), `state.json` (its state without pid, as `idle` and seen) and
+  `resume` (the session id) in place of `task`. The agent's pane takes the
+  record and the state for its pane id, then execs `claude --resume <id>`
+  (`codex resume <id>`); the nvim pane binds as for a new thread. The state
+  carries on: the first hook (SessionStart, source `resume`) keeps its turns,
+  title and last reply, and its snapshot chain and activity log continue.
+  A record whose directory is gone stays lost.
+- **The weaver session:** its config has `session_serialization false` (any
+  of yours dropped), since zellij's resurrection reruns each pane's last
+  command line: `claude <task>` (a new conversation sent the task again) and
+  `nvim --listen <old socket>` bound to nothing. As the session starts, its
+  home (`weaver home`) runs `gc_states`, then resumes every thread lost by a
+  session of its name, in number order, without leaving home
+  (`WEAVER_RESTORE=0`: listed instead). An exited weaver session that zellij
+  saved before this is deleted and started afresh.
+- **Dashboard:** lost threads (of every session) last, under `LOST`, glyph
+  `[-]`, without a number or a 1-9 key and not counted in the title; their item
+  id is `l<session id>` and field 2 the session id. Enter resumes one
+  (`weaver resume`), x forgets it (`weaver resume --forget`), and the preview
+  shows its card (`weaver _preview <session id>`).
+
 ## Dashboard
 
 `weaver ls` (Alt y) is fzf in a floating pane. `push_status`, run by every hook
@@ -414,16 +462,18 @@ one colour.
 `weaver` (outside zellij) starts `zellij --config <session config> --session
 weaver --new-session-with-layout <layout>`, or attaches to a running one. A
 session made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; the
-sidebar, the tab labels, numbered placement and `_sidefit` act only there. An
-exited weaver session is resurrected with the session config; an exited one
-without the marker (from before this layout) is left to you.
+sidebar, the tab labels, numbered placement and `_sidefit` act only there.
+zellij does not save it (`session_serialization false`): weaver brings its
+threads back itself ([Lost threads](#lost-threads)). An exited weaver session
+saved before that is deleted and started afresh; an exited one without the
+marker (from before this layout) is left to you.
 
 - **Config:** `$STATE_DIR/zellij-session.kdl`, rebuilt at every start: your
   config (`$ZELLIJ_CONFIG_FILE`, else `config.kdl`) with the session keys
   (`weaver-keys.kdl` beside it, else `config/zellij-session-keys.kdl`) added
   before the brace that closes its first `keybinds` block, then `layout_dir` and
   `theme_dir` pointing at your config directory's, when they exist and are
-  not set.
+  not set, and `session_serialization false` last.
 - **Layout:** `$WEAVER_LAYOUT`, else `layouts/weaver.kdl` in your zellij config
   directory, else `config/weaver-layout.kdl`: a `home` tab running `weaver
   home`, and a `default_tab_template` with the status line.
@@ -728,3 +778,20 @@ without the marker (from before this layout) is left to you.
   field (`{1}`, `{2}`), `transform` included (measured on 0.74.5 with
   `--with-shell`), so home's `n` decides on `$FZF_TOTAL_COUNT` and prints the
   `{2}` it needs.
+- 2026-10-15: zellij 0.44 to 0.45.1 on macOS crashes its server with heap
+  corruption detected in the screen thread (zellij-org/zellij#5423, open; four
+  crashes on one Mac in two days, 36 s to 56 min after starting), taking
+  every agent with it. Threads now survive it: a thread whose agent died with
+  its zellij is kept as lost and resumed (`weaver resume`, and the weaver
+  session's home as it starts). zellij's own resurrection was the wrong tool:
+  it saves each pane's running command line, which after weaver's exec is
+  `claude <task>` (a new conversation sent the task again) and an nvim on the
+  old pane's socket, so the weaver session turns it off. Only threads are
+  kept: an agent you started by hand is resumable through `claude --resume`,
+  and keeping every one would fill the board after each zellij quit.
+- 2026-10-15: "Its zellij went" is decided from the server process, not the
+  SessionEnd hook: at a crash every agent gets SIGHUP and reports reason
+  `other`, as it does when you close its pane, and the hook's background work
+  may die with the pane. The server (`zellij --server .../<session>`) either no
+  longer runs or started after the agent's last event; `/exit`, `/clear` and
+  logout (SessionEnd's reason, kept as `end_reason`) are never lost.

@@ -5,6 +5,7 @@
 #   weaver                          attach to or start the zellij session; inside it, the dashboard
 #   weaver new [task...]            start a thread: a tab with nvim and a new agent, in a new worktree
 #   weaver close [pane-id]          close an agent, its nvim and its thread's tab
+#   weaver resume [--all] [which]   bring back threads lost when their zellij went
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
 #   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
@@ -346,13 +347,14 @@ JQ_MAIN='
     (if rejected then 1 else "" end),
     (.error // "" | tostring | one(100)),
     (if .tool_name == "Bash" then (.tool_input | objects | .command // "") | one(200) else "" end),
+    (if .hook_event_name == "SessionEnd" then .reason // "" | one(40) else "" end),
     $s.cwd // "", $s.root // "", $s.file // "", $s.prompt // "",
     $s.state // "", $s.session_id // "", $s.start_cwd // "", $s.since // "",
     $s.waiting // "", $s.pending // "", $s.last_message // "", ($s.seen // false),
     $s.marked_root // "", $s.marker // "", $s.project_root // "",
     $s.background // "", $s.background_tasks // "",
     $s.pid // "", $s.proc_start // "", $o.title // "", $o.turn // 0, $o.turn_ended // 0,
-    $o.prompt_id // "", $o.transcript // "", $s.agent // "",
+    $o.prompt_id // "", $o.transcript // "", $s.agent // "", $o.end_reason // "",
     (files_new(($o.files // []) | arrays; $file) | tojson),
     (subs_new(($o.subagents // []) | arrays; $aid; $now) | tojson),
     (tasks_new(($o.tasks // []) | arrays) | tojson)
@@ -450,10 +452,10 @@ log_line() {
 hook_run() {
 	local mode=$1 pane=$ZELLIJ_PANE_ID parsed J out moved=0 rc=0 HEAD=""
 	local event cwd sid file prompt prompt_long tool ntype now now_ms waiting_new key last_new aid atype bg_new bgdesc_new
-	local source interrupt title_new prompt_id transcript new_cwd rejected err cmd
+	local source interrupt title_new prompt_id transcript new_cwd rejected err cmd end_new
 	local o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen
 	local o_marked o_marker o_proj o_bg o_bgdesc o_pid o_procstart o_title o_turn o_turn_ended o_promptid
-	local o_transcript o_agent o_turn_roots files_json subs_json tasks_json paths
+	local o_transcript o_agent o_end o_turn_roots files_json subs_json tasks_json paths end_reason
 	local root="" d state ev_file="" start since waiting pending last seen marked marker proj mark_dir bg bgdesc
 	local pid proc_start title turn turn_ended turn_roots agent_kind=${WEAVER_AGENT:-claude} LOGF=""
 	local snap_prev="" snap_start="" snap_end="" first_touch="" prev_prompt="" turn_prompt="" seq
@@ -463,9 +465,17 @@ hook_run() {
 	# A session nested in this pane's agent (claude -p, an SDK script) inherits
 	# ZELLIJ_PANE_ID: while the pane's own agent runs, its events are not ours.
 	local me=${WEAVER_AGENT_PID:-${CLAUDE_PID:-}}
-	if [ -n "$me" ] && [ -n "$PK_PID" ] && [ "$me" != "$PK_PID" ] &&
-		[ "$PK_STATE" != ended ] && agent_alive "$PK_PID" "$PK_START"; then
-		return 0
+	if [ -n "$me" ] && [ -n "$PK_PID" ] && [ "$me" != "$PK_PID" ]; then
+		if agent_alive "$PK_PID" "$PK_START"; then
+			[ "$PK_STATE" != ended ] && return 0
+		else
+			# The pane's last agent died with a zellij that is gone, and this
+			# zellij gave its pane id to a new agent: keep the old one's
+			# thread as lost before this state replaces it.
+			load_rest
+			lost_check "$SF" && lose "$SF" "$PK_PID"
+			peek_state
+		fi
 	fi
 	if [ "$mode" = async ]; then async_gate || return 0; fi
 	lock
@@ -479,10 +489,10 @@ hook_run() {
 		return
 	}
 	IFS=$US read -r event cwd sid file prompt prompt_long tool ntype now now_ms waiting_new key last_new \
-		aid atype bg_new bgdesc_new source interrupt title_new prompt_id transcript new_cwd rejected err cmd \
+		aid atype bg_new bgdesc_new source interrupt title_new prompt_id transcript new_cwd rejected err cmd end_new \
 		o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen \
 		o_marked o_marker o_proj o_bg o_bgdesc o_pid o_procstart o_title o_turn o_turn_ended o_promptid \
-		o_transcript o_agent files_json subs_json tasks_json o_turn_roots paths <<<"$parsed"
+		o_transcript o_agent o_end files_json subs_json tasks_json o_turn_roots paths <<<"$parsed"
 	if [ -z "$event" ]; then
 		# Empty or eventless input: keep the stored state rather than blank it.
 		drop_lock
@@ -638,6 +648,10 @@ hook_run() {
 		;;
 	SessionEnd) state=ended bg="" bgdesc="" ;;
 	esac
+	# Why the session ended (Claude Code's SessionEnd reason): /exit, /clear or
+	# a logout ends it on purpose; a hangup (its zellij going) is "other".
+	end_reason=$o_end
+	[ "$event" = SessionEnd ] && end_reason=$end_new
 	[ "$state" = needs-you ] || waiting="" pending=""
 	if [ "$state" != "$o_state" ]; then
 		case $state in needs-you) rc=10 ;; done) rc=11 ;; esac
@@ -778,6 +792,7 @@ write_state() {
 	case $bg in '' | *[!0-9]*) bg=0 ;; esac
 	json_str "$bgdesc" && out="$out,\"background\":$bg,\"background_tasks\":$J"
 	out="$out,\"nvim_pane\":${NV:-null}"
+	[ -n "$end_reason" ] && json_str "$end_reason" && out="$out,\"end_reason\":$J"
 	[ -n "$sid" ] && json_str "$LOG_DIR/$sid.jsonl" && out="$out,\"log\":$J"
 	out="$out,\"subagents\":${subs_json:-[]},\"tasks\":${tasks_json:-[]}"
 	local IFS=$RS r rl=""
@@ -1839,6 +1854,109 @@ forget() {
 	drop_lock
 }
 
+# ---------------------------------------------------------------- lost threads
+#
+# A thread lasts until you close it (weaver close). When its agent dies with
+# its zellij (a crash, or zellij quit) the thread is kept as lost, in
+# $LOST_DIR/<skey>_<session id>.json, and `weaver resume` (or the weaver
+# session, as it starts again) brings it back in a new tab that resumes its
+# conversation. An agent ended on purpose (/exit), or whose pane you closed
+# while its zellij ran on, is forgotten as before.
+
+LOST_DIR="$STATE_DIR/lost"
+
+# The running zellij servers, one "<session> <epoch it started>" per line, into
+# SERVERS (asked once per process). A server is `zellij --server <socket
+# dir>/<session>`; ps gives how long it has run, as [[dd-]hh:]mm:ss.
+servers() {
+	[ -n "${SERVERS+x}" ] && return 0
+	local line et cmd now d h m s a b c
+	SERVERS=""
+	now=$(date +%s)
+	while IFS= read -r line; do
+		line=${line#"${line%%[! ]*}"}
+		et=${line%% *} cmd=${line#* }
+		case $cmd in *zellij*" --server "*) ;; *) continue ;; esac
+		d=0 h=0 c=""
+		case $et in *-*) d=${et%%-*} et=${et#*-} ;; esac
+		IFS=: read -r a b c <<<"$et"
+		if [ -n "$c" ]; then h=$a m=$b s=$c; else m=$a s=$b; fi
+		case $d$h$m$s in '' | *[!0-9]*) continue ;; esac
+		SERVERS="$SERVERS${cmd##*/} $((now - 10#$d * 86400 - 10#$h * 3600 - 10#$m * 60 - 10#$s))$NL"
+	done <<EOF2
+$(ps -A -ww -o etime=,command= 2>/dev/null)
+EOF2
+}
+
+# Did the zellij of session $1 go since $2 (epoch s, an agent's last event):
+# is no server running it, or one that started after?
+server_lost() {
+	local name start
+	servers
+	# Inside zellij its own server runs: none means ps did not answer, and
+	# without knowing, nothing is lost (forgotten, as before).
+	[ -z "$SERVERS" ] && [ -n "$SESSION" ] && return 1
+	while IFS=' ' read -r name start; do
+		[ -n "$name" ] && [ "${name//\//_}" = "$1" ] || continue
+		[ "$start" -gt "$2" ]
+		return
+	done <<EOF2
+$SERVERS
+EOF2
+	return 0
+}
+
+# Is the dead agent of state file $1 a thread lost with its zellij? Only a
+# thread (it has a record) with a session to resume, not ended on purpose,
+# whose zellij has gone since its last event.
+lost_check() {
+	local b=${1%.json} base info sid ts why
+	[ -f "$b.thread" ] && [ -f "$1" ] || return 1
+	info=$(jq -r '[.session_id // "", .ts // 0, .end_reason // ""] | map(tostring) | join("\u001f")' "$1" 2>/dev/null) ||
+		return 1
+	IFS=$US read -r sid ts why <<<"$info"
+	[ -n "$sid" ] || return 1
+	case $why in prompt_input_exit | logout | clear) return 1 ;; esac
+	base=${b##*/}
+	server_lost "${base%_*}" "${ts:-0}"
+}
+
+# Keep the thread of the agent whose state file is $1 as lost, then remove
+# its files. Only if its pid is still $2 when we hold its lock (as forget).
+lose() {
+	local b=${1%.json} line="" re='"pid":([0-9]+)' now_pid="" SF=$1 LOCK base sid lf
+	[ -f "$1" ] || return 0
+	lock
+	{ IFS= read -r line <"$1"; } 2>/dev/null
+	[[ $line =~ $re ]] && now_pid=${BASH_REMATCH[1]}
+	if [ "$now_pid" != "${2:-}" ]; then
+		drop_lock
+		return 0
+	fi
+	base=${b##*/}
+	sid=$(jq -r '.session_id // empty' "$1" 2>/dev/null)
+	lf="$LOST_DIR/${base%_*}_$sid.json"
+	mkdir -p "$LOST_DIR"
+	if [ -n "$sid" ] && jq -nc --slurpfile s "$1" --slurpfile t "$b.thread" --arg skey "${base%_*}" \
+		--argjson now "$(date +%s)" '{lost: $now, session: $skey, state: $s[0], thread: $t[0]}' >"$lf.$$" 2>/dev/null &&
+		mv -f "$lf.$$" "$lf"; then
+		rm -f "$1" "$b.nvim" "$b.bash" "$b.prompt" "$b.thread"
+		rm -rf "$b.opening"
+		drop_lock
+		return 0
+	fi
+	rm -f "$lf.$$"
+	drop_lock
+	return 1
+}
+
+# The agent of state file $1 (pid $2) is gone: its thread lost with its
+# zellij is kept, anything else forgotten.
+retire() {
+	if lost_check "$1" && lose "$1" "${2:-}"; then return 0; fi
+	forget "$1" "${2:-}"
+}
+
 # The live agents of this session as JQ_ROWS lines, into AGENT_ROWS; the files
 # of agents that are gone (pane closed, or process dead) are removed.
 agent_rows() {
@@ -1867,13 +1985,14 @@ agent_rows() {
 			IFS=$US read -r kind f pid start st <<<"$line"
 			[ $trusted = 1 ] || continue
 			agent_alive "$pid" "$start" && [ -n "$pid" ] && [ "$st" != ended ] && continue
-			forget "$f" "$pid"
+			retire "$f" "$pid"
 			;;
 		*)
 			IFS=$US read -r _ _ _ _ _ _ _ _ _ _ _ pid start f _ <<<"$line"
 			if [ -n "$pid" ] && ! agent_alive "$pid" "$start"; then
-				# Killed without a SessionEnd: it is not coming back.
-				forget "$f" "$pid"
+				# Killed without a SessionEnd: it is not coming back (a thread
+				# lost with its zellij is kept, to resume).
+				retire "$f" "$pid"
 				continue
 			fi
 			AGENT_ROWS="$AGENT_ROWS$line$NL"
@@ -1884,9 +2003,10 @@ $rows
 EOF2
 }
 
-# Across every session: remove the state of agents whose process is gone,
-# ended agents after an hour, sessions that no longer exist (state from before
-# pids were recorded), stale nvim files and month-old activity logs.
+# Across every session: remove the state of agents whose process is gone
+# (keeping a thread lost with its zellij), ended agents after an hour,
+# sessions that no longer exist (state from before pids were recorded), stale
+# nvim files, and month-old activity logs and lost threads.
 gc_states() {
 	local f line pid start st ts sessions="" re_p='"pid":([0-9]+)' re_t='"proc_start":"([^"]*)"'
 	local re_s='"state":"([a-z-]+)"' re_ts='"ts":([0-9]+)' now base skey
@@ -1901,7 +2021,7 @@ gc_states() {
 		[[ $line =~ $re_ts ]] && ts=${BASH_REMATCH[1]}
 		if [ -n "$pid" ]; then
 			agent_alive "$pid" "$start" || {
-				forget "$f" "$pid"
+				retire "$f" "$pid"
 				continue
 			}
 		else
@@ -1949,6 +2069,7 @@ gc_states() {
 	[ -d "$STATE_DIR/fetch" ] && find "$STATE_DIR/fetch" -type f -mmin +1440 -exec rm -f {} + 2>/dev/null
 	[ -f "$STATE_DIR/close.log" ] && [ "$(wc -c <"$STATE_DIR/close.log")" -gt 100000 ] && rm -f "$STATE_DIR/close.log"
 	[ -d "$LOG_DIR" ] && find "$LOG_DIR" -name '*.jsonl' -mtime +30 -exec rm -f {} + 2>/dev/null
+	[ -d "$LOST_DIR" ] && find "$LOST_DIR" -name '*.json' -mtime +30 -exec rm -f {} + 2>/dev/null
 	[ -d "$STATE_DIR/turns" ] && find "$STATE_DIR/turns" -type f -mtime +30 -exec rm -f {} + 2>/dev/null
 	[ "${1:-}" = quiet ] || echo "weaver: cleaned up"
 	return 0
@@ -2335,13 +2456,13 @@ ls_plan() {
 ls_rows() {
 	local mode=${LS_MODE:-fzf} width now i j k n=0 g c sep="  "
 	local pane tab state root since seen prompt waiting bg title nsub turn last tdone ttotal file sid
-	local tabname agent bgtasks ttask tname tnum troots name fact glyph key where
+	local tabname agent bgtasks ttask tname tnum troots name fact glyph key where lf lsid live
 	local red="" green="" grey="" dim="" bold="" off=""
 	local wn=0 wf=0 ww=0 cn cf cw pre lead age_w=3 out="" keys="" title_l title_r gap
-	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root r_num order
+	local -a r_group r_key r_pane r_tab r_glyph r_name r_fact r_where r_age r_label r_root r_num r_lost order
 	local nums="" numw=2 jump=${LS_JUMP:-print(jump)+accept} shown tl tc tk
 	local -a keyl=("" "" "" "" "" "" "" "" "" "")
-	local -a counts=(0 0 0 0) heads=("NEEDS YOU" "DONE" "WORKING" "IDLE")
+	local -a counts=(0 0 0 0 0) heads=("NEEDS YOU" "DONE" "WORKING" "IDLE" "LOST")
 	local gaps=1 groups=0
 	ls_utf8
 	# Colours for fzf, and on request (COLOR=1).
@@ -2441,6 +2562,31 @@ ls_rows() {
 	done <<EOF2
 $AGENT_ROWS
 EOF2
+	live=$n
+	# Threads lost with their zellij (a crash, or zellij quit), last: enter
+	# resumes one in a new tab (weaver resume).
+	lost_rows
+	while IFS=$US read -r lf lsid tname tnum root since _ ttask title; do
+		[ -n "$lf" ] || continue
+		case $since in '' | *[!0-9]*) since=$now ;; esac
+		name=${tname:-${title:-$ttask}}
+		fact="lost with zellij · ⏎ resumes"
+		paint "$G_END" "$grey" "$dim" "$off"
+		glyph=$PAINT
+		where_of "$root"
+		where=$W_REPO${W_BRANCH:+/$W_BRANCH}
+		age $((now - since))
+		printf -v key '%d%011d%08d' 4 $((10000000000 - since)) "$n"
+		r_group[n]=4 r_key[n]=$key r_pane[n]=$lsid r_tab[n]="" r_glyph[n]=$glyph r_lost[n]=1
+		r_name[n]=$name r_fact[n]=$fact r_where[n]=$where r_age[n]=$AGE r_root[n]=$root
+		r_label[n]="$name · $where · lost" r_num[n]=""
+		counts[4]=$((counts[4] + 1))
+		[ ${#name} -gt $wn ] && wn=${#name}
+		[ ${#fact} -gt $wf ] && wf=${#fact}
+		n=$((n + 1))
+	done <<EOF2
+$LOST_ROWS
+EOF2
 	# Best first: an insertion sort (a handful of rows).
 	i=0
 	while [ $i -lt $n ]; do
@@ -2456,7 +2602,7 @@ EOF2
 	i=0
 	while [ $i -lt $n ]; do
 		c=0 j=0
-		while [ $j -lt $n ]; do
+		while [ $j -lt $live ] && [ $i -lt $live ]; do
 			[ "${r_root[j]}" = "${r_root[i]}" ] && c=$((c + 1))
 			j=$((j + 1))
 		done
@@ -2471,7 +2617,7 @@ EOF2
 	# the agents alone.
 	if [ "$mode" = fzf ]; then
 		pre=$((numw + 6)) sep=" $TAB"
-		for g in 0 1 2 3; do [ ${counts[g]} -gt 0 ] && groups=$((groups + 1)); done
+		for g in 0 1 2 3 4; do [ ${counts[g]} -gt 0 ] && groups=$((groups + 1)); done
 		ls_plan
 	else
 		pre=5 cw=0
@@ -2497,11 +2643,11 @@ EOF2
 	# [ WEAVER :: THREADS ] 5, like the vault's [ MAP :: LOCAL ] 4 LINKS; tl in
 	# colour (WEAVER in ink on fzf's grey border), title_l to measure.
 	title_l="[ WEAVER :: THREADS ]"
-	[ $n = 0 ] || title_l="$title_l $n"
+	[ $live = 0 ] || title_l="$title_l $live"
 	tk=$bold
 	[ "$mode" = fzf ] && [ -n "$bold" ] && tk="$C_BOLD$C_INK"
 	tl="$dim[$off ${tk}WEAVER$off $dim::$off ${grey}THREADS$off $dim]$off"
-	[ $n = 0 ] || tl="$tl $grey$n$off"
+	[ $live = 0 ] || tl="$tl $grey$live$off"
 	# The status bar's counts, their cells in its colours; tc in colour.
 	title_r="" tc=""
 	for g in 0 1 2; do
@@ -2559,9 +2705,12 @@ EOF2
 			m=$((m + 1))
 			last_g=$g
 		fi
-		a=$((a + 1))
 		lead=""
-		if [ "$mode" = fzf ]; then
+		if [ -n "${r_lost[i]:-}" ]; then
+			# A lost thread: no number, no 1-9 key.
+			[ "$mode" = fzf ] && printf -v lead "%${numw}s " ""
+		elif [ "$mode" = fzf ]; then
+			a=$((a + 1))
 			# Threads' stable numbers when they have them (the same in the
 			# sidebar and on the home tab), else the rows' order.
 			# Two digits, like the vault's numbered sections (01).
@@ -2589,6 +2738,7 @@ EOF2
 		printf -v FIT '%*s' $age_w "${r_age[i]}"
 		out="$out$dim$FIT$off"
 		l_id[m]="a${r_pane[i]}" l_pane[m]=${r_pane[i]} l_tab[m]=${r_tab[i]} l_text[m]=$out
+		[ -n "${r_lost[i]:-}" ] && l_id[m]="l${r_pane[i]}"
 		l_label[m]=${r_label[i]} l_isagent[m]=1
 		m=$((m + 1))
 	done
@@ -2620,14 +2770,65 @@ EOF2
 	done
 }
 
+# The resume card's jq: age, word wrapping, and a field (its label, then the
+# value wrapped under itself, at most $lines lines) in $w columns.
+JQ_CARD='
+def age: if . < 60 then "\(.)s" elif . < 3600 then "\(. / 60 | floor)m"
+	elif . < 172800 then "\(. / 3600 | floor)h" else "\(. / 86400 | floor)d" end;
+def base: tostring | split("/") | last;
+def one: tostring | gsub("[\\t\\n\\r]+"; " ");
+# Words into lines of at most $n characters (a longer word is cut).
+def wrap($n): reduce (split(" ")[] | select(. != "")) as $x ([];
+	if length == 0 then [$x[0:$n]]
+	elif (.[-1] | length) + 1 + ($x | length) <= $n then .[-1] += " " + $x
+	else . + [$x[0:$n]] end);
+def field($label; $text; $color; $lines):
+	($text | one) as $t
+	| if $t == "" then empty else
+		($t | wrap([$w - 11, 20] | max)) as $ls
+		| ($ls[0:$lines] | to_entries[]
+			| (if .key == 0 then $dim + ($label + "           ")[0:11] + $off else "           " end)
+			  + $color + .value + $off
+			  + (if .key == $lines - 1 and ($ls | length) > $lines then $dim + " …" + $off else "" end))
+	  end;
+'
+
+# The card of the lost thread whose session id is $1, under TITLE $2: what it
+# was asked and last said, where, and the keys that act on it.
+lost_card() {
+	local f="" g
+	for g in "$LOST_DIR"/*_"$1".json; do [ -f "$g" ] && f=$g && break; done
+	[ -n "$f" ] || return 0
+	[ -n "${2:-}" ] &&
+		printf '%s%s%s%s%s%s\n' "$C_BOLD" "${2%% · *}" "$C_OFF" "$C_DIM" "${2#"${2%% · *}"}" "$C_OFF"
+	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" --arg home "$HOME" \
+		--arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" "$JQ_CARD"'
+		def tilde: if . == $home then "~" elif startswith($home + "/") then "~" + .[($home | length):] else . end;
+		[ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its zellij went" + $off,
+		  "",
+		  field("asked"; .thread.task // .state.prompt // ""; ""; 4),
+		  (if (.state.last_message // "") != "" then field("said"; .state.last_message; $grey; 6) else empty end),
+		  field("in"; (.state.start_cwd // .thread.worktree // "") | tilde; $grey; 2),
+		  field("session"; (.session // "") + " · " + (.state.session_id // ""); $dim; 2),
+		  "",
+		  $dim + "⏎ resume it in a new tab   x forget it" + $off
+		] | .[]' "$f" 2>/dev/null
+}
+
 # The dashboard's preview for agent PANE: its resume card under TITLE (name ·
-# repo/branch · turn), or (s, tab) its screen, or (?) the keys. The view
-# is kept next to the dashboard's socket.
+# repo/branch · turn), or (s, tab) its screen, or (?) the keys; for a lost
+# thread (PANE is its session id), its card. The view is kept next to the
+# dashboard's socket.
 cmd_preview() {
 	local pane=${1#terminal_} title=${2:-} view=card f line root re_r='"root":"([^"]*)"' n=0
 	local head="" ab="" changed=0 new=0 lines=${FZF_PREVIEW_LINES:-40}
-	pane=${pane%%[!0-9]*}
 	[ -n "${FZF_SOCK:-}" ] && { IFS= read -r view <"${FZF_SOCK%.sock}.view"; } 2>/dev/null
+	case $pane in
+	*[!0-9]*)
+		if [ "$view" = help ]; then ls_help; else lost_card "$pane" "$title"; fi
+		return 0
+		;;
+	esac
 	case $view in
 	help)
 		ls_help
@@ -2684,26 +2885,7 @@ EOF2
 	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" \
 		--arg head "$head" --arg ab "$ab" --argjson changed "$changed" --argjson new "$new" --argjson shared "$n" \
 		--arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" \
-		--arg gseen "$G_SEEN" --arg gidle "$G_IDLE" '
-		def age: if . < 60 then "\(.)s" elif . < 3600 then "\(. / 60 | floor)m"
-			elif . < 172800 then "\(. / 3600 | floor)h" else "\(. / 86400 | floor)d" end;
-		def base: tostring | split("/") | last;
-		def one: tostring | gsub("[\\t\\n\\r]+"; " ");
-		# Words into lines of at most $n characters (a longer word is cut).
-		def wrap($n): reduce (split(" ")[] | select(. != "")) as $x ([];
-			if length == 0 then [$x[0:$n]]
-			elif (.[-1] | length) + 1 + ($x | length) <= $n then .[-1] += " " + $x
-			else . + [$x[0:$n]] end);
-		# A field: its label, then the value wrapped under itself (at most $max lines).
-		def field($label; $text; $color; $lines):
-			($text | one) as $t
-			| if $t == "" then empty else
-				($t | wrap([$w - 11, 20] | max)) as $ls
-				| ($ls[0:$lines] | to_entries[]
-					| (if .key == 0 then $dim + ($label + "           ")[0:11] + $off else "           " end)
-					  + $color + .value + $off
-					  + (if .key == $lines - 1 and ($ls | length) > $lines then $dim + " …" + $off else "" end))
-			  end;
+		--arg gseen "$G_SEEN" --arg gidle "$G_IDLE" "$JQ_CARD"'
 		(if has("state") | not then {state: "starting", since: .created, prompt: .task, agent: .agent} else . end)
 		| (.state // "idle") as $st
 		| (.seen // false) as $seen
@@ -2774,6 +2956,10 @@ ${g}threads$o
   $(paint "$G_SEEN" "$d"; printf %s "$PAINT")  done, seen   $(paint "$G_IDLE" "$d"; printf %s "$PAINT")  idle    $(paint "$G_INT" "$g"; printf %s "$PAINT")  interrupted
 
   ${d}×2$o  ${d}two agents share the worktree: their turn diffs mix$o
+
+${g}lost$o ${d}(its zellij went: a crash, or quit)$o
+  ${g}⏎$o           resume it in a new tab ${d}(weaver resume)$o
+  ${g}x$o           forget it ${d}(its worktree stays)$o
 EOF2
 }
 
@@ -2874,14 +3060,21 @@ ls_footer() {
 LS_KEYS='j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9'
 
 # The home tab's board (`weaver home`): the dashboard, full-size and for good.
-# Jumping leaves it running behind you; Alt y comes back to it.
+# Jumping leaves it running behind you; Alt y comes back to it. As the weaver
+# session starts, the threads it lost when it last went (a crash, or zellij
+# quit) come back first, unless WEAVER_RESTORE=0 (then the board lists them).
 cmd_home() {
+	need_session
+	if weaver_session && [ "${WEAVER_RESTORE:-1}" != 0 ]; then
+		gc_states quiet
+		resume_session
+	fi
 	LS_HOME=1 cmd_ls
 }
 
 cmd_ls() {
 	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows foot items=0
-	local jump_act edit_act new_act quit_act
+	local jump_act edit_act new_act quit_act resume_act
 	need_session
 	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
 	if [ $fzf = 0 ]; then
@@ -2899,12 +3092,14 @@ cmd_ls() {
 		new_act="transform:if [ \"\$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute($q new)+reload($q _rows)'; else printf '%s2})+reload(%s _rows)\\n' 'execute($q new --from {' '$q'; fi"
 		# q and esc: back to the thread you came from, as Alt y does.
 		quit_act="execute-silent($q go home)"
+		resume_act="execute($q resume {2})+reload($q _rows)"
 		export LS_HOME
 	else
 		jump_act="print(jump)+accept"
 		edit_act="print(ctrl-e)+accept"
 		new_act="print(new)+accept"
 		quit_act=abort
+		resume_act="print(resume)+accept"
 	fi
 	export LS_JUMP=$jump_act
 	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
@@ -2941,12 +3136,12 @@ cmd_ls() {
 			--bind "resize:reload(LS_REMEASURE=1 $q _rows)" --bind "load:transform($q _chrome)" \
 			--bind "focus:transform:case {1} in a*) ;; *) case \$FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n \"\$t\" ] || t={5} ;; *) t={5}; [ -n \"\$t\" ] || t={4} ;; esac; [ -n \"\$t\" ] && echo \"pos(\$t)\" ;; esac" \
 			--bind "j:down,k:up,g,home:first,G,end:last,q:$quit_act" \
-			--bind "enter,double-click:transform:case {1} in a*) echo '$jump_act' ;; esac" \
+			--bind "enter,double-click:transform:case {1} in a*) echo '$jump_act' ;; l*) echo '$resume_act' ;; esac" \
 			--bind "1:transform(sed -n 1p '$base.keys'),2:transform(sed -n 2p '$base.keys'),3:transform(sed -n 3p '$base.keys')" \
 			--bind "4:transform(sed -n 4p '$base.keys'),5:transform(sed -n 5p '$base.keys'),6:transform(sed -n 6p '$base.keys')" \
 			--bind "7:transform(sed -n 7p '$base.keys'),8:transform(sed -n 8p '$base.keys'),9:transform(sed -n 9p '$base.keys')" \
 			--bind "n:$new_act" \
-			--bind "x:transform:case {1} in a*) echo 'execute($q close {2})+reload($q _rows)' ;; esac" \
+			--bind "x:transform:case {1} in a*) echo 'execute($q close {2})+reload($q _rows)' ;; l*) echo 'execute($q resume --forget {2})+reload($q _rows)' ;; esac" \
 			--bind "e,ctrl-e:transform:case {1} in a*) echo '$edit_act' ;; esac" \
 			--bind "s,tab:transform($q _view screen)" \
 			--bind "?:transform($q _view help)" \
@@ -2974,13 +3169,19 @@ cmd_ls() {
 		esac
 		pane="" tab=""
 		case $sel in
-		a*)
+		a* | l*)
+			[ "${sel%"${sel#?}"}" = l ] && key=resume
 			sel=${sel#*"$TAB"}
 			pane=${sel%%"$TAB"*}
 			sel=${sel#*"$TAB"}
 			tab=${sel%%"$TAB"*}
 			;;
 		esac
+		# A lost thread: back in a new tab (where you land).
+		if [ "$key" = resume ]; then
+			[ -n "$pane" ] && "$SELF" resume "$pane"
+			return
+		fi
 		if [ "$key" = new ]; then
 			"$SELF" new ${pane:+--from "$pane"}
 			rc=$?
@@ -4268,6 +4469,198 @@ thread_create() {
 	printf 'weaver: thread %s in %s (tab %s)\n' "$name" "$TILDE" "${tab:-?}"
 }
 
+# Bring lost thread $1 (its record in $LOST_DIR) back: a tab like the one
+# `weaver new` makes, in the directory its agent started in, whose agent
+# resumes its conversation (claude --resume, codex resume) instead of taking a
+# task. It keeps its number when that is free, and its state (turns, title,
+# last reply) carries on. Prints where it went; returns 1 with RESTORE_ERR
+# when it cannot (its record stays).
+thread_restore() {
+	local lf=$1 tok d info sid kind dir num name tab now
+	RESTORE_ERR=""
+	tok="$(date +%s)$$$RANDOM"
+	d="$THREADS_NEW/${SKEY}_$tok"
+	mkdir -p "$d" || die "cannot create $d"
+	# Claim it: of two restores at once, one takes the record.
+	if ! mv "$lf" "$d/lost.json" 2>/dev/null; then
+		rm -rf "$d"
+		RESTORE_ERR="${lf##*/}: already resumed"
+		return 1
+	fi
+	info=$(jq -r '[.state.session_id // "", .thread.agent // .state.agent // "claude",
+		.state.start_cwd // .thread.worktree // .state.cwd // "", .thread.num // "", .thread.name // ""]
+		| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' "$d/lost.json" 2>/dev/null)
+	IFS=$US read -r sid kind dir num name <<<"$info"
+	name=${name:-thread}
+	agent_cmd "$kind" || {
+		kind=claude
+		agent_cmd claude
+	}
+	if [ -z "$sid" ] || [ ! -d "$dir" ]; then
+		mv -f "$d/lost.json" "$lf"
+		rm -rf "$d"
+		tildify "$dir"
+		RESTORE_ERR="$name: its directory ${TILDE:+$TILDE }is gone"
+		return 1
+	fi
+	now=$(date +%s)
+	num_lock
+	thread_num
+	case $num in '' | *[!0-9]*) ;; *) case $NUMS_USED in *" $num "*) ;; *) NUM=$num ;; esac ;; esac
+	if ! jq -c --arg cmd "$AGENT_CMD" --argjson num "$NUM" '.thread + {cmd: $cmd, num: $num} | del(.pane)' \
+		"$d/lost.json" >"$d/thread.json" 2>/dev/null ||
+		! jq -c --argjson now "$now" '.state | del(.pid, .proc_start, .nvim_pane, .end_reason)
+			+ {state: "idle", ts: $now, since: $now, seen: true, subagents: [], background: 0, background_tasks: ""}' \
+			"$d/lost.json" >"$d/state.json" 2>/dev/null ||
+		! printf '%s\n' "$sid" >"$d/resume"; then
+		num_unlock
+		mv -f "$d/lost.json" "$lf"
+		rm -rf "$d"
+		RESTORE_ERR="$name: cannot write its records"
+		return 1
+	fi
+	num_unlock
+	thread_layout "$tok" "$kind" "$dir"
+	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
+		mv -f "$d/lost.json" "$lf"
+		rm -rf "$d"
+		RESTORE_ERR="$name: zellij could not open its tab"
+		return 1
+	}
+	rm -f "$d/lost.json"
+	weaver_session && thread_place "$tab" "$NUM"
+	tildify "$dir"
+	printf 'weaver: resumed %s in %s (tab %s)\n' "$name" "$TILDE" "${tab:-?}"
+}
+
+# The lost threads, newest first, into LOST_ROWS: one per line, US-separated:
+# record file, session id, name, number, directory, when lost (epoch s), its
+# zellij session, task, title.
+lost_rows() {
+	local f
+	local -a files=()
+	LOST_ROWS=""
+	for f in "$LOST_DIR"/*.json; do [ -f "$f" ] && files[${#files[@]}]=$f; done
+	[ ${#files[@]} -gt 0 ] || return 0
+	LOST_ROWS=$(jq -r '[input_filename, .state.session_id // "", .thread.name // "", .thread.num // "",
+		.state.root // .thread.worktree // .state.cwd // "", .lost // 0, .session // "",
+		.thread.task // .state.prompt // "", .state.title // ""]
+		| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' "${files[@]}" 2>/dev/null |
+		sort -t "$US" -k6,6nr)
+}
+
+# The lost threads WHICH names (a session id or at least its first 4
+# characters, a thread's name, or its number), into MATCH: their record
+# files, one per line; MATCHES counts them.
+lost_match() {
+	local which=$1 f sid name num rest
+	MATCH="" MATCHES=0
+	while IFS=$US read -r f sid name num rest; do
+		[ -n "$f" ] || continue
+		if [ "$which" != "$sid" ] && [ "$which" != "$name" ] && [ "$which" != "$num" ]; then
+			[ ${#which} -ge 4 ] || continue
+			case $sid in "$which"*) ;; *) continue ;; esac
+		fi
+		MATCH="$MATCH$f$NL" MATCHES=$((MATCHES + 1))
+	done <<EOF2
+$LOST_ROWS
+EOF2
+}
+
+# Every thread this zellij session lost (when it went before), back in its
+# tabs in their numbers' order, leaving you where you are.
+resume_session() {
+	local f sid name num rest files
+	lost_rows
+	files=$(while IFS=$US read -r f sid name num _ _ rest; do
+		[ -n "$f" ] || continue
+		rest=${rest%%"$US"*}
+		[ "$rest" = "$SKEY" ] && printf '%s\t%s\n' "${num:-999}" "$f"
+	done <<<"$LOST_ROWS" | sort -n | cut -f 2)
+	[ -n "$files" ] || return 0
+	while IFS= read -r f; do
+		NOFOCUS=1 thread_restore "$f" >/dev/null || echo "weaver: $RESTORE_ERR" >&2
+	done <<<"$files"
+	push_status
+}
+
+# weaver resume [--all | --forget [--yes]] [WHICH]: the threads lost with
+# their zellij (a crash, or zellij quit). Alone, it lists them; with WHICH (a
+# session id or its start, a thread's name or number) it brings that one
+# back in a new tab whose agent resumes its conversation, and with --all
+# every one. --forget drops one for good instead (its worktree stays).
+cmd_resume() {
+	local all=0 drop=0 yes=0 which="" f sid name num dir lost skey task title failed=0 now out
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--all) all=1 ;;
+		--forget) drop=1 ;;
+		--yes | -y) yes=1 ;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		-*) die "usage: weaver resume [--all | --forget [--yes]] [session-id | name | number]" ;;
+		*) which=$1 ;;
+		esac
+		shift
+	done
+	lost_rows
+	if [ $all = 0 ] && [ -z "$which" ]; then
+		if [ -z "$LOST_ROWS" ]; then
+			echo "weaver: no lost threads"
+			return 0
+		fi
+		now=$(date +%s)
+		while IFS=$US read -r f sid name num dir lost skey task title; do
+			[ -n "$f" ] || continue
+			age $((now - lost))
+			where_of "$dir"
+			printf '%3s  %-32s %-28s %4s ago  %s\n' "$num" "$name" "$W_REPO${W_BRANCH:+/$W_BRANCH}" "$AGE" "${sid:0:8}"
+		done <<<"$LOST_ROWS"
+		echo "weaver resume NAME (a number, or a session id) brings one back; --all, every one"
+		return 0
+	fi
+	if [ $all = 1 ]; then
+		MATCH=""
+		[ -n "$LOST_ROWS" ] && MATCH=$(printf '%s\n' "$LOST_ROWS" | cut -d "$US" -f 1)
+	else
+		lost_match "$which"
+	fi
+	[ -n "$MATCH" ] || die "no lost thread ${which:+named $which }(weaver resume lists them)"
+	[ $all = 1 ] || [ "$MATCHES" = 1 ] || die "$which names $MATCHES lost threads: give its session id (weaver resume lists them)"
+	if [ $drop = 1 ]; then
+		[ $all = 0 ] || die "--forget takes one lost thread"
+		f=${MATCH%"$NL"}
+		name=$(jq -r '.thread.name // "the thread"' "$f" 2>/dev/null)
+		if [ $yes = 0 ]; then
+			have_tty || die "--forget needs a terminal to ask, or --yes"
+			out=/dev/tty
+			CARD_PAD="  "
+			[ -n "${FZF_COLUMNS:-}" ] && card_place "$out" 6
+			{
+				card_row forget "$C_BOLD$name$C_OFF"
+				card_row "" "${C_GREY}its conversation and worktree stay; weaver stops offering it$C_OFF"
+				echo
+				card_keys y forget n keep
+			} >"$out"
+			read_yes || return 130
+		fi
+		rm -f "$f"
+		return 0
+	fi
+	need_session
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		thread_restore "$f" || {
+			echo "weaver: $RESTORE_ERR" >&2
+			failed=$((failed + 1))
+		}
+	done <<<"$MATCH"
+	push_status
+	[ $failed = 0 ]
+}
+
 # weaver new [options] [task...]
 cmd_new() {
 	local repo="" from="" branch="" base="" where="" agent="" edit=0 sf start rc f
@@ -4389,6 +4782,30 @@ cmd_agent_pane() {
 		case $task in -*) task=" $task" ;; esac
 		# shellcheck disable=SC2086
 		exec $AGENT_CMD "$task"
+	fi
+	# A lost thread brought back (weaver resume): its record and its state for
+	# this pane, then its conversation, resumed.
+	if [ -n "$tok" ] && [ -n "$pane" ] && [ -f "$d/resume" ]; then
+		sid=$(cat "$d/resume")
+		c=$(jq -r '.cmd // empty' "$d/thread.json" 2>/dev/null)
+		[ -n "$c" ] && AGENT_CMD=$c
+		# A dead agent's files under this pane id (an earlier zellij's) go
+		# first: kept as lost when they are, else forgotten.
+		state_file "$pane"
+		if [ -f "$SF" ]; then
+			peek_state
+			[ -n "$PK_PID" ] && agent_alive "$PK_PID" "$PK_START" || retire "$SF" "$PK_PID"
+		fi
+		jq -c --argjson pane "$pane" '. + {pane: $pane}' "$d/thread.json" >"$STATE_DIR/${SKEY}_$pane.thread.$$" &&
+			mv -f "$STATE_DIR/${SKEY}_$pane.thread.$$" "$STATE_DIR/${SKEY}_$pane.thread"
+		jq -c --argjson pane "$pane" '. + {pane: $pane}' "$d/state.json" >"$SF.$$" && mv -f "$SF.$$" "$SF"
+		rm -f "$d/resume" "$d/state.json"
+		printf '%s\n' "$pane" >"$d/pane.$$" && mv -f "$d/pane.$$" "$d/pane"
+		# shellcheck disable=SC2086
+		case $kind in
+		claude) exec $AGENT_CMD --resume "$sid" ;;
+		codex) exec $AGENT_CMD resume "$sid" ;;
+		esac
 	fi
 	[ -n "$pane" ] && sid=$(jq -r '.session_id // empty' "$STATE_DIR/${SKEY}_$pane.json" 2>/dev/null)
 	c=$(jq -r '.cmd // empty' "$STATE_DIR/${SKEY}_$pane.thread" 2>/dev/null)
@@ -4793,7 +5210,12 @@ session_config() {
 		[ -d "$ZDIR/themes" ] && ! grep -Eq '^[[:space:]]*theme_dir[[:space:]]' "$src" 2>/dev/null &&
 			echo "theme_dir \"$ZDIR/themes\""
 		true
-	} >"$SESSION_CONFIG.$$" && mv -f "$SESSION_CONFIG.$$" "$SESSION_CONFIG"
+	} | awk '!/^[[:space:]]*session_serialization[[:space:]]/' >"$SESSION_CONFIG.$$" &&
+		# weaver brings the session's threads back itself (weaver resume):
+		# zellij's resurrection would rerun each agent's command line, a new
+		# conversation sent the task again, beside nvims bound to nothing.
+		echo "session_serialization false" >>"$SESSION_CONFIG.$$" &&
+		mv -f "$SESSION_CONFIG.$$" "$SESSION_CONFIG"
 }
 
 # The weaver session's layout, into SESSION_LAYOUT: $WEAVER_LAYOUT, else
@@ -4825,12 +5247,14 @@ EOF2
 	case $state in
 	running) exec zellij attach "$name" ;;
 	exited)
-		# Resurrect weaver's own session; one from before its layout is in
-		# the way, and only you may delete it.
+		# weaver's own session, saved by zellij (before weaver turned that
+		# off): its resurrection would rerun each agent's last command line,
+		# so start it afresh instead, and its home brings the threads back.
+		# One from before weaver's layout is in the way, and only you may
+		# delete it.
 		weaver_session ||
 			die "an exited zellij session named $name (from before weaver's layout) is in the way: zellij delete-session $name, then weaver again"
-		session_config
-		exec zellij --config "$SESSION_CONFIG" attach "$name"
+		zellij delete-session "$name" 2>/dev/null
 		;;
 	esac
 	session_config
@@ -4863,7 +5287,7 @@ num_lock() {
 num_unlock() { rm -rf "${STATE_DIR:?}/${SKEY:?}.num.lock"; }
 
 # The lowest number none of this session's threads has (those being opened
-# included), into NUM.
+# included), into NUM; the numbers taken, space-separated, into NUMS_USED.
 thread_num() {
 	local used=" " f n
 	local -a files=()
@@ -4873,6 +5297,7 @@ thread_num() {
 	if [ ${#files[@]} -gt 0 ]; then
 		for n in $(jq -r '.num // empty' "${files[@]}" 2>/dev/null); do used="$used$n "; done
 	fi
+	NUMS_USED=$used
 	NUM=1
 	while case $used in *" $NUM "*) true ;; *) false ;; esac do NUM=$((NUM + 1)); done
 }
@@ -5026,7 +5451,11 @@ usage: weaver [command]
                                close an agent (the focused one) with its nvim, and its
                                thread's tab; offers to remove a thread's worktree when it
                                is clean and merged or pushed
-  hook [--async]               Claude Code hook (reads the event JSON on stdin)
+  resume [--all] [which]       threads lost when their zellij went (a crash, or quit):
+                               alone, list them; with a name, number or session id, bring
+                               that one back in a new tab resuming its conversation;
+                               --all, every one. --forget [--yes] which: drop one
+  hook [--async]              Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
@@ -5046,6 +5475,7 @@ case $cmd in
 '' | start) cmd_start "$@" ;;
 new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
+resume) cmd_resume "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
 go) cmd_go "$@" ;;

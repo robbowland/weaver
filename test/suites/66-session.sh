@@ -47,7 +47,7 @@ thread() {
 }
 num() { jq -r .num "$SD/${SESSION}_$1.thread" 2>/dev/null; }
 
-# --- weaver alone, outside zellij: start, attach, resurrect
+# --- weaver alone, outside zellij: start, attach, start an exited one afresh
 mkdir -p "$AT/fakez2" "$AT/zcfg"
 cat >"$AT/fakez2/zellij" <<'EOF'
 #!/bin/sh
@@ -68,10 +68,13 @@ ok "weaver: its config is yours plus its keys, well defined" \
 	"$(zellij --config "$AT/st2/weaver/zellij-session.kdl" setup --check 2>&1 | grep -c 'Well defined')|$(grep -c 'bind "Alt j" { GoToNextTab; }' "$AT/st2/weaver/zellij-session.kdl")" "1|1"
 ok "weaver: its keys come last in your keybinds, so they win" \
 	"$(awk '/bind "Alt N"/ { a = NR } /GoToNextTab/ { b = NR } END { print (a < b) ? "after" : "before" }' "$AT/st2/weaver/zellij-session.kdl")" "after"
+ok "weaver: its session is not saved by zellij (weaver brings its threads back itself)" \
+	"$(grep -c '^[[:space:]]*session_serialization' "$AT/st2/weaver/zellij-session.kdl")|$(tail -n 1 "$AT/st2/weaver/zellij-session.kdl")" \
+	"1|session_serialization false"
 ok "weaver: a running session: attach" "$(out FAKE_SESSIONS='weaver [Created 1s ago] \n')" "zellij attach weaver"
-ok "weaver: weaver's exited session: resurrect it, with its config" \
-	"$(out FAKE_SESSIONS='weaver [Created 1h ago] (EXITED - attach to resurrect)\n')" \
-	"zellij --config $AT/st2/weaver/zellij-session.kdl attach weaver"
+ok "weaver: weaver's exited session (saved by zellij): deleted, and started afresh" \
+	"$(out FAKE_SESSIONS='weaver [Created 1h ago] (EXITED - attach to resurrect)\n' | tr '\n' '|')" \
+	"zellij delete-session weaver|zellij --config $AT/st2/weaver/zellij-session.kdl --session weaver --new-session-with-layout $ROOT/config/weaver-layout.kdl|"
 rm -f "$AT/st2/weaver/weaver.layout"
 o=$(out FAKE_SESSIONS='weaver [Created 1h ago] (EXITED - attach to resurrect)\n')
 ok "weaver: an exited session from before its layout: says how to clear it" \
