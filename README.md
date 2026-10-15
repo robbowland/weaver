@@ -176,7 +176,8 @@ Agents are grouped under NEEDS YOU, DONE (finished, not yet seen), WORKING
 and IDLE (seen, idle or interrupted), in the order `Alt 1` visits them; the
 headings' counts are the status bar's. Threads lost when their session went
 come last, under LOST ([When the session goes](#when-the-session-goes)). Each row is the thread's name, one fact
-(what it waits on, what its last turn changed and said, its subagents),
+(what it waits on, the command it runs, what its last turn changed and
+said, its subagents),
 repo/branch when there is room, and how long it has been in that state. The
 states are Micrographics task cells, which read without colour: `[!]` needs you,
 `[x]` done, `[/]` working, `[ ]` idle, `[-]` interrupted. Titles are in ink only
@@ -191,10 +192,10 @@ reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 all, `q` or `esc` closes the dashboard, and `Ctrl q` quits the session. With no
 agents, it says how to start one.
 
-The resume card says what the agent was asked, what it waits on, what it last
-said, its tasks, subagents and files, and its worktree's git status in one
-line. The dashboard's pane fits what it shows: the card sits beside the list
-when there is room for 150 columns, else under it, and gives way to the list
+The resume card says what the agent was asked, what it waits on or runs,
+what it last said, its tasks, subagents and files, and its worktree's git
+status in one line. The card sits beside the list when there is room for 150
+columns, else under it, and gives way to the list
 when space is short (`s` still shows it). `weaver ls | cat` prints the board
 as text.
 

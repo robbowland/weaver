@@ -4,7 +4,10 @@
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
     "Notification": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
     "PermissionRequest": [{ "matcher": "", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
+    "PreToolUse": [
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }
+    ],
     "Stop": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
     "StopFailure": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],

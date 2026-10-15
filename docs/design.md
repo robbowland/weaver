@@ -49,6 +49,8 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `turn_ended` | int | the last turn that got its `end` snapshot |
 | `turn_roots` | [string] | the roots the current (or last) turn touched |
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
+| `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
+| `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
 | `server` | int | tmux only: the pid of the tmux server the agent runs on (from `$TMUX`); a server started again is another, however soon, so its threads count as lost (absent in older states: then a session made after `ts`) |
@@ -362,7 +364,8 @@ So the headings' counts are the status bar's, and the order is the one Alt 1
 visits. A row: its number (1-9), glyph, name (Claude Code's title, else the
 thread's task, else the last prompt; at most 40 columns), one fact (what it
 waits on; for a finished turn, the files it changed and its last reply;
-background tasks, subagents, task progress or the file being edited; the
+the command it runs (`running npm test`), background tasks, subagents, task
+progress or the file being edited; the
 reason it is not reporting), repo/branch (from 96 columns; `×N` when N agents
 share the worktree) and its age in that state. Columns are no wider than
 their longest entry, so repo/branch and age stay close at any width.
@@ -994,4 +997,12 @@ else weaver's.
   first and polled every 100 ms for a `pane` file the agent's pane wrote, so
   it started up to 100 ms later and, for that moment, belonged to no agent
   (a close then left it behind).
+- 2026-10-15: A working thread's row says what it runs (`running npm
+  test`), and its card (`runs`): an async PreToolUse on Bash records the
+  command, its PostToolUse (paired by `tool_use_id`) or the turn's end
+  clears it. Async, so the agent never waits on it; async hooks land in any
+  order, so a PreToolUse whose tool has already finished (`done_ids`) sets
+  nothing. Before, a working row showed at most the last file edited, and
+  nothing through the long commands (tests, builds) a turn spends most time
+  in.
 

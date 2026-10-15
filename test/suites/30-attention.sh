@@ -86,6 +86,26 @@ hookj 1 "$(j UserPromptSubmit ',"prompt":"long job"')" >/dev/null
 hookj 1 "$(note idle_prompt 'Claude is waiting for your input')"
 ok "the idle reminder while 'working': it was stopped with Esc" "$(st 1 state)" "interrupted"
 
+# --- what a working agent runs: from the async PreToolUse on Bash to its
+# PostToolUse, paired by tool_use_id (async hooks land in any order)
+pre() { hookj 1 "$(j PreToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"},\"tool_use_id\":\"$2\"")" --async; }
+post() { hookj 1 "$(j PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$1\"},\"tool_use_id\":\"$2\",\"tool_response\":{}")" --async; }
+hookj 1 "$(j UserPromptSubmit ',"prompt":"run the tests"')" >/dev/null
+pre "npm test" tu-1
+ok "a command starting: working, and what it runs" "$(st 1 state)|$(st 1 doing)" "working|npm test"
+ok "...on the board" "$(weaver ls | grep -c 'running npm test')" "1"
+ok "...and its card" "$(weaver _preview 1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'runs  *npm test')" "1"
+post "npm test" tu-1
+ok "...and when it is done, no longer" "$(st 1 doing)" "null"
+post "make lint" tu-2
+pre "make lint" tu-2
+ok "a PreToolUse landing after its PostToolUse: nothing runs" "$(st 1 doing)" "null"
+pre "sleep 30" tu-3
+hookj 1 "$(j Stop ',"last_assistant_message":"ok"')" >/dev/null
+ok "the turn's end ends what it ran" "$(st 1 state)|$(st 1 doing)" "done|null"
+hookj 1 "$(j PreToolUse "$ask_input")" >/dev/null
+ok "the sync PreToolUse on AskUserQuestion still needs you" "$(st 1 state)|$(st 1 doing)" "needs-you|null"
+
 # --- compaction carries on; a new start, clear or resume is idle (defect 2)
 hookj 1 "$(j UserPromptSubmit ',"prompt":"big refactor"')" >/dev/null
 hookj 1 "$(j SessionStart ',"source":"compact"')" >/dev/null

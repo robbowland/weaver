@@ -256,6 +256,8 @@ func (e *Env) Rows(plain bool) string {
 			g = 2
 			glyph = paint(GWork, grey, dim, off)
 			switch {
+			case a.Doing != "":
+				fact = "running " + a.Doing
 			case bg != "0":
 				fact = bg + " in background"
 			case nsub != "0":

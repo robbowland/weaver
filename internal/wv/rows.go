@@ -76,6 +76,7 @@ type Row struct {
 	Pane, Tab, State, Root, Since, Seen, Prompt, Waiting, Bg, Title, Nsub, Pid, Pstart, Sfile string
 	Turn, Last, Tdone, Ttotal, File, Sid, Tabname, Agent, Bgtasks, Ttask, Tname, Tnum         string
 	Troots                                                                                    []string
+	Doing                                                                                     string // the command it runs now
 }
 
 // obj is a JSON object read with its numbers as they were written.
@@ -352,6 +353,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Tabname = clean(p.TabName)
 		r.Agent = str(s.get("agent", ""))
 		r.Bgtasks = str(s.get("background_tasks", ""))
+		r.Doing = clean(str(s.get("doing", "")))
 		r.Ttask, r.Tname, r.Tnum = str(t.get("task", "")), str(t.get("name", "")), str(t.get("num", ""))
 		if tr, ok := s.get("turn_roots", []any{}).([]any); ok {
 			for _, x := range tr {

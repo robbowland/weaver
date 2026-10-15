@@ -267,6 +267,9 @@ func card(s obj, w int, head, ab string, changed, nw, shared int) string {
 	if st == "needs-you" {
 		add(field(w, "waits", s.get("waiting", "you"), "", 3))
 	}
+	if d := s.get("doing", ""); d != "" && st == "working" {
+		add(field(w, "runs", d, "", 3))
+	}
 	if n, ok := num(s.get("background", json.Number("0"))); ok && n > 0 {
 		add(field(w, "background", s.get("background_tasks", ""), "", 2))
 	}

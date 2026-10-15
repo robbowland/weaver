@@ -50,7 +50,11 @@ type hk struct {
 	Moved                                                                 bool
 	SnapPrev, SnapStart, SnapEnd, FirstTouch, PrevPrompt, TurnPrompt      string
 	NV                                                                    string
-	rc                                                                    int
+	// What it is running now (a Bash command, from the async PreToolUse
+	// until its PostToolUse), that one's tool_use_id, and the ids of the
+	// last tools that finished (an async PreToolUse may land after them).
+	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
+	rc                                                             int
 }
 
 // Hook is `weaver hook [--async]` (and, from Event, another agent's event):
@@ -378,6 +382,7 @@ func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 		h.Rejected = "1"
 	}
 	h.Err = ctl(one(tostring(ev.get("error", "")), 100))
+	h.ToolUseID = ctl(one(ev.get("tool_use_id", ""), 80))
 	if ev["tool_name"] == "Bash" {
 		c := any("")
 		if ti, ok := ev["tool_input"].(map[string]any); ok {
@@ -398,6 +403,7 @@ func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 	h.OTitle, h.OTurn, h.OTurnEnded = ctl(rawOr(o, "title", "")), ctl(rawOr(o, "turn", "0")), ctl(rawOr(o, "turn_ended", "0"))
 	h.OPromptID, h.OTranscript = ctl(rawOr(o, "prompt_id", "")), ctl(rawOr(o, "transcript", ""))
 	h.OAgent, h.OEnd = ctl(rawOr(s, "agent", "")), ctl(rawOr(o, "end_reason", ""))
+	h.ODoing, h.ODoingID, h.ODoneIDs = ctl(rawOr(o, "doing", "")), ctl(rawOr(o, "doing_id", "")), ctl(rawOr(o, "done_ids", ""))
 	h.FilesJSON = filesNew(st, o, h.File)
 	h.SubsJSON = subsNew(st, o, ev, h.Aid, h.Now)
 	h.TasksJSON = tasksNew(st, o, ev)
@@ -729,6 +735,7 @@ func (h *hk) run(e *Env, me string) {
 	}
 
 	h.Waiting, h.Pending, h.Bg, h.Bgdesc = h.OWaiting, h.OPending, h.OBg, h.OBgdesc
+	h.Doing, h.DoingID, h.DoneIDs = h.ODoing, h.ODoingID, h.ODoneIDs
 	h.State = h.OState
 	if h.State == "" {
 		h.State = "working"
@@ -746,8 +753,21 @@ func (h *hk) run(e *Env, me string) {
 		}
 	case "UserPromptSubmit":
 		h.State, h.Bg, h.Bgdesc = "working", "", ""
-	case "PermissionRequest", "PreToolUse":
-		// A permission dialog, or (PreToolUse on AskUserQuestion) a question.
+	case "PreToolUse":
+		if h.Mode == "async" {
+			// A command starting (the async PreToolUse on Bash): what the
+			// agent is doing, while its turn goes on, unless it has already
+			// finished.
+			if (h.OState == "working" || h.OState == "needs-you") && h.Cmd != "" &&
+				(h.ToolUseID == "" || !strings.Contains(" "+h.DoneIDs+" ", " "+h.ToolUseID+" ")) {
+				h.Doing, h.DoingID = h.Cmd, h.ToolUseID
+			}
+			break
+		}
+		// (PreToolUse on AskUserQuestion) a question.
+		h.State, h.Waiting, h.Pending = "needs-you", h.WaitingNew, h.Key
+	case "PermissionRequest":
+		// A permission dialog.
 		h.State, h.Waiting, h.Pending = "needs-you", h.WaitingNew, h.Key
 	case "Notification":
 		switch h.Ntype {
@@ -778,6 +798,16 @@ func (h *hk) run(e *Env, me string) {
 			}
 		}
 	case "PostToolUse", "PostToolUseFailure":
+		if h.ToolUseID != "" {
+			if h.ToolUseID == h.DoingID {
+				h.Doing, h.DoingID = "", ""
+			}
+			ids := append(strings.Fields(h.DoneIDs), h.ToolUseID)
+			if len(ids) > 8 {
+				ids = ids[len(ids)-8:]
+			}
+			h.DoneIDs = strings.Join(ids, " ")
+		}
 		h.State = "working"
 		if h.Event == "PostToolUseFailure" && h.Interrupt != "" {
 			h.State = "interrupted"
@@ -823,6 +853,13 @@ func (h *hk) run(e *Env, me string) {
 		}
 	case "SessionEnd":
 		h.State, h.Bg, h.Bgdesc = "ended", "", ""
+	}
+	// A turn's commands end with it, or with the agent's work.
+	if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" && h.Source != "compact" {
+		h.Doing, h.DoingID, h.DoneIDs = "", "", ""
+	}
+	if h.State != "working" && h.State != "needs-you" {
+		h.Doing, h.DoingID = "", ""
 	}
 	// Why the session ended: /exit, /clear or a logout ends it on purpose; a
 	// hangup (its session going) is "other".
@@ -966,6 +1003,12 @@ func (e *Env) writeState(h *hk, lk string) {
 		bg = "0"
 	}
 	b.WriteString(`,"background":` + bg + `,"background_tasks":` + jsonStr(h.Bgdesc))
+	if h.Doing != "" {
+		b.WriteString(`,"doing":` + jsonStr(h.Doing) + `,"doing_id":` + jsonStr(h.DoingID))
+	}
+	if h.DoneIDs != "" {
+		b.WriteString(`,"done_ids":` + jsonStr(h.DoneIDs))
+	}
 	nv := "null"
 	if h.NV != "" {
 		nv = h.NV
@@ -1107,7 +1150,7 @@ func (e *Env) afterWrite(h *hk) {
 	}
 	// The background work, only when there is some.
 	if h.State != h.OState || h.Root != h.ORoot || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch != "" ||
-		h.Title != h.OTitle || h.Marker != h.OMarker || h.MarkDir != h.OMarked ||
+		h.Title != h.OTitle || h.Marker != h.OMarker || h.MarkDir != h.OMarked || h.Doing != h.ODoing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		e.spawnBg(h)
 	}

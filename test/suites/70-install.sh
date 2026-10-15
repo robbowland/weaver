@@ -50,8 +50,9 @@ out=$(inst --configure)
 S=$H/.claude/settings.json
 ok "no stale weaver or agentnav hook is left" \
 	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(weaver|agentnav) "))] | length' "$S")" "0"
-ok "each event has exactly one weaver hook" \
-	"$(jq '[.hooks[] | [.[].hooks[] | select(.command | endswith("/weaver"))] | length] | unique' -c "$S")" "[1]"
+ok "each event (each matcher of it) has exactly one weaver hook" \
+	"$(jq '[.hooks[][] | [.hooks[] | select(.command | endswith("/weaver"))] | length | select(. > 0)] | unique' -c "$S")|$(jq '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | endswith("/weaver")))] | length' "$S")|$(jq -c '[.hooks.PreToolUse[] | select(any(.hooks[]; .command | endswith("/weaver"))) | .matcher]' "$S")" \
+	"[1]|$(jq '.hooks | length' "$ROOT/config/claude-hooks.json")|[\"AskUserQuestion\",\"Bash\"]"
 ok "...run by absolute path, without a shell" \
 	"$(jq -r '[.hooks[][].hooks[] | select(.command | endswith("/weaver")) | .command] | unique | .[]' "$S")|$(jq -r '.hooks.Stop[] | .hooks[] | select(.command | endswith("/weaver")) | .args | join(" ")' "$S")" \
 	"$H/.local/bin/weaver|hook"

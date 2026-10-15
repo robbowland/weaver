@@ -53,7 +53,8 @@ func (e *Env) hookBg() {
 			e.Tmux("set-option", "-w", "-u", "-t", "%"+h.Pane, "@weaver-unseen")
 		}
 	}
-	if h.State != h.OState || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot {
+	if h.State != h.OState || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot ||
+		h.Doing != h.ODoing {
 		// A thread's label is its title (else its task or prompt) and branch.
 		e.PushStatus(h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot)
 	}
