@@ -511,6 +511,51 @@ marker (from before this layout) is left to you.
   `agent` or `tab`. A tab without an agent is labelled by its name, or for
   zellij's `Tab #N`, its first pane's directory and command.
 
+## On tmux
+
+`MUX` is `tmux` or `zellij`: `$WEAVER_MUX`, else zellij when
+`$ZELLIJ_SESSION_NAME` is set, else tmux when `$TMUX` is, else zellij. Every
+call to the multiplexer goes through the `mux_*` functions, or a branch on
+`MUX` where tmux needs no workaround.
+
+- **Identity:** `MY_PANE` is the pane weaver runs in (`$ZELLIJ_PANE_ID`, or
+  `$TMUX_PANE` without its `%`; empty in a tmux popup or `run-shell`, which are
+  not panes). In tmux `SESSION` is `$WEAVER_TMUX_SESSION`, which weaver's
+  sessions set for their panes (`new-session -e`, `set-environment`, and `-e`
+  on every window and split it makes), else `tmux display-message -p '#S'`;
+  SKEY is `tmux-<session>`, so state files never mix a zellij session's pane
+  ids with a tmux one's of the same name.
+- **Shapes:** `mux_panes` and `mux_tabs` answer in zellij's `list-panes -a -j`
+  and `list-tabs -j` JSON, from `list-panes -s` and `list-windows` formats split
+  on US: a tab is a window (`@N` as `N`, its index as `position`), a pane `%N`
+  as `N`, and `is_floating` is always false. The rest of weaver reads one shape.
+- **Server:** `weaver` outside tmux (`tmux_start`) runs `tmux -L
+  ${WEAVER_TMUX_SOCKET:-weaver} -f config/tmux.conf`, without zellij's or
+  tmux's variables: `new-session -s weaver -n home 'weaver home'`, or
+  `source-file` and `attach-session` when it runs. `tm` talks to the server
+  `$TMUX` names, else weaver's.
+- **Threads:** `thread_tab`: `new-window -n NAME -c DIR 'weaver nvim --thread
+  TOK'`, then `split-window -h -l AGENT_COLS 'weaver _agent TOK KIND'` (argv,
+  no shell), the nvim pane titled `nvim: <dir>`, the agent active.
+  `thread_place` moves the window to the index of its number (home is 0),
+  when that is free. `thread_width` is one `resize-pane -x`, and Alt v's nvim
+  `split-window -h -b -l 80%` on the agent's left.
+- **Focus:** `select-window` and `select-pane` work from anywhere, so
+  `focus_pane` is those two, and `focused_pane` (in a popup or `run-shell`)
+  is the session's active pane. weaver's keys pass `#{pane_id}` to `run-shell`
+  as well.
+- **Status line:** tmux's own, `#(weaver status --tmux '#{session_name}')`
+  every 2 s (the zjstatus fast path, with zjstatus's `#[...]` styles), and
+  `push_status` refreshes each client on the session at once.
+- **Lost threads:** a `tmux-` session is lost when its server no longer has
+  it, or has one of its name created after the agent's last event
+  (`#{session_created}`). `resume_session` in a tmux session also takes the
+  lost threads of the zellij session of its name. `mux_session_keys` lists
+  both multiplexers' sessions for `gc_states`, so neither's files go for the
+  other's sessions.
+- **Not on tmux:** the thread sidebar and `_sidefit` (zellij swap layouts), and
+  `float_fit`: popups keep the size their key gives them.
+
 ## Decisions
 
 - 2026-10-13: WorktreeCreate and WorktreeRemove hooks are not registered.
@@ -816,3 +861,13 @@ marker (from before this layout) is left to you.
   nothing, so weaver names it in the footer and help rather than rebinding it.
   `weaver quit` asks first and works from outside zellij, for a session left
   running behind a closed window.
+- 2026-10-15: weaver can run on tmux, beside zellij, behind one `mux_*` layer.
+  zellij 0.45.1 crashed its server five times in three days on the work Mac
+  (once in the test suite's own session, 50 s after it started), taking every
+  agent with it; Rob found the tool too brittle to rely on. tmux's server is
+  mature and rarely crashes, does what zellij needed workarounds for (focus
+  from the command line, absolute pane widths, window indices as thread
+  numbers), and runs headless, so its tests need no client. Herdr was weighed
+  and set aside: one server for every pane as in zellij, with open crashes of
+  its own, and pre-1.0. zellij stays the default until the tmux session has
+  been tried.

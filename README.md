@@ -41,6 +41,23 @@ config (weaver's otherwise), added after your own keybindings for this session
 only. An exited session named `weaver` from before this layout is never
 replaced by weaver: `zellij delete-session weaver`, then `weaver`.
 
+### On tmux
+
+```sh
+WEAVER_MUX=tmux weaver
+```
+
+starts the same session in tmux instead, on weaver's own tmux server
+(`tmux -L weaver`, configured by `config/tmux.conf`, then
+`~/.config/weaver/tmux.conf` when you have one), so it never touches a tmux of
+yours. Home is window 0 and each thread's window index is its number; the keys
+are the same (`Ctrl q` quits the session), and Ghostty's Cmd+D splits panes.
+Inside tmux weaver finds its session by itself; agents started in any tmux
+session report as they do in zellij. Its threads are kept apart from a zellij
+session of the same name, and the tmux session, as it starts, also brings back
+the threads that zellij session lost. Not on tmux yet: the thread sidebar, and
+floating panes that fit what they show (tmux's popups have a fixed size).
+
 ## Keys
 
 | Key | Does |
@@ -350,6 +367,9 @@ End-to-end, in a throwaway zellij session with its own state, Claude Code
 config dir and minimal nvim config; your real sessions are not touched. Each
 suite starts from a clean slate, so any one can run alone.
 `test/suites/05-latency.sh` measures what each hook costs the agent.
+`test/tmux.sh` runs weaver on a throwaway tmux server of its own (a few
+seconds): threads, hooks, Alt v and Alt y, a crash and its resume, close and
+quit.
 `test/nvim/run.sh` runs only the Neovim specs (headless, a few seconds); set
 `WEAVER_TEST_PLUGINS` to a directory holding `diffview-plus.nvim` if
 lazy.nvim's plugin directory doesn't have it.

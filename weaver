@@ -31,10 +31,14 @@ G_NEED='[!]' G_DONE='[x]' G_SEEN='[x]' G_WORK='[/]' G_IDLE='[ ]' G_INT='[-]' G_E
 # tab: answer from the counts the hooks keep, before parsing anything else.
 # It must never fail or hang zjstatus: no external command, only a file read
 # (bounded by read -t), empty output and status 0 on anything unexpected.
-if [ "${1:-}" = status ] && [ "${2:-}" = --zjstatus ]; then
+# tmux's status line runs `weaver status --tmux SESSION` the same way (its
+# #[...] styles are zjstatus's).
+if [ "${1:-}" = status ] && { [ "${2:-}" = --zjstatus ] || [ "${2:-}" = --tmux ]; }; then
 	n=0 d=0 w=0
-	f="${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/weaver/${ZELLIJ_SESSION_NAME//\//_}.status"
-	[ -n "${ZELLIJ_SESSION_NAME:-}" ] && [ -f "$f" ] && { read -r -t 1 n d w _ <"$f"; } 2>/dev/null
+	k=${ZELLIJ_SESSION_NAME:-}
+	[ "$2" = --tmux ] && k=${3:-} && [ -n "$k" ] && k="tmux-$k"
+	f="${XDG_STATE_HOME:-${HOME:-/nonexistent}/.local/state}/weaver/${k//\//_}.status"
+	[ -n "$k" ] && [ -f "$f" ] && { read -r -t 1 n d w _ <"$f"; } 2>/dev/null
 	case "${n:-0}${d:-0}${w:-0}" in *[!0-9]*) n=0 d=0 w=0 ;; esac
 	out=""
 	# Each count's cell: faint brackets, its mark in the signal colour.
@@ -60,8 +64,34 @@ LOG_DIR="$STATE_DIR/log"
 # /tmp rather than $TMPDIR: macOS caps unix socket paths at ~104 bytes.
 SOCK_DIR="/tmp/weaver-${UID:-$(id -u)}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-SESSION="${ZELLIJ_SESSION_NAME:-}"
-SKEY="${SESSION//\//_}"
+# The multiplexer: tmux or zellij. $WEAVER_MUX says, else the session weaver
+# runs in; outside both, zellij. MY_PANE is the pane this runs in (empty in a
+# tmux popup or run-shell, which are not panes), SESSION its session's name.
+# A tmux session's files are keyed tmux-<name> (SKEY), so a zellij and a tmux
+# session of one name never mix their pane ids.
+if [ -n "${WEAVER_MUX:-}" ]; then
+	MUX=$WEAVER_MUX
+elif [ -n "${ZELLIJ_SESSION_NAME:-}" ]; then
+	MUX=zellij
+elif [ -n "${TMUX:-}" ]; then
+	MUX=tmux
+else
+	MUX=zellij
+fi
+if [ "$MUX" = tmux ]; then
+	MY_PANE=${TMUX_PANE:-}
+	MY_PANE=${MY_PANE#%}
+	SESSION=""
+	if [ -n "${TMUX:-}" ]; then
+		# weaver's tmux sessions set it for their panes; anywhere else, ask.
+		SESSION=${WEAVER_TMUX_SESSION:-$(tmux display-message -p ${TMUX_PANE:+-t "$TMUX_PANE"} '#S' 2>/dev/null)}
+	fi
+	SKEY="${SESSION:+tmux-}${SESSION//\//_}"
+else
+	MY_PANE=${ZELLIJ_PANE_ID:-}
+	SESSION="${ZELLIJ_SESSION_NAME:-}"
+	SKEY="${SESSION//\//_}"
+fi
 US=$'\037' # field separator for jq output; never appears in paths or prompts
 RS=$'\036' # list separator inside one field
 TAB=$'\t'
@@ -87,7 +117,122 @@ die() {
 }
 
 need_session() {
-	[ -n "$SESSION" ] || die "not inside a zellij session (ZELLIJ_SESSION_NAME is unset)"
+	[ -n "$SESSION" ] || die "not inside a zellij or tmux session"
+}
+
+# ---------------------------------------------------------------- multiplexer
+#
+# What weaver asks of zellij or tmux, by MUX. tmux answers in zellij's JSON
+# (list-panes -j, list-tabs -j) so the rest of weaver reads one shape: a tab
+# is a tmux window (its id @N as N, its index as its position), a pane's id
+# %N is N, and nothing floats (tmux's popups are not panes).
+
+# tmux: the server we run in, else weaver's own ($WEAVER_TMUX_SOCKET).
+tm() {
+	if [ -n "${TMUX:-}" ]; then
+		tmux "$@"
+	else
+		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" "$@"
+	fi
+}
+
+# The session's panes, as zellij's list-panes -a -j.
+mux_panes() {
+	local out
+	if [ "$MUX" != tmux ]; then
+		zellij action list-panes -a -j 2>/dev/null
+		return
+	fi
+	out=$(tm list-panes -s -t "=$SESSION" -F "#{pane_id}$US#{window_id}$US#{window_name}$US#{window_index}$US#{pane_dead}$US#{pane_start_command}$US#{pane_width}$US#{pane_height}$US#{pane_left}$US#{pane_top}$US#{pane_title}$US#{pane_current_path}$US#{pane_active}" 2>/dev/null) ||
+		return 1
+	printf '%s\n' "$out" | jq -Rsc '[split("\n")[] | select(length > 0) | split("\u001f")
+		| {id: (.[0][1:] | tonumber), is_plugin: false, is_floating: false,
+		   tab_id: (.[1][1:] | tonumber), tab_name: .[2], tab_position: (.[3] | tonumber),
+		   exited: (.[4] == "1"), terminal_command: .[5],
+		   pane_columns: (.[6] | tonumber), pane_rows: (.[7] | tonumber),
+		   pane_x: (.[8] | tonumber), pane_y: (.[9] | tonumber),
+		   title: .[10], pane_cwd: .[11], is_focused: (.[12] == "1")}]'
+}
+
+# The session's tabs, as zellij's list-tabs -j.
+mux_tabs() {
+	local out
+	if [ "$MUX" != tmux ]; then
+		zellij action list-tabs -j 2>/dev/null
+		return
+	fi
+	out=$(tm list-windows -t "=$SESSION" -F "#{window_id}$US#{window_index}$US#{window_name}$US#{window_active}$US#{window_width}$US#{window_height}" 2>/dev/null) ||
+		return 1
+	printf '%s\n' "$out" | jq -Rsc '[split("\n")[] | select(length > 0) | split("\u001f")
+		| {tab_id: (.[0][1:] | tonumber), position: (.[1] | tonumber), name: .[2],
+		   active: (.[3] == "1"), viewport_columns: (.[4] | tonumber), viewport_rows: (.[5] | tonumber)}]'
+}
+
+mux_go_tab() {
+	if [ "$MUX" = tmux ]; then
+		tm select-window -t "@$1" >/dev/null 2>&1
+	else
+		zellij action go-to-tab-by-id "$1" >/dev/null 2>&1
+	fi
+}
+
+mux_close_pane() {
+	if [ "$MUX" = tmux ]; then
+		tm kill-pane -t "%$1" >/dev/null 2>&1
+	else
+		zellij action close-pane --pane-id "terminal_$1" >/dev/null 2>&1
+	fi
+}
+
+mux_rename_pane() {
+	if [ "$MUX" = tmux ]; then
+		tm select-pane -t "%$1" -T "$2" </dev/null >/dev/null 2>&1
+	else
+		zellij action rename-pane --pane-id "terminal_$1" "$2" </dev/null >/dev/null 2>&1
+	fi
+}
+
+mux_rename_tab() {
+	if [ "$MUX" = tmux ]; then
+		tm rename-window -t "@$1" "$2" </dev/null >/dev/null 2>&1
+	else
+		zellij action rename-tab-by-id "$1" "$2" </dev/null >/dev/null 2>&1
+	fi
+}
+
+# Pane $1's screen, with its colours.
+mux_screen() {
+	if [ "$MUX" = tmux ]; then
+		tm capture-pane -p -e -t "%$1" 2>/dev/null
+	else
+		zellij action dump-screen --ansi --pane-id "terminal_$1" 2>/dev/null
+	fi
+}
+
+# The panes your clients are looking at, space-separated.
+mux_client_panes() {
+	if [ "$MUX" = tmux ]; then
+		tm list-clients -F '#{pane_id}' 2>/dev/null | tr -d '%' | tr '\n' ' '
+	else
+		zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }'
+	fi
+}
+
+# The running sessions' keys (SKEY), one per line, of both: zellij's, and
+# tmux's on weaver's server and the one we run in.
+mux_session_keys() {
+	zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g'
+	command -v tmux >/dev/null 2>&1 || return 0
+	{
+		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" list-sessions -F '#S' 2>/dev/null
+		[ -n "${TMUX:-}" ] && tmux list-sessions -F '#S' 2>/dev/null
+	} | sed 's|/|_|g; s|^|tmux-|'
+}
+
+# tmux: the sessions of the server we run in (else weaver's), one
+# "<key> <epoch it was created>" per line.
+tmux_sessions() {
+	tm list-sessions -F '#S #{session_created}' 2>/dev/null | sed 's|/|_|g; s|^|tmux-|'
 }
 
 state_file() { SF="$STATE_DIR/${SKEY}_$1.json"; }
@@ -369,7 +514,7 @@ BELL_JSON='{"terminalSequence":"\u0007"}'
 cmd_hook() {
 	local rc mode=sync
 	[ "${1:-}" = --async ] && mode=async
-	[ -n "${ZELLIJ_PANE_ID:-}" ] && [ -n "$SESSION" ] || exit 0
+	[ -n "${MY_PANE:-}" ] && [ -n "$SESSION" ] || exit 0
 	[ -t 0 ] && exit 0
 	if [ -n "${WEAVER_DEBUG:-}" ]; then
 		[ "$WEAVER_DEBUG" = trace ] && set -x
@@ -451,7 +596,7 @@ log_line() {
 # Returns 10 when the agent has just started needing you, 11 when it has just
 # finished (ring the bell).
 hook_run() {
-	local mode=$1 pane=$ZELLIJ_PANE_ID parsed J out moved=0 rc=0 HEAD=""
+	local mode=$1 pane=$MY_PANE parsed J out moved=0 rc=0 HEAD=""
 	local event cwd sid file prompt prompt_long tool ntype now now_ms waiting_new key last_new aid atype bg_new bgdesc_new
 	local source interrupt title_new prompt_id transcript new_cwd rejected err cmd end_new
 	local o_cwd o_root o_file o_prompt o_state o_sid o_start o_since o_waiting o_pending o_last o_seen
@@ -887,7 +1032,7 @@ cmd_event() {
 	esac || exit 0
 	IFS=$NL read -r -d '' meta json <<<"$meta"
 	IFS=, read -r agent pid pane <<<"${meta//[\[\]\"]/}"
-	pane=${pane:-${ZELLIJ_PANE_ID:-}}
+	pane=${pane:-${MY_PANE:-}}
 	[ -n "$pane" ] && [ -n "$SESSION" ] && [ -n "$agent" ] || exit 0
 	case $json in *'"hook_event_name"'*) ;; *) exit 0 ;; esac
 	case $json in *'"PostToolUse'* | *'"Subagent'*) mode=async ;; esac
@@ -897,7 +1042,7 @@ cmd_event() {
 	if [ -z "$pid" ] && [ -n "$adapter" ]; then
 		case $json in *'"SessionStart"'*) agent_ancestor && pid=$ANCESTOR ;; esac
 	fi
-	(printf '%s' "$json" | ZELLIJ_PANE_ID=$pane WEAVER_AGENT=$agent WEAVER_AGENT_PID=$pid hook_run "$mode") >/dev/null 2>&1
+	(printf '%s' "$json" | MY_PANE=$pane WEAVER_AGENT=$agent WEAVER_AGENT_PID=$pid hook_run "$mode") >/dev/null 2>&1
 	rc=$?
 	if [ $bell = 1 ]; then
 		case ${WEAVER_BELL:-1}:$rc in
@@ -1010,7 +1155,7 @@ toplevel() { git -C "$1" rev-parse --show-toplevel 2>/dev/null; }
 list_panes() {
 	local i
 	for i in 1 2 3; do
-		PANES=$(zellij action list-panes -a -j 2>/dev/null) &&
+		PANES=$(mux_panes) &&
 			printf '%s' "$PANES" | jq -e 'type == "array"' >/dev/null 2>&1 && return 0
 		sleep 0.1
 	done
@@ -1025,8 +1170,16 @@ list_panes() {
 # (this pane keeps running; it closes when weaver exits). Outside a floating
 # pane, the focused tiled pane of our own tab.
 focused_pane() {
-	local me=${ZELLIJ_PANE_ID:-} id cur floats
+	local me=${MY_PANE:-} id cur floats
 	FOCUSED=""
+	# tmux: a popup or run-shell is not a pane, so the session's active pane
+	# is the one you were on.
+	if [ "$MUX" = tmux ]; then
+		cur=$(tm display-message -p -t "=$SESSION:" '#{pane_id}' 2>/dev/null)
+		cur=${cur#%}
+		[ "$cur" != "$me" ] && FOCUSED=$cur
+		return 0
+	fi
 	if [ -n "$me" ] && printf '%s' "$PANES" | jq -e --arg me "$me" \
 		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and .is_floating)' >/dev/null 2>&1; then
 		floats=" $(printf '%s' "$PANES" | jq -r '[.[] | select((.is_plugin | not) and .is_floating) | .id] | join(" ")') "
@@ -1070,7 +1223,11 @@ client_pane() {
 # do: so step until the client this runs for (the one on our own floating
 # pane, else the first) is on PANE. A few zellij calls per pane in the tab.
 focus_pane() {
-	local pane=$1 tab=${2:-} me=${ZELLIJ_PANE_ID:-} id cur i n=8 floats=""
+	local pane=$1 tab=${2:-} me=${MY_PANE:-} id cur i n=8 floats=""
+	if [ "$MUX" = tmux ]; then
+		tm select-window -t "%$pane" \; select-pane -t "%$pane" >/dev/null 2>&1
+		return
+	fi
 	id=$(client_of "$me")
 	[ -n "$tab" ] && zellij action go-to-tab-by-id "$tab" >/dev/null 2>&1
 	if list_panes; then
@@ -1100,6 +1257,10 @@ pane_view() {
 	VIEW_COLS="" VIEW_ROWS="" VIEW_FLOAT=""
 	if [ -n "${WEAVER_VIEW:-}" ]; then
 		read -r VIEW_COLS VIEW_ROWS VIEW_FLOAT <<<"$WEAVER_VIEW"
+	elif [ "$MUX" = tmux ]; then
+		# Our own pane or popup, whose size is the terminal's.
+		info=$({ stty size </dev/tty; } 2>/dev/null)
+		VIEW_ROWS=${info% *} VIEW_COLS=${info#* }
 	else
 		[ -n "$p" ] || return 1
 		[ -n "${PANES:-}" ] || list_panes || return 1
@@ -1120,13 +1281,13 @@ pane_view() {
 	return 0
 }
 
-# Fit the floating pane this runs in ($ZELLIJ_PANE_ID) to ROWS x COLS cells:
+# Fit the floating pane this runs in ($MY_PANE) to ROWS x COLS cells:
 # at most 85% of the tab's rows and 90% of its columns (at least 3 x 20),
 # centred, borderless (whatever draws in it draws its own border). Into
 # FIT_ROWS and FIT_COLS, the size it took. Does nothing in a pane that does
 # not float, or when zellij does not answer.
 float_fit() {
-	local rows=$1 cols=$2 p=${ZELLIJ_PANE_ID:-} max
+	local rows=$1 cols=$2 p=${MY_PANE:-} max
 	FIT_ROWS="" FIT_COLS=""
 	case $rows$cols in '' | *[!0-9]*) return 0 ;; esac
 	[ -n "$p" ] && pane_view "$p" && [ -n "$VIEW_FLOAT" ] || return 0
@@ -1175,7 +1336,7 @@ hook_bg() {
 		push_status
 	fi
 	if [ -n "$NV" ] && [ "$root" != "$o_root" ] && same_root; then
-		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${root##*/}"
+		bounded /dev/null mux_rename_pane "$NV" "nvim: ${root##*/}"
 	fi
 	if [ "$mark_dir" != "$o_marked" ] || { [ -n "$mark_dir" ] && [ "$marker" != "$o_marker" ]; }; then
 		[ -n "$o_marked" ] && [ "$o_marked" != "$mark_dir" ] && wt_marker "$o_marked" ""
@@ -1337,7 +1498,7 @@ follow_bash_edits() {
 	[ -n "$NV" ] || return 0
 	nvim_edit_event edit "$r" "$newest" "$tool"
 	if [ "$r" != "$o_root" ]; then
-		bounded /dev/null zellij action rename-pane --pane-id "terminal_$NV" "nvim: ${r##*/}"
+		bounded /dev/null mux_rename_pane "$NV" "nvim: ${r##*/}"
 	fi
 	return 0
 }
@@ -1553,7 +1714,7 @@ cmd_nvim() {
 		rc=$?
 		if [ $rc = 0 ] || [ $rc -ge 128 ]; then
 			read_nvim_pane "$agent"
-			[ -n "$NV" ] && [ "$NV" != "${ZELLIJ_PANE_ID:-}" ] && focus_pane "$NV"
+			[ -n "$NV" ] && [ "$NV" != "${MY_PANE:-}" ] && focus_pane "$NV"
 			exit 0
 		fi
 	fi
@@ -1561,13 +1722,13 @@ cmd_nvim() {
 
 	state_file "$agent"
 	nvim_file "$agent"
-	if [ -n "${ZELLIJ_PANE_ID:-}" ]; then
+	if [ -n "${MY_PANE:-}" ]; then
 		mkdir -p "$STATE_DIR"
 		# exec keeps this pid for nvim.
-		printf '%s\n%s\n' "$ZELLIJ_PANE_ID" "$$" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
+		printf '%s\n%s\n' "$MY_PANE" "$$" >"$NVF.$$" && mv -f "$NVF.$$" "$NVF"
 		if [ -f "$SF" ]; then
 			lock
-			if jq -c --arg nv "$ZELLIJ_PANE_ID" '.nvim_pane = ($nv | tonumber? // $nv)' "$SF" >|"$LOCK"; then
+			if jq -c --arg nv "$MY_PANE" '.nvim_pane = ($nv | tonumber? // $nv)' "$SF" >|"$LOCK"; then
 				commit_lock
 			else
 				drop_lock
@@ -1593,6 +1754,14 @@ cmd_nvim() {
 open_left_of() {
 	local target=$1 cwd=$2 name=$3
 	shift 3
+	# tmux splits the target's own window, whatever has the focus.
+	if [ "$MUX" = tmux ]; then
+		NEWPANE=$(tm split-window -h -b -l 80% -P -F '#{pane_id}' -t "%$target" -c "$cwd" "$@") ||
+			die "tmux split-window failed"
+		NEWPANE=${NEWPANE#%}
+		mux_rename_pane "$NEWPANE" "$name"
+		return 0
+	fi
 	# Its tab first: the new pane opens beside the focused one.
 	focus_pane "$target" "$(printf '%s' "$PANES" | jq -r --arg p "$target" \
 		'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id // empty')"
@@ -1659,13 +1828,13 @@ cmd_edit() {
 		case $1 in
 		--full) full=1 ;;
 		-*) die "usage: weaver edit [--full] [pane-id]" ;;
-		*) target=${1#terminal_} ;;
+		*) target=${1#terminal_} target=${target#%} ;;
 		esac
 		shift
 	done
 	need_session
 	ui_lock
-	list_panes || die "zellij action list-panes failed"
+	list_panes || die "$MUX would not list the panes"
 
 	if [ -z "$target" ]; then
 		focused_pane
@@ -1736,7 +1905,14 @@ cmd_edit() {
 			edit_unlock
 		fi
 	fi
-	[ $full = 1 ] && zellij action toggle-fullscreen
+	if [ $full = 1 ]; then
+		if [ "$MUX" = tmux ]; then
+			read_nvim_pane "${agent:-x}"
+			tm resize-pane -Z -t "%${NV:-${NEWPANE:-$target}}" >/dev/null 2>&1
+		else
+			zellij action toggle-fullscreen
+		fi
+	fi
 	return 0
 }
 
@@ -1832,8 +2008,8 @@ JQ_ROWS='
 # in (or we run outside a pane): never garbage-collect on a partial answer.
 panes_trusted() {
 	[ -n "$PANES" ] || return 1
-	[ -n "${ZELLIJ_PANE_ID:-}" ] || return 0
-	printf '%s' "$PANES" | jq -e --arg me "$ZELLIJ_PANE_ID" \
+	[ -n "${MY_PANE:-}" ] || return 0
+	printf '%s' "$PANES" | jq -e --arg me "$MY_PANE" \
 		'any(.[]; (.is_plugin | not) and (.id | tostring) == $me)' >/dev/null 2>&1
 }
 
@@ -1893,6 +2069,19 @@ EOF2
 # is no server running it, or one that started after?
 server_lost() {
 	local name start
+	# A tmux session: lost when its server no longer has it, or has one of
+	# its name made since (the server went, and weaver started it again).
+	case $1 in tmux-*)
+		while IFS=' ' read -r name start; do
+			[ -n "$name" ] && [ "$name" = "$1" ] || continue
+			[ "$start" -gt "$2" ]
+			return
+		done <<EOF2
+$(tmux_sessions)
+EOF2
+		return 0
+		;;
+	esac
 	servers
 	# Inside zellij its own server runs: none means ps did not answer, and
 	# without knowing, nothing is lost (forgotten, as before).
@@ -2029,7 +2218,7 @@ gc_states() {
 			base=${f##*/}
 			skey=${base%_*}
 			if [ -z "$sessions" ]; then
-				sessions=$NL$(zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g')$NL
+				sessions=$NL$(mux_session_keys)$NL
 			fi
 			# Only an hour after its last event: zellij's list can miss a
 			# session that is busy (seen under load in the tests).
@@ -2060,7 +2249,7 @@ gc_states() {
 		base=${f##*/}
 		skey=${base%_*}
 		if [ -z "$sessions" ]; then
-			sessions=$NL$(zellij list-sessions --short --no-formatting 2>/dev/null | sed 's|/|_|g')$NL
+			sessions=$NL$(mux_session_keys)$NL
 		fi
 		case $sessions in "$NL$NL" | *"$NL$skey$NL"*) ;; *) rm -f "$f" ;; esac
 	done
@@ -2089,7 +2278,7 @@ status_counts() {
 	[ ${#FOUND[@]} -gt 0 ] || return 0
 	clients=" "
 	[ "${1:-}" = mark ] &&
-		clients=" $(zellij action list-clients 2>/dev/null | awk 'NR > 1 { sub("terminal_", "", $2); printf "%s ", $2 }')"
+		clients=" $(mux_client_panes)"
 	for f in "${FOUND[@]}"; do
 		line="" st="" pid="" seen=""
 		{ IFS= read -r line <"$f"; } 2>/dev/null
@@ -2142,6 +2331,12 @@ push_status() {
 	mkdir -p "$STATE_DIR"
 	printf '%s %s %s\n' "$N_NEED" "$N_DONE" "$N_WORK" >"$STATE_DIR/$SKEY.status.$$" &&
 		mv -f "$STATE_DIR/$SKEY.status.$$" "$STATE_DIR/$SKEY.status"
+	# tmux reads the counts every few seconds: now, for its clients on us.
+	if [ "$MUX" = tmux ]; then
+		for s in $(tm list-clients -t "=$SESSION" -F '#{client_name}' 2>/dev/null); do
+			tm refresh-client -S -t "$s" >/dev/null 2>&1
+		done
+	fi
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
 		[ -S "$s" ] || continue
 		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $(printf '%q' "$SELF") _rows)+refresh-preview" \
@@ -2380,10 +2575,10 @@ ls_view() {
 	local base=${FZF_SOCK:-}
 	base=${base%.sock}
 	if [ -n "$base" ] && [ -z "${LS_REMEASURE:-}" ] && [ -f "$base.vp" ]; then
-		WEAVER_VIEW=$(cat "$base.vp" 2>/dev/null) pane_view "${ZELLIJ_PANE_ID:-}"
+		WEAVER_VIEW=$(cat "$base.vp" 2>/dev/null) pane_view "${MY_PANE:-}"
 		return
 	fi
-	pane_view "${ZELLIJ_PANE_ID:-}" || return 1
+	pane_view "${MY_PANE:-}" || return 1
 	[ -n "$base" ] && printf '%s %s %s\n' "$VIEW_COLS" "$VIEW_ROWS" "$VIEW_FLOAT" >"$base.vp"
 	return 0
 }
@@ -2839,7 +3034,7 @@ cmd_preview() {
 		[ -n "$pane" ] || return 0
 		# Whose screen it is, then as much of its end as fits.
 		printf '%sscreen · %s%s%s%s%s\n' "$C_DIM" "$C_OFF$C_BOLD" "${title%% · *}" "$C_OFF" "$C_DIM${title#"${title%% · *}"}" "$C_OFF"
-		zellij action dump-screen --ansi --pane-id "terminal_$pane" 2>/dev/null |
+		mux_screen "$pane" |
 			awk 'NF { last = NR } { l[NR] = $0 } END { s = last - '"$((lines - 1))"' + 1; if (s < 1) s = 1; for (i = s; i <= last; i++) print l[i] }'
 		return 0
 		;;
@@ -3413,7 +3608,7 @@ thread_tab_labels() {
 		line="$tab$TAB$label"
 		new="$new$line$NL"
 		case "$NL$old$NL" in *"$NL$line$NL"*) continue ;; esac
-		zellij action rename-tab-by-id "$tab" "$label" </dev/null >/dev/null 2>&1
+		mux_rename_tab "$tab" "$label"
 	done <<EOF2
 $AGENT_ROWS
 EOF2
@@ -3424,7 +3619,7 @@ EOF2
 # with no PANE, to the tab.
 cmd_goto() {
 	if [ -z "${1:-}" ]; then
-		zellij action go-to-tab-by-id "${2:-}" >/dev/null 2>&1
+		mux_go_tab "${2:-}"
 		return 0
 	fi
 	jump_to "$1" "$2"
@@ -3438,11 +3633,11 @@ cmd_sidebar() {
 	q=$(printf '%q' "$SELF")
 	[ -x /bin/dash ] && sh=/bin/dash
 	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
-	base="$SOCK_DIR/${SKEY}.side.${ZELLIJ_PANE_ID:-$$}"
+	base="$SOCK_DIR/${SKEY}.side.${MY_PANE:-$$}"
 	sock="$base.sock"
 	# Its own tab: the thread it shows inverted.
 	list_panes
-	WEAVER_SIDE_TAB=$(printf '%s' "${PANES:-[]}" | jq -r --arg p "${ZELLIJ_PANE_ID:-}" \
+	WEAVER_SIDE_TAB=$(printf '%s' "${PANES:-[]}" | jq -r --arg p "${MY_PANE:-}" \
 		'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id // empty' 2>/dev/null)
 	export WEAVER_SIDE_TAB
 	trap 'rm -f "$sock" "$base".keys "$base".cur; [ -n "$tick" ] && kill "$tick" 2>/dev/null' EXIT
@@ -4313,6 +4508,13 @@ agent_cols() {
 thread_width() {
 	local agent=$1 nv=$2 round geo aw total target step d n i dir
 	agent_width
+	if [ "$MUX" = tmux ]; then
+		total=$(tm display-message -p -t "%$agent" '#{window_width}' 2>/dev/null)
+		case $total in '' | *[!0-9]*) return 0 ;; esac
+		agent_cols "$total"
+		tm resize-pane -t "%$agent" -x "$AGENT_COLS" >/dev/null 2>&1
+		return 0
+	fi
 	for round in 1 2 3; do
 		list_panes || return 0
 		geo=$(printf '%s' "$PANES" | jq -r --arg a "$agent" --arg n "$nv" '
@@ -4350,7 +4552,7 @@ thread_layout() {
 	agent_width
 	size=$AW_SIZE
 	# At least the agent's minimum, in columns, on a narrow screen.
-	total=$(zellij action list-tabs -j 2>/dev/null | jq -r '[.[] | select(.active)] | .[0].viewport_columns // 0' 2>/dev/null)
+	total=$(mux_tabs | jq -r '[.[] | select(.active)] | .[0].viewport_columns // 0' 2>/dev/null)
 	case $total in '' | *[!0-9]*) total=0 ;; esac
 	if [ -n "$AW_PCT" ] && [ "$total" -gt 0 ]; then
 		agent_cols "$total"
@@ -4437,6 +4639,34 @@ weaver_thread {
 }"
 }
 
+# Open a thread's tab, named $4, in directory $3: nvim on the left (`weaver
+# nvim --thread $1`), the agent ($2) on the right at its width, with the
+# focus; not gone to when NOFOCUS is set. Its id into TAB; returns 1 when the
+# multiplexer would not open it.
+thread_tab() {
+	local tok=$1 kind=$2 dir=$3 name=$4 total
+	TAB=""
+	if [ "$MUX" != tmux ]; then
+		thread_layout "$tok" "$kind" "$dir"
+		TAB=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) ||
+			return 1
+		return 0
+	fi
+	TAB=$(tm new-window ${NOFOCUS:+-d} -P -F '#{window_id}' -t "=$SESSION:" -n "$name" -c "$dir" \
+		-e "WEAVER_TMUX_SESSION=$SESSION" "$SELF" nvim --thread "$tok") || return 1
+	TAB=${TAB#@}
+	total=$(tm display-message -p -t "@$TAB" '#{window_width}' 2>/dev/null)
+	case $total in '' | *[!0-9]*) total=200 ;; esac
+	agent_cols "$total"
+	tm split-window -h -t "@$TAB" -l "$AGENT_COLS" -c "$dir" -e "WEAVER_TMUX_SESSION=$SESSION" \
+		"$SELF" _agent "$tok" "$kind" >/dev/null || {
+		tm kill-window -t "@$TAB" >/dev/null 2>&1
+		return 1
+	}
+	tm select-pane -t "@$TAB.0" -T "nvim: ${dir##*/}" \; select-pane -t "@$TAB.1" >/dev/null 2>&1
+	return 0
+}
+
 # Start the thread from TASK and the F_* fields: its worktree (unless here),
 # then its tab. Prints where it went.
 thread_create() {
@@ -4476,12 +4706,12 @@ thread_create() {
 		die "cannot write the thread record"
 	}
 	num_unlock
-	thread_layout "$tok" "$F_AGENT" "$dir"
-	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
+	thread_tab "$tok" "$F_AGENT" "$dir" "$name" || {
 		rm -rf "$d"
-		[ "$created" = true ] && die "zellij could not open the tab for $name (its new worktree stays: $dir)"
-		die "zellij could not open the tab for $name"
+		[ "$created" = true ] && die "$MUX could not open the tab for $name (its new worktree stays: $dir)"
+		die "$MUX could not open the tab for $name"
 	}
+	tab=$TAB
 	weaver_session && thread_place "$tab" "$NUM"
 	remember_repo "$F_REPO"
 	tildify "$dir"
@@ -4539,13 +4769,13 @@ thread_restore() {
 		return 1
 	fi
 	num_unlock
-	thread_layout "$tok" "$kind" "$dir"
-	tab=$(zellij action new-tab --layout-string "$LAYOUT" --cwd "$dir" --name "$name" ${NOFOCUS:+--no-focus}) || {
+	thread_tab "$tok" "$kind" "$dir" "$name" || {
 		mv -f "$d/lost.json" "$lf"
 		rm -rf "$d"
-		RESTORE_ERR="$name: zellij could not open its tab"
+		RESTORE_ERR="$name: $MUX could not open its tab"
 		return 1
 	}
+	tab=$TAB
 	rm -f "$d/lost.json"
 	weaver_session && thread_place "$tab" "$NUM"
 	tildify "$dir"
@@ -4586,15 +4816,19 @@ $LOST_ROWS
 EOF2
 }
 
-# Every thread this zellij session lost (when it went before), back in its
-# tabs in their numbers' order, leaving you where you are.
+# Every thread this session lost (when it went before), back in its tabs in
+# their numbers' order, leaving you where you are. A tmux session also takes
+# those of the zellij session of its name: moving from zellij to tmux keeps
+# them.
 resume_session() {
-	local f sid name num rest files
+	local f sid name num rest files also=""
+	[ "$MUX" = tmux ] && also=${SKEY#tmux-}
 	lost_rows
 	files=$(while IFS=$US read -r f sid name num _ _ rest; do
 		[ -n "$f" ] || continue
 		rest=${rest%%"$US"*}
-		[ "$rest" = "$SKEY" ] && printf '%s\t%s\n' "${num:-999}" "$f"
+		{ [ "$rest" = "$SKEY" ] || { [ -n "$also" ] && [ "$rest" = "$also" ]; }; } &&
+			printf '%s\t%s\n' "${num:-999}" "$f"
 	done <<<"$LOST_ROWS" | sort -n | cut -f 2)
 	[ -n "$files" ] || return 0
 	while IFS= read -r f; do
@@ -4783,7 +5017,7 @@ cmd_new() {
 cmd_agent_pane() {
 	local tok=${1:-} kind=${2:-claude} d task sid="" pane c
 	need_session
-	pane=${ZELLIJ_PANE_ID:-}
+	pane=${MY_PANE:-}
 	d="$THREADS_NEW/${SKEY}_$tok"
 	case $kind in claude | codex) ;; *) die "unknown agent: $kind" ;; esac
 	agent_cmd "$kind"
@@ -4995,19 +5229,19 @@ cmd_close() {
 		--yes | -y) yes=1 ;;
 		--remove-worktree) rmwt=1 ;;
 		-*) die "usage: weaver close [--yes] [--remove-worktree] [pane-id]" ;;
-		*) target=${1#terminal_} ;;
+		*) target=${1#terminal_} target=${target#%} ;;
 		esac
 		shift
 	done
 	need_session
-	list_panes || die "zellij action list-panes failed"
+	list_panes || die "$MUX would not list the panes"
 	if [ -z "$target" ]; then
 		# The focused pane's agent; else this pane's; else the one agent in
 		# this pane's tab (run from a shell beside a thread).
 		focused_pane
 		target=$FOCUSED
-		agent_of_pane "$target" || target=${ZELLIJ_PANE_ID:-}
-		agent_of_pane "$target" || target=$(tab_agent "${ZELLIJ_PANE_ID:-}")
+		agent_of_pane "$target" || target=${MY_PANE:-}
+		agent_of_pane "$target" || target=$(tab_agent "${MY_PANE:-}")
 	fi
 	agent_of_pane "$target" || die "no agent in pane ${target:-?}"
 	read_nvim_pane "$AGENT"
@@ -5047,7 +5281,7 @@ cmd_close() {
 	# Its worktree may go only if weaver made it and nothing would be lost.
 	if [ "$TH_CREATED" = true ] && [ "$TH_HERE" != true ] && [ -n "$TH_DIR" ]; then
 		form_path "$TH_DIR"
-		worktree_users "$TH_DIR" "$AGENT ${nv:-} ${ZELLIJ_PANE_ID:-}" "$tab"
+		worktree_users "$TH_DIR" "$AGENT ${nv:-} ${MY_PANE:-}" "$tab"
 		if ! worktree_removable "$TH_DIR"; then
 			keep="$TILDE ${C_DIM}·$C_OFF$C_GREY $WT_WHY"
 		elif [ -n "$USERS" ]; then
@@ -5099,8 +5333,8 @@ cmd_close() {
 
 	# Closing the last panes of the tab closes the tab, and any floating pane
 	# in it: when this runs in one, finish from outside it.
-	if [ -z "$others" ] && [ -n "${ZELLIJ_PANE_ID:-}" ] && printf '%s' "$PANES" | jq -e --arg t "$tab" \
-		--arg me "$ZELLIJ_PANE_ID" 'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and (.tab_id | tostring) == $t)' \
+	if [ -z "$others" ] && [ -n "${MY_PANE:-}" ] && printf '%s' "$PANES" | jq -e --arg t "$tab" \
+		--arg me "$MY_PANE" 'any(.[]; (.is_plugin | not) and (.id | tostring) == $me and (.tab_id | tostring) == $t)' \
 		>/dev/null 2>&1; then
 		detach=1
 	fi
@@ -5124,9 +5358,9 @@ cmd_close() {
 close_tail() {
 	local agent=$1 nv=$2 pid=$3 start=$4 remove=$5 dir=$6 repo=$7 sides=${8:-} i rc p
 	need_session
-	zellij action close-pane --pane-id "terminal_$agent" >/dev/null 2>&1
-	[ -n "$nv" ] && zellij action close-pane --pane-id "terminal_$nv" >/dev/null 2>&1
-	for p in $sides; do zellij action close-pane --pane-id "terminal_$p" >/dev/null 2>&1; done
+	mux_close_pane "$agent"
+	[ -n "$nv" ] && mux_close_pane "$nv"
+	for p in $sides; do mux_close_pane "$p"; done
 	for ((i = 0; i < 50; i++)); do
 		[ -n "$pid" ] && agent_alive "$pid" "$start" || break
 		sleep 0.1
@@ -5252,8 +5486,9 @@ cmd_start() {
 		cmd_ls
 		return
 	fi
-	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
 	name=${1:-${WEAVER_SESSION:-weaver}}
+	[ "$MUX" = tmux ] && tmux_start "$name"
+	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
 	while IFS= read -r line; do
 		case $line in
 		"$name "*EXITED*) state=exited ;;
@@ -5283,6 +5518,28 @@ EOF2
 	exec zellij --config "$SESSION_CONFIG" --session "$name" --new-session-with-layout "$SESSION_LAYOUT"
 }
 
+# The weaver session in tmux, on weaver's own server (tmux -L weaver, with
+# config/tmux.conf): attach to it, or start it with home in window 0. Its
+# panes know their session ($WEAVER_TMUX_SESSION); zellij's variables, from a
+# zellij this was started in, stay out of it.
+tmux_start() {
+	local name=$1 conf
+	command -v tmux >/dev/null 2>&1 || die "tmux is not installed"
+	SKEY="tmux-${name//\//_}"
+	conf="$(script_dir)/config/tmux.conf"
+	[ -f "$conf" ] || die "missing $conf"
+	set -- env -u ZELLIJ -u ZELLIJ_SESSION_NAME -u ZELLIJ_PANE_ID -u TMUX -u TMUX_PANE \
+		tmux -L "${WEAVER_TMUX_SOCKET:-weaver}" -f "$conf"
+	if "$@" has-session -t "=$name" 2>/dev/null; then
+		exec "$@" source-file "$conf" \; attach-session -t "=$name"
+	fi
+	mkdir -p "$STATE_DIR"
+	echo weaver >"$STATE_DIR/$SKEY.layout"
+	rm -f "${STATE_DIR:?}/${SKEY:?}.last"
+	exec "$@" new-session -s "$name" -n home -e "WEAVER_TMUX_SESSION=$name" "$SELF" home \; \
+		set-environment -t "=$name" WEAVER_TMUX_SESSION "$name"
+}
+
 # weaver quit [--yes]: quit the zellij session you are in (outside zellij,
 # the weaver session, $WEAVER_SESSION) with every agent and nvim in it, after
 # asking. Its threads are kept, as when zellij goes: the weaver session brings
@@ -5302,15 +5559,20 @@ cmd_quit() {
 		esac
 		shift
 	done
-	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
 	name=${SESSION:-${WEAVER_SESSION:-weaver}}
-	while IFS= read -r line; do
-		case $line in "$name "*EXITED*) ;; "$name "*) running=1 ;; esac
-	done <<EOF2
+	if [ "$MUX" = tmux ]; then
+		tm has-session -t "=$name" 2>/dev/null && running=1
+		SKEY="tmux-${name//\//_}"
+	else
+		command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
+		while IFS= read -r line; do
+			case $line in "$name "*EXITED*) ;; "$name "*) running=1 ;; esac
+		done <<EOF2
 $(zellij list-sessions --no-formatting 2>/dev/null)
 EOF2
-	[ -n "$running" ] || die "no zellij session $name is running"
-	SKEY=${name//\//_}
+		SKEY=${name//\//_}
+	fi
+	[ -n "$running" ] || die "no $MUX session $name is running"
 	if [ $yes = 0 ]; then
 		have_tty || die "quit needs a terminal to ask, or --yes"
 		for f in "$STATE_DIR/$SKEY"_*.thread; do [ -f "$f" ] && threads=$((threads + 1)); done
@@ -5345,7 +5607,11 @@ EOF2
 		} >"$out"
 		read_yes || return 130
 	fi
-	zellij kill-session "$name" 2>/dev/null || die "zellij could not quit $name"
+	if [ "$MUX" = tmux ]; then
+		tm kill-session -t "=$name" 2>/dev/null || die "tmux could not quit $name"
+	else
+		zellij kill-session "$name" 2>/dev/null || die "zellij could not quit $name"
+	fi
 }
 
 # Serialise numbering threads (weaver new): a lock older than 10s was left
@@ -5392,6 +5658,11 @@ thread_num() {
 thread_place() {
 	local tab=$1 num=$2 nums="{}" f moves
 	case $tab$num in '' | *[!0-9]*) return 0 ;; esac
+	# tmux: the window's index is the thread's number (home is 0), when free.
+	if [ "$MUX" = tmux ]; then
+		tm move-window -d -s "@$tab" -t "=$SESSION:$num" >/dev/null 2>&1
+		return 0
+	fi
 	list_panes || return 0
 	for f in "$STATE_DIR/${SKEY}"_*.thread; do
 		[ -f "$f" ] || continue
@@ -5421,17 +5692,22 @@ cmd_go() {
 	[ "$where" = home ] || die "usage: weaver go home"
 	need_session
 	# One question to zellij: the tabs, which is active, which is home.
-	t=$(zellij action list-tabs -j 2>/dev/null)
+	t=$(mux_tabs)
 	read -r cur home <<<"$(printf '%s' "$t" | jq -r '[([.[] | select(.active) | .tab_id] | first // ""),
 		([.[] | select(.name == "home") | .tab_id] | first // "")] | map(tostring) | join(" ")')"
 	if [ -n "$home" ] && [ "$cur" = "$home" ]; then
 		{ read -r last <"$STATE_DIR/$SKEY.last"; } 2>/dev/null
 		case $last in '' | *[!0-9]*) return 0 ;; esac
 		printf '%s' "$t" | jq -e --argjson l "$last" 'any(.[]; .tab_id == $l)' >/dev/null 2>&1 || return 0
-		zellij action go-to-tab-by-id "$last" >/dev/null 2>&1
+		mux_go_tab "$last"
 		return 0
 	fi
 	[ -n "$cur" ] && printf '%s\n' "$cur" >"$STATE_DIR/$SKEY.last"
+	if [ -z "$home" ] && [ "$MUX" = tmux ]; then
+		tm new-window -t "=$SESSION:0" -n home -e "WEAVER_TMUX_SESSION=$SESSION" "$SELF" home >/dev/null 2>&1 ||
+			tm new-window -t "=$SESSION:" -n home -e "WEAVER_TMUX_SESSION=$SESSION" "$SELF" home >/dev/null 2>&1
+		return 0
+	fi
 	if [ -z "$home" ]; then
 		kdl_str "$SELF"
 		home=$(zellij action new-tab --name home --layout-string "layout { tab { pane name=\"home\" command=$K { args \"home\"; }; }; }") ||
@@ -5439,7 +5715,7 @@ cmd_go() {
 		thread_place "$home" 0
 		return 0
 	fi
-	zellij action go-to-tab-by-id "$home" >/dev/null 2>&1
+	mux_go_tab "$home"
 }
 
 # The sidebar's own tab, to the window (`weaver _sidefit`, from the sidebar,
@@ -5448,9 +5724,10 @@ cmd_go() {
 # again); and the agent at its width (thread_width).
 cmd_sidefit() {
 	local info tab cols width want have mem="" agent
+	[ "$MUX" = tmux ] && return 0
 	weaver_session || return 0
 	list_panes || return 0
-	info=$(printf '%s' "$PANES" | jq -r --arg me "${ZELLIJ_PANE_ID:-}" \
+	info=$(printf '%s' "$PANES" | jq -r --arg me "${MY_PANE:-}" \
 		'map(select((.is_plugin | not) and (.id | tostring) == $me)) | .[0] // empty | "\(.tab_id) \(.pane_columns)"')
 	read -r tab width <<<"$info"
 	case $tab$width in '' | *[!0-9]*) return 0 ;; esac
@@ -5587,6 +5864,7 @@ _title) ls_title ;;
 _chrome) ls_chrome ;;
 sidebar) cmd_sidebar ;;
 home) cmd_home ;;
+_restore) need_session && gc_states quiet && resume_session ;;
 _side) need_session && side_rows "$@" ;;
 _goto) need_session && cmd_goto "$@" ;;
 _focus) need_session && focus_pane "$@" ;;
