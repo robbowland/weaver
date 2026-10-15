@@ -68,12 +68,19 @@ func (e *Env) numLock() func() {
 }
 
 // threadNum is the lowest number none of this session's threads has (those
-// being opened included), and the numbers taken.
+// being opened included), and the numbers taken. A thread being opened
+// waits there at most 10 s (its nvim gives up on its agent then): one older
+// than 30 s was left by panes closed before they met, and holds no number.
 func (e *Env) threadNum() (int, map[int]bool) {
 	used := map[int]bool{}
 	fs, _ := filepath.Glob(e.StateDir + "/" + e.SKey + "_*.thread")
 	ns, _ := filepath.Glob(e.threadsNew() + "/" + e.SKey + "_*/thread.json")
-	for _, f := range append(fs, ns...) {
+	for _, f := range ns {
+		if s, err := os.Stat(f); err == nil && time.Since(s.ModTime()) < 30*time.Second {
+			fs = append(fs, f)
+		}
+	}
+	for _, f := range fs {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			continue
@@ -910,6 +917,30 @@ func (e *Env) threadRead(agent string) threadRec {
 	return threadRec{g("name"), g("task"), g("repo"), g("branch"), g("worktree"), g("here"), g("worktree_created"), g("agent")}
 }
 
+// threadNvim is the nvim pane of a thread's agent before that nvim has
+// bound itself (it waits for the agent to say which pane it is): the pane
+// in the agent's window started as `weaver nvim --thread TOK`, where the
+// agent was started as `weaver _agent TOK`; and TOK. "" when there is none.
+func threadNvim(panes []Pane, agent Pane) (string, string) {
+	f := strings.Fields(agent.Cmd)
+	tok := ""
+	for i := 0; i+1 < len(f); i++ {
+		if f[i] == "_agent" {
+			tok = f[i+1]
+			break
+		}
+	}
+	if !digits(tok) {
+		return "", ""
+	}
+	for _, p := range panes {
+		if p.Tab == agent.Tab && p.ID != agent.ID && strings.HasSuffix(p.Cmd, " nvim --thread "+tok) {
+			return strconv.Itoa(p.ID), tok
+		}
+	}
+	return "", ""
+}
+
 // Close is `weaver close [--yes] [--remove-worktree] [PANE]`: close an
 // agent (the focused one) with its nvim, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
@@ -969,7 +1000,10 @@ func (e *Env) Close(args []string) int {
 		fmt.Fprintln(os.Stderr, "weaver: no agent in pane "+t)
 		return 1
 	}
-	nv := readNvimPane(e, agent)
+	nv, pending := readNvimPane(e, agent), ""
+	if nv == "" {
+		nv, pending = threadNvim(panes, byID[agent])
+	}
 	th := e.threadRead(agent)
 	var st, pid, start, title, kind string
 	if b, err := os.ReadFile(e.StateFile(agent)); err == nil {
@@ -1099,7 +1133,7 @@ func (e *Env) Close(args []string) int {
 			}
 		}
 	}
-	tail := []string{agent, nv, pid, start, remove, th.dir, th.repo}
+	tail := []string{agent, nv, pid, start, remove, th.dir, th.repo, pending}
 	// Closing the last panes of the window closes it, and any popup in it:
 	// when this runs in one, finish from outside it.
 	if me, ok := byID[e.MyPane]; !others && ok && me.Tab == tab {
@@ -1119,17 +1153,21 @@ func (e *Env) Close(args []string) int {
 }
 
 // CloseTail is the closing itself (`weaver _close AGENT NVIM PID START
-// REMOVE DIR REPO`): close the agent's pane and its nvim's, wait for the
-// agent to exit, forget it, and remove its worktree if asked, checking
-// again first.
+// REMOVE DIR REPO [TOK]`): close the agent's pane and its nvim's, wait for
+// the agent to exit, forget it, and remove its worktree if asked, checking
+// again first. TOK: the thread was still being opened (its nvim had not
+// bound itself), and its record of that goes too.
 func (e *Env) CloseTail(a []string) int {
-	for len(a) < 7 {
+	for len(a) < 8 {
 		a = append(a, "")
 	}
-	agent, nv, pid, start, remove, dir, repo := a[0], a[1], a[2], a[3], a[4], a[5], a[6]
+	agent, nv, pid, start, remove, dir, repo, tok := a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]
 	e.Tmux("kill-pane", "-t", "%"+agent)
 	if nv != "" {
 		e.Tmux("kill-pane", "-t", "%"+nv)
+	}
+	if digits(tok) {
+		os.RemoveAll(e.threadsNew() + "/" + e.SKey + "_" + tok)
 	}
 	for i := 0; i < 50 && pid != "" && agentAlive(pid, start, nil); i++ {
 		time.Sleep(100 * time.Millisecond)

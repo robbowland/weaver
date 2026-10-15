@@ -1025,3 +1025,14 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   `_close`, `send` and `quit`. On tmux the script now does only what the Go
   binary hands it: `help`, plain `status`, an explicit `gc` (zellij's states
   too), and zellij's own commands (sidebar, layout); under zellij, all of it.
+- 2026-10-15: A thread closed before its nvim has bound itself (nvim waits
+  for the agent to say which pane it is, so `.nvim` comes a moment after
+  `.thread`) is closed whole: `close` finds that nvim as the pane in the
+  agent's window started as `weaver nvim --thread TOK` (the agent's own
+  start command names TOK), closes it with the agent, and removes the
+  thread's record in `new/`. Before, its nvim counted as a stranger in the
+  window, so the window and the worktree stayed, and killing it before it
+  read its agent's pane left that record holding the thread's number for a
+  day (until gc); `threadNum` now ignores a record there older than 30 s,
+  since a live one waits at most 10. Found by `test/tmux.sh` on the
+  personal Mac, which is fast enough to close before nvim binds.

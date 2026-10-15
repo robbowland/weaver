@@ -335,7 +335,8 @@ AG=$(pane_at 2 1)
 waitfor '[ -f "$AT/args.$AG" ]'
 ok "resume: its worktree gone, from its repository" \
 	"$(windows)|$(tx display -p -t "%$AG" '#{pane_current_path}')|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)" \
-	"0 2 |$(cd "$AT/repo" && pwd -P)|--resume sid-g "
+	"0 2 |$(cd "$AT/repo" && pwd -P)|--resume sid-g " ||
+	{ tx list-windows -t "=$S" -F '#{window_index} #{window_name}' | sed 's/^/  window: /'; panes 1 | sed 's/^/  pane: /'; ls "$SD" "$SD/lost" | sed 's/^/  state: /'; }
 
 echo "-- $pass passed, $fail failed"
 exit $fail
