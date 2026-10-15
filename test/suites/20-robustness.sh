@@ -7,14 +7,6 @@ fresh
 
 rows() { weaver ls | grep -c -E '^\[.\] '; }
 
-# The harness itself: zellij falls back to some other running session when the
-# named one is gone, so the test shim must refuse. (A tmux run has a server of
-# its own.)
-if [ "$MUX_T" = zellij ]; then
-	ZELLIJ_SESSION_NAME=weaver-no-such-session zellij action list-tabs >/dev/null 2>&1
-	ok "test shim refuses actions on a session that isn't running" "$?" "1"
-fi
-
 feed >/dev/null
 settle
 
@@ -91,13 +83,6 @@ wait "$GHOST" 2>/dev/null
 ok "killed without SessionEnd: no longer listed" "$(weaver ls | grep -c 'doomed')" "0"
 ok "...and its state is gone" "$([ -f "$SD/${SK}_2.json" ] && echo kept || echo gone)" "gone"
 
-# --- an agent cleaned up while the dashboard reads the others hides nothing
-jq -c '.pane = 3' "$SD/${SK}_0.json" >"$SD/${SK}_3.json"
-FOUND_RACE=$(WEAVER_SOURCED=1 bash -c '. "$1"; session_files json; rm -f "$2"; CLAUDE_LIVE="[]"; list_panes;
-	jq -rRn --argjson panes "$PANES" --argjson now 0 --arg fields "$ROW_FIELDS" "$JQ_ROWS" "${FOUND[@]}" 2>/dev/null | grep -c "^0"' _ \
-	"$WEAVER_SCRIPT" "$SD/${SK}_3.json")
-ok "a state file removed while the rows are read: the others are still read" "$FOUND_RACE" "1"
-
 # --- a pid reused by an unrelated process is not the agent
 live_pid
 printf '{"hook_event_name":"UserPromptSubmit","prompt":"reused","cwd":"%s","session_id":"sid-reuse","pid":0}' "$T/repo" |
@@ -116,13 +101,13 @@ ok "a stale nvim file: the pane it names keeps its title" \
 	"$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id==1) | .title')" "$title"
 rm -f "$SD/${SK}_2.nvim"
 
-# --- state from a zellij session that no longer exists (a reused name has
-# new pane ids) is cleaned up
+# --- state of a session that no longer exists (a zellij one from before
+# weaver ran on tmux only, or one whose name was reused) is cleaned up
 jq -c '.ts -= 7200' "$SD/${SK}_0.json" >"$SD/weaver-gone-session_0.json"
 cp "$SD/${SK}_0.json" "$SD/weaver-busy-session_0.json"
 weaver gc >/dev/null
 ok "state of a session that is gone: cleaned up" "$([ -f "$SD/weaver-gone-session_0.json" ] && echo kept || echo gone)" "gone"
-ok "...but not within the hour (zellij's list can miss a busy session)" \
+ok "...but not within the hour" \
 	"$([ -f "$SD/weaver-busy-session_0.json" ] && echo kept)" "kept"
 rm -f "$SD/weaver-busy-session_0.json"
 ok "...and ours kept" "$([ -f "$SD/${SK}_0.json" ] && echo kept)" "kept"

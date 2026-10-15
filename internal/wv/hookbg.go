@@ -19,7 +19,7 @@ import (
 )
 
 // hookBg is `weaver hook --bg`: everything a hook does besides writing the
-// state, after it (the script's hook_bg), so the agent never waits on nvim,
+// state, after it, so the agent never waits on nvim,
 // tmux, git or Worktrunk.
 func (e *Env) hookBg() {
 	h := &hk{}
@@ -46,7 +46,7 @@ func (e *Env) hookBg() {
 	}
 	// tmux: the window of an agent that has just finished is flagged, for
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
-	if e.Mux == "tmux" && h.State != h.OState {
+	if h.State != h.OState {
 		if h.State == "done" {
 			e.Tmux("set-option", "-w", "-t", "%"+h.Pane, "@weaver-unseen", "1")
 		} else if h.OState == "done" {
@@ -72,25 +72,6 @@ func (e *Env) hookBg() {
 		e.GC()
 	}
 	e.hookSnapshots(h)
-}
-
-// ScriptRun runs the script for a command it still does, and waits.
-func (e *Env) ScriptRun(args ...string) error {
-	dir, err := Runtime()
-	if err != nil {
-		return err
-	}
-	script := dir + "/weaver"
-	if sh := os.Getenv("WEAVER_SH"); sh != "" {
-		script = sh
-	}
-	bash := "/bin/bash"
-	if p, err := lookPath("bash"); err == nil {
-		bash = p
-	}
-	c := exec.Command(bash, append([]string{script}, args...)...)
-	c.Env = append(os.Environ(), "WEAVER_SELF="+e.Self, "WEAVER_RUNTIME="+dir)
-	return c.Run()
 }
 
 // sameRoot: is h's root still the agent's? A later hook may have moved it
@@ -232,17 +213,11 @@ func (e *Env) nvimStateEvent(h *hk) {
 	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title), "", "", true)
 }
 
-// PushStatus brings what shows the session's agents up to date (the
-// script's push_status): agents done that a client looks at count as seen,
+// PushStatus brings what shows the session's agents up to date: agents done that a client looks at count as seen,
 // the counts go to the status file and tmux's status line, every dashboard
 // reloads, and (labels, in the weaver session) the threads' windows are
 // labelled.
 func (e *Env) PushStatus(labels bool) {
-	// Sidebars (zellij's) are the script's.
-	if m, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".side.*.sock"); len(m) > 0 {
-		e.ScriptRun("status", "--push")
-		return
-	}
 	clients := " "
 	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
 		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "
@@ -288,7 +263,7 @@ func (e *Env) PushStatus(labels bool) {
 	}
 	// tmux's status line shows the session's @weaver-counts, and an option
 	// set redraws every client: set them when they change.
-	if e.Mux == "tmux" && (labels || now != old) {
+	if labels || now != old {
 		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-counts", CountsFmt(need, done, work))
 	}
 	q := Quote(e.Self)
@@ -304,7 +279,7 @@ func (e *Env) PushStatus(labels bool) {
 			}
 		}
 	}
-	if labels && e.Mux == "tmux" && e.WeaverSession() {
+	if labels && e.WeaverSession() {
 		e.threadTabLabels(rows)
 	}
 }

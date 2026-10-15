@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
-# Install weaver; with --configure, also wire it into Claude Code (and zellij,
-# when you use weaver there).
+# Install weaver; with --configure, also wire it into Claude Code (and Codex).
 #
 #   ./install.sh                  build weaver (one binary) into ~/.local/bin/weaver
-#   ./install.sh --configure      also add the zellij keybindings and the Claude Code (and Codex) hooks
-#     --zellij-config FILE        zellij config to edit; repeatable (default: $ZELLIJ_CONFIG_FILE,
-#                                 else ~/.config/zellij/config.kdl). FILE.in templates are
-#                                 edited but not validated.
+#   ./install.sh --configure      also add the Claude Code (and Codex) hooks
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
 # Idempotent: rerunning refreshes the installed copy and skips config already present.
 set -eu
 
-NL='
-'
 SRC=$(cd "$(dirname "$0")" && pwd -P)
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/weaver"
 BIN="$HOME/.local/bin"
@@ -30,19 +24,15 @@ die() {
 	exit 1
 }
 
-configure=0 dry=0 zconfs="" codex=1
+configure=0 dry=0 codex=1
 while [ $# -gt 0 ]; do
 	case $1 in
 	--configure) configure=1 ;;
 	--dry-run) dry=1 ;;
 	--no-codex) codex=0 ;;
-	--zellij-config)
-		[ $# -ge 2 ] || die "--zellij-config needs a file"
-		zconfs="$zconfs$2$NL"
-		shift
-		;;
+	--zellij-config) die "weaver runs on tmux only now: --zellij-config is gone (remove weaver's keybindings from your zellij config)" ;;
 	-h | --help)
-		sed -n '2,13p' "$0"
+		sed -n '2,9p' "$0"
 		exit 0
 		;;
 	*) die "unknown option: $1 (see --help)" ;;
@@ -65,16 +55,6 @@ check_deps() {
 	case "$major.$minor" in [0-9]*.[0-9]*) ;; *) die "cannot parse the tmux version '$v'" ;; esac
 	if [ "$major" -lt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -lt 3 ]; }; then
 		die "tmux $v is too old: weaver needs 3.3 or newer"
-	fi
-	# zellij is optional (WEAVER_MUX=zellij).
-	command -v zellij >/dev/null 2>&1 || return 0
-	v=$(zellij --version 2>/dev/null)
-	v=${v##* }
-	major=${v%%.*} rest=${v#*.}
-	minor=${rest%%.*}
-	case "$major.$minor" in [0-9]*.[0-9]*) ;; *) die "cannot parse the zellij version '$v'" ;; esac
-	if [ "$major" -eq 0 ] && [ "$minor" -lt 45 ]; then
-		die "zellij $v is too old: weaver needs 0.45 or newer"
 	fi
 }
 
@@ -162,86 +142,13 @@ show_or_apply() {
 	cat "$new" >"$f" || die "cannot write $f (backup: $f.bak.$TS)"
 }
 
-# The weaver block in a zellij config: from its "// weaver:" comment (or
-# "// agentnav:", its old name) through the brace closing the block after it,
-# leading whitespace stripped.
-AWK_BLOCK='
-	/^[[:space:]]*\/\/ (weaver|agentnav):/ { inblock = 1 }
-	inblock {
-		line = $0
-		sub(/^[[:space:]]+/, "", line)
-		print line
-		if (line !~ /^\/\//) {
-			depth += gsub(/[{]/, "{") - gsub(/[}]/, "}")
-			started = 1
-		}
-		if (started && depth <= 0) exit
-	}'
-
-configure_zellij() {
-	local f=$1 tmp
-	tmp=$(mktemp "${TMPDIR:-/tmp}/weaver.XXXXXX")
+# weaver ran on zellij too, once: say so where a zellij config still has
+# its keybindings (they run weaver commands it no longer has).
+warn_zellij() {
+	local f=${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}
 	if [ -f "$f" ] && grep -Eq 'Run "(weaver|agentnav)"' "$f"; then
-		if [ "$(awk "$AWK_BLOCK" "$f")" = "$(sed 's/^[[:space:]]*//' "$SRC/config/zellij-keybinds.kdl")" ]; then
-			say "zellij: $f already has the current weaver keybindings"
-			rm -f "$tmp"
-			return
-		fi
-		if ! grep -Eq '^[[:space:]]*// (weaver|agentnav):' "$f"; then
-			warn "zellij: $f has weaver keybindings without the '// weaver:' comment; update them by hand from $SRC/config/zellij-keybinds.kdl"
-			rm -f "$tmp"
-			return
-		fi
-		# Replace the old block with the current one, at the same indentation.
-		awk -v snip="$SRC/config/zellij-keybinds.kdl" '
-			!done && /^[[:space:]]*\/\/ (weaver|agentnav):/ {
-				ind = $0
-				sub(/[^[:space:]].*/, "", ind)
-				while ((getline l < snip) > 0) print (l == "" ? "" : ind l)
-				skip = 1
-				done = 1
-				next
-			}
-			skip {
-				depth += gsub(/[{]/, "{") - gsub(/[}]/, "}")
-				if ($0 ~ /[{}]/) started = 1
-				if (started && depth <= 0) skip = 0
-				next
-			}
-			{ print }' "$f" >"$tmp"
-	elif [ -f "$f" ] && grep -Eq '^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]' "$f"; then
-		# Insert just inside the first top-level keybinds block.
-		awk -v snip="$SRC/config/zellij-keybinds.kdl" '
-			!done && /^[[:space:]]*keybinds([[:space:]]+clear-defaults=true)?[[:space:]]*[{]/ {
-				print
-				while ((getline l < snip) > 0) print (l == "" ? "" : "    " l)
-				done = 1
-				next
-			}
-			{ print }' "$f" >"$tmp"
-	else
-		{
-			if [ -f "$f" ]; then cat "$f" && echo; fi
-			echo "keybinds {"
-			sed 's/^/    /' "$SRC/config/zellij-keybinds.kdl"
-			echo "}"
-		} >"$tmp"
+		warn "zellij: $f still has weaver's keybindings; weaver runs on tmux only now, so remove its '// weaver:' block"
 	fi
-	if show_or_apply zellij "$f" "$tmp"; then
-		case $f in
-		*.in) say "zellij: $f is a template; not validated" ;;
-		*)
-			if zellij --config "$f" setup --check 2>&1 | grep -q 'Well defined'; then
-				say "zellij: $f is well defined"
-			else
-				[ -f "$f.bak.$TS" ] && cat "$f.bak.$TS" >"$f"
-				rm -f "$tmp"
-				die "zellij rejected $f; restored the backup. Check with: zellij --config $f setup --check"
-			fi
-			;;
-		esac
-	fi
-	rm -f "$tmp"
 }
 
 # Remove every weaver hook (whatever its form: "weaver hook", an exec-form
@@ -290,12 +197,7 @@ install_files
 remove_old_copies
 remove_agentnav
 if [ $configure = 1 ]; then
-	[ -n "$zconfs" ] || zconfs="${ZELLIJ_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zellij/config.kdl}$NL"
-	if command -v zellij >/dev/null 2>&1; then
-		printf '%s' "$zconfs" | while IFS= read -r z; do
-			[ -n "$z" ] && configure_zellij "$z"
-		done
-	fi
+	warn_zellij
 	configure_claude
 	[ $codex = 1 ] && configure_codex
 	[ $dry = 1 ] || cat <<'EOF'
@@ -303,8 +205,6 @@ if [ $configure = 1 ]; then
 Done. To pick it up:
   - a running weaver tmux session reads weaver's tmux config again the next time
     `weaver` attaches to it
-  - running zellij sessions reload their config file by themselves; restart zellij
-    only if Alt y / Alt v do nothing
   - restart any Claude Code sessions that are already running: they read hooks at start
 EOF
 	[ $dry = 1 ] || [ $CODEX_DONE = 0 ] || cat <<'EOF'

@@ -19,8 +19,7 @@ import (
 
 func s(v any) string { return tostring(v) }
 
-// normalized turns a normalized event into Claude Code hook input (the
-// script's JQ_EVENT).
+// normalized turns a normalized event into Claude Code hook input.
 func normalized(n obj) map[string]any {
 	h := map[string]any{
 		"session_id": s(n.get("session", "")), "transcript_path": s(n.get("transcript", "")), "cwd": s(n.get("cwd", "")),
@@ -79,8 +78,7 @@ func normalized(n obj) map[string]any {
 
 var rePatchFile = regexp.MustCompile(`\*\*\* (?:Update|Add) File: ([^\n]+)`)
 
-// codex turns Codex's hook input into a normalized event (the script's
-// JQ_CODEX). Its hooks mirror Claude Code's, without Notification; tool
+// codex turns Codex's hook input into a normalized event. Its hooks mirror Claude Code's, without Notification; tool
 // names differ, so any tool may have changed files.
 func codex(c obj) obj {
 	n := obj{"agent": "codex", "session": s(c.get("session_id", "")), "cwd": s(c.get("cwd", "")),

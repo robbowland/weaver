@@ -1,7 +1,5 @@
-// Package wv is weaver compiled: what it knows of its session, its state
-// files and the dashboards, read and written exactly as the shell script
-// reads and writes them, so the two run side by side while the script's
-// commands move here.
+// Package wv is weaver: what it knows of its tmux session, its state files,
+// the hook engine, the dashboards and threads.
 package wv
 
 import (
@@ -12,11 +10,10 @@ import (
 	"strings"
 )
 
-// Env is where weaver runs: its multiplexer and session, the pane it runs
-// in, and where its files live. As the script's globals of the same names.
+// Env is where weaver runs: its tmux session, the pane it runs in, and
+// where its files live.
 type Env struct {
-	Mux       string // tmux or zellij
-	Session   string // the multiplexer's session name; empty outside one
+	Session   string // the tmux session's name; empty outside one
 	SKey      string // the session's key in file names: tmux-<name> for tmux
 	MyPane    string // the pane weaver runs in (its number); empty in a popup
 	InTmux    bool   // inside a tmux client's pane ($TMUX)
@@ -29,7 +26,8 @@ type Env struct {
 	Self      string   // this binary, as it was run (never resolved past a link)
 }
 
-// Load reads the environment as the script's top does.
+// Load reads the environment: the tmux session, pane and server, and where
+// weaver keeps its files.
 func Load() *Env {
 	e := &Env{}
 	home := os.Getenv("HOME")
@@ -45,14 +43,6 @@ func Load() *Env {
 	if e.ClaudeDir == "" {
 		e.ClaudeDir = home + "/.claude"
 	}
-	switch {
-	case os.Getenv("WEAVER_MUX") != "":
-		e.Mux = os.Getenv("WEAVER_MUX")
-	case os.Getenv("ZELLIJ_SESSION_NAME") != "":
-		e.Mux = "zellij"
-	default:
-		e.Mux = "tmux"
-	}
 	sock := os.Getenv("WEAVER_TMUX_SOCKET")
 	switch {
 	case strings.Contains(sock, "/"):
@@ -63,28 +53,22 @@ func Load() *Env {
 		e.TSock = []string{"-L", "weaver"}
 	}
 	e.Self = self()
-	if e.Mux == "tmux" {
-		e.MyPane = strings.TrimPrefix(os.Getenv("TMUX_PANE"), "%")
-		e.InTmux = os.Getenv("TMUX") != ""
-		if e.InTmux {
-			// weaver's tmux sessions set it for their panes; anywhere else, ask.
-			e.Session = os.Getenv("WEAVER_TMUX_SESSION")
-			if e.Session == "" {
-				args := []string{"display-message", "-p"}
-				if p := os.Getenv("TMUX_PANE"); p != "" {
-					args = append(args, "-t", p)
-				}
-				out, _ := exec.Command("tmux", append(args, "#S")...).Output()
-				e.Session = strings.TrimRight(string(out), "\n")
+	e.MyPane = strings.TrimPrefix(os.Getenv("TMUX_PANE"), "%")
+	e.InTmux = os.Getenv("TMUX") != ""
+	if e.InTmux {
+		// weaver's tmux sessions set it for their panes; anywhere else, ask.
+		e.Session = os.Getenv("WEAVER_TMUX_SESSION")
+		if e.Session == "" {
+			args := []string{"display-message", "-p"}
+			if p := os.Getenv("TMUX_PANE"); p != "" {
+				args = append(args, "-t", p)
 			}
+			out, _ := exec.Command("tmux", append(args, "#S")...).Output()
+			e.Session = strings.TrimRight(string(out), "\n")
 		}
-		if e.Session != "" {
-			e.SKey = "tmux-" + strings.ReplaceAll(e.Session, "/", "_")
-		}
-	} else {
-		e.MyPane = os.Getenv("ZELLIJ_PANE_ID")
-		e.Session = os.Getenv("ZELLIJ_SESSION_NAME")
-		e.SKey = strings.ReplaceAll(e.Session, "/", "_")
+	}
+	if e.Session != "" {
+		e.SKey = "tmux-" + strings.ReplaceAll(e.Session, "/", "_")
 	}
 	return e
 }
@@ -182,8 +166,7 @@ func readTrim(f string) (string, error) {
 
 // putFile leaves FILE holding TEXT and a newline, for readers that may read
 // it meanwhile (fzf's keys, its transforms): alone when it holds that
-// already, else replaced whole (a rename); a new file is just written. As
-// the script's put_file.
+// already, else replaced whole (a rename); a new file is just written.
 func putFile(f, text string) {
 	text = strings.TrimRight(text, "\n")
 	if cur, err := readTrim(f); err == nil {

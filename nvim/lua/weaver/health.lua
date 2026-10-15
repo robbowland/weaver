@@ -39,9 +39,9 @@ function M.check()
 
   local bin = util.weaver_bin()
   if bin then
-    health.ok('weaver script: ' .. bin)
+    health.ok('weaver: ' .. bin)
   else
-    health.warn('the weaver script is not found: :AgentReviewed cannot mark reviewed')
+    health.warn('weaver is not found: :AgentReviewed cannot mark reviewed')
   end
 
   if not package.loaded['weaver.status'] then

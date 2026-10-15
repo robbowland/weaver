@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// CountsFmt is the status line's counts in tmux's colours (the script's
-// counts_fmt): needs you, done, working, each only when there are some.
+// CountsFmt is the status line's counts in tmux's colours: needs you, done,
+// working, each only when there are some.
 func CountsFmt(n, d, w int) string {
 	out := ""
 	if n > 0 {
@@ -22,15 +22,12 @@ func CountsFmt(n, d, w int) string {
 	return out
 }
 
-// StatusLine is `weaver status --tmux SESSION` (or --zjstatus): the counts
-// push_status last wrote for the session, in the status line's colours.
+// StatusLine is `weaver status --tmux SESSION`: the counts PushStatus last
+// wrote for the session, in the status line's colours.
 func StatusLine(args []string) string {
-	k := os.Getenv("ZELLIJ_SESSION_NAME")
-	if args[0] == "--tmux" {
-		k = ""
-		if len(args) > 1 && args[1] != "" {
-			k = "tmux-" + args[1]
-		}
+	k := ""
+	if len(args) > 1 && args[1] != "" {
+		k = "tmux-" + args[1]
 	}
 	state := os.Getenv("XDG_STATE_HOME")
 	if state == "" {
@@ -54,4 +51,37 @@ func StatusLine(args []string) string {
 		}
 	}
 	return CountsFmt(c[0], c[1], c[2])
+}
+
+// StatusText is plain `weaver status`: the session's counts as cells,
+// `[!] 1  [x] 2  [/] 1`, each only when there are some (done counts the
+// ones not yet seen).
+func (e *Env) StatusText() string {
+	rows, _ := e.AgentRows()
+	var n, d, w int
+	for _, r := range rows {
+		if r.Pane == "" {
+			continue
+		}
+		switch r.State {
+		case "needs-you":
+			n++
+		case "working", "starting":
+			w++
+		case "done":
+			if r.Seen != "true" {
+				d++
+			}
+		}
+	}
+	var out []string
+	for _, c := range []struct {
+		g string
+		k int
+	}{{GNeed, n}, {GDone, d}, {GWork, w}} {
+		if c.k > 0 {
+			out = append(out, c.g+" "+strconv.Itoa(c.k))
+		}
+	}
+	return strings.Join(out, "  ")
 }

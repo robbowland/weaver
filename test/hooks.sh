@@ -1,12 +1,11 @@
 #!/bin/bash
-# weaver's hook engine on tmux: the suites in test/suites/ that test the hooks
-# (their state machine and its robustness, subagents, per-turn snapshots, other
-# agents' events) rather than a multiplexer's keys, against a throwaway tmux
-# server with three fake agents, a and b in window one, c in window two, as
-# test/zellij.sh lays them out in zellij (so their panes are 0, 1 and 2).
+# weaver's hook engine on tmux: the suites in test/suites/ (the hooks' latency,
+# their state machine and its robustness, attention, subagents, per-turn
+# snapshots, other agents' events, the installer and the dashboard's
+# renderings), against a throwaway tmux server with three fake agents, a and b
+# in window one, c in window two (so their panes are 0, 1 and 2).
 #
-#   test/hooks.sh [suite...]   default: 20-robustness 30-attention 40-subagents 45-snapshots 60-agents
-#                              80-dashboard (its renderings; its floating dashboard is zellij's)
+#   test/hooks.sh [suite...]   default: every suite in test/suites/
 #
 # Each run gets a fresh scratch directory (printed at the end) holding a git
 # repo with two worktrees, the state dir and the server's socket. Your real
@@ -16,7 +15,7 @@ set -u
 # These tests may run inside a Claude Code agent: nothing of its session may
 # leak into the fake agents.
 unset CLAUDE_PID CLAUDE_CODE_SESSION_ID CLAUDECODE CLAUDE_PROJECT_DIR CLAUDE_ENV_FILE
-unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_MUX WEAVER_TMUX_SESSION WEAVER_TMUX_SOCKET WEAVER_SH WEAVER_SELF WEAVER_RUNTIME
+unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_TMUX_SOCKET
 
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=${HERE%/test}
@@ -41,17 +40,16 @@ mkdir -p "$T"
 mkdir -p "$AT/bin" "$AT/state" "$AT/claude/sessions"
 # Everything the server runs (its keys' run-shell, its panes) inherits these:
 # the run's own state, never yours.
-export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude WEAVER_FOLLOW_IDLE_MS=300 WEAVER_MUX=tmux
+export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude WEAVER_FOLLOW_IDLE_MS=300
 export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 : >"$WORKTRUNK_CONFIG_PATH"
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi
-# weaver: the binary built from this checkout (carrying its script), its
-# files unpacked here.
+# weaver: the binary built from this checkout, its files unpacked here.
 (cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
-export XDG_DATA_HOME=$AT/data WEAVER_SCRIPT=$ROOT/weaver
+export XDG_DATA_HOME=$AT/data
 export PATH="$AT/bin:$PATH"
 
 # The server: its own socket and weaver's tmux config (its keys and hooks);
@@ -67,11 +65,10 @@ tmux -S "$SOCK" -f "$ROOT/config/tmux.conf" new-session -d -s "$SESSION" -x 200 
 	exit 1
 }
 echo "$SESSION" >"$AT/session"
-echo tmux >"$AT/mux"
 echo "$SOCK" >"$AT/socket"
 
 # A client on it, in a pseudo-terminal as a terminal would run it: the suites
-# press keys through it ($AT/keys.fifo, as on zellij).
+# press keys through it ($AT/keys.fifo).
 mkfifo "$AT/keys.fifo"
 TERM=xterm-256color python3 -I "$HERE/pty_drive.py" "$AT/keys.fifo" "$AT/screen.log" \
 	tmux -S "$SOCK" attach -t "=$SESSION" &
@@ -86,7 +83,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 
-[ $# -eq 0 ] && set -- 20-robustness 30-attention 40-subagents 45-snapshots 60-agents 80-dashboard
+if [ $# -eq 0 ]; then
+	set --
+	for f in "$HERE"/suites/*.sh; do
+		f=${f##*/}
+		set -- "$@" "${f%.sh}"
+	done
+fi
 failed=0
 for suite in "$@"; do
 	suite=${suite##*/}

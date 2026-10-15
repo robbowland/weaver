@@ -1,6 +1,5 @@
 // weaver keeps track of the coding agents running in your tmux session and
-// opens Neovim in the worktree each is really editing. One binary: what is
-// compiled runs here; the rest, in the shell script it carries.
+// opens Neovim in the worktree each is really editing.
 package main
 
 import (
@@ -18,13 +17,17 @@ func main() {
 	}
 	// tmux's status line asks for the counts on every redraw: no more than a
 	// file read.
-	if cmd == "status" && len(args) >= 2 && (args[1] == "--tmux" || args[1] == "--zjstatus") {
+	if cmd == "status" && len(args) >= 2 && args[1] == "--tmux" {
 		fmt.Println(wv.StatusLine(args[1:]))
 		return
 	}
-	// install.sh: unpack this build's files now, so Neovim configs find its
-	// plugin before weaver next runs.
-	if cmd == "_runtime" {
+	switch cmd {
+	case "help", "-h", "--help":
+		fmt.Print(wv.Usage)
+		return
+	case "_runtime":
+		// install.sh: unpack this build's files now, so Neovim configs find
+		// its plugin before weaver next runs.
 		if _, err := wv.Runtime(); err != nil {
 			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
 			os.Exit(1)
@@ -32,22 +35,19 @@ func main() {
 		return
 	}
 	e := wv.Load()
-	if e.Mux == "tmux" {
-		if rc, ok := run(e, cmd, args); ok {
-			os.Exit(rc)
-		}
+	rc, ok := run(e, cmd, args)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wv.Usage)
+		os.Exit(2)
 	}
-	if err := e.Script(args); err != nil {
-		fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
-		os.Exit(1)
-	}
+	os.Exit(rc)
 }
 
-// run is the compiled commands; ok false for the script's.
+// run runs cmd; ok false when there is no such command.
 func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	needSession := func() bool {
 		if e.Session == "" {
-			fmt.Fprintln(os.Stderr, "weaver: not inside a zellij or tmux session")
+			fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `weaver`)")
 			return false
 		}
 		return true
@@ -138,13 +138,16 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		}
 		e.Boot(sock)
 	case "status":
-		if len(args) < 2 || args[1] != "--push" {
-			return 0, false
-		}
 		if !needSession() {
 			return 1, true
 		}
-		e.PushStatus(false)
+		if len(args) > 1 && args[1] == "--push" {
+			e.PushStatus(false)
+		} else {
+			fmt.Println(e.StatusText())
+		}
+	case "gc":
+		e.GC()
 	case "new":
 		return e.New(args[1:])
 	case "_form":
@@ -199,7 +202,8 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	case "resume":
 		for _, a := range args[1:] {
 			if a == "-h" || a == "--help" {
-				return 0, false
+				fmt.Print(wv.Usage)
+				return 0, true
 			}
 		}
 		return e.Resume(args[1:]), true
@@ -226,7 +230,8 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	case "quit":
 		for _, a := range args[1:] {
 			if a == "-h" || a == "--help" {
-				return 0, false
+				fmt.Print(wv.Usage)
+				return 0, true
 			}
 		}
 		return e.Quit(args[1:]), true

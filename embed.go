@@ -1,10 +1,9 @@
-// Package weaver holds what the weaver binary carries with it: the shell
-// script that does what is not compiled yet, the Neovim plugin, and the
-// multiplexers' configs. The binary unpacks them once per build (see
-// internal/wv/runtime.go).
+// Package weaver holds what the weaver binary carries with it: the Neovim
+// plugin, and tmux's config and the agents' hook settings. The binary
+// unpacks them once per build (see internal/wv/runtime.go).
 package weaver
 
 import "embed"
 
-//go:embed weaver nvim config
+//go:embed nvim config
 var Files embed.FS

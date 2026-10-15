@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Glyphs and colours, as the script's G_* and C_*.
+// Glyphs and colours: every state is a Micrographics task cell.
 const (
 	GNeed = "[!]"
 	GDone = "[x]"
@@ -94,7 +94,7 @@ func envInt(k string) (int, bool) {
 	return n, err == nil
 }
 
-// lsSize is the dashboard's size, columns and lines (the script's ls_size):
+// lsSize is the dashboard's size, columns and lines:
 // fzf's, which inside its border (border=true) is 4 columns and 2 lines
 // short of the pane; else the terminal's.
 func lsSize(border bool) (int, int) {
@@ -184,7 +184,7 @@ type boardRow struct {
 	lost                                     bool
 }
 
-// Rows prints the dashboard's lines (the script's ls_rows). fzf mode (plain
+// Rows prints the dashboard's lines. fzf mode (plain
 // false): one TAB-separated item per line, id pane tab prev next label
 // display, and the border's label, the header and the 1-9 keys next to
 // $FZF_SOCK. Plain: the board as text, $COLUMNS wide.
@@ -409,7 +409,7 @@ func (e *Env) Rows(plain bool) string {
 				groups++
 			}
 		}
-		// The layout (the script's ls_plan).
+		// The layout.
 		nn := min(wn+2, 42)
 		nf, nw := 0, 0
 		if wf > 0 {
@@ -635,8 +635,7 @@ func (e *Env) Rows(plain bool) string {
 	return b.String()
 }
 
-// where is the repository and branch checked out at a root (the script's
-// where_of): read from its .git files without running git.
+// where is the repository and branch checked out at a root: read from its .git files without running git.
 type where struct{ repo, branch, gitdir string }
 
 func whereOf(root string) where {
@@ -752,7 +751,7 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 	return strconv.Itoa(total)
 }
 
-// Footer is the dashboard's footer (the script's ls_footer): the keys that
+// Footer is the dashboard's footer: the keys that
 // work now, as many as fit the list's width, ? always last.
 func Footer() string {
 	g, d, o := CGrey, CDim, COff
@@ -797,7 +796,7 @@ func Footer() string {
 	return out + end + "\n"
 }
 
-// Title is the dashboard's header (the script's ls_title): with no agents,
+// Title is the dashboard's header: with no agents,
 // what to do; else a blank line while browsing, whose place the search input
 // takes.
 func Title() string {

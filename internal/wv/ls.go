@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// FzfColors are the dashboards' fzf colours (the script's FZF_COLORS).
+// FzfColors are the dashboards' fzf colours.
 const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1," +
 	"pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff," +
 	"prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999"
@@ -38,7 +38,7 @@ func isTTY(fd int) bool {
 // Home is the home tab's board (`weaver home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
 // threads back, the status line's counts and the tabs' labels) runs behind
-// it, in the script, and reloads it when done.
+// it (`weaver _boot`), and reloads it when done.
 func (e *Env) Home() int {
 	if e.WeaverSession() {
 		os.MkdirAll(e.StateDir, 0o755)

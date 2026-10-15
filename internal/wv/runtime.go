@@ -8,21 +8,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	weaver "github.com/robbowland/weaver"
 )
 
-// Runtime is the directory holding what the binary carries (the script,
-// nvim/, config/) as files, for what needs them on disk: bash, Neovim and
-// tmux. Unpacked once per build, under a name made of its content, into
-// $XDG_DATA_HOME/weaver/runtime/; $WEAVER_SH (a checkout's script, its
-// nvim/ and config/ beside it) stands in for it.
+// Runtime is the directory holding what the binary carries (nvim/ and
+// config/) as files, for what needs them on disk: Neovim and tmux. Unpacked
+// once per build, under a name made of its content, into
+// $XDG_DATA_HOME/weaver/runtime/.
 func Runtime() (string, error) {
-	if sh := os.Getenv("WEAVER_SH"); sh != "" {
-		return filepath.Dir(sh), nil
-	}
 	data := os.Getenv("XDG_DATA_HOME")
 	if data == "" {
 		data = os.Getenv("HOME") + "/.local/share"
@@ -43,7 +38,7 @@ func Runtime() (string, error) {
 	})
 	id := hex.EncodeToString(h.Sum(nil))[:16]
 	dir := data + "/weaver/runtime/" + id
-	if _, err := os.Stat(dir + "/weaver"); err == nil {
+	if _, err := os.Stat(dir + "/config/tmux.conf"); err == nil {
 		syncNvim(data+"/weaver", id)
 		return dir, nil
 	}
@@ -59,11 +54,7 @@ func Runtime() (string, error) {
 		if err != nil {
 			return err
 		}
-		mode := os.FileMode(0o644)
-		if p == "weaver" {
-			mode = 0o755
-		}
-		return os.WriteFile(filepath.Join(tmp, p), b, mode)
+		return os.WriteFile(filepath.Join(tmp, p), b, 0o644)
 	})
 	if err != nil {
 		os.RemoveAll(tmp)
@@ -72,7 +63,7 @@ func Runtime() (string, error) {
 	if err := os.Rename(tmp, dir); err != nil {
 		// Another weaver unpacked it meanwhile.
 		os.RemoveAll(tmp)
-		if _, err2 := os.Stat(dir + "/weaver"); err2 != nil {
+		if _, err2 := os.Stat(dir + "/config/tmux.conf"); err2 != nil {
 			return "", err
 		}
 	}
@@ -133,23 +124,4 @@ func pruneRuntimes(dir, id string) {
 			os.RemoveAll(filepath.Join(dir, e.Name()))
 		}
 	}
-}
-
-// Script runs the shell script in place of this process for what is not
-// compiled yet: by bash, told which binary it is and where its files are.
-func (e *Env) Script(args []string) error {
-	dir, err := Runtime()
-	if err != nil {
-		return err
-	}
-	script := dir + "/weaver"
-	if sh := os.Getenv("WEAVER_SH"); sh != "" {
-		script = sh
-	}
-	bash := "/bin/bash"
-	if p, err := lookPath("bash"); err == nil {
-		bash = p
-	}
-	env := append(os.Environ(), "WEAVER_SELF="+e.Self, "WEAVER_RUNTIME="+dir)
-	return syscall.Exec(bash, append([]string{bash, script}, args...), env)
 }

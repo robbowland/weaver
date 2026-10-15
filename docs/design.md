@@ -1,17 +1,17 @@
 # weaver design: contracts and decisions
 
-The engine (the `weaver` script) and the Neovim side (`nvim/`) meet at the
-contracts below. Change one only with both sides agreeing, and log the change.
+The engine (the `weaver` binary, `cmd/weaver` and `internal/wv`) and the
+Neovim side (`nvim/`) meet at the contracts below. Change one only with both sides agreeing, and log the change.
 
 ## Files
 
 | Path | What |
 | --- | --- |
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
-| `$STATE_DIR/<skey>_<pane>.json` | state of the agent in zellij pane `<pane>` of session `<skey>` (session name with `/` as `_`); one JSON object on one line |
+| `$STATE_DIR/<skey>_<pane>.json` | state of the agent in tmux pane `%<pane>` of session `<skey>` (`tmux-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
-| `$STATE_DIR/<skey>.status` | the session's counts for zjstatus: `needs-you done-unseen working` |
+| `$STATE_DIR/<skey>.status` | the session's counts for its status line: `needs-you done-unseen working` |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `weaver new` started it (below) |
@@ -21,7 +21,7 @@ contracts below. Change one only with both sides agreeing, and log the change.
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
-| `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its zellij (see [Lost threads](#lost-threads)); pruned after 30 days |
+| `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
 
 ## State file
 
@@ -29,7 +29,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `pane` | int | the agent's pane id (zellij's, or tmux's `%N` as `N`) |
+| `pane` | int | the agent's pane id (tmux's `%N` as `N`) |
 | `agent` | string | `claude`, `codex`, ... |
 | `state` | string | `working`, `needs-you`, `done`, `idle`, `interrupted`, `ended` |
 | `since` | int | epoch s the state began; `ts` is the last event |
@@ -81,7 +81,7 @@ nvim debounces review refreshes itself (250 ms); there is no separate poke.
 release.
 
 `weaver nvim <pane>` sets `WEAVER_PANE`, `WEAVER_STATE` (state file) and
-`WEAVER_BIN` (this script) in nvim's environment.
+`WEAVER_BIN` (the weaver binary) in nvim's environment.
 
 ## Snapshots
 
@@ -166,7 +166,7 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 ## Events from other agents
 
 `weaver event [--bell]` reads one event as JSON on stdin; the pane is
-`ZELLIJ_PANE_ID` unless the event names one. Adapters translate an agent's own
+`$TMUX_PANE` unless the event names one. Adapters translate an agent's own
 hook input into it (`weaver adapt codex`). `--bell` rings the terminal bell on
 `/dev/tty` when the agent starts needing you or finishes, for agents that
 cannot ring through their hook output.
@@ -198,12 +198,12 @@ states, turns, snapshots, log and nvim events.
 `weaver new` makes the worktree (Worktrunk's `wt switch [--create] <branch>
 --no-cd --format json`, whose `path` and `action` say where and whether it was
 made; else `git worktree add` at `<repo>/../<repo>.<branch with / as ->`), then
-one tab: `zellij action new-tab --layout-string <kdl> --cwd <dir> --name
-<name>`. The layout is the session's `new_tab_template` from `zellij action
-dump-layout`, its bare `pane` (the tab's content) replaced by a vertical split:
-`weaver nvim --thread <token>` on the left (close on exit), `weaver _agent
-<token> <agent>` on the right at `$WEAVER_AGENT_WIDTH` (default `20%`) with the
-focus. Without a template, the split alone.
+one window: `new-window -n <label> -c <dir> 'weaver nvim --thread <token>'`,
+then `split-window -h -l <agent's columns> 'weaver _agent <token> <agent>'`
+(argv, no shell): nvim on the left, the agent on the right at
+`$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while nvim keeps 60)
+with the focus. In the weaver session the window moves to the index of its
+number and is named with its label from the start.
 
 A new branch starts, as Rob's `wnew` does, from the remote's default branch
 (`origin`, else the first remote; its `HEAD`, else its `main` or `master`)
@@ -220,16 +220,18 @@ HEAD of the checkout you are in (Worktrunk runs with `-C` that checkout; git
 gets its commit), `^` the default branch. A branch that exists only on the
 remote is checked out tracking it (`wt switch` / `git worktree add`).
 
-Neither pane knows the other's id when the layout spawns them, so they meet
+Neither pane knows the other's id when it starts, so they meet
 in `$STATE_DIR/new/<skey>_<token>/`: the agent's pane moves `thread.json` to
 `<skey>_<its pane>.thread`, deletes `task` (read first), writes `pane`, then
 execs the agent with the task as its prompt (`claude "<task>"`, `codex
 "<task>"`); the nvim's pane waits up to 10 s for `pane`, removes the directory
 and goes on as `weaver nvim <agent pane>`. So the agent's `.nvim` file and
-socket exist before its first hook. Run again (zellij reruns an exited command
-on enter), the agent's pane finds no `task` and resumes instead: `claude
---resume <session_id>` (`--continue` when unknown), `codex resume <id>`
-(`--last`).
+socket exist before its first hook. A thread restored after its session went
+leaves `resume` (the session id) there instead of `task`, and its agent's pane
+resumes: `claude --resume <session_id>` (`--continue` when unknown), `codex
+resume <id>` (`--last`). A thread closed before its nvim has read `pane` is
+closed whole all the same: `close` finds that nvim by the token both panes were
+started with.
 
 ### Thread record
 
@@ -252,8 +254,8 @@ the agent's other files. Readers ignore fields they don't know.
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
 
-The tab's current name is the multiplexer's (`tab_name` in `list-panes`); in
-the weaver session weaver labels it (`thread_tab_labels`).
+The window's current name is tmux's; in the weaver session weaver labels it
+(`threadTabLabels`).
 
 A task's slug: its first line in lowercase ASCII letters and digits, every
 other run of characters one `-`, at most 48 characters, cut at a `-`.
@@ -281,26 +283,27 @@ worktree themselves. The branch always stays.
 
 ## Lost threads
 
-A thread lasts until you close it. When its agent dies because its zellij
-went (a crash of the server, or zellij quit), its thread is kept as lost
-rather than forgotten, so it can be resumed.
+A thread lasts until you close it. When its agent dies because its session
+went (its tmux server crashed or was killed, or you quit the session), its
+thread is kept as lost rather than forgotten, so it can be resumed.
 
 - **When:** where an agent's files would be forgotten for a dead pid
-  (`agent_rows`, `gc_states`), `retire` keeps them as lost when the agent has a
+  (`AgentRows`, `GC`), `retire` keeps them as lost when the agent has a
   thread record and a session id, its `end_reason` is not `prompt_input_exit`,
-  `logout` or `clear` (ended on purpose), and its zellij has gone since its last
-  event `ts`: no `zellij --server <socket dir>/<session>` process runs, or the
-  one that does started after `ts` (its age from `ps -o etime`). Anything else
-  is forgotten as before; a pane closed while its zellij runs on is not lost.
-  The hook does the same check before a new agent's state replaces a dead
-  one's in a reused pane id (a new zellij of the same name numbers panes
-  from 0 again), and only ever keeps there, never forgets.
+  `logout` or `clear` (ended on purpose), and its session has gone since its
+  last event: the tmux server no longer has a session of its name, or has one
+  on another server (the state's `server`, its pid) or, for older states,
+  one created after the agent's last event `ts`. Anything else is forgotten as
+  before; a pane closed while its session runs on is not lost. The hook does
+  the same check before a new agent's state replaces a dead one's in a reused
+  pane id (a new server numbers panes from 0 again), and only ever keeps
+  there, never forgets.
 - **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json`, one object:
   `lost` (epoch s), `skey` (the session key it was lost from, `tmux-` first
   for a tmux session; records before 2026-10-15 call it `session`), `state`
   (the state file) and `thread` (the thread record). The pane's files go.
-  Readers take its directory and key through `JQ_LOST` (`lost_dir`,
-  `lost_skey`), where an empty field counts as none.
+  Readers take its directory and key through `lostDir` and its `skey`, where
+  an empty field counts as none.
 - **Resume:** `weaver resume [--all] [WHICH]` (WHICH: a session id or its first
   4+ characters, a thread name, or a number; alone it lists them). Each is
   claimed by moving its record into `new/<skey>_<token>/` (so two resumes never
@@ -315,35 +318,30 @@ rather than forgotten, so it can be resumed.
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
   title and last reply, and its snapshot chain and activity log continue.
   A record whose directory is gone stays lost.
-- **The weaver session:** its config has `session_serialization false` (any
-  of yours dropped), since zellij's resurrection reruns each pane's last
-  command line: `claude <task>` (a new conversation sent the task again) and
-  `nvim --listen <old socket>` bound to nothing. As the session starts, its
-  home (`weaver home`) runs `gc_states`, then resumes every thread lost by a
-  session of its name, in number order, without leaving home
-  (`WEAVER_RESTORE=0`: listed instead). An exited weaver session that zellij
-  saved before this is deleted and started afresh.
+- **The weaver session:** as it starts, its home (`weaver home`, behind the
+  board as `weaver _boot`) runs `GC`, then resumes every thread lost by a
+  session of its name (and by the zellij session of that name, from before
+  weaver ran on tmux only), in number order, without leaving home
+  (`WEAVER_RESTORE=0`: listed instead).
 - **Dashboard:** lost threads (of every session) last, under `LOST`, glyph
   `[-]`, without a number or a 1-9 key and not counted in the title; their item
   id is `l<session id>` and field 2 the session id. Enter resumes one
   (`weaver resume`), x forgets it (`weaver resume --forget`), and the preview
   shows its card (`weaver _preview <session id>`).
-- **Quit:** zellij's `Ctrl q` quits everything, and the threads come back as
-  above. `weaver quit [--yes]` kills the session you are in (outside zellij,
-  `$WEAVER_SESSION`) with `zellij kill-session`, after a card: the threads
-  kept, the turns under way, and the agents' nvims' unsaved buffers (each nvim
-  asked over its socket, as `weaver close` does). The footer shows `^q QUIT`.
+- **Quit:** `Ctrl q` kills the session, and the threads come back as above.
+  `weaver quit [--yes]` kills the session you are in (outside tmux,
+  `$WEAVER_SESSION`) after a card: the threads kept, the turns under way, and
+  the agents' nvims' unsaved buffers (each nvim asked over its socket, as
+  `weaver close` does). The footer shows `^q QUIT`.
 
 ## Dashboard
 
-`weaver ls` (Alt y) is fzf in a floating pane. `push_status`, run by every hook
-that changes a state, reloads it through its `--listen` socket.
+The dashboard is fzf: `weaver home` in the weaver session's home window, at
+full size, and `weaver ls` (or `weaver` inside any other tmux session) in the
+pane it runs in. `PushStatus`, run by every hook that changes a state, reloads
+it through its `--listen` socket.
 
-The pane fits its content (`float_fit`, below): as wide as the rows need, as
-tall as the list, its header and footer and the card, at most 90% x 85% of
-the tab, centred; re-fitted when a reload changes the list. It is borderless
-(the Alt y binding: `borderless true; name "weaver"`) and fzf draws one sharp
-border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
+fzf draws one sharp border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
 title and the status bar's counts in its label (home leaves the counts to the
 status line, below it). Inside, from the top: a blank
 line (the search input takes its place, so nothing moves), the agents under a
@@ -352,8 +350,8 @@ that work now, then the card. The card goes beside the list when the pane can
 be 150 columns wide (74 of them), else below it, where it gets what the list
 leaves: under 6 lines it is hidden, and `s`, `tab` or `?` show it over the
 list. When even the list would not fit, the gaps between groups go first, so
-a heading never shows without its rows. With no agents, the pane is one small
-box saying how to start one, with nothing to select.
+a heading never shows without its rows. With no agents, the board says how
+to start one, with nothing to select.
 
 | Group | Glyph | Who | Order |
 | --- | --- | --- | --- |
@@ -388,12 +386,11 @@ or gap has the list positions of the agents before and after it in `prev` and
 a TAB after the glyph; fzf shows it with `--tabstop 1` and searches only what
 follows (`--nth 2`), which headings and gaps leave empty. The first nine
 agents are numbered and `<sock>.keys` holds, line by line, the action that
-picks each (`pos(N)+print(jump)+accept`). It also fits the pane and leaves
-next to the socket what fzf shows around the list: `.label` (the border's
-label), `.title` (the header: what to do on an empty board), `.room` and
-`.tight` (the card's `--preview-window`, and whether it is hidden for want of
-room), `.vp` (the tab's size, asked of zellij again only on a resize). On each
-load, `weaver _chrome` turns them into fzf actions.
+picks each (`pos(N)+print(jump)+accept`). It also leaves next to the socket
+what fzf shows around the list: `.label` (the border's label), `.title` (the
+header: what to do on an empty board), `.room` and `.tight` (the card's
+`--preview-window`, and whether it is hidden for want of room). On each load,
+`weaver _chrome` turns them into fzf actions.
 
 ### Keys
 
@@ -411,10 +408,11 @@ That covers every way of moving (keys, page, first/last, mouse, a reload
 whose agent went away) in one place, for one `/bin/dash` spawn per move
 (about 1 ms).
 
-`n` and `e` end fzf with a key (`print`), and cmd_ls acts: `e` jumps and runs
-`weaver edit`; `n` runs `weaver new --from <pane>` on the pane's terminal and
-reopens the dashboard when it is cancelled (130) or fails. `x` runs `weaver
-close <pane>` inside fzf (`execute`), then reloads.
+Outside home, `n` and `e` end fzf with a key (`print`), and `Ls` acts: `e`
+jumps and runs `weaver edit`; `n` runs `weaver new --from <pane>` on the
+pane's terminal and reopens the dashboard when it is cancelled (130) or
+fails. Home does both inside fzf and keeps running. `x` runs `weaver close
+<pane>` inside fzf (`execute`), then reloads.
 
 ### Resume card
 
@@ -423,184 +421,90 @@ then aligned fields (asked, waits, background, said, tasks, subagents, files,
 git), each wrapped under itself, at most a few lines. `git` is the worktree's
 `git status` in one line: branch, ahead/behind, changed and new files. A
 thread whose agent has not reported shows its record (task, worktree).
-`s`/`tab` swap in the agent's screen (`zellij action dump-screen`) under
+`s`/`tab` swap in the agent's screen (`tmux capture-pane`) under
 `screen · name · repo/branch · turn`, as many lines as fit; `?` the keys.
-
-### Floating panes
-
-`float_fit ROWS COLS` (shared with `weaver new`'s form) fits the floating pane
-it runs in: at most 85% of the tab's rows and 90% of its columns, at least 3 x
-20, centred, borderless, in one `zellij action change-floating-pane-coordinates
--p terminal_<pane> -b true -x -y --width --height`; FIT_ROWS and FIT_COLS get
-the size it took. It does nothing in a tiled pane or when zellij does not
-answer. The tab's size (without its bars) is `list-tabs -j`'s
-`viewport_columns` and `viewport_rows` (`pane_view`). Measured in a 120x40
-tab: about 120 ms for a fit, nothing to fit on an ordinary reload.
-
-## Sidebar, home and status line
-
-In the weaver session (its layout writes `weaver` to `$STATE_DIR/<skey>.layout`)
-a thread's number is its place: `num` in its thread record, the lowest free one
-in the session (`weaver new`). Wherever a row is numbered (the sidebar, the
-home board, the floating dashboard) the number is the thread's `num` when any
-agent has one, else the row's place as before, and the digits go by it.
-
-`weaver sidebar`, at the left of every thread tab when `WEAVER_SIDEBAR=1`, lists the session in its
-tabs' order (`thread_order`: the threads by number, then the other tabs; home
-left out): number, glyph, name and age, and for one that needs you a faint
-second line with what it waits on; a tab without an agent is a faint `·` and
-its name. (Without the layout's order: by number, then by pane.) Its own tab's thread is inverted, the whole width, and the cursor
-sits on it. Under 16 columns it is a rail, number and glyph. j/k move;
-enter and 1-9 go to a thread (`weaver _goto PANE TAB`: focus_pane, mark_seen,
-push_status), and it keeps running. It is fzf with `--read0` (a needs-you row
-is two lines) on `<skey>.side.<pane>.sock`; `.keys` and `.cur` sit beside it.
-push_status writes the session's rows and order once (`$STATE_DIR/<skey>.rows`
-and `.order`, from agent_rows and thread_order) and reloads every sidebar from
-them (`weaver _side --cached`); a
-loop in each sidebar reloads it every 15 s so ages move on. Measured: about 18
-MB per sidebar (fzf 12.5, bash 2.3, the tick loop 3.3), no CPU at rest, a
-reload from the rows about 20 ms.
-
-`weaver home`, in the home tab, is the dashboard at full size that never ends:
-enter, digits and `e` go to a thread and leave it running, `n` runs `weaver
-new` inside it (also on an empty board), `q` and `esc` go back to the tab you
-came from, as Alt y does. It outlives installs of weaver, so it touches
-`<skey>.fzf.<pid>.born` as it starts; the first reload after a newer weaver
-is installed runs that weaver's `_rows` and `_chrome`, and `_chrome`, seeing
-the script newer than `.born`, aborts the board, which then execs the new
-weaver's board (`LS_HOME=1 weaver ls`) in the same pane and process. Its old
-keys never meet rows they do not know.
-
-The PR and issue Inbox, when it comes, is a second tab beside home (`inbox`,
-before the threads, out of the thread numbering and of Alt j/k's thread
-order), so home stays the board of threads and the sidebar does not list it.
-
-The status line is zjstatus showing the current tab only: `{tabs}` with
-`tab_normal ""` and `tab_active "{name}"`, then `{command_weaver}` (the counts)
-and `{mode}`. So the tab's name is the line: push_status renames each thread's
-tab to `<num> <name> · <repo>/<branch>` (name: Claude Code's title, else the
-task, at most 30 characters) with `zellij action rename-tab-by-id`, only when
-the label changed (labels kept in `$STATE_DIR/<skey>.tabs`), and only in the
-weaver session. zjstatus prints `#[...]` in a tab name as it is, so the line is
-one colour.
 
 ## The weaver session
 
-`weaver` (outside zellij) starts `zellij --config <session config> --session
-weaver --new-session-with-layout <layout>`, or attaches to a running one. A
-session made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; the
-sidebar, the tab labels, numbered placement and `_sidefit` act only there.
-zellij does not save it (`session_serialization false`): weaver brings its
-threads back itself ([Lost threads](#lost-threads)). An exited weaver session
-saved before that is deleted and started afresh; an exited one without the
-marker (from before this layout) is left to you.
+`weaver` outside tmux (`Start`) runs `tmux -L ${WEAVER_TMUX_SOCKET:-weaver} -f
+config/tmux.conf`, without an outer tmux's or zellij's variables:
+`new-session -s weaver -n home 'weaver home'`, or `source-file` and
+`attach-session` when it runs. A session made that way has
+`$STATE_DIR/<skey>.layout` saying `weaver`; thread labels and numbered
+placement act only there. The server starts from `/` (the home window keeps
+your directory, `-c`), so a worktree removed under it can never be its
+directory. `$WEAVER_TMUX_SOCKET` is a name (`-L`) or a socket's path (`-S`,
+which the tests use). Inside tmux, weaver talks to the server `$TMUX` names,
+else weaver's.
 
-- **Config:** `$STATE_DIR/zellij-session.kdl`, rebuilt at every start: your
-  config (`$ZELLIJ_CONFIG_FILE`, else `config.kdl`) with the session keys
-  (`weaver-keys.kdl` beside it, else `config/zellij-session-keys.kdl`) added
-  before the brace that closes its first `keybinds` block, then `layout_dir` and
-  `theme_dir` pointing at your config directory's, when they exist and are
-  not set, and `session_serialization false` last.
-- **Layout:** `$WEAVER_LAYOUT`, else `layouts/weaver.kdl` in your zellij config
-  directory, else `config/weaver-layout.kdl`: a `home` tab running `weaver
-  home`, and a `default_tab_template` with the status line.
-- **Thread tabs:** `weaver new` builds the tab from the session's
-  `new_tab_template` as a named `tab_template` (`weaver_thread`), with a vertical
-  split: the nvim and the agent; with `WEAVER_SIDEBAR=1`, `weaver sidebar` at 16%
-  before them, and a
-  `swap_tiled_layout name="rail"` with the sidebar at 5% (its content needs 3 columns at 80).
-  `zellij action next-swap-layout -t TAB` (and Alt [ / Alt ]) toggles the two
-  with the panes kept. The tab then moves (`move-tab -t TAB left`) to its
-  place: after the last thread tab with a lower number, else after home.
-- **Numbers:** `num` in the thread record, the lowest free among the
-  session's thread records (those being opened included), under
-  `$STATE_DIR/<skey>.num.lock`.
-- **Folding:** `weaver _sidefit`, run by the sidebar at its start and on
-  resize: open from 160 columns, the rail below. The decision is kept in
-  `$STATE_DIR/<skey>.side.<tab>`; while the window stays on the same side of
-  160 the layout is left as you set it.
-- **Alt y:** `weaver go home` from a 1x1 borderless floating pane: one
-  `list-tabs` for the active tab and home; from home to the tab in
-  `$STATE_DIR/<skey>.last`, else home (made again if it was closed).
-- **Order:** `thread_order` fills THREAD_ORDER from $PANES (else list-panes)
-  and the state and thread files, one line per entry in tab position order,
-  home left out, US-separated: `kind num tab pane label`, kind `thread`,
-  `agent` or `tab`. A tab without an agent is labelled by its name, or for
-  zellij's `Tab #N`, its first pane's directory and command.
-
-## On tmux
-
-tmux is weaver's default; the sections above describe zellij's session, which
-`WEAVER_MUX=zellij` keeps. `MUX` is `tmux` or `zellij`: `$WEAVER_MUX`, else
-zellij when `$ZELLIJ_SESSION_NAME` is set, else tmux (inside tmux or outside
-both). Every call to the multiplexer goes through the `mux_*` functions, or a
-branch on `MUX` where tmux needs no workaround. The zellij suites set
-`WEAVER_MUX=zellij`; `test/tmux.sh` tests tmux end to end.
-
-- **Identity:** `MY_PANE` is the pane weaver runs in (`$ZELLIJ_PANE_ID`, or
-  `$TMUX_PANE` without its `%`; empty in a tmux popup or `run-shell`, which are
-  not panes). In tmux `SESSION` is `$WEAVER_TMUX_SESSION`, which weaver's
-  sessions set for their panes (`new-session -e`, `set-environment`, and `-e`
-  on every window and split it makes), else `tmux display-message -p '#S'`;
-  SKEY is `tmux-<session>`, so state files never mix a zellij session's pane
-  ids with a tmux one's of the same name.
-- **Shapes:** `mux_panes` and `mux_tabs` answer in zellij's `list-panes -a -j`
-  and `list-tabs -j` JSON, from `list-panes -s` and `list-windows` formats split
-  on US: a tab is a window (`@N` as `N`, its index as `position`), a pane `%N`
-  as `N`, and `is_floating` is always false. The rest of weaver reads one shape.
-- **Server:** `weaver` outside tmux (`tmux_start`) runs `tmux -L
-  ${WEAVER_TMUX_SOCKET:-weaver} -f config/tmux.conf`, without zellij's or
-  tmux's variables: `new-session -s weaver -n home 'weaver home'`, or
-  `source-file` and `attach-session` when it runs. `tm` talks to the server
-  `$TMUX` names, else weaver's.
-- **Threads:** `thread_tab`: `new-window -n NAME -c DIR 'weaver nvim --thread
-  TOK'`, then `split-window -h -l AGENT_COLS 'weaver _agent TOK KIND'` (argv,
-  no shell), the nvim pane titled `nvim: <dir>`, the agent active.
-  `thread_place` moves the window to the index of its number (home is 0),
-  when that is free. `thread_width` is one `resize-pane -x`, and Alt v's nvim
+- **Identity:** `MyPane` is the pane weaver runs in (`$TMUX_PANE` without its
+  `%`; empty in a tmux popup or `run-shell`, which are not panes). `Session`
+  is `$WEAVER_TMUX_SESSION`, which weaver's sessions set for their panes
+  (`new-session -e`, `set-environment`, and `-e` on every window and split it
+  makes), else `tmux display-message -p '#S'`; the session's key (`SKey`) is
+  `tmux-<session>`.
+- **Panes:** `Panes` is one `list-panes -s` with its fields split on US: a
+  window `@N` as `N` (its index too), a pane `%N` as `N`.
+- **Numbers:** a thread's number is its place: `num` in its thread record,
+  the lowest free among the session's thread records (those being opened
+  included, for at most 30 s), under `$STATE_DIR/<skey>.num.lock`. Its window
+  moves to the index of its number (home is 0), when that is free. Wherever a
+  row is numbered (the home board, a dashboard) the number is the thread's
+  `num` when any agent has one, else the row's place, and the digits go by it.
+- **Home:** `weaver home`, in window 0, is the dashboard at full size that
+  never ends: enter, digits and `e` go to a thread and leave it running, `n`
+  runs `weaver new` inside it (also on an empty board), `q` and `esc` go back
+  to the window you came from, as Alt y does. It outlives installs of weaver,
+  so it touches `<skey>.fzf.<pid>.born` as it starts; the first reload after a
+  newer weaver is installed runs that weaver's `_rows` and `_chrome`, and
+  `_chrome`, seeing the binary newer than `.born`, aborts the board, which
+  then execs the new weaver's board (`LS_HOME=1 weaver ls`) in the same pane
+  and process. Its old keys never meet rows they do not know. The PR and
+  issue Inbox, when it comes, is a second window beside home, out of the
+  thread numbering.
+- **Alt y:** `weaver go home`: from a thread to home, remembering the window
+  in `$STATE_DIR/<skey>.last`; from home back to it (home is made again if it
+  was closed).
+- **Threads:** `new-window -n LABEL -c DIR 'weaver nvim --thread TOK'`, then
+  `split-window -h -l AGENT_COLS 'weaver _agent TOK KIND'` (argv, no shell),
+  the nvim pane titled `nvim: <dir>`, the agent active. `Alt v`'s nvim is a
   `split-window -h -b -l 80%` on the agent's left.
-- **Focus:** `select-window` and `select-pane` work from anywhere, so
-  `focus_pane` is those two, and `focused_pane` (in a popup or `run-shell`)
-  is the session's active pane. weaver's keys pass `#{pane_id}` to `run-shell`
-  as well.
-- **Status line:** tmux's own, showing the session's `@weaver-counts`, which
-  `push_status` sets (in zjstatus's `#[...]` styles, `counts_fmt`) when the
-  counts change, or as the session starts; setting an option redraws every
-  client, and `status-interval` is 0, so nothing polls. `weaver status --tmux
-  SESSION` still prints them.
-- **Seen as you look:** when an agent finishes, hook_bg flags its window
-  (`@weaver-unseen`). tmux's `pane-focus-in` hook, on a flagged window, runs
-  `weaver _seen <window>` 1.5 s later, which marks its done agents seen only
-  if the window is still the session's current one: passing through with Alt
-  j/k leaves them new. (A thread that finishes while you are on it is seen at
-  once, as before: status_counts sees the clients' panes.)
+- **Focus:** `select-window` and `select-pane` work from anywhere, and the
+  focused pane (in a popup or `run-shell`) is the session's active pane.
+  weaver's keys pass `#{pane_id}` to `run-shell` as well.
+- **Status line:** tmux's own, one line: on the left the current window's
+  name, which in the weaver session `PushStatus` keeps as each thread's label
+  (`<num> <title, else task, at most 30> · <repo>/<branch>`, faint grey;
+  renamed only when it is not its label, since window ids start again with
+  each server); on the right the session's `@weaver-counts` (`CountsFmt`),
+  set when the counts change or as the session starts, so nothing polls
+  (`status-interval` 0), then `[CPY]` in copy mode, `[PFX]` while the prefix
+  is down, else `[NRM]`. `weaver status --tmux SESSION` prints the counts.
+- **Seen as you look:** when an agent finishes, the hook's background run
+  flags its window (`@weaver-unseen`). tmux's `pane-focus-in` hook, on a
+  flagged window, runs `weaver _seen <window>` 1.5 s later, which marks its
+  done agents seen only if the window is still the session's current one:
+  passing through with Alt j/k leaves them new. (A thread that finishes while
+  you are on it is seen at once: the counts see the clients' panes.)
 - **Alt 1** says where it landed in tmux's message line: `[2/3] 02 name ·
   needs you · what it waits on`.
-- **Server:** started from `/` (the home window keeps your directory, `-c`),
-  so a worktree removed under it can never be its directory.
-  `$WEAVER_TMUX_SOCKET` is a name (`-L`) or a socket's path (`-S`, which the
-  tests use).
 - **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
   its repository, lines, the version a review shows them in, the lines' text,
   your note) and `:AgentSend` pipes them, as one message, to `$WEAVER_BIN send
-  $WEAVER_PANE`. `weaver send` checks the agent's state as the board has it
-  (`agent_rows`): only idle, done or interrupted take it (a dialog could take
-  pasted text as an answer), unless `--force`. Then `load-buffer`,
-  `paste-buffer -p -d` (bracketed, so its newlines do not submit) and `Enter`.
+  $WEAVER_PANE`. `weaver send` checks the agent's state as the board has it:
+  only idle, done or interrupted take it (a dialog could take pasted text as
+  an answer), unless `--force`. Then `load-buffer`, `paste-buffer -p -d`
+  (bracketed, so its newlines do not submit) and `Enter`.
 - **Resume:** a lost thread whose directory has gone resumes in its
   repository's main checkout (`.thread.repo`), from which Claude Code finds
-  the session in any of its worktrees (and since 2.1.223, in any project). Its left shows
-  the current window's name, so `push_status` labels the thread windows
-  (`thread_tab_labels`) in tmux's weaver session even without a sidebar; a
-  window is renamed when its name (from PANES' `tab_name`) is not its label,
-  since window and tab ids start again with each server. Its right shows
-  `[CPY]` in copy mode, `[PFX]` while the prefix is down, else `[NRM]`.
+  the session in any of its worktrees (and since 2.1.223, in any project).
 - **Resizing:** tmux gives a narrower window's columns to the rightmost pane,
   the agent, so a `window-resized` hook runs `weaver _fit <window>`, which
-  sets each thread agent there back to its width (`thread_width`, one
-  `resize-pane -x`), only while nvim and the agent are the window's only
-  panes.
-- **Look:** popups, menus and copy mode in Micrographics; tmux 3.8's theme
+  sets each thread agent there back to its width (one `resize-pane -x`), only
+  while nvim and the agent are the window's only panes. Below 104 columns
+  nvim keeps 60 and the agent gets the rest.
+- **Look:** popups, menus and copy mode in Micrographics, and one faint
+  divider between panes (`pane-border-indicators off`); tmux 3.8's theme
   colours (`dark-theme-*`, server options) too, set inside `%if
   "#{dark-theme-black}"`, which an older tmux, without them, reads as false.
   `extended-keys-format csi-u` (3.5+, guarded the same way) gives apps keys
@@ -616,14 +520,6 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   starts or attaches a session, so an install reaches a running server. Every
   setting may be read twice: array options take explicit indices
   (`terminal-features[90]`).
-- **Lost threads:** a `tmux-` session is lost when its server no longer has
-  it, or has one of its name created after the agent's last event
-  (`#{session_created}`). `resume_session` in a tmux session also takes the
-  lost threads of the zellij session of its name. `mux_session_keys` lists
-  both multiplexers' sessions for `gc_states`, so neither's files go for the
-  other's sessions.
-- **Not on tmux:** the thread sidebar and `_sidefit` (zellij swap layouts), and
-  `float_fit`: popups keep the size their key gives them.
 
 ## Decisions
 
@@ -1082,4 +978,15 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   agent over tmux's half-lit one (`pane-border-indicators off`, both border
   styles #616161), and kept nvim's 60 columns below 104, where the agent
   gets what is left.
-
+- 2026-10-15: weaver runs on tmux only (Rob: drop zellij and the script).
+  zellij had been benched since weaver moved to tmux, its suites unrun and
+  going stale (the install suite still expected the copy-and-link install),
+  and the bash script, 6,300 lines, did only `help`, plain `status` and an
+  explicit `gc` for tmux. Those three are Go now and the script, zellij's
+  layout, keys and sidebar, `WEAVER_MUX`, `WEAVER_SIDEBAR`, `status
+  --zjstatus`, `install.sh --zellij-config` and the zellij suites are gone.
+  What the suites tested that still holds moved to the tmux harness: hook
+  latency (whose fake nvim had been bound under zellij's key, so it measured
+  nothing), the installer, and the states contract (a Go test now). A
+  zellij session's leftover states are swept as their agents go, and the
+  weaver session still resumes the threads a zellij one of its name lost.

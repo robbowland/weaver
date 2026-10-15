@@ -169,7 +169,7 @@ sleep 4
 ok "Alt 1 twice at once: one step, cleanly" "$(client)|$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and .is_floating and (.exited|not))] | length')" "terminal_2|0"
 cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 
-# --- the status bar: counts, pushed to zjstatus, and unread
+# --- the status line: counts, pushed to tmux, and unread
 hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
 ok "status: needs you, done and unseen, working" "$(weaver status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
@@ -183,7 +183,7 @@ ok "...in the status line too" "$(status_line)" "#[fg=#616161][#[fg=#ff3b2f]!#[f
 printf 'garbage\n' >"$SD/$SK.status"
 ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "
 rc=0"
-ok "...and outside zellij too" "$(ZELLIJ_SESSION_NAME= weaver status --zjstatus; echo "rc=$?")" "
+ok "...and for no session" "$(weaver status --tmux ''; echo "rc=$?")" "
 rc=0"
 
 # --- the multiplexer marks a tab whose pane rings the bell (what

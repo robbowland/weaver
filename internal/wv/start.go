@@ -12,7 +12,8 @@ import (
 // weaver session on weaver's own tmux server (with config/tmux.conf, read
 // again each time, so an install reaches a running server), or start it
 // with home in window 0. Its panes know their session
-// ($WEAVER_TMUX_SESSION); zellij's variables stay out of it.
+// ($WEAVER_TMUX_SESSION); an outer tmux's or zellij's variables stay out
+// of it.
 func (e *Env) Start(name string) int {
 	if name == "" {
 		name = os.Getenv("WEAVER_SESSION")

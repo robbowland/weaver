@@ -13,7 +13,7 @@ import (
 )
 
 // The dashboard's preview: an agent's resume card, its screen, the keys, or
-// a lost thread's card (the script's cmd_preview, JQ_CARD).
+// a lost thread's card.
 
 const nbsp = " "
 

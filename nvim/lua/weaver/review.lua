@@ -186,7 +186,7 @@ function M.mark_reviewed()
   local root = dv.root_here()
   local bin = util.weaver_bin()
   if not root or not bin then
-    util.msg(root and 'cannot find the weaver script' or 'not in a git repository', util.WARN)
+    util.msg(root and 'cannot find weaver' or 'not in a git repository', util.WARN)
     return
   end
   vim.system({ bin, 'snapshot', '--reviewed', root }, { text = true }, function(r)

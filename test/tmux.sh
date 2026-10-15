@@ -6,7 +6,7 @@
 # Cmd+D (as Ghostty sends it), Alt N, the server crashing and its threads resumed (by the board's
 # enter, and by themselves), the board's x, and Ctrl q. Its own socket,
 # session name, state, Claude Code dir, nvim config and PATH, with fake
-# agents: never your tmux, zellij or agents.
+# agents: never your tmux or agents.
 #   test/tmux.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -14,7 +14,7 @@ ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-tmux.XXXXXX)
 SOCK=$AT/tmux.sock
 S=wt$$
-unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_MUX WEAVER_RESTORE WEAVER_SH WEAVER_SELF WEAVER_RUNTIME
+unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_RESTORE
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
@@ -29,10 +29,9 @@ printf '%s\n' "\$@" >"$AT/args.\${TMUX_PANE#%}"
 exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
-# weaver: the binary built from this checkout (carrying its script), its
-# files unpacked here.
+# weaver: the binary built from this checkout, its files unpacked here.
 (cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
-export XDG_DATA_HOME=$AT/data WEAVER_SCRIPT=$ROOT/weaver
+export XDG_DATA_HOME=$AT/data
 export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
 

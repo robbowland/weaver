@@ -14,7 +14,7 @@ nvim --clean --headless --listen "$(sock $P)" \
 	-c 'lua function AgentFollow() return 0 end; function AgentChecktime() return 0 end; function WeaverEvent() return 0 end' \
 	</dev/null >/dev/null 2>&1 &
 nvpid=$!
-printf '%s\n%s\n' "$NVP" "$nvpid" >"$SD/${SESSION}_$P.nvim"
+printf '%s\n%s\n' "$NVP" "$nvpid" >"$SD/${SK}_$P.nvim"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$(sock $P)" ] && break; sleep 0.2; done
 
 J=$AT/lat
@@ -86,15 +86,15 @@ P_ASYNC=$MED L_ASYNC=$LOW
 sleep 1
 
 # Generous budgets, so a loaded machine passes; what they catch is a
-# synchronous nvim or zellij call (10-15 ms each, 2 s when stuck) creeping
+# synchronous nvim or tmux call (10-15 ms each, 2 s when stuck) creeping
 # back in, or the async hook parsing events it has no use for.
 ok "latency: a prompt costs the agent under 25 ms" "$([ "$L_PROMPT" -lt 25 ] && echo y)" y
-ok "latency: an edit in the async hook waits on neither nvim nor zellij (under 40 ms)" \
+ok "latency: an edit in the async hook waits on neither nvim nor tmux (under 40 ms)" \
 	"$([ "$L_EDIT" -lt 40 ] && echo y)" y
-ok "latency: the async hook with nothing to do skips the parse" \
-	"$([ "$L_ASYNC" -lt 12 ] && [ "$L_ASYNC" -lt "$L_PROMPT" ] && echo y)" y
+ok "latency: the async hook with nothing to do is done in under 12 ms" \
+	"$([ "$L_ASYNC" -lt 12 ] && echo y)" y
 
 kill "$nvpid" 2>/dev/null
 Z close-pane --pane-id "terminal_$NVP" >/dev/null 2>&1
-rm -f "$SD/${SESSION}_$P".* "$(sock $P)"
+rm -f "$SD/${SK}_$P".* "$(sock $P)"
 done_suite

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -122,45 +121,6 @@ func canonValue(d *json.Decoder, b *strings.Builder) error {
 		b.WriteString("null")
 	}
 	return nil
-}
-
-// tojson is a decoded value as compact JSON (objects' keys sorted: a decoded
-// object no longer knows its order).
-func tojson(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return "null"
-	case string:
-		return jqStr(x)
-	case json.Number:
-		return x.String()
-	case bool:
-		if x {
-			return "true"
-		}
-		return "false"
-	case []any:
-		parts := make([]string, len(x))
-		for i, e := range x {
-			parts[i] = tojson(e)
-		}
-		return "[" + strings.Join(parts, ",") + "]"
-	case map[string]any:
-		ks := make([]string, 0, len(x))
-		for k := range x {
-			ks = append(ks, k)
-		}
-		sort.Strings(ks)
-		parts := make([]string, len(ks))
-		for i, k := range ks {
-			parts[i] = jqStr(k) + ":" + tojson(x[k])
-		}
-		return "{" + strings.Join(parts, ",") + "}"
-	case obj:
-		return tojson(map[string]any(x))
-	}
-	b, _ := json.Marshal(v)
-	return string(b)
 }
 
 // kv is one member of a JSON object read in order.
@@ -325,7 +285,7 @@ func ctl(s string) string {
 	}, s)
 }
 
-// jsonStr is the script's json_str: s as a JSON string, \ and " escaped, tab
+// jsonStr is s as a JSON string, \ and " escaped, tab
 // and newline by name, any other control character a space.
 func jsonStr(s string) string {
 	if !strings.ContainsAny(s, "\\\"") && strings.IndexFunc(s, func(r rune) bool { return r < 0x20 || r == 0x7f }) < 0 {

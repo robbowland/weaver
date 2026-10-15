@@ -50,10 +50,11 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 	return m
 }
 
-// GC forgets agents that are gone (the script's gc_states), for tmux
-// sessions (zellij's are the script's): a dead agent is retired (its thread
+// GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid goes an hour
 // after its session, an ended one an hour after it ended; then old files.
+// States of other keys (zellij's, from before weaver ran on tmux only) go
+// the same way as their agents do.
 func (e *Env) GC() {
 	now := time.Now().Unix()
 	var sessions map[string]bool
@@ -65,8 +66,7 @@ func (e *Env) GC() {
 		// Nobody answered: keep everything.
 		return sessions == nil || sessions[skey]
 	}
-	fs, _ := filepath.Glob(e.StateDir + "/tmux-*_*.json")
-	for _, f := range fs {
+	for _, f := range paneFiles(e.StateDir, "json") {
 		l, _ := firstLine(f)
 		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), sub1(reGcState, l)
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
@@ -86,8 +86,7 @@ func (e *Env) GC() {
 			e.forget(f, pid)
 		}
 	}
-	ns, _ := filepath.Glob(e.StateDir + "/tmux-*_*.nvim")
-	for _, f := range ns {
+	for _, f := range paneFiles(e.StateDir, "nvim") {
 		if exists(strings.TrimSuffix(f, ".nvim") + ".json") {
 			continue
 		}
@@ -104,8 +103,7 @@ func (e *Env) GC() {
 		}
 	}
 	// A thread whose agent never reported (no state) goes with its session.
-	ths, _ := filepath.Glob(e.StateDir + "/tmux-*_*.thread")
-	for _, f := range ths {
+	for _, f := range paneFiles(e.StateDir, "thread") {
 		if exists(strings.TrimSuffix(f, ".thread") + ".json") {
 			continue
 		}
@@ -139,6 +137,20 @@ func (e *Env) GC() {
 	old(e.LogDir, "*.jsonl", month, false)
 	old(e.LostDir, "*.json", month, false)
 	old(e.StateDir+"/turns", "*", month, false)
+}
+
+// paneFiles are dir's per-pane files with extension ext, of any session:
+// <key>_<digits>.<ext>.
+func paneFiles(dir, ext string) []string {
+	ms, _ := filepath.Glob(dir + "/*_*." + ext)
+	var out []string
+	for _, m := range ms {
+		b := strings.TrimSuffix(filepath.Base(m), "."+ext)
+		if i := strings.LastIndexByte(b, '_'); i > 0 && digits(b[i+1:]) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // Boot is `weaver _boot SOCKET`: what the weaver session needs as it starts,

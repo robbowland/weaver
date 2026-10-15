@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Pane is one pane of the session, as the script's mux_panes has it.
+// Pane is one pane of the session.
 type Pane struct {
 	ID, Tab  int
 	TabName  string
@@ -29,8 +29,8 @@ type Pane struct {
 	Focused  bool
 }
 
-// Panes lists the session's panes (tmux list-panes -s), retried twice as
-// the script's list_panes is: an empty answer is no answer.
+// Panes lists the session's panes (tmux list-panes -s), retried twice: an
+// empty answer is no answer.
 func (e *Env) Panes() ([]Pane, bool) {
 	const us = "\x1f"
 	f := strings.Join([]string{"#{pane_id}", "#{window_id}", "#{window_name}", "#{window_index}", "#{pane_dead}",
@@ -70,8 +70,8 @@ func (e *Env) Panes() ([]Pane, bool) {
 	return nil, false
 }
 
-// Row is an agent of the session, as the script's ROW_FIELDS: each field as
-// jq printed it (tostring, control characters made spaces).
+// Row is an agent of the session: each field as a string (numbers in
+// decimal, control characters made spaces).
 type Row struct {
 	Pane, Tab, State, Root, Since, Seen, Prompt, Waiting, Bg, Title, Nsub, Pid, Pstart, Sfile string
 	Turn, Last, Tdone, Ttotal, File, Sid, Tabname, Agent, Bgtasks, Ttask, Tname, Tnum         string
@@ -226,11 +226,11 @@ func jqRank(v any) int {
 	return 6
 }
 
-// AgentRows are the session's agents (the script's agent_rows): from their
+// AgentRows are the session's agents: from their
 // state files, refined by Claude Code's own session files, and the threads
 // whose agent has not reported yet. Agents gone (their pane closed, or their
-// process dead without a SessionEnd) are retired on the way, as the script
-// does. Its second value is the time the rows were made (epoch s).
+// process dead without a SessionEnd) are retired on the way. Its second
+// value is the time the rows were made (epoch s).
 func (e *Env) AgentRows() ([]Row, int64) {
 	now := time.Now().Unix()
 	jsons := e.SessionFiles("json")
@@ -503,7 +503,7 @@ func agentAlive(pid, start string, starts map[int]string) bool {
 	return strings.Join(strings.Fields(now), " ") == strings.Join(strings.Fields(start), " ")
 }
 
-// LostRow is a thread lost with its session, as the script's lost_rows.
+// LostRow is a thread lost with its session.
 type LostRow struct {
 	File, Sid, Name, Num, Dir, Lost, Skey, Task, Title string
 	lost                                               float64
@@ -614,8 +614,8 @@ func (e *Env) lostCheck(f string) bool {
 // serverLost: did session key skey's session go since ts (epoch s), the
 // agent having run on tmux server srv (its pid, when its state says)? A tmux
 // session: when its server no longer has it, or has one of its name made
-// since: another server, or (older states) a session made after ts. (zellij's
-// are the script's.)
+// since: another server, or (older states) a session made after ts. Any
+// other key (zellij's, from before weaver ran on tmux) never is.
 func (e *Env) serverLost(skey string, ts float64, srv string) bool {
 	if !strings.HasPrefix(skey, "tmux-") {
 		return false
@@ -635,7 +635,7 @@ func (e *Env) serverLost(skey string, ts float64, srv string) bool {
 	return true
 }
 
-// lock serialises read-modify-write of state file sf as the script's lock:
+// lock serialises read-modify-write of state file sf:
 // sf.lock created exclusively holding our pid; a lock whose owner is gone is
 // removed; after ~2s, a private file instead. Its path.
 func lock(sf string) string {
@@ -666,8 +666,8 @@ func lock(sf string) string {
 
 var rePid = []byte(`"pid":`)
 
-// pidOf is the pid in a state file's first line ("pid":N), as the script
-// reads it; empty without one.
+// pidOf is the pid in a state file's first line ("pid":N); empty without
+// one.
 func pidOf(f string) string {
 	l, _ := firstLine(f)
 	i := strings.Index(l, string(rePid))

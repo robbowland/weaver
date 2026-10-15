@@ -242,7 +242,7 @@ function M.read_json(path)
   return ok and type(value) == 'table' and value or nil
 end
 
--- The weaver script, for `weaver snapshot` and friends.
+-- The weaver binary, for `weaver snapshot` and friends.
 function M.weaver_bin()
   local bin = vim.env.WEAVER_BIN
   if bin and bin ~= '' and fn.executable(bin) == 1 then

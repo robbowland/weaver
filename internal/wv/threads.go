@@ -798,7 +798,7 @@ func (e *Env) Resume(args []string) int {
 		return 0
 	}
 	if e.Session == "" {
-		fmt.Fprintln(os.Stderr, "weaver: not inside a zellij or tmux session")
+		fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `weaver`)")
 		return 1
 	}
 	failed := 0

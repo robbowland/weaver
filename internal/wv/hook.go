@@ -16,8 +16,7 @@ import (
 )
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
-// agent's, made one by Event) folded into its state file, as the script's
-// hook_run did. What it needs besides the state (nvim, tmux, Worktrunk,
+// agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, tmux, Worktrunk,
 // snapshots, the status line) runs after it in a detached `weaver hook --bg`.
 
 const rs, us = "\x1e", "\x1f"
@@ -311,7 +310,7 @@ func rawOr(s obj, k, d string) string {
 	return tostring(v)
 }
 
-// parse reads the event and the stored state (the script's JQ_MAIN): false
+// parse reads the event and the stored state: false
 // when there is no event to fold in.
 func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 	var s obj
@@ -549,7 +548,7 @@ func atoi(s string) (int, bool) {
 }
 
 // findTop is the work tree holding directory dir: the nearest ancestor with
-// a .git, as a physical path like git's (the script's find_top).
+// a .git, as a physical path like git's.
 func findTop(dir string) (string, bool) {
 	d, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -598,7 +597,7 @@ func fileTop(f string) (string, bool) {
 
 var reProcStart = regexp.MustCompile(`"procStart":"([^"]*)"`)
 
-// run is the state machine (the script's hook_run, from the parse on).
+// run is the state machine, from the parse on.
 func (h *hk) run(e *Env, me string) {
 	// A new agent session in this pane (not a resume or compaction) starts
 	// afresh; otherwise the root is never reset to the start directory.
@@ -882,7 +881,7 @@ func (h *hk) run(e *Env, me string) {
 	h.NV = readNvimPane(e, h.Pane)
 }
 
-// stateCell is a state's glyph (the script's state_cell).
+// stateCell is a state's glyph.
 func stateCell(s string) string {
 	switch s {
 	case "needs-you":
@@ -924,8 +923,7 @@ func readNvimPane(e *Env, pane string) string {
 	return nv
 }
 
-// writeState writes the state file from the hook's fields (the script's
-// write_state) through its lock, which the rename releases.
+// writeState writes the state file from the hook's fields through its lock, which the rename releases.
 func (e *Env) writeState(h *hk, lk string) {
 	var b strings.Builder
 	p := jsonStr(h.Pane)
@@ -975,16 +973,13 @@ func (e *Env) writeState(h *hk, lk string) {
 	b.WriteString(`,"nvim_pane":` + nv)
 	// The tmux server it runs on ($TMUX is "socket,pid,session"): a server
 	// started again is another, however soon (serverLost).
-	if e.Mux == "tmux" {
-		t := os.Getenv("TMUX")
-		if i := strings.IndexByte(t, ','); i >= 0 {
-			srv := t[i+1:]
-			if j := strings.IndexByte(srv, ','); j >= 0 {
-				srv = srv[:j]
-			}
-			if digits(srv) && srv != "0" {
-				b.WriteString(`,"server":` + srv)
-			}
+	if t := os.Getenv("TMUX"); strings.IndexByte(t, ',') >= 0 {
+		srv := t[strings.IndexByte(t, ',')+1:]
+		if j := strings.IndexByte(srv, ','); j >= 0 {
+			srv = srv[:j]
+		}
+		if digits(srv) && srv != "0" {
+			b.WriteString(`,"server":` + srv)
 		}
 	}
 	if h.EndReason != "" {

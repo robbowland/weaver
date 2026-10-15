@@ -13,8 +13,8 @@ import (
 // snapMsg are a snapshot commit's message fields.
 type snapMsg struct{ sid, pane, prompt, promptID, transcript string }
 
-// snapshot commits the worktree holding dir onto ref (docs/design.md, the
-// script's snapshot): a private index (named by key) so your staging area
+// snapshot commits the worktree holding dir onto ref (docs/design.md): a
+// private index (named by key) so your staging area
 // is never touched, a tree, a commit on the tip, and a compare-and-swap
 // update of ref. Point "base" commits HEAD's tree as the start of a chain
 // instead of reading the worktree. An "end" on top of an end of the same

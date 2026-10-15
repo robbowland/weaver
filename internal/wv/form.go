@@ -565,8 +565,7 @@ func checkThread(task string, fm form) string {
 }
 
 // New is `weaver new [options] [TASK]`: a thread for TASK (or, without
-// one, the form's), its worktree and its window. ok false for --help (the
-// script's usage).
+// one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
 	var repoArg, from, branch, base, agent, where string
 	var task []string
@@ -617,7 +616,7 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 	}
 	if e.Session == "" {
-		return die("not inside zellij or tmux: start it with `weaver`, then Alt N (or weaver new) there")
+		return die("not inside tmux: start it with `weaver`, then Alt N (or weaver new) there")
 	}
 	if agent == "" {
 		agent = "claude"
@@ -769,25 +768,6 @@ func readKey() byte {
 		return 0x1b
 	}
 	return b
-}
-
-// scriptCmd is the script run for args, by bash, as a child.
-func (e *Env) scriptCmd(args ...string) *exec.Cmd {
-	dir, err := Runtime()
-	if err != nil {
-		return nil
-	}
-	script := dir + "/weaver"
-	if sh := os.Getenv("WEAVER_SH"); sh != "" {
-		script = sh
-	}
-	bash := "/bin/bash"
-	if p, err := lookPath("bash"); err == nil {
-		bash = p
-	}
-	c := exec.Command(bash, append([]string{script}, args...)...)
-	c.Env = append(os.Environ(), "WEAVER_SELF="+e.Self, "WEAVER_RUNTIME="+dir)
-	return c
 }
 
 // newForm is the form until you start a thread it can start: the task, or
