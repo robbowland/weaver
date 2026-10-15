@@ -15,7 +15,7 @@ M.agent = {}
 local seq = 0
 
 -- Fields an event or the state file may carry, copied as they are.
-local FIELDS = { 'state', 'turn', 'title', 'prompt', 'waiting', 'root', 'agent' }
+local FIELDS = { 'state', 'turn', 'title', 'prompt', 'waiting', 'root', 'agent', 'doing' }
 
 -- The files the agent edited this session, in order, each once (at most
 -- 200, like the state file's list).
@@ -239,8 +239,8 @@ function M.text()
 end
 
 -- The winbar: state and turn, then the edit waiting to be followed (the one
--- thing you may act on), then what the agent was asked (or waits on), dim,
--- cut to the window's width.
+-- thing you may act on), then what the agent waits on (needs you), runs
+-- (working) or was asked, dim, cut to the window's width.
 function M.winbar()
   local a = M.agent
   local follow = require('weaver.follow')
@@ -281,7 +281,13 @@ function M.winbar()
   elseif not follow.enabled() then
     add('  following off', 'WeaverBarFaint')
   end
-  local about = a.state == 'needs-you' and a.waiting or a.title or a.prompt
+  local about
+  if a.state == 'needs-you' then
+    about = a.waiting
+  elseif a.state == 'working' and a.doing and a.doing ~= '' then
+    about = 'running ' .. a.doing
+  end
+  about = about or a.title or a.prompt
   if about and about ~= '' then
     local win = vim.g.statusline_winid
     local room = (win and api.nvim_win_is_valid(win) and api.nvim_win_get_width(win) or 80) - width - 4

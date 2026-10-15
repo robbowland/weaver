@@ -40,7 +40,7 @@ func (e *Env) hookBg() {
 		if ot == "" {
 			ot = "0"
 		}
-		if h.State != h.OState || strconv.Itoa(h.Turn) != ot || h.Prompt != h.OPrompt || h.Title != h.OTitle {
+		if h.State != h.OState || strconv.Itoa(h.Turn) != ot || h.Prompt != h.OPrompt || h.Title != h.OTitle || h.Doing != h.ODoing {
 			e.nvimStateEvent(h)
 		}
 	}
@@ -211,7 +211,8 @@ func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
 }
 
 func (e *Env) nvimStateEvent(h *hk) {
-	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title), "", "", true)
+	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title)+
+		`,"doing":`+jsonStr(h.Doing), "", "", true)
 }
 
 // PushStatus brings what shows the session's agents up to date: agents done that a client looks at count as seen,

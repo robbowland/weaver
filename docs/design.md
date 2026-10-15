@@ -74,7 +74,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `edit` | `root`, `file` (absolute), `tool`, `agent_id`? | Edit, Write, MultiEdit, NotebookEdit, an MCP edit tool, or a Bash command whose changed file was identified |
 | `root` | `root` | the agent moved to another repo or worktree without a file |
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
-| `state` | `prompt`?, `waiting`?, `title`? | any state change |
+| `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed |
 | `focus` | `root`, `file` (may be `""`) | `weaver edit` (Alt v, Alt V, dashboard ctrl-e): go there now unless that would take over typing, a diff review or unsaved changes |
 
@@ -1004,5 +1004,5 @@ else weaver's.
   order, so a PreToolUse whose tool has already finished (`done_ids`) sets
   nothing. Before, a working row showed at most the last file edited, and
   nothing through the long commands (tests, builds) a turn spends most time
-  in.
-
+  in. The agent's nvim gets it too (the state event's `doing`): its bar says
+  `running npm test` where it would say what the agent was asked.
