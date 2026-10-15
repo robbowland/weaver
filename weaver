@@ -3699,8 +3699,13 @@ cmd_next() {
 $AGENT_ROWS
 EOF2
 	if [ -z "$list" ]; then
-		echo "weaver: no agent needs you"
-		[ -t 1 ] && sleep 1
+		# From a tmux key (run-shell, no terminal): in tmux's message line.
+		if [ "$MUX" = tmux ] && ! [ -t 1 ]; then
+			tm display-message "weaver: no agent needs you" 2>/dev/null
+		else
+			echo "weaver: no agent needs you"
+			[ -t 1 ] && sleep 1
+		fi
 		return 0
 	fi
 	# Pressed again while the last press is still at work: that one already
@@ -4949,7 +4954,7 @@ cmd_new() {
 		esac
 		shift
 	done
-	[ -n "$SESSION" ] || die "not inside zellij: start it with \`weaver\`, then Alt N (or weaver new) there"
+	[ -n "$SESSION" ] || die "not inside zellij or tmux: start it with \`weaver\`, then Alt N (or weaver new) there"
 	case ${agent:-claude} in claude | codex) ;; *) die "unknown agent: $agent (claude or codex)" ;; esac
 
 	# Where it starts: --repo; the agent of --from's repository; else here.
