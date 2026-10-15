@@ -1015,3 +1015,7 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   form hands it the choices as `weaver new` flags. n on the board to the
   form's first paint, in the lab: about 230 ms to 120 ms, most of the rest
   fzf starting.
+- 2026-10-15: Compiled: `weaver` itself (attach to or start the session:
+  one tmux query, then tmux in place of weaver), `edit` (Alt v) and the
+  agent's `nvim` (its liveness check over RPC, then nvim in place of
+  weaver).

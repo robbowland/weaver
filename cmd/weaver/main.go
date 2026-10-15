@@ -159,6 +159,25 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 			sf = args[4]
 		}
 		e.Fetch(args[1], args[2], args[3], sf)
+	case "", "start":
+		if e.Session != "" {
+			return e.Ls(), true
+		}
+		n := ""
+		if cmd == "start" && len(args) > 1 {
+			n = args[1]
+		}
+		return e.Start(n), true
+	case "edit":
+		if !needSession() {
+			return 1, true
+		}
+		return e.Edit(args[1:]), true
+	case "nvim":
+		if !needSession() {
+			return 1, true
+		}
+		return e.Nvim(args[1:]), true
 	case "_rows":
 		if !needSession() {
 			return 1, true
