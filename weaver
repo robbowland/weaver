@@ -3009,6 +3009,13 @@ ls_title() {
 # reload changed it (ls_card_room).
 ls_chrome() {
 	local base=${FZF_SOCK%.sock} pw="" last="" q
+	# The home board, with a newer weaver installed since it started: it ends,
+	# for cmd_ls to start it again in that weaver (the reload that brought
+	# this here showed the new weaver's rows, which the old keys may not know).
+	if [ -n "${LS_HOME:-}" ] && [ -f "$base.born" ] && [ "$SELF" -nt "$base.born" ]; then
+		echo abort
+		return 0
+	fi
 	q=$(printf '%q' "$SELF")
 	printf 'transform-header(%s _title)+transform-footer(%s _footer)' "$q" "$q"
 	{ IFS= read -r pw <"$base.room"; } 2>/dev/null
@@ -3107,9 +3114,12 @@ cmd_ls() {
 	base="$SOCK_DIR/${SKEY}.fzf.$$"
 	sock="$base.sock"
 	# Its files go with it, also when its pane is closed under it.
-	trap 'rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp' EXIT
+	trap 'rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp "$base".born' EXIT
 	trap 'exit 129' HUP
 	trap 'exit 143' TERM
+	# The home board outlives installs of weaver: when it started, for
+	# ls_chrome to tell that a newer weaver is installed under it.
+	[ -n "${LS_HOME:-}" ] && : >"$base.born"
 	ls_utf8
 	while :; do
 		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
@@ -3155,6 +3165,12 @@ cmd_ls() {
 			# without its terminal (the pane or the session closed).
 			[ $rc = 2 ] && return 0
 			{ : </dev/tty; } 2>/dev/null || return 0
+			# A newer weaver is installed (ls_chrome ended the board for
+			# it): the board starts again in it, whose keys know its rows.
+			if [ "$SELF" -nt "$base.born" ]; then
+				rm -f "$base.born"
+				exec env LS_HOME=1 "$SELF" ls
+			fi
 			sleep 0.2
 			continue
 		fi

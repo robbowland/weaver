@@ -442,7 +442,12 @@ reload from the rows about 20 ms.
 `weaver home`, in the home tab, is the dashboard at full size that never ends:
 enter, digits and `e` go to a thread and leave it running, `n` runs `weaver
 new` inside it (also on an empty board), `q` and `esc` go back to the tab you
-came from, as Alt y does.
+came from, as Alt y does. It outlives installs of weaver, so it touches
+`<skey>.fzf.<pid>.born` as it starts; the first reload after a newer weaver
+is installed runs that weaver's `_rows` and `_chrome`, and `_chrome`, seeing
+the script newer than `.born`, aborts the board, which then execs the new
+weaver's board (`LS_HOME=1 weaver ls`) in the same pane and process. Its old
+keys never meet rows they do not know.
 
 The PR and issue Inbox, when it comes, is a second tab beside home (`inbox`,
 before the threads, out of the thread numbering and of Alt j/k's thread
@@ -795,3 +800,9 @@ marker (from before this layout) is left to you.
   may die with the pane. The server (`zellij --server .../<session>`) either no
   longer runs or started after the agent's last event; `/exit`, `/clear` and
   logout (SessionEnd's reason, kept as `end_reason`) are never lost.
+- 2026-10-15: The home board restarts itself when weaver is installed again.
+  On the work Mac a board started before crash recovery was installed showed
+  the new weaver's `LOST` rows (its reloads run the installed script) under the
+  old weaver's keys, which knew only agent rows: enter and x did nothing.
+  Bindings live in the long-running board, so the board, not each key, follows
+  the install.

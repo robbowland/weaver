@@ -88,6 +88,23 @@ key 32 # 2: thread 2, wherever its row is
 sleep 2.5
 ok "home: 2 goes to thread 2" "$(client)" "terminal_0"
 ok "...and the home board stays" "$(Z list-panes -a -j | jq -r ".[] | select(.id == $HM) | .exited")|$([ -S "$H" ] && echo listening)" "false|listening"
+
+# --- a newer weaver installed under the home board: its next reload starts
+# the board again in that weaver (the old one's keys may not know its rows)
+board() { pgrep -f -- "--listen $H" | head -n 1; }
+B1=$(board)
+SRC=$(readlink "$AT/bin/weaver")
+cp "$SRC" "$AT/bin/weaver.new" && mv -f "$AT/bin/weaver.new" "$AT/bin/weaver"
+curl -s -m 2 --unix-socket "$H" -X POST -d "reload($AT/bin/weaver _rows)" http://localhost >/dev/null
+sleep 2.5
+B2=$(board)
+ok "home: a newer weaver installed, the board starts again in it, in its pane" \
+	"$([ -n "$B2" ] && [ "$B2" != "$B1" ] && echo again)|$(Z list-panes -a -j | jq -r ".[] | select(.id == $HM) | .exited")|$(hz '.matches | length > 0')" \
+	"again|false|true"
+curl -s -m 2 --unix-socket "$H" -X POST -d "reload($AT/bin/weaver _rows)" http://localhost >/dev/null
+sleep 1.5
+ok "...once" "$(board)" "$B2"
+ln -sfn "$SRC" "$AT/bin/weaver"
 Z close-pane --pane-id "terminal_$HM"
 sleep 1.5
 ok "home: its processes go with its pane" "$(pgrep -f "$AT/bin/weaver home" | wc -l | tr -d ' ')" "0"

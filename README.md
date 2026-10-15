@@ -310,6 +310,8 @@ see the diff first. It is safe to rerun, and it replaces an install from when
 weaver was called agentnav.
 
 Restart running Claude Code sessions afterwards: they read hooks at start.
+An open home board starts again in the new weaver by itself, at its next
+reload.
 When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 (`--no-codex` to skip); trust them in Codex's `/hooks` before they run.
 
