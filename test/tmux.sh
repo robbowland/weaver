@@ -245,6 +245,17 @@ n=$(grep -c 'what should the agent do' "$AT/screen.log")
 key 1b4e # Alt N
 waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
 ok "Alt N: the new-thread form, in a popup" "$([ "$(grep -c 'what should the agent do' "$AT/screen.log")" -gt "$n" ] && echo form)" "form"
+FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.' | head -n 1)
+[ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
+ok "form: its fields, from the focused thread's checkout" "$(sed -n '1p;4p;5p' "$FORM" 2>/dev/null | tr '\n' ' ')" "$(cd "$AT/repo" && pwd -P) worktree claude "
+hdr=$(FZF_COLUMNS=96 weaver _form header "$FORM" "Fix the flaky test!" | sed 's/\x1b\[[0-9;]*m//g')
+ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
+	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test ')" \
+	"repo where branch base agent |1"
+key 09 # tab: this checkout
+waitfor '[ "$(sed -n 4p "$FORM")" = here ]'
+ok "form: tab works in this checkout" "$(sed -n 4p "$FORM")|$(FZF_COLUMNS=96 weaver _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
+	"here|this checkout"
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "

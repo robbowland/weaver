@@ -1007,3 +1007,11 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   `_fit`), `status --push`, and the home board's start (`_boot`: the sweep of
   tmux sessions' old states, `gc`'s, is Go; a restore of lost threads, which
   starts agents, is the script's `_resume`, run only when there is one).
+- 2026-10-15: The new-thread form compiled (`new` without a task, `_form`,
+  `_fetch`): its header asks git two things at once (`git remote`, and one
+  `git for-each-ref` for the branch, the remotes' HEADs and main or master)
+  where the script asked one at a time; the background fetch is a detached
+  `weaver _fetch` (no perl). The thread itself is still the script's: the
+  form hands it the choices as `weaver new` flags. n on the board to the
+  form's first paint, in the lab: about 230 ms to 120 ms, most of the rest
+  fzf starting.

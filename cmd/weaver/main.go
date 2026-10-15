@@ -136,6 +136,29 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 			return 1, true
 		}
 		e.PushStatus(false)
+	case "new":
+		if e.Session == "" {
+			return 0, false
+		}
+		return e.New(args[1:])
+	case "_form":
+		if len(args) < 3 {
+			return 1, true
+		}
+		q := ""
+		if len(args) > 3 {
+			q = args[3]
+		}
+		e.Form(args[1], args[2], q)
+	case "_fetch":
+		if len(args) < 4 {
+			return 1, true
+		}
+		sf := ""
+		if len(args) > 4 {
+			sf = args[4]
+		}
+		e.Fetch(args[1], args[2], args[3], sf)
 	case "_rows":
 		if !needSession() {
 			return 1, true
