@@ -376,7 +376,7 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 test/run.sh
 ```
 
-runs, in about two minutes, each with its own state and nothing of yours
+runs, in about five minutes, each with its own state and nothing of yours
 touched:
 
 - `test/contract.sh`: the states and glyphs weaver, its Neovim side and the
@@ -384,12 +384,15 @@ touched:
 - `test/nvim/run.sh`: the Neovim specs, headless (set `WEAVER_TEST_PLUGINS`
   to a directory holding `diffview-plus.nvim` if lazy.nvim's plugin
   directory doesn't have it);
+- `test/hooks.sh`: the hook engine (its state machine, Alt 1, the status
+  counts, subagents, per-turn snapshots, other agents' events): the suites in
+  `test/suites/` that test it, on a throwaway tmux server with three fake
+  agents and a client attached (`test/hooks.sh SUITE` runs one);
 - `test/tmux.sh`: weaver on tmux end to end. `weaver` starts its session on a
   throwaway tmux server in a pseudo-terminal and the tests press its keys
   there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
   Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
   their threads resumed, Ctrl q.
 
-zellij is benched: its end-to-end suites (`test/suites/`, which also cover
-the hooks' state machine in depth) still run with `test/zellij.sh [suite...]`
-in a throwaway zellij session, but are no longer kept up.
+zellij is benched: all of `test/suites/` still runs on zellij with
+`test/zellij.sh [suite...]`, but is no longer kept up there.

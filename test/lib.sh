@@ -1,12 +1,33 @@
 # Helpers for the suites in test/suites/; sourced. Run the suites through
-# test/zellij.sh, which sets AT and starts the zellij session.
-: "${AT:?run the suites through test/zellij.sh}"
+# test/hooks.sh (tmux: the hook engine's suites) or test/zellij.sh (zellij,
+# benched), which set AT and start the session.
+: "${AT:?run the suites through test/hooks.sh or test/zellij.sh}"
 
 T=$AT/t
 SD=$AT/state/weaver
 SESSION=$(cat "$AT/session")
-# These suites test weaver on zellij, also where it runs outside a session.
-export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH" WEAVER_MUX=zellij
+# The multiplexer the run is on, and the session's key (its state files'
+# prefix): tmux-<session> on tmux.
+MUX_T=$(cat "$AT/mux" 2>/dev/null || echo zellij)
+if [ "$MUX_T" = tmux ]; then
+	SK="tmux-$SESSION"
+	TSOCK=$(cat "$AT/socket")
+	export WEAVER_MUX=tmux WEAVER_TMUX_SOCKET=$TSOCK WEAVER_TMUX_SESSION=$SESSION TMUX="$TSOCK,0,0" \
+		XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
+	unset ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID TMUX_PANE
+else
+	SK=$SESSION
+	# These suites test weaver on zellij, also where it runs outside a session.
+	export ZELLIJ_SESSION_NAME=$SESSION XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH" WEAVER_MUX=zellij
+fi
+# as_pane PANE CMD...: CMD as run from pane PANE ($ZELLIJ_PANE_ID, or tmux's
+# $TMUX_PANE); pane_env PANE: the same as an assignment, for a command line.
+as_pane() {
+	local p=$1
+	shift
+	if [ "$MUX_T" = tmux ]; then TMUX_PANE="%$p" "$@"; else ZELLIJ_PANE_ID=$p "$@"; fi
+}
+pane_env() { if [ "$MUX_T" = tmux ]; then printf 'TMUX_PANE=%%%s' "$1"; else printf 'ZELLIJ_PANE_ID=%s' "$1"; fi; }
 pass=0 fail=0
 # weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
 eval "$(grep -m 1 "^G_NEED='" "$AT/bin/weaver")"
@@ -25,10 +46,53 @@ done_suite() {
 	exit $fail
 }
 
-Z() { zellij action "$@"; }
+# Z ARGS: zellij action ARGS; on tmux, the few the hook suites ask (the pane
+# list, as weaver sees it; closing a pane).
+Z() {
+	if [ "$MUX_T" != tmux ]; then
+		zellij action "$@"
+		return
+	fi
+	case "$1 ${2:-}" in
+	"list-panes -a") weaver _panes ;;
+	"close-pane --pane-id") tmux -S "$TSOCK" kill-pane -t "%${3#terminal_}" ;;
+	*)
+		echo "Z $*: not on tmux" >&2
+		return 1
+		;;
+	esac
+}
 # key HEX: type bytes into the zellij client (1b65 = Alt e, 0d = Enter, ...)
 key() { printf '%s\n' "$1" >"$AT/keys.fifo"; }
-client() { Z list-clients | tail -n 1 | awk '{print $2}'; }
+# client: the pane the client is on (zellij's terminal_N form).
+client() {
+	if [ "$MUX_T" = tmux ]; then
+		printf 'terminal_%s\n' "$(tmux -S "$TSOCK" list-clients -F '#{pane_id}' | tail -n 1 | tr -d '%')"
+	else
+		Z list-clients | tail -n 1 | awk '{print $2}'
+	fi
+}
+# status_line: the counts as the session's status line shows them.
+status_line() {
+	if [ "$MUX_T" = tmux ]; then weaver status --tmux "$SESSION"; else weaver status --zjstatus; fi
+}
+# ring PANE: the shell in agent pane PANE rings the bell; bell_mark TAB: is
+# tab (window) TAB marked for it ("true")?
+ring() {
+	if [ "$MUX_T" = tmux ]; then
+		tmux -S "$TSOCK" send-keys -t "%$1" "printf '\\a'" Enter
+	else
+		Z write-chars --pane-id "terminal_$1" "printf '\\a'
+"
+	fi
+}
+bell_mark() {
+	if [ "$MUX_T" = tmux ]; then
+		[ "$(tmux -S "$TSOCK" display -p -t "@$1" '#{window_bell_flag}')" = 1 ] && echo true || echo false
+	else
+		Z list-tabs -a -j | jq -r ".[] | select(.tab_id == $1) | .has_bell_notification"
+	fi
+}
 tabpanes() { Z list-panes -a -j | jq -c "[.[] | select((.is_plugin|not) and .tab_id==$1 and (.is_floating|not)) | .id]"; }
 ms() { perl -MTime::HiRes=time -e 'my $t=time; system(@ARGV); printf "%d", (time-$t)*1000' -- "$@"; }
 
@@ -50,13 +114,13 @@ hook() {
 		+ (if $e == "SessionStart" then {source:"startup"} else {} end)
 		+ (if $f != "" then {tool_name:"Edit", tool_input:{file_path:$f}, tool_response:{}} else {} end)
 		+ (if $p != "" then {prompt:$p} else {} end)' |
-		ZELLIJ_PANE_ID=$1 weaver hook $mode
+		as_pane "$1" weaver hook $mode
 }
 # hookj PANE JSON [ARGS]: fake a hook event from raw JSON (sync unless --async).
 hookj() {
 	local pane=$1 json=$2
 	shift 2
-	printf '%s' "$json" | ZELLIJ_PANE_ID=$pane weaver hook "$@"
+	printf '%s' "$json" | as_pane "$pane" weaver hook "$@"
 }
 # hooka PANE JSON: the same through whichever hook Claude Code would use.
 hooka() {
@@ -73,9 +137,9 @@ settle() {
 	done
 	sleep 0.2
 }
-st() { jq -r ".$2" "$SD/${SESSION}_$1.json"; }
+st() { jq -r ".$2" "$SD/${SK}_$1.json"; }
 
-sock() { printf '/tmp/weaver-%s/%s_%s.sock' "$(id -u)" "$SESSION" "$1"; }
+sock() { printf '/tmp/weaver-%s/%s_%s.sock' "$(id -u)" "$SK" "$1"; }
 # nvq AGENT EXPR: evaluate EXPR in the agent's nvim (3s timeout).
 nvq() {
 	perl -e 'alarm 3; exec @ARGV' nvim --server "$(sock "$1")" --remote-expr "$2" </dev/null || printf 'TIMEOUT'
@@ -94,7 +158,7 @@ unstick() {
 		sleep 1
 	fi
 }
-nvim_pane() { sed -n 1p "$SD/${SESSION}_$1.nvim"; }
+nvim_pane() { sed -n 1p "$SD/${SK}_$1.nvim"; }
 
 # The standard scene: A started in the main checkout but edits worktree a;
 # B waits for permission in worktree b; C (tab two) writes a new file in b.
@@ -115,7 +179,7 @@ feed() {
 # whatever the suites before it did. The three agent panes stay.
 fresh() {
 	local f p
-	for f in "$SD/${SESSION}"_*.nvim; do
+	for f in "$SD/${SK}"_*.nvim; do
 		[ -f "$f" ] || continue
 		read -r p <"$f"
 		case $p in '' | *[!0-9]*) ;; *) Z close-pane --pane-id "terminal_$p" >/dev/null 2>&1 ;; esac
@@ -123,7 +187,7 @@ fresh() {
 	settle
 	rm -rf "$SD"
 	mkdir -p "$SD"
-	rm -f "/tmp/weaver-$(id -u)/${SESSION}"_*.sock*
+	rm -f "/tmp/weaver-$(id -u)/${SK}"_*.sock*
 	rm -f "$AT/claude/sessions/"*.json
 	sleep 0.3
 }
@@ -141,7 +205,7 @@ fake_nvim() {
 		</dev/null >/dev/null 2>&1 &
 	p=$!
 	for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$s" ] && break; sleep 0.2; done
-	printf '%s\n%s\n' "${2:-99}" "$p" >"$SD/${SESSION}_$1.nvim"
+	printf '%s\n%s\n' "${2:-99}" "$p" >"$SD/${SK}_$1.nvim"
 	FAKE_NVIM_PID=$p
 }
 # nvim_events PANE [FIELD]: what the agent's fake nvim was told, one event per

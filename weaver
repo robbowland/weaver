@@ -4746,24 +4746,28 @@ weaver_thread {
 }
 
 # tmux, 1.5 s after you focus window $1, flagged as holding an agent done and
-# unseen (config/tmux.conf's pane-focus-in hook): if you are still on it, its
-# done agents are seen and the counts say so. Passing through, they stay new.
+# unseen (config/tmux.conf's pane-focus-in hook): if you are still on it, the
+# agent you are looking at (its pane, or the nvim bound to it) is seen, and the
+# counts say so. Passing through, it stays new; the flag stays while another
+# agent there is still new.
 cmd_seen() {
-	local win=${1:-} p line="" re_s='"state":"done"' re_n='"seen":true'
+	local win=${1:-} info p line re_d='"state":"done"' re_n='"seen":true' left=""
 	[ "$MUX" = tmux ] || return 0
 	need_session
 	win=${win#@}
-	case $(tm display-message -p -t "@$win" '#{window_active}:#{session_attached}' 2>/dev/null) in
-	1:[1-9]*) ;;
-	*) return 0 ;;
-	esac
+	info=$(tm display-message -p -t "@$win" '#{window_active}:#{session_attached}:#{pane_id}' 2>/dev/null)
+	case $info in 1:[1-9]*:%*) ;; *) return 0 ;; esac
+	agent_of_pane "${info##*%}" || return 0
+	line=""
+	{ IFS= read -r line <"$STATE_DIR/${SKEY}_$AGENT.json"; } 2>/dev/null
+	[[ $line =~ $re_d ]] && ! [[ $line =~ $re_n ]] && mark_seen "$AGENT"
 	for p in $(tm list-panes -t "@$win" -F '#{pane_id}' 2>/dev/null); do
 		p=${p#%}
 		line=""
 		{ IFS= read -r line <"$STATE_DIR/${SKEY}_$p.json"; } 2>/dev/null
-		[[ $line =~ $re_s ]] && ! [[ $line =~ $re_n ]] && mark_seen "$p"
+		[[ $line =~ $re_d ]] && ! [[ $line =~ $re_n ]] && left=1
 	done
-	tm set-option -w -u -t "@$win" @weaver-unseen >/dev/null 2>&1
+	[ -n "$left" ] || tm set-option -w -u -t "@$win" @weaver-unseen >/dev/null 2>&1
 	push_status
 }
 
@@ -6037,6 +6041,7 @@ sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;
 _fit) cmd_fit "$@" ;;
+_panes) need_session && list_panes && printf '%s\n' "$PANES" ;;
 _seen) cmd_seen "$@" ;;
 _side) need_session && side_rows "$@" ;;
 _goto) need_session && cmd_goto "$@" ;;

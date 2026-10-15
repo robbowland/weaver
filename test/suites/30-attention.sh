@@ -106,7 +106,7 @@ ok "your prompt: turn 1, and the session title" "$(st 1 turn)|$(st 1 title)" "1|
 live_pid
 P1=$LIVE_PID
 pj() { printf '{"hook_event_name":"%s","cwd":"%s","session_id":"sid-live"%s}' "$1" "$T/repo-wt-b" "${2:-}"; }
-lhook() { printf '%s' "$1" | CLAUDE_PID=$P1 ZELLIJ_PANE_ID=1 weaver hook ${2:-} >/dev/null; }
+lhook() { printf '%s' "$1" | CLAUDE_PID=$P1 as_pane 1 weaver hook ${2:-} >/dev/null; }
 lhook "$(pj SessionStart ',"source":"startup"')"
 lhook "$(pj UserPromptSubmit ',"prompt":"run the slow tests"')"
 lhook "$(pj PermissionRequest "$bash_input")"
@@ -118,7 +118,7 @@ ok "...and working once it finishes" "$(st 1 state)" "working"
 sleep 1.1
 claude_session "$P1" sid-live waiting "$(($(date +%s) * 1000))" "dialog open"
 ok "a dialog no hook reported: needs you" "$(weaver ls | grep -c '^\[!\] .*dialog open')" "1"
-jq -c '.ts -= 30' "$SD/${SESSION}_1.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SESSION}_1.json"
+jq -c '.ts -= 30' "$SD/${SK}_1.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SK}_1.json"
 claude_session "$P1" sid-live idle $((($(date +%s) - 10) * 1000))
 ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^\[-\] .*interrupted')" "1"
 kill "$P1"
@@ -174,23 +174,23 @@ hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
 ok "status: needs you, done and unseen, working" "$(weaver status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
 settle
-ok "status for zjstatus, kept by the hooks: Micrographics signal colours" "$(weaver status --zjstatus)" \
+ok "status for the status line, kept by the hooks: Micrographics signal colours" "$(status_line)" \
 	"#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 focus 0
 weaver status --push
 ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(weaver status)" "true|$G_NEED 1  $G_WORK 1"
-ok "...in zjstatus too" "$(weaver status --zjstatus)" "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
-printf 'garbage\n' >"$SD/$SESSION.status"
-ok "zjstatus widget: a bad counts file prints nothing, status 0" "$(weaver status --zjstatus; echo "rc=$?")" "
+ok "...in the status line too" "$(status_line)" "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
+printf 'garbage\n' >"$SD/$SK.status"
+ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "
 rc=0"
 ok "...and outside zellij too" "$(ZELLIJ_SESSION_NAME= weaver status --zjstatus; echo "rc=$?")" "
 rc=0"
 
-# --- zellij marks a tab whose pane rings the bell (what terminalSequence does)
-Z write-chars --pane-id terminal_2 "printf '\\a'
-" >/dev/null
+# --- the multiplexer marks a tab whose pane rings the bell (what
+# terminalSequence does)
+ring 2 >/dev/null
 sleep 1
-ok "bell in an unfocused tab marks it" "$(Z list-tabs -a -j | jq -r '.[] | select(.tab_id == 1) | .has_bell_notification')" "true"
+ok "bell in an unfocused tab marks it" "$(bell_mark 1)" "true"
 
 # --- Worktrunk marker on the worktree really being edited (A edits worktree a)
 if command -v wt >/dev/null 2>&1; then

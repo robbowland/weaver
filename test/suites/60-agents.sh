@@ -7,7 +7,7 @@ fresh
 # --- weaver event: a made-up agent in pane 2
 live_pid
 P=$LIVE_PID
-ev() { printf '%s' "$1" | ZELLIJ_PANE_ID=2 weaver event; }
+ev() { printf '%s' "$1" | as_pane 2 weaver event; }
 base='"agent":"pi","session":"pi-1","cwd":"'"$T/repo"'","pid":'"$P"
 ev "{$base,\"event\":\"session_start\",\"source\":\"startup\"}"
 ok "event: session start makes an idle agent of the given kind" "$(st 2 state)|$(st 2 agent)|$(st 2 pid)" "idle|pi|$P"
@@ -44,7 +44,7 @@ kill "$P"
 fresh
 live_pid
 CX=$LIVE_PID
-cx() { printf '%s' "$1" | ZELLIJ_PANE_ID=1 WEAVER_AGENT_PID=$CX weaver adapt codex; }
+cx() { printf '%s' "$1" | WEAVER_AGENT_PID=$CX as_pane 1 weaver adapt codex; }
 cb='"session_id":"cx-1","transcript_path":null,"cwd":"'"$T/repo-wt-b"'","model":"gpt-5","permission_mode":"default"'
 cx "{$cb,\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}"
 ok "codex: session start" "$(st 1 state)|$(st 1 agent)" "idle|codex"
