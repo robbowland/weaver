@@ -165,6 +165,14 @@ T.run(function()
   T.ok('...and the winbar says so', C.winbar():find('following off', 1, true) ~= nil, true)
   C.cmd('AgentFollow')
 
+  -- A start screen (a dashboard plugin's, as a new thread's nvim shows) is
+  -- replaced like an empty window, not waited on.
+  C.cmd('enew')
+  C.lua("vim.bo.buftype = 'nofile'; vim.bo.filetype = 'snacks_dashboard'")
+  idle()
+  C.event({ ev = 'edit', root = R.main, file = app, seq = 9e12 + 3.5 })
+  T.ok('dashboard: replaced by the edit', wait_file('app.txt'), 'app.txt')
+
   -- A removed worktree's tab is closed when the agent moves on.
   C.cmd('tabonly!')
   C.cmd('tabnew')

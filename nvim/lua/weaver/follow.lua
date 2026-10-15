@@ -1,7 +1,7 @@
 -- Polite following. An agent edit is followed (its worktree's tab brought
 -- forward, its file shown at the change) only once you have been idle for
--- about 3 s, in normal mode, in a normal file window, and not reviewing a
--- diff. Until then it waits as the pending target in the winbar, and
+-- about 3 s, in normal mode, in a normal file window (or a start screen such
+-- as a dashboard), and not reviewing a diff. Until then it waits as the pending target in the winbar, and
 -- :AgentJump (<leader>aj) goes there at once.
 --
 -- Following never types into nvim and never switches away from your windows
@@ -99,7 +99,7 @@ function M.why_wait()
   if reviewing_diff() then
     return 'diff'
   end
-  if not util.plain_window(win) then
+  if not util.replaceable(win) then
     return 'window'
   end
   if (uv.now() - last_input) < idle_ms() then
@@ -276,7 +276,7 @@ local function go(target, by)
   end
   -- The cursor moves to the file only from another file window (or when you
   -- asked); a terminal or git UI you were in keeps it.
-  if by == 'you' or util.plain_window(api.nvim_get_current_win()) then
+  if by == 'you' or util.replaceable(api.nvim_get_current_win()) then
     api.nvim_set_current_win(win)
   end
   return true

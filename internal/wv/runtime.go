@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	weaver "github.com/robbowland/weaver"
 )
@@ -39,8 +41,10 @@ func Runtime() (string, error) {
 		h.Write(b)
 		return nil
 	})
-	dir := data + "/weaver/runtime/" + hex.EncodeToString(h.Sum(nil))[:16]
+	id := hex.EncodeToString(h.Sum(nil))[:16]
+	dir := data + "/weaver/runtime/" + id
 	if _, err := os.Stat(dir + "/weaver"); err == nil {
+		syncNvim(data+"/weaver", id)
 		return dir, nil
 	}
 	tmp := dir + ".tmp." + strconv.Itoa(os.Getpid())
@@ -72,7 +76,63 @@ func Runtime() (string, error) {
 			return "", err
 		}
 	}
+	syncNvim(data+"/weaver", id)
+	pruneRuntimes(data+"/weaver/runtime", id)
 	return dir, nil
+}
+
+// syncNvim keeps base/nvim, the Neovim plugin at a path that stays put for
+// Neovim configs to load (lazy.nvim's `dir`), this build's: a copy, marked
+// with the build's id, swapped in whole when the build changes.
+func syncNvim(base, id string) {
+	stable := base + "/nvim"
+	if l, err := firstLine(stable + "/.weaver-runtime"); err == nil && l == id {
+		return
+	}
+	pid := strconv.Itoa(os.Getpid())
+	tmp := stable + ".tmp." + pid
+	err := fs.WalkDir(weaver.Files, "nvim", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		to := filepath.Join(tmp, strings.TrimPrefix(p, "nvim"))
+		if d.IsDir() {
+			return os.MkdirAll(to, 0o755)
+		}
+		b, err := weaver.Files.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(to, b, 0o644)
+	})
+	if err == nil {
+		err = os.WriteFile(tmp+"/.weaver-runtime", []byte(id+"\n"), 0o644)
+	}
+	if err != nil {
+		os.RemoveAll(tmp)
+		return
+	}
+	old := stable + ".old." + pid
+	os.Rename(stable, old)
+	if os.Rename(tmp, stable) != nil {
+		os.RemoveAll(tmp)
+	}
+	os.RemoveAll(old)
+}
+
+// pruneRuntimes removes the unpacked files of builds other than this one
+// that nothing has unpacked in a month (an nvim started from one keeps
+// loading its modules from there, so a recent one stays).
+func pruneRuntimes(dir, id string) {
+	es, _ := os.ReadDir(dir)
+	for _, e := range es {
+		if e.Name() == id || !e.IsDir() {
+			continue
+		}
+		if st, err := e.Info(); err == nil && time.Since(st.ModTime()) > 31*24*time.Hour {
+			os.RemoveAll(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // Script runs the shell script in place of this process for what is not

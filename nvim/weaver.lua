@@ -4,10 +4,12 @@
 -- The modules live beside it in lua/weaver/. Sourcing this file again
 -- reloads them.
 
+-- First on the runtimepath, so its modules are the ones `require` finds even
+-- when the user's config also loads a copy of weaver's plugin (perhaps an
+-- older one).
 local dir = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h')
-if not vim.tbl_contains(vim.opt.runtimepath:get(), dir) then
-  vim.opt.runtimepath:append(dir)
-end
+vim.opt.runtimepath:remove(dir)
+vim.opt.runtimepath:prepend(dir)
 
 if package.loaded.weaver then
   pcall(package.loaded.weaver.teardown)

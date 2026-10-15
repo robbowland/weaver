@@ -22,6 +22,15 @@ func main() {
 		fmt.Println(wv.StatusLine(args[1:]))
 		return
 	}
+	// install.sh: unpack this build's files now, so Neovim configs find its
+	// plugin before weaver next runs.
+	if cmd == "_runtime" {
+		if _, err := wv.Runtime(); err != nil {
+			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	e := wv.Load()
 	if e.Mux == "tmux" {
 		if rc, ok := run(e, cmd, args); ok {

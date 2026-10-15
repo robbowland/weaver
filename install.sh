@@ -93,6 +93,9 @@ install_files() {
 	# old binary or the new one, never half of either.
 	(cd "$SRC" && go build -trimpath -o "$BIN/.weaver.new" ./cmd/weaver) || die "cannot build weaver"
 	mv -f "$BIN/.weaver.new" "$BIN/weaver"
+	# Its files unpacked now (its Neovim plugin kept at $DEST/nvim for Neovim
+	# configs), not when it first needs them.
+	"$BIN/weaver" _runtime || warn "could not unpack weaver's files under $DEST"
 	# The binary carries the script, the Neovim plugin and the configs (it
 	# unpacks them under $DEST/runtime). An older install's copies beside it
 	# stay while what it started may still use them (an nvim loaded its plugin

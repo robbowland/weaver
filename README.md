@@ -346,7 +346,8 @@ zellij 0.45+ only to run weaver there.
 
 This builds weaver, one binary carrying everything it needs, into
 `~/.local/bin/weaver` (it unpacks its Neovim plugin and configs under
-`~/.local/share/weaver/runtime` as it first needs them), adds
+`~/.local/share/weaver/runtime`, and keeps a copy of its Neovim plugin at
+`~/.local/share/weaver/nvim` for your Neovim config to load), adds
 the hooks to `~/.claude/settings.json` (replacing any older weaver hooks) and,
 when zellij is installed, the keybindings to your zellij config, backing up
 each file it changes. weaver's tmux needs no config of yours. The hooks run `~/.local/bin/weaver` directly, without a shell;

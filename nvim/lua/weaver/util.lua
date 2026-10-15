@@ -180,8 +180,28 @@ function M.plain_window(win)
   return not (ok and fixed)
 end
 
+-- Start screens a plugin draws in place of an empty buffer (snacks.nvim,
+-- dashboard-nvim, alpha, mini.starter): nothing to lose, so following may
+-- replace them like an empty file window.
+local START_SCREENS = { snacks_dashboard = true, dashboard = true, alpha = true, starter = true, ministarter = true }
+
+function M.start_screen(win)
+  if not api.nvim_win_is_valid(win) or api.nvim_win_get_config(win).relative ~= '' then
+    return false
+  end
+  local buf = api.nvim_win_get_buf(win)
+  return vim.bo[buf].buftype == 'nofile' and START_SCREENS[vim.bo[buf].filetype] == true and not vim.bo[buf].modified
+end
+
+-- A window following may show a file in: a normal file window, or a start
+-- screen.
+function M.replaceable(win)
+  return M.plain_window(win) or M.start_screen(win)
+end
+
 -- A window in TAB to show PATH in: one already showing it, else the tab's
--- current window, else any normal file window without unsaved changes.
+-- current window, else any normal file window (or start screen) without
+-- unsaved changes.
 -- Returns the window, or nil and 'unsaved' (only windows with unsaved
 -- changes) or 'nowindow' (no normal file window at all).
 function M.window_for(tab, path)
@@ -193,7 +213,7 @@ function M.window_for(tab, path)
   end
   local saw_plain = false
   for _, win in ipairs(vim.list_extend({ api.nvim_tabpage_get_win(tab) }, wins)) do
-    if M.plain_window(win) then
+    if M.replaceable(win) then
       saw_plain = true
       if not vim.bo[api.nvim_win_get_buf(win)].modified then
         return win
