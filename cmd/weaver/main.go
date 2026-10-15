@@ -44,6 +44,31 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		return true
 	}
 	switch cmd {
+	case "hook":
+		e.HookMain(args[1:])
+	case "event", "adapt":
+		bell, adapter := false, ""
+		rest := args[1:]
+		if cmd == "adapt" {
+			if len(rest) == 0 || rest[0] != "codex" {
+				fmt.Fprintln(os.Stderr, "weaver: usage: weaver adapt codex [--bell]")
+				return 1, true
+			}
+			adapter, rest = "codex", rest[1:]
+		}
+		for _, a := range rest {
+			if a == "--bell" {
+				bell = true
+			}
+		}
+		return e.Event(adapter, bell), true
+	case "snapshot":
+		c, msg := wv.Snapshot(args[1:])
+		if msg != "" {
+			fmt.Fprintln(os.Stderr, "weaver: "+msg)
+			return 1, true
+		}
+		fmt.Println(c)
 	case "_rows":
 		if !needSession() {
 			return 1, true

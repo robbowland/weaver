@@ -991,3 +991,13 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   `_footer` and `_hf` about 20 ms to 4 ms. Next: the hook engine, then the
   rest of the script, then packaging (a Homebrew formula with the
   dependencies).
+- 2026-10-15: The hook engine compiled (`hook`, `event`, `adapt codex`,
+  `snapshot`): the event and the stored state are read in-process (no jq),
+  the state machine and the state file are as the script's (the suites pass
+  unchanged), and the background work runs as a detached `weaver hook --bg`
+  given the run in `WEAVER_BG`. nvim's events go over its socket as
+  msgpack-RPC (neovim/go-client), where the script started an `nvim
+  --remote-expr` client for each; dashboards reload by an HTTP POST to fzf's
+  socket from Go, where the script ran curl. Measured on the lab agent, a
+  sync hook about 50 ms to 10 ms, an async one that changes nothing about
+  65 ms to 13 ms. The script keeps its hook for zellij.

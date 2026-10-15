@@ -1,0 +1,538 @@
+package wv
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/neovim/go-client/nvim"
+)
+
+// hookBg is `weaver hook --bg`: everything a hook does besides writing the
+// state, after it (the script's hook_bg), so the agent never waits on nvim,
+// tmux, git or Worktrunk.
+func (e *Env) hookBg() {
+	h := &hk{}
+	if json.Unmarshal([]byte(os.Getenv("WEAVER_BG")), h) != nil {
+		return
+	}
+	os.Unsetenv("WEAVER_BG")
+	h.sf = e.StateFile(h.Pane)
+	// nvim first: following is what you see.
+	if h.NV != "" {
+		if h.EvFile != "" {
+			e.nvimEditEvent(h, "edit", h.Root, h.EvFile, h.Tool)
+		} else if h.Root != h.ORoot {
+			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "", true)
+		}
+		// The bar shows the state, turn, prompt and title: any change to them.
+		ot := h.OTurn
+		if ot == "" {
+			ot = "0"
+		}
+		if h.State != h.OState || strconv.Itoa(h.Turn) != ot || h.Prompt != h.OPrompt || h.Title != h.OTitle {
+			e.nvimStateEvent(h)
+		}
+	}
+	// tmux: the window of an agent that has just finished is flagged, for
+	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
+	if e.Mux == "tmux" && h.State != h.OState {
+		if h.State == "done" {
+			e.Tmux("set-option", "-w", "-t", "%"+h.Pane, "@weaver-unseen", "1")
+		} else if h.OState == "done" {
+			e.Tmux("set-option", "-w", "-u", "-t", "%"+h.Pane, "@weaver-unseen")
+		}
+	}
+	if h.State != h.OState || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot {
+		// A thread's label is its title (else its task or prompt) and branch.
+		e.PushStatus(h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot)
+	}
+	if h.NV != "" && h.Root != h.ORoot && e.sameRoot(h) {
+		e.renamePane(h.NV, "nvim: "+filepath.Base(h.Root))
+	}
+	if h.MarkDir != h.OMarked || h.MarkDir != "" && h.Marker != h.OMarker {
+		if h.OMarked != "" && h.OMarked != h.MarkDir {
+			wtMarker(h.OMarked, "")
+		}
+		if h.MarkDir != "" {
+			wtMarker(h.MarkDir, h.Marker)
+		}
+	}
+	if h.Event == "SessionStart" {
+		e.ScriptRun("gc")
+	}
+	e.hookSnapshots(h)
+}
+
+// ScriptRun runs the script for a command it still does, and waits.
+func (e *Env) ScriptRun(args ...string) error {
+	dir, err := Runtime()
+	if err != nil {
+		return err
+	}
+	script := dir + "/weaver"
+	if sh := os.Getenv("WEAVER_SH"); sh != "" {
+		script = sh
+	}
+	bash := "/bin/bash"
+	if p, err := lookPath("bash"); err == nil {
+		bash = p
+	}
+	c := exec.Command(bash, append([]string{script}, args...)...)
+	c.Env = append(os.Environ(), "WEAVER_SELF="+e.Self, "WEAVER_RUNTIME="+dir)
+	return c.Run()
+}
+
+// sameRoot: is h's root still the agent's? A later hook may have moved it
+// on while this one waited.
+func (e *Env) sameRoot(h *hk) bool {
+	l, _ := firstLine(h.sf)
+	m := regexp.MustCompile(`"root":"([^"]*)"`).FindStringSubmatch(l)
+	return m == nil || m[1] == h.Root
+}
+
+// renamePane titles a pane (the nvim beside an agent), bounded.
+func (e *Env) renamePane(p, title string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	args := []string{"select-pane", "-t", "%" + p, "-T", title}
+	if !e.InTmux {
+		args = append(append([]string{}, e.TSock...), args...)
+	}
+	exec.CommandContext(ctx, "tmux", args...).Run()
+}
+
+// wtMarker sets or clears a Worktrunk branch marker in dir.
+func wtMarker(dir, m string) {
+	if _, err := lookPath("wt"); err != nil {
+		return
+	}
+	if m != "" {
+		exec.Command("wt", "-C", dir, "config", "state", "marker", "set", m).Run()
+	} else {
+		exec.Command("wt", "-C", dir, "config", "state", "marker", "clear").Run()
+	}
+}
+
+// nvimEvent sends event ev (docs/design.md) to the agent's nvim: WeaverEvent,
+// or AgentFollow / AgentChecktime on a weaver.lua that predates it, over its
+// socket (msgpack-RPC; no nvim client started). Returns 0 on success, 128+
+// when nvim did not answer in time, 1 when nothing listens. In a hook, a
+// timeout is remembered: calls are skipped for 15s.
+func (e *Env) nvimEvent(h *hk, ev, extra, r, f string, hook bool) int {
+	sock := e.SockDir + "/" + e.SKey + "_" + h.Pane + ".sock"
+	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
+		return 1
+	}
+	stalled := sock + ".stalled"
+	if hook {
+		if t, err := firstLine(stalled); err == nil {
+			if n, ok := atoi(t); ok && h.Now-int64(n) < 15 {
+				return 128
+			}
+		}
+	}
+	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(h.Pane) + `,"agent":"` + h.AgentKind +
+		`","sid":` + jsonStr(h.Sid) + `,"turn":` + strconv.Itoa(h.Turn) + `,"state":"` + h.State + `"` + extra + "}"
+	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+	compat := "0"
+	switch ev {
+	case "edit", "root", "focus":
+		compat = "v:lua.AgentFollow('" + q(r) + "','" + q(f) + "')"
+	case "checktime":
+		compat = "v:lua.AgentChecktime()"
+	}
+	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + q(j) + "') : " + compat
+	rc := nvimEval(sock, expr, 2*time.Second)
+	if rc >= 128 {
+		if hook {
+			os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644)
+		}
+	} else if exists(stalled) {
+		os.Remove(stalled)
+	}
+	return rc
+}
+
+// nvimEval evaluates expr in the nvim at sock: 0, 1 when it cannot be
+// reached, 142 when it does not answer within d.
+func nvimEval(sock, expr string, d time.Duration) int {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	v, err := nvim.Dial(sock, nvim.DialContext(ctx), nvim.DialLogf(func(string, ...any) {}))
+	if err != nil {
+		if ctx.Err() != nil {
+			return 142
+		}
+		return 1
+	}
+	done := make(chan error, 1)
+	go func() {
+		var r any
+		done <- v.Eval(expr, &r)
+	}()
+	select {
+	case err := <-done:
+		v.Close()
+		if err != nil {
+			return 1
+		}
+		return 0
+	case <-ctx.Done():
+		v.Close()
+		return 142
+	}
+}
+
+// nvimEditEvent: an edit (or a focus) at file f in root r.
+func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
+	x := `,"root":` + jsonStr(r) + `,"file":` + jsonStr(f) + `,"tool":` + jsonStr(tool)
+	if h.Aid != "" {
+		x += `,"agent_id":` + jsonStr(h.Aid)
+	}
+	e.nvimEvent(h, ev, x, r, f, true)
+}
+
+func (e *Env) nvimStateEvent(h *hk) {
+	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title), "", "", true)
+}
+
+// PushStatus brings what shows the session's agents up to date (the
+// script's push_status): agents done that a client looks at count as seen,
+// the counts go to the status file and tmux's status line, every dashboard
+// reloads, and (labels, in the weaver session) the threads' windows are
+// labelled.
+func (e *Env) PushStatus(labels bool) {
+	// Sidebars (zellij's) are the script's.
+	if m, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".side.*.sock"); len(m) > 0 {
+		e.ScriptRun("status", "--push")
+		return
+	}
+	clients := " "
+	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
+		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "
+	}
+	rows, _ := e.AgentRows()
+	var need, done, work int
+	var seenNow []string
+	for _, r := range rows {
+		if r.Pane == "" {
+			continue
+		}
+		switch r.State {
+		case "needs-you":
+			need++
+		case "working", "starting":
+			work++
+		case "done":
+			if r.Seen == "true" {
+				continue
+			}
+			if strings.Contains(clients, " "+r.Pane+" ") {
+				seenNow = append(seenNow, r.Pane)
+			} else {
+				done++
+			}
+		}
+	}
+	for _, p := range seenNow {
+		e.MarkSeen(p)
+	}
+	os.MkdirAll(e.StateDir, 0o755)
+	sf := e.StateDir + "/" + e.SKey + ".status"
+	old := ""
+	if l, err := firstLine(sf); err == nil {
+		if f := strings.Fields(l); len(f) >= 3 {
+			old = strings.Join(f[:3], " ")
+		}
+	}
+	now := strconv.Itoa(need) + " " + strconv.Itoa(done) + " " + strconv.Itoa(work)
+	tmp := sf + "." + strconv.Itoa(os.Getpid())
+	if os.WriteFile(tmp, []byte(now+"\n"), 0o644) == nil {
+		os.Rename(tmp, sf)
+	}
+	// tmux's status line shows the session's @weaver-counts, and an option
+	// set redraws every client: set them when they change.
+	if e.Mux == "tmux" && (labels || now != old) {
+		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-counts", CountsFmt(need, done, work))
+	}
+	q := Quote(e.Self)
+	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
+	for _, s := range socks {
+		if st, err := os.Stat(s); err != nil || st.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		if !fzfPost(s, "reload(COLOR=1 "+q+" _rows)+refresh-preview") {
+			b := strings.TrimSuffix(s, ".sock")
+			for _, x := range []string{s, b + ".keys", b + ".view", b + ".title", b + ".label", b + ".room", b + ".shown", b + ".tight", b + ".vp"} {
+				os.Remove(x)
+			}
+		}
+	}
+	if labels && e.Mux == "tmux" && e.WeaverSession() {
+		e.threadTabLabels(rows)
+	}
+}
+
+// fzfPost sends actions to the fzf listening on unix socket s.
+func fzfPost(s, actions string) bool {
+	c := &http.Client{Timeout: time.Second, Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", s)
+		}}}
+	r, err := c.Post("http://localhost", "text/plain", strings.NewReader(actions))
+	if err != nil {
+		return false
+	}
+	r.Body.Close()
+	return true
+}
+
+// MarkSeen marks agent p seen (you looked at it): a "done" no longer stands
+// out.
+func (e *Env) MarkSeen(p string) {
+	sf := e.StateFile(p)
+	if !exists(sf) {
+		return
+	}
+	lk := lock(sf)
+	b, err := os.ReadFile(sf)
+	o, ok := parseOobj(b)
+	if err != nil || !ok {
+		os.Remove(lk)
+		return
+	}
+	if os.WriteFile(lk, []byte(o.set("seen", "true").String()+"\n"), 0o644) == nil {
+		os.Rename(lk, sf)
+	} else {
+		os.Remove(lk)
+	}
+}
+
+// threadTabLabels: in the weaver session a thread's window is its line on
+// the status bar, "<num> <name> · <repo>/<branch>"; renamed only when that
+// is not its name already.
+func (e *Env) threadTabLabels(rows []Row) {
+	panes, _ := e.Panes()
+	names := map[string]bool{}
+	for _, p := range panes {
+		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.TabName)
+		names[strconv.Itoa(p.Tab)+"\t"+n] = true
+	}
+	for _, r := range rows {
+		if r.Pane == "" || r.Tnum == "" {
+			continue
+		}
+		l := r.Title
+		if l == "" {
+			l = r.Ttask
+		}
+		if l == "" {
+			l = r.Prompt
+		}
+		if i := strings.IndexByte(l, '\n'); i >= 0 {
+			l = l[:i]
+		}
+		l = strings.TrimRight(fit(l, 30), " ")
+		w := whereOf(r.Root)
+		n, _ := strconv.Atoi(r.Tnum)
+		label := padNum(n) + " " + l + " · " + w.repo
+		if w.branch != "" {
+			label += "/" + w.branch
+		}
+		if names[r.Tab+"\t"+label] {
+			continue
+		}
+		e.Tmux("rename-window", "-t", "@"+r.Tab, label)
+	}
+}
+
+func padNum(n int) string {
+	s := strconv.Itoa(n)
+	if len(s) < 2 {
+		s = "0" + s
+	}
+	return s
+}
+
+// followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
+// heredoc, a formatter, an MCP write) counts as an edit: in the repos the
+// command names, the one it ran in and the agent's root, the files git sees
+// as changed since the previous such call; the newest is followed. False
+// when nothing changed.
+func (e *Env) followBashEdits(h *hk) bool {
+	stamp := e.StateDir + "/" + e.SKey + "_" + h.Pane + ".bash"
+	nw := stamp + "." + strconv.Itoa(os.Getpid())
+	if os.WriteFile(nw, nil, 0o644) != nil {
+		return false
+	}
+	sst, err := os.Stat(stamp)
+	if err != nil {
+		os.Rename(nw, stamp)
+		return false
+	}
+	var roots []string
+	seen := map[string]bool{}
+	cands := append([]string{h.Cwd, h.Root}, strings.Split(h.Paths, rs)...)
+	for _, p := range cands {
+		if !strings.HasPrefix(p, "/") {
+			continue
+		}
+		d := p
+		for d != "" {
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				break
+			}
+			d = d[:max(strings.LastIndexByte(d, '/'), 0)]
+		}
+		if d == "" {
+			continue
+		}
+		r, ok := findTop(d)
+		if !ok || seen[r] {
+			continue
+		}
+		seen[r] = true
+		roots = append(roots, r)
+		if len(roots) >= 4 {
+			break
+		}
+	}
+	type cand struct {
+		p string
+		t time.Time
+	}
+	var cs []cand
+	for _, r := range roots {
+		c := exec.Command("git", "-C", r, "status", "--porcelain", "-z", "-uall")
+		c.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+		out, _ := c.Output()
+		es := strings.Split(string(out), "\x00")
+		for i := 0; i < len(es); i++ {
+			en := es[i]
+			if len(en) < 4 {
+				continue
+			}
+			xy := en[:2]
+			// A rename is followed by its original path.
+			if strings.ContainsAny(xy, "RC") {
+				i++
+			}
+			if strings.Contains(xy, "D") {
+				continue
+			}
+			p := r + "/" + en[3:]
+			st, err := os.Lstat(p)
+			if err != nil || !st.Mode().IsRegular() || !st.ModTime().After(sst.ModTime()) {
+				continue
+			}
+			cs = append(cs, cand{p, st.ModTime()})
+		}
+	}
+	os.Rename(nw, stamp)
+	if len(cs) == 0 {
+		return false
+	}
+	sort.SliceStable(cs, func(i, j int) bool {
+		if !cs[i].t.Equal(cs[j].t) {
+			return cs[i].t.After(cs[j].t)
+		}
+		return cs[i].p < cs[j].p
+	})
+	newest := cs[0].p
+	r, ok := fileTop(newest)
+	if !ok {
+		return false
+	}
+	if exists(h.sf) {
+		lk := lock(h.sf)
+		b, _ := os.ReadFile(h.sf)
+		if o, ok := parseOobj(b); ok {
+			o = o.set("root", jqStr(r)).set("file", jqStr(newest))
+			var fs []json.RawMessage
+			if raw, ok := o.get("files"); ok {
+				fs, _ = rawArray(raw)
+			}
+			var nf []json.RawMessage
+			for _, f := range fs {
+				var s string
+				if json.Unmarshal(f, &s) == nil && s == newest {
+					continue
+				}
+				nf = append(nf, f)
+			}
+			nf = append(nf, json.RawMessage(jqStr(newest)))
+			if len(nf) > 200 {
+				nf = nf[len(nf)-200:]
+			}
+			o = o.set("files", joinRaw(nf))
+			if h.Turn > 0 {
+				var tr []json.RawMessage
+				if raw, ok := o.get("turn_roots"); ok {
+					tr, _ = rawArray(raw)
+				}
+				has := false
+				for _, x := range tr {
+					var s string
+					if json.Unmarshal(x, &s) == nil && s == r {
+						has = true
+					}
+				}
+				if !has {
+					o = o.set("turn_roots", joinRaw(append(tr, json.RawMessage(jqStr(r)))))
+				}
+			}
+			if os.WriteFile(lk, []byte(o.String()+"\n"), 0o644) == nil {
+				os.Rename(lk, h.sf)
+			} else {
+				os.Remove(lk)
+			}
+		} else {
+			os.Remove(lk)
+		}
+	}
+	// A root first touched this turn starts its chain from HEAD.
+	if !strings.Contains(rs+h.TurnRoots+rs, rs+r+rs) && h.Turn > 0 && h.Sid != "" {
+		e.snapRoots(h, "base", h.Turn, r, "", h.PromptID)
+	}
+	x := `,"file":` + jsonStr(newest)
+	if h.Tool == "Bash" {
+		h.logLine(e, "bash", `,"cmd":`+jsonStr(h.Cmd)+x)
+	} else {
+		h.logLine(e, "edit", x+`,"tool":`+jsonStr(h.Tool)+`,"root":`+jsonStr(r))
+	}
+	if h.NV == "" {
+		return true
+	}
+	e.nvimEditEvent(h, "edit", r, newest, h.Tool)
+	if r != h.ORoot {
+		e.renamePane(h.NV, "nvim: "+filepath.Base(r))
+	}
+	return true
+}
+
+// gitOut runs git in dir; its output without the trailing newline.
+func gitOut(dir string, env []string, stdin string, args ...string) (string, error) {
+	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if env != nil {
+		c.Env = append(os.Environ(), env...)
+	}
+	if stdin != "" {
+		c.Stdin = strings.NewReader(stdin)
+	}
+	var out bytes.Buffer
+	c.Stdout = &out
+	err := c.Run()
+	return strings.TrimRight(out.String(), "\n"), err
+}
