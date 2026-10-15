@@ -29,7 +29,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `pane` | int | the agent's zellij pane id |
+| `pane` | int | the agent's pane id (zellij's, or tmux's `%N` as `N`) |
 | `agent` | string | `claude`, `codex`, ... |
 | `state` | string | `working`, `needs-you`, `done`, `idle`, `interrupted`, `ended` |
 | `since` | int | epoch s the state began; `ts` is the last event |
@@ -39,7 +39,9 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `title` | string | the session title, when the agent reports one |
 | `turn` | int | +1 on each prompt of yours (not on subagent reports or task notifications) |
 | `prompt`, `waiting`, `last_message` | string | your last prompt; what it waits on; its last reply |
-| `cwd`, `root`, `start_cwd`, `project_root` | string | `root` is the repo or worktree it is really working in |
+| `cwd`, `root`, `start_cwd`, `project_root` | string | `root` is the repo or worktree it is really working in; `start_cwd` the directory Claude Code snaps its cwd back to (where it started, moved by the worktree tools), the baseline a move is measured from; `project_root` its repository, `-` when it has none |
+| `pending` | string | while it needs you for a tool: that call's key (name and input), so the tool's PostToolUse can be matched to it |
+| `marker`, `marked_root` | string | the Worktrunk marker weaver set, and the worktree it set it on |
 | `file` | string | the last file it edited |
 | `files` | [string] | absolute paths edited this session, most recent last, at most 200 |
 | `subagents` | [{id, type, since}] | subagents running now |
@@ -163,11 +165,11 @@ cannot ring through their hook output.
 
 | Field | For | Meaning |
 | --- | --- | --- |
-| `agent` | all, required | `codex`, `gemini`, `pi`, ...: the state's `agent` |
+| `agent` | all, required | `codex`, `gemini`, `pi`, ... (lowercase letters, digits, `_`, `-`; anything else is ignored): the state's `agent` |
 | `event` | all, required | below |
 | `session` | all | the agent's session id |
 | `pid` | all | the agent process (liveness); adapters find it at `session_start` |
-| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file |
+| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file; `pane` digits, a string or a number (tmux's `%3` and zellij's `terminal_3` are read as 3) |
 | `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
 | `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
 | `waiting` | `needs_you` | what it waits on |
@@ -236,12 +238,14 @@ the agent's other files. Readers ignore fields they don't know.
 | `here` | bool | started in the current checkout, not a new worktree |
 | `worktree_created` | bool | `weaver new` made this worktree (only then may `weaver close` offer to remove it) |
 | `agent` | string | `claude` or `codex` |
+| `cmd` | string | the command its agent runs (`$WEAVER_CLAUDE`, `$WEAVER_CODEX`, else the agent's name) |
+| `num` | int | its number in the session (below) |
 | `created` | int | epoch s |
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
 
-The tab's current name is zellij's (`tab_name` in `list-panes`); weaver never
-renames it.
+The tab's current name is the multiplexer's (`tab_name` in `list-panes`); in
+the weaver session weaver labels it (`thread_tab_labels`).
 
 A task's slug: its first line in lowercase ASCII letters and digits, every
 other run of characters one `-`, at most 48 characters, cut at a `-`.
@@ -284,13 +288,17 @@ rather than forgotten, so it can be resumed.
   one's in a reused pane id (a new zellij of the same name numbers panes
   from 0 again), and only ever keeps there, never forgets.
 - **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json`, one object:
-  `lost` (epoch s), `session` (the zellij session key), `state` (the state
-  file) and `thread` (the thread record). The pane's files go.
+  `lost` (epoch s), `skey` (the session key it was lost from, `tmux-` first
+  for a tmux session; records before 2026-10-15 call it `session`), `state`
+  (the state file) and `thread` (the thread record). The pane's files go.
+  Readers take its directory and key through `JQ_LOST` (`lost_dir`,
+  `lost_skey`), where an empty field counts as none.
 - **Resume:** `weaver resume [--all] [WHICH]` (WHICH: a session id or its first
   4+ characters, a thread name, or a number; alone it lists them). Each is
   claimed by moving its record into `new/<skey>_<token>/` (so two resumes never
-  take one), then opened like a new thread's tab in the directory its agent
-  started in (`start_cwd`, else the worktree): `thread.json` (its record with
+  take one), then opened like a new thread's tab in `lost_dir`: `start_cwd`,
+  else the thread's worktree, else `root`, else `cwd`. (`start_cwd` moves with
+  the worktree tools, so an agent that entered a worktree resumes there.) `thread.json` (its record with
   `cmd` for now's agent command and its number when free, else the lowest
   free), `state.json` (its state without pid, as `idle` and seen) and
   `resume` (the session id) in place of `task`. The agent's pane takes the
@@ -328,7 +336,8 @@ tall as the list, its header and footer and the card, at most 90% x 85% of
 the tab, centred; re-fitted when a reload changes the list. It is borderless
 (the Alt y binding: `borderless true; name "weaver"`) and fzf draws one sharp
 border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
-title and the status bar's counts in its label. Inside, from the top: a blank
+title and the status bar's counts in its label (home leaves the counts to the
+status line, below it). Inside, from the top: a blank
 line (the search input takes its place, so nothing moves), the agents under a
 heading per group, groups apart by one blank line, fzf's footer with the keys
 that work now, then the card. The card goes beside the list when the pane can
@@ -364,8 +373,8 @@ Weaver-Point trailers) and kept in `$STATE_DIR/turns/`. Only a tip that is the
 ### Items
 
 `weaver _rows` prints one item per line, TAB-separated: `id pane tab prev next label display`. `id` is `a<pane>` for an
-agent, `h<group>` a heading, `g<group>` the gap above it, `e` the empty
-board's line; fzf tracks the selection by it (`--track --id-nth 1`). A heading
+agent, `l<session id>` a lost thread, `h<group>` a heading and `g<group>` the
+gap above it (an empty board has no items: its message is fzf's header); fzf tracks the selection by it (`--track --id-nth 1`). A heading
 or gap has the list positions of the agents before and after it in `prev` and
 `next`. `label` (`name · repo/branch · turn N`) heads the card. `display` has
 a TAB after the glyph; fzf shows it with `--tabstop 1` and searches only what
@@ -546,9 +555,10 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   `focus_pane` is those two, and `focused_pane` (in a popup or `run-shell`)
   is the session's active pane. weaver's keys pass `#{pane_id}` to `run-shell`
   as well.
-- **Status line:** tmux's own, `#(weaver status --tmux '#{session_name}')`
-  every 2 s (the zjstatus fast path, with zjstatus's `#[...]` styles), and
-  `push_status` refreshes each client on the session at once. Its left shows
+- **Status line:** tmux's own, showing the session's `@weaver-counts`, which
+  `push_status` sets (in zjstatus's `#[...]` styles, `counts_fmt`) and redraws
+  each client on the session with, in one tmux call; `status-interval` is 0,
+  so nothing polls. `weaver status --tmux SESSION` still prints them. Its left shows
   the current window's name, so `push_status` labels the thread windows
   (`thread_tab_labels`) in tmux's weaver session even without a sidebar; a
   window is renamed when its name (from PANES' `tab_name`) is not its label,

@@ -172,7 +172,12 @@ for suite in "$@"; do
 done
 
 cleanup
-# The whole run includes weaver on tmux, which needs no zellij session.
+# The whole run includes the contracts between weaver's halves, and weaver on
+# tmux; neither needs a zellij session.
+if [ -n "$all" ]; then
+	echo "=== contract.sh"
+	bash "$HERE/contract.sh" || failed=$((failed + 1))
+fi
 if [ -n "$all" ] && command -v tmux >/dev/null 2>&1; then
 	echo "=== tmux.sh"
 	bash "$HERE/tmux.sh" || failed=$((failed + 1))

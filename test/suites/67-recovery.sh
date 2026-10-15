@@ -60,7 +60,7 @@ lost_thread gone-sess 5 sid-lost-a alpha 2 "$T/repo-wt-a"
 lost_thread gone-sess 6 sid-exit beta 3 "$T/repo-wt-b" prompt_input_exit
 weaver gc >/dev/null 2>&1
 ok "lost: a thread whose zellij went is kept, its pane's files go" \
-	"$(jq -r '"\(.session) \(.thread.name) \(.thread.num) \(.state.session_id) \(.state.turn)"' "$LOST/gone-sess_sid-lost-a.json" 2>/dev/null)|$(ls "$SD"/gone-sess_5.* 2>/dev/null | wc -l | tr -d ' ')" \
+	"$(jq -r '"\(.skey) \(.thread.name) \(.thread.num) \(.state.session_id) \(.state.turn)"' "$LOST/gone-sess_sid-lost-a.json" 2>/dev/null)|$(ls "$SD"/gone-sess_5.* 2>/dev/null | wc -l | tr -d ' ')" \
 	"gone-sess alpha 2 sid-lost-a 3|0"
 ok "lost: one ended on purpose (/exit) is forgotten" \
 	"$([ -f "$LOST/gone-sess_sid-exit.json" ] && echo kept || echo forgotten)|$(ls "$SD"/gone-sess_6.* 2>/dev/null | wc -l | tr -d ' ')" \

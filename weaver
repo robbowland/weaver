@@ -27,6 +27,19 @@
 #   [ ] idle              [-] interrupted, or ended
 G_NEED='[!]' G_DONE='[x]' G_SEEN='[x]' G_WORK='[/]' G_IDLE='[ ]' G_INT='[-]' G_END='[-]'
 
+# A state's cell, into GCELL: the one mapping from states to glyphs (the board,
+# home, the sidebar, Worktrunk's markers; nvim's GLYPH in status.lua matches).
+state_cell() {
+	case $1 in
+	needs-you) GCELL=$G_NEED ;;
+	done) GCELL=$G_DONE ;;
+	working | starting) GCELL=$G_WORK ;;
+	interrupted) GCELL=$G_INT ;;
+	ended) GCELL=$G_END ;;
+	*) GCELL=$G_IDLE ;;
+	esac
+}
+
 # The counts (needs you, done, working) in the status line's #[...] styles,
 # zjstatus's and tmux's, into COUNTS_FMT: each count's cell faint brackets,
 # its mark in the signal colour.
@@ -83,6 +96,15 @@ elif [ -n "${ZELLIJ_SESSION_NAME:-}" ]; then
 else
 	MUX=tmux
 fi
+case $MUX in
+tmux | zellij) ;;
+*)
+	# A hook never fails the agent over it.
+	[ "${1:-}" = hook ] && exit 0
+	printf 'weaver: WEAVER_MUX is tmux or zellij, not %s\n' "$MUX" >&2
+	exit 1
+	;;
+esac
 if [ "$MUX" = tmux ]; then
 	MY_PANE=${TMUX_PANE:-}
 	MY_PANE=${MY_PANE#%}
@@ -832,13 +854,12 @@ hook_run() {
 	# Worktrunk branch markers, like its own Claude Code plugin sets for the
 	# session's start directory, but on the worktree the agent is really in.
 	# weaver's glyph for the state, not Worktrunk's emoji.
-	case $state in
-	working) marker=$G_WORK ;;
-	needs-you) marker=$G_NEED ;;
-	done) marker=$G_DONE ;;
-	ended) marker='' ;;
-	*) marker=$G_IDLE ;;
-	esac
+	if [ "$state" = ended ]; then
+		marker=''
+	else
+		state_cell "$state"
+		marker=$GCELL
+	fi
 	mark_dir=""
 	if [ "${WEAVER_WT_MARKERS:-1}" != 0 ] && [ -n "$marker" ] && [ "$root" != "$proj" ] && [ -e "$root/.git" ]; then
 		mark_dir=$root
@@ -1028,6 +1049,9 @@ def patch_files: [(.tool_input | .. | strings) | scan("\\*\\*\\* (?:Update|Add) 
 # weaver event [--bell]: one normalized event on stdin. The agent is the pane
 # ZELLIJ_PANE_ID names (or "pane"). With --bell, a change to needs-you or
 # done rings the terminal bell on /dev/tty, for agents that cannot ask their
+# The meta fields of a normalized event (agent, pid, pane), US-separated.
+JQ_META='[.agent // "", .pid // "", .pane // ""] | map(tostring | gsub("[\u0000-\u001f]+"; "")) | join("\u001f")'
+
 # own terminal to (zellij marks the tab).
 cmd_event() {
 	local adapter="" bell=0 meta json agent pid pane mode=sync rc ev
@@ -1040,12 +1064,19 @@ cmd_event() {
 	done
 	[ -t 0 ] && die "usage: weaver event [--bell] < event.json"
 	case $adapter in
-	'') meta=$(jq -c '[.agent // "", (.pid // "" | tostring), (.pane // "" | tostring)], ('"$JQ_EVENT"')') ;;
-	codex) meta=$(jq -c '('"$JQ_CODEX"') | [.agent // "", (.pid // "" | tostring), (.pane // "" | tostring)], ('"$JQ_EVENT"')') ;;
+	'') meta=$(jq -rc '('"$JQ_META"'), ('"$JQ_EVENT"')') ;;
+	codex) meta=$(jq -rc '('"$JQ_CODEX"') | ('"$JQ_META"'), ('"$JQ_EVENT"')') ;;
 	*) die "unknown adapter: $adapter" ;;
 	esac || exit 0
 	IFS=$NL read -r -d '' meta json <<<"$meta"
-	IFS=, read -r agent pid pane <<<"${meta//[\[\]\"]/}"
+	IFS=$US read -r agent pid pane <<<"$meta"
+	# An agent's name goes into the state file and nvim's events as it is.
+	case $agent in [a-z]*) ;; *) exit 0 ;; esac
+	case $agent in *[!a-z0-9_-]*) exit 0 ;; esac
+	# A pane is digits: tmux's %3 and zellij's terminal_3 are pane 3.
+	pane=${pane#terminal_} pane=${pane#%}
+	case $pane in *[!0-9]*) pane="" ;; esac
+	case $pid in *[!0-9]*) pid="" ;; esac
 	pane=${pane:-${MY_PANE:-}}
 	[ -n "$pane" ] && [ -n "$SESSION" ] && [ -n "$agent" ] || exit 0
 	case $json in *'"hook_event_name"'*) ;; *) exit 0 ;; esac
@@ -1352,10 +1383,12 @@ hook_bg() {
 	if [ "$state" != "$o_state" ] || [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] ||
 		[ "$title" != "$o_title" ] || [ "$root" != "$o_root" ]; then
 		# A thread's label is its title (else its task or prompt) and branch.
-		LABELS=""
-		{ [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] || [ "$title" != "$o_title" ] ||
-			[ "$root" != "$o_root" ]; } && LABELS=1
-		push_status
+		if [ "$event" = UserPromptSubmit ] || [ "$event" = SessionStart ] || [ "$title" != "$o_title" ] ||
+			[ "$root" != "$o_root" ]; then
+			push_status labels
+		else
+			push_status
+		fi
 	fi
 	if [ -n "$NV" ] && [ "$root" != "$o_root" ] && same_root; then
 		bounded /dev/null mux_rename_pane "$NV" "nvim: ${root##*/}"
@@ -1845,7 +1878,7 @@ edit_lock() {
 edit_unlock() { rm -rf "$EDIT_LOCK"; }
 
 cmd_edit() {
-	local full=0 target="" agent="" info root file nv cwd f p d sid turn state i
+	local full=0 target="" agent="" info root file nv cwd f p d sid turn state kind i
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--full) full=1 ;;
@@ -1877,12 +1910,13 @@ cmd_edit() {
 		mark_seen "$agent"
 		state_file "$agent"
 		if [ -f "$SF" ]; then
-			info=$(jq -r '[.root // .cwd // "", .file // "", .session_id // "", .turn // 0, .state // ""]
+			info=$(jq -r '[.root // .cwd // "", .file // "", .session_id // "", .turn // 0, .state // "", .agent // "claude"]
 				| map(tostring) | join("\u001f")' "$SF") || die "cannot read $SF"
 		else
-			info=$(jq -r '.worktree // ""' "$STATE_DIR/${SKEY}_$agent.thread" 2>/dev/null)
+			info=$(jq -r '[.worktree // "", "", "", 0, "", .agent // "claude"] | map(tostring) | join("\u001f")' \
+				"$STATE_DIR/${SKEY}_$agent.thread" 2>/dev/null)
 		fi
-		IFS=$US read -r root file sid turn state <<<"$info"
+		IFS=$US read -r root file sid turn state kind <<<"$info"
 		[ -d "$root" ] || root=$PWD
 		# git gives the root as a real path; the agent may have used a symlinked
 		# one (/tmp vs /private/tmp on macOS), so compare real paths.
@@ -1902,7 +1936,7 @@ cmd_edit() {
 			printf '%s' "$PANES" | jq -e --arg p "$nv" \
 				'any(.[]; (.is_plugin | not) and (.id | tostring) == $p and (.exited | not))' >/dev/null; then
 			edit_unlock
-			pane=$agent aid="" seq=$(jq -n 'now * 1000 | floor') agent_kind=claude
+			pane=$agent aid="" seq=$(jq -n 'now * 1000 | floor') agent_kind=${kind:-claude}
 			nvim_edit_event focus "$root" "$file" ""
 			focus_pane "$nv" "$(printf '%s' "$PANES" | jq -r --arg p "$nv" \
 				'map(select((.is_plugin | not) and (.id | tostring) == $p)) | .[0].tab_id // empty')"
@@ -2067,6 +2101,15 @@ forget() {
 # conversation. An agent ended on purpose (/exit), or whose pane you closed
 # while its zellij ran on, is forgotten as before.
 
+# A lost record's fields, read the same everywhere: where it resumes (where
+# its agent started, else its thread's worktree, else where it last was; an
+# empty field counts as none) and the session key it was lost from (older
+# records call it "session").
+JQ_LOST='
+def present: select(. != null and . != "");
+def lost_dir: ([.state.start_cwd, .thread.worktree, .state.root, .state.cwd] | map(present) | .[0]) // "";
+def lost_skey: [.skey, .session] | map(present) | .[0] // "";
+'
 LOST_DIR="$STATE_DIR/lost"
 
 # The running zellij servers, one "<session> <epoch it started>" per line, into
@@ -2155,7 +2198,7 @@ lose() {
 	lf="$LOST_DIR/${base%_*}_$sid.json"
 	mkdir -p "$LOST_DIR"
 	if [ -n "$sid" ] && jq -nc --slurpfile s "$1" --slurpfile t "$b.thread" --arg skey "${base%_*}" \
-		--argjson now "$(date +%s)" '{lost: $now, session: $skey, state: $s[0], thread: $t[0]}' >"$lf.$$" 2>/dev/null &&
+		--argjson now "$(date +%s)" '{lost: $now, skey: $skey, state: $s[0], thread: $t[0]}' >"$lf.$$" 2>/dev/null &&
 		mv -f "$lf.$$" "$lf"; then
 		rm -f "$1" "$b.nvim" "$b.bash" "$b.prompt" "$b.thread"
 		rm -rf "$b.opening"
@@ -2295,52 +2338,37 @@ gc_states() {
 
 # ---------------------------------------------------------------- status
 
-# Counts for the status bar, into N_NEED (needs you), N_DONE (done, not yet
-# seen) and N_WORK (working). Pure bash over the state files: no jq, and zellij
-# only to see which panes you are looking at (those count as seen).
+# Counts for the status line, into N_NEED (needs you), N_DONE (done, not yet
+# seen) and N_WORK (working, or a thread starting): the board's rows
+# (agent_rows), so a state is decided by one rule. With "mark", the clients
+# too (MUX_CLIENT_PANES, MUX_CLIENT_NAMES): agents you are looking at count as
+# seen (SEEN_NOW).
 status_counts() {
-	local f line st seen pid pane re_s='"state":"([a-z-]+)"' re_p='"pid":([0-9]+)' re_n='"seen":true'
-	local re_c='"status":"([a-z]+)"' cs clients
+	local pane st seen clients
 	N_NEED=0 N_DONE=0 N_WORK=0 SEEN_NOW="" clients=" " MUX_CLIENT_NAMES=""
 	# The clients (for push_status to refresh) even with no agents to count.
 	if [ "${1:-}" = mark ]; then
 		mux_clients
 		clients=$MUX_CLIENT_PANES
 	fi
-	session_files json
-	[ ${#FOUND[@]} -gt 0 ] || return 0
-	for f in "${FOUND[@]}"; do
-		line="" st="" pid="" seen=""
-		{ IFS= read -r line <"$f"; } 2>/dev/null
-		[[ $line =~ $re_s ]] && st=${BASH_REMATCH[1]}
-		[[ $line =~ $re_p ]] && pid=${BASH_REMATCH[1]}
-		[[ $line =~ $re_n ]] && seen=1
-		[ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null && continue
-		# Claude Code's own status, when newer, settles a dialog already answered.
-		if [ -n "$pid" ] && [ -f "$CLAUDE_DIR/sessions/$pid.json" ]; then
-			cs=""
-			{ IFS= read -r cs <"$CLAUDE_DIR/sessions/$pid.json"; } 2>/dev/null
-			if [[ $cs =~ $re_c ]]; then
-				case $st:${BASH_REMATCH[1]} in
-				needs-you:busy) st=working ;;
-				working:waiting | done:waiting) st=needs-you ;;
-				esac
-			fi
-		fi
-		pane=${f##*_}
-		pane=${pane%.json}
+	agent_rows
+	while IFS=$US read -r pane _ st _ _ seen _; do
+		[ -n "$pane" ] || continue
 		case $st in
 		needs-you) N_NEED=$((N_NEED + 1)) ;;
-		working) N_WORK=$((N_WORK + 1)) ;;
+		working | starting) N_WORK=$((N_WORK + 1)) ;;
 		done)
-			[ -n "$seen" ] && continue
+			[ "$seen" = true ] && continue
 			case $clients in
 			*" $pane "*) SEEN_NOW="$SEEN_NOW $pane" ;;
 			*) N_DONE=$((N_DONE + 1)) ;;
 			esac
 			;;
 		esac
-	done
+	done <<EOF2
+$AGENT_ROWS
+EOF2
+	return 0
 }
 
 # The status text, plain.
@@ -2354,10 +2382,10 @@ status_text() {
 
 # Keep the counts the status line shows (weaver status --tmux, --zjstatus) and
 # reload any open dashboard. Agents you are looking at count as seen. With
-# LABELS set (a title, prompt or branch changed, or the session started), the
+# "labels" (a title, prompt or branch changed, or the session started), the
 # thread tabs' labels too.
 push_status() {
-	local p s q side=""
+	local labels=${1:-} p s q side=""
 	status_counts mark
 	for p in $SEEN_NOW; do mark_seen "$p"; done
 	[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR"
@@ -2382,7 +2410,7 @@ push_status() {
 	# session labels its thread windows either way: its status line shows them.
 	for s in "$SOCK_DIR/${SKEY}".side.*.sock; do [ -S "$s" ] && side=1 && break; done
 	if [ -z "$side" ]; then
-		[ -n "${LABELS:-}" ] && [ "$MUX" = tmux ] && weaver_session && agent_rows && thread_tab_labels
+		[ "$labels" = labels ] && [ "$MUX" = tmux ] && weaver_session && thread_tab_labels
 		return 0
 	fi
 	side_cache_write
@@ -3039,15 +3067,15 @@ lost_card() {
 	[ -n "${2:-}" ] &&
 		printf '%s%s%s%s%s%s\n' "$C_BOLD" "${2%% · *}" "$C_OFF" "$C_DIM" "${2#"${2%% · *}"}" "$C_OFF"
 	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" --arg home "$HOME" \
-		--arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" "$JQ_CARD"'
+		--arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" "$JQ_CARD$JQ_LOST"'
 		def tilde: if . == $home then "~" elif startswith($home + "/") then "~" + .[($home | length):] else . end;
 		def tail($n): if length > $n then "…" + .[(length - $n + 1):] else . end;
 		[ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its session went" + $off,
 		  "",
 		  field("asked"; .thread.task // .state.prompt // ""; ""; 4),
 		  (if (.state.last_message // "") != "" then field("said"; .state.last_message; $grey; 6) else empty end),
-		  field("in"; (.state.start_cwd // .thread.worktree // "") | tilde | tail([$w - 11, 20] | max); $grey; 1),
-		  field("session"; ((.session // "") | sub("^tmux-"; "")) + " · " + (.state.session_id // ""); $dim; 2),
+		  field("in"; lost_dir | tilde | tail([$w - 11, 20] | max); $grey; 1),
+		  field("session"; (lost_skey | sub("^tmux-"; "")) + " · " + (.state.session_id // ""); $dim; 2),
 		  "",
 		  $dim + "⏎ resume it in a new tab   x forget it" + $off
 		] | .[]' "$f" 2>/dev/null
@@ -3058,11 +3086,12 @@ lost_card() {
 # thread (PANE is its session id), its card. The view is kept next to the
 # dashboard's socket.
 cmd_preview() {
-	local pane=${1#terminal_} title=${2:-} view=card f line root re_r='"root":"([^"]*)"' n=0
+	local pane=${1#terminal_} title=${2:-} id=${3:-} view=card f line root re_r='"root":"([^"]*)"' n=0
 	local head="" ab="" changed=0 new=0 lines=${FZF_PREVIEW_LINES:-40}
 	[ -n "${FZF_SOCK:-}" ] && { IFS= read -r view <"${FZF_SOCK%.sock}.view"; } 2>/dev/null
-	case $pane in
-	*[!0-9]*)
+	# A lost thread (its item's id l…, or without one, its session id).
+	case $id:$pane in
+	l*:* | :*[!0-9]*)
 		if [ "$view" = help ]; then ls_help; else lost_card "$pane" "$title"; fi
 		return 0
 		;;
@@ -3317,7 +3346,7 @@ cmd_home() {
 		[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session
 		# The counts the status line shows may be a session that went's,
 		# and the tabs' labels too.
-		LABELS=1 push_status
+		push_status labels
 	fi
 	LS_HOME=1 cmd_ls
 }
@@ -3385,7 +3414,7 @@ cmd_ls() {
 			--no-scrollbar --footer "$foot" --footer-border none \
 			--color "$FZF_COLORS" \
 			--prompt '/ ' --ghost 'search threads' --info hidden --no-separator \
-			--preview "$q _preview {2} {6}" --preview-window "${LS_PW:-down,50%,border-top,wrap,hidden}" \
+			--preview "$q _preview {2} {6} {1}" --preview-window "${LS_PW:-down,50%,border-top,wrap,hidden}" \
 			--bind "resize:reload(LS_REMEASURE=1 $q _rows)" --bind "load:transform($q _chrome)" \
 			--bind "focus:transform:case {1} in a*) ;; *) case \$FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n \"\$t\" ] || t={5} ;; *) t={5}; [ -n \"\$t\" ] || t={4} ;; esac; [ -n \"\$t\" ] && echo \"pos(\$t)\" ;; esac" \
 			--bind "j:down,k:up,g,home:first,G,end:last,q:$quit_act" \
@@ -3487,16 +3516,17 @@ side_order() {
 # A state's glyph, in its colour, into GLYPH, and plain, into GCHAR (the
 # dashboard's shapes).
 glyph_of() {
-	local c=$G_IDLE k=$C_DIM
-	case $1 in
-	needs-you) c=$G_NEED k=$C_RED ;;
-	done) if [ "$2" = true ]; then c=$G_SEEN; else c=$G_DONE k=$C_GREEN; fi ;;
-	working | starting) c=$G_WORK k=$C_GREY ;;
-	interrupted) c=$G_INT k=$C_GREY ;;
-	tab)
+	local c k=$C_DIM
+	if [ "$1" = tab ]; then
 		GCHAR=" · " GLYPH="$C_DIM · $C_OFF" GMARK="${C_DIM}·$C_OFF"
 		return 0
-		;;
+	fi
+	state_cell "$1"
+	c=$GCELL
+	case $1 in
+	needs-you) k=$C_RED ;;
+	done) [ "$2" = true ] || k=$C_GREEN ;;
+	working | starting | interrupted) k=$C_GREY ;;
 	esac
 	paint "$c" "$k"
 	GCHAR=$c GLYPH=$PAINT GMARK="$k${c:1:1}$C_OFF"
@@ -4805,8 +4835,8 @@ thread_restore() {
 		RESTORE_ERR="${lf##*/}: already resumed"
 		return 1
 	fi
-	info=$(jq -r '[.state.session_id // "", .thread.agent // .state.agent // "claude",
-		.state.start_cwd // .thread.worktree // .state.cwd // "", .thread.num // "", .thread.name // ""]
+	info=$(jq -r "$JQ_LOST"'[.state.session_id // "", .thread.agent // .state.agent // "claude",
+		lost_dir, .thread.num // "", .thread.name // ""]
 		| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' "$d/lost.json" 2>/dev/null)
 	IFS=$US read -r sid kind dir num name <<<"$info"
 	name=${name:-thread}
@@ -4827,7 +4857,7 @@ thread_restore() {
 	case $num in '' | *[!0-9]*) ;; *) case $NUMS_USED in *" $num "*) ;; *) NUM=$num ;; esac ;; esac
 	if ! jq -c --arg cmd "$AGENT_CMD" --argjson num "$NUM" '.thread + {cmd: $cmd, num: $num} | del(.pane)' \
 		"$d/lost.json" >"$d/thread.json" 2>/dev/null ||
-		! jq -c --argjson now "$now" '.state | del(.pid, .proc_start, .nvim_pane, .end_reason)
+		! jq -c --argjson now "$now" '.state | del(.pid, .proc_start, .nvim_pane, .end_reason, .waiting, .pending, .marker, .marked_root)
 			+ {state: "idle", ts: $now, since: $now, seen: true, subagents: [], background: 0, background_tasks: ""}' \
 			"$d/lost.json" >"$d/state.json" 2>/dev/null ||
 		! printf '%s\n' "$sid" >"$d/resume"; then
@@ -4860,8 +4890,8 @@ lost_rows() {
 	LOST_ROWS=""
 	for f in "$LOST_DIR"/*.json; do [ -f "$f" ] && files[${#files[@]}]=$f; done
 	[ ${#files[@]} -gt 0 ] || return 0
-	LOST_ROWS=$(jq -r '[input_filename, .state.session_id // "", .thread.name // "", .thread.num // "",
-		.state.root // .thread.worktree // .state.cwd // "", .lost // 0, .session // "",
+	LOST_ROWS=$(jq -r "$JQ_LOST"'[input_filename, .state.session_id // "", .thread.name // "", .thread.num // "",
+		lost_dir, .lost // 0, lost_skey,
 		.thread.task // .state.prompt // "", .state.title // ""]
 		| map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001f")' "${files[@]}" 2>/dev/null |
 		sort -t "$US" -k6,6nr)
@@ -4903,7 +4933,7 @@ resume_session() {
 	while IFS= read -r f; do
 		NOFOCUS=1 thread_restore "$f" >/dev/null || echo "weaver: $RESTORE_ERR" >&2
 	done <<<"$files"
-	LABELS=1 push_status
+	push_status labels
 }
 
 # weaver resume [--all | --forget [--yes]] [WHICH]: the threads lost with
@@ -4979,7 +5009,7 @@ cmd_resume() {
 			failed=$((failed + 1))
 		}
 	done <<<"$MATCH"
-	LABELS=1 push_status
+	push_status labels
 	[ $failed = 0 ]
 }
 

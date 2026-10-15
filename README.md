@@ -379,7 +379,8 @@ End-to-end, in a throwaway zellij session with its own state, Claude Code
 config dir and minimal nvim config; your real sessions are not touched. Each
 suite starts from a clean slate, so any one can run alone.
 `test/suites/05-latency.sh` measures what each hook costs the agent.
-`test/run.sh` with no suites also runs `test/tmux.sh`, which runs weaver on
+`test/run.sh` with no suites also runs `test/contract.sh` (the states and
+glyphs weaver, its Neovim side and this design agree on) and `test/tmux.sh`, which runs weaver on
 tmux end to end in about 40 seconds: `weaver` starts its session on a
 throwaway tmux server in a pseudo-terminal and the tests press its keys
 there (threads, hooks, Alt y, Alt v, Alt 1, Cmd+D, Alt N, the board, a crash
