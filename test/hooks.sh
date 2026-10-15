@@ -6,6 +6,7 @@
 # test/zellij.sh lays them out in zellij (so their panes are 0, 1 and 2).
 #
 #   test/hooks.sh [suite...]   default: 20-robustness 30-attention 40-subagents 45-snapshots 60-agents
+#                              80-dashboard (its renderings; its floating dashboard is zellij's)
 #
 # Each run gets a fresh scratch directory (printed at the end) holding a git
 # repo with two worktrees, the state dir and the server's socket. Your real
@@ -56,7 +57,8 @@ SOCK=$AT/tmux.sock
 agent='echo FAKE AGENT; exec bash --noprofile --norc -i'
 tmux -S "$SOCK" -f "$ROOT/config/tmux.conf" new-session -d -s "$SESSION" -x 200 -y 50 -n one -c "$T/repo" "bash --noprofile --norc -c '$agent'" \; \
 	split-window -h -t "=$SESSION:one" -c "$T/repo-wt-b" "bash --noprofile --norc -c '$agent'" \; \
-	new-window -d -t "=$SESSION:" -n two -c "$T/repo" "bash --noprofile --norc -c '$agent'" || exit 1
+	new-window -d -t "=$SESSION:" -n two -c "$T/repo" "bash --noprofile --norc -c '$agent'" \; \
+	select-pane -t %0 || exit 1
 [ "$(tmux -S "$SOCK" list-panes -s -t "=$SESSION" -F '#{pane_id}' | tr '\n' ' ')" = "%0 %1 %2 " ] || {
 	echo "the test server's panes are not %0 %1 %2" >&2
 	exit 1
@@ -81,7 +83,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 
-[ $# -eq 0 ] && set -- 20-robustness 30-attention 40-subagents 45-snapshots 60-agents
+[ $# -eq 0 ] && set -- 20-robustness 30-attention 40-subagents 45-snapshots 60-agents 80-dashboard
 failed=0
 for suite in "$@"; do
 	suite=${suite##*/}

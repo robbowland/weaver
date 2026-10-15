@@ -3777,6 +3777,10 @@ cmd_next() {
 	local pane tab state since seen prompt waiting title ttask tnum class list="" i=0 n=0 at=-1 pick label
 	local -a c_pane c_tab c_label
 	need_session
+	# Pressed again while the last press is still at work: that one already
+	# moves you, so this one does nothing. Before anything else, or a second
+	# press could wait out the first and move you twice.
+	ui_lock nowait || return 0
 	agent_rows
 	while IFS=$US read -r pane tab state _ since seen prompt waiting _ title _ _ _ _ _ _ _ _ _ _ _ _ _ ttask _ tnum _; do
 		[ -n "$pane" ] || continue
@@ -3805,9 +3809,6 @@ EOF2
 		fi
 		return 0
 	fi
-	# Pressed again while the last press is still at work: that one already
-	# moves you, so this one does nothing.
-	ui_lock nowait || return 0
 	# Where you are now, to go on from there (this hides the floating panes).
 	list_panes
 	focused_pane

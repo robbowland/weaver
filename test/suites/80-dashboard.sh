@@ -16,7 +16,7 @@ NOW=$(date +%s)
 # put PANE FIELDS: an agent's state file, FIELDS a jq object ($now: NOW).
 put() {
 	jq -nc --argjson now "$NOW" "{pane: $1, agent: \"claude\", session_id: \"sid-$1\", ts: \$now} + ($2)" \
-		>"$SD/${SESSION}_$1.json"
+		>"$SD/${SK}_$1.json"
 }
 
 # --- the scene, in a repository of its own (the other suites leave changes
@@ -42,8 +42,8 @@ hook 1 PostToolUse "$T/dash-readme" "$T/dash-readme/README.md"
 hook 1 PostToolUse "$T/dash-readme" "$T/dash-readme/GUIDE.md"
 hookj 1 '{"hook_event_name":"Stop","cwd":"'"$T/dash-readme"'","session_id":"sid-1","last_assistant_message":"Wrote README.md and GUIDE.md."}' >/dev/null
 settle
-jq -c --argjson s $((NOW - 90)) '.since = $s | .title = "Add a README"' "$SD/${SESSION}_1.json" >"$AT/s.json" &&
-	mv "$AT/s.json" "$SD/${SESSION}_1.json"
+jq -c --argjson s $((NOW - 90)) '.since = $s | .title = "Add a README"' "$SD/${SK}_1.json" >"$AT/s.json" &&
+	mv "$AT/s.json" "$SD/${SK}_1.json"
 put 2 '{state: "working", since: ($now - 630), title: "Refine the dashboard", turn: 4, root: "'"$T/dash"'",
 	prompt: "group the rows by state with headings",
 	subagents: [{id: "x1", type: "Explore", since: ($now - 630)}, {id: "x2", type: "general-purpose", since: ($now - 150)}]}'
@@ -69,7 +69,7 @@ NP=${NP#terminal_}
 thread() {
 	jq -nc --argjson p "$NP" --argjson c $(($(date +%s) - $1)) --arg a "$2" --arg w "$T/dash-flag" \
 		'{name: "flaky", task: "Fix the flaky test", repo: "", branch: "flaky", worktree: $w, here: false,
-		  worktree_created: true, agent: $a, created: $c, pane: $p}' >"$SD/${SESSION}_$NP.thread"
+		  worktree_created: true, agent: $a, created: $c, pane: $p}' >"$SD/${SK}_$NP.thread"
 }
 thread 70 claude
 ok "a new thread, before its agent reports: working, starting" \
@@ -83,13 +83,17 @@ ok "a Codex thread that never reports: its hooks need trusting" \
 Z close-pane --pane-id "terminal_$NP"
 sleep 0.3
 ok "...and gone with its pane" "$(LS_MODE=plain weaver _rows | grep -c 'flaky')" "0"
-rm -f "$SD/${SESSION}_$NP.thread"
+rm -f "$SD/${SK}_$NP.thread"
 
 # The card gets what the list leaves, and only when that is 6 lines or more.
 room() { bash -c 'WEAVER_SOURCED=1 . "$(command -v weaver)"; LS_COLS=$1 LS_LINES=$2; ls_card_room $3; echo "$LS_PW${LS_PHIDE:+ hidden}"' _ "$@"; }
 ok "card: below the list, in what it leaves" "$(room 72 30 12)" "down,13,border-top,wrap"
 ok "card: hidden under 6 lines (s still shows it)" "$(room 72 22 12)" "down,50%,border-top,wrap,hidden hidden"
 ok "card: beside the list from 150 columns" "$(room 160 20 12)" "right,74,border-left,wrap"
+
+# The rest is zellij's floating dashboard (Alt y outside its weaver session);
+# tmux has the home board instead, which test/tmux.sh drives.
+[ "$MUX_T" = tmux ] && done_suite
 
 # --- the dashboard itself
 focus 2

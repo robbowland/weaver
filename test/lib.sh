@@ -56,6 +56,12 @@ Z() {
 	case "$1 ${2:-}" in
 	"list-panes -a") weaver _panes ;;
 	"close-pane --pane-id") tmux -S "$TSOCK" kill-pane -t "%${3#terminal_}" ;;
+	"new-pane --name")
+		# Z new-pane --name NAME -- CMD...: a pane beside agent a, as terminal_N.
+		shift 3
+		[ "${1:-}" = -- ] && shift
+		printf 'terminal_%s\n' "$(tmux -S "$TSOCK" split-window -d -P -F '#{pane_id}' -t "%0" -- "$@" | tr -d '%')"
+		;;
 	*)
 		echo "Z $*: not on tmux" >&2
 		return 1
