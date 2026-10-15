@@ -173,7 +173,7 @@ key 1b79
 sleep 2.5
 FL=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .is_floating and (.exited|not)) | .id')
 ok "empty board: stays open and says how to start a thread" \
-	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\. n starts one here|n NEW THREAD  q QUIT')" "2"
+	"$(Z dump-screen --pane-id "terminal_$FL" | grep -cE 'No threads yet\. n starts one here|n NEW THREAD  q BACK  \^q QUIT')" "2"
 S=$(ls /tmp/weaver-$(id -u)/${SESSION}.fzf.*.sock 2>/dev/null | head -n 1)
 ok "...in a small pane, with nothing to select" \
 	"$(Z list-panes -a -j | jq -r ".[] | select(.id == $FL) | .pane_rows")|$(fz '.matches | length')" "7|0"

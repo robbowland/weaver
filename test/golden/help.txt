@@ -10,6 +10,8 @@ keys
   ^r          reload
   ?           this help (? again: back)
   q  esc      close the dashboard
+  ^q          quit zellij, every agent and nvim (the threads come
+              back as weaver starts; weaver quit asks first)
 
 threads
   [!]  needs you    [x]  done, not yet seen    [/]  working

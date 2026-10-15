@@ -120,6 +120,13 @@ An agent you ended yourself (`/exit`), or whose tab you closed while zellij
 ran on, is not lost. Agents you started by hand, outside a thread, are not
 kept: `claude --resume` finds them.
 
+So quitting everything is safe: `Ctrl q` (zellij's own key, from any pane)
+quits the session with every agent and nvim in it, and `weaver` brings its
+threads back next time. `weaver quit` does the same after asking, says what
+stops (turns under way, unsaved buffers in the agents' nvims), and from
+outside zellij quits the `weaver` session left running behind a closed
+window.
+
 ## What it tracks
 
 Each agent is **working**, **needs you** (a permission dialog, a question, an
@@ -179,8 +186,8 @@ reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 `j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
 (`weaver new`), `x` closes one (`weaver close`), `e` jumps and opens its nvim,
 `s` (or `tab`) swaps the resume card for the agent's screen, `?` lists them
-all, `q` or `esc` closes the dashboard. With no agents, it says how to start
-one.
+all, `q` or `esc` closes the dashboard, and `Ctrl q` quits zellij. With no
+agents, it says how to start one.
 
 The resume card says what the agent was asked, what it waits on, what it last
 said, its tasks, subagents and files, and its worktree's git status in one

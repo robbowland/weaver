@@ -312,6 +312,11 @@ rather than forgotten, so it can be resumed.
   id is `l<session id>` and field 2 the session id. Enter resumes one
   (`weaver resume`), x forgets it (`weaver resume --forget`), and the preview
   shows its card (`weaver _preview <session id>`).
+- **Quit:** zellij's `Ctrl q` quits everything, and the threads come back as
+  above. `weaver quit [--yes]` kills the session you are in (outside zellij,
+  `$WEAVER_SESSION`) with `zellij kill-session`, after a card: the threads
+  kept, the turns under way, and the agents' nvims' unsaved buffers (each nvim
+  asked over its socket, as `weaver close` does). The footer shows `^q QUIT`.
 
 ## Dashboard
 
@@ -806,3 +811,8 @@ marker (from before this layout) is left to you.
   old weaver's keys, which knew only agent rows: enter and x did nothing.
   Bindings live in the long-running board, so the board, not each key, follows
   the install.
+- 2026-10-15: Rob asked for an easy way to quit everything. zellij's `Ctrl q`
+  already does, from any pane, and since lost threads come back it loses
+  nothing, so weaver names it in the footer and help rather than rebinding it.
+  `weaver quit` asks first and works from outside zellij, for a session left
+  running behind a closed window.

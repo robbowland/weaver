@@ -84,6 +84,27 @@ printf 'layout { tab name="home" { pane; }; }\n' >"$AT/zcfg/layouts/weaver.kdl"
 ok "weaver: your layouts/weaver.kdl when you have one" \
 	"$(out | grep -c -- "--new-session-with-layout $AT/zcfg/layouts/weaver.kdl")" "1"
 
+# --- weaver quit: the session and everything in it, after asking (the
+# fake zellij above only says what it would do)
+quit() {
+	env -u ZELLIJ_SESSION_NAME -u ZELLIJ PATH="$AT/fakez2:$PATH" XDG_STATE_HOME="$AT/st2" weaver quit "$@" 2>&1
+}
+RUNNING='weaver [Created 1s ago] \n'
+ok "quit --yes: outside zellij, the weaver session goes" "$(FAKE_SESSIONS="$RUNNING" quit --yes)" "zellij kill-session weaver"
+ok "quit: \$WEAVER_SESSION names it" \
+	"$(FAKE_SESSIONS='work [Created 1s ago] \n' WEAVER_SESSION=work quit --yes)" "zellij kill-session work"
+ok "quit: none running (an exited one is not) says so, and quits nothing" \
+	"$(FAKE_SESSIONS='weaver [Created 1h ago] (EXITED - attach to resurrect)\n' quit --yes | grep -c 'kill-session')|$(quit --yes | grep -c 'no zellij session weaver is running')" "0|1"
+printf '{"pane": 5, "state": "working", "session_id": "sid-q"}\n' >"$AT/st2/weaver/weaver_5.json"
+printf '{"name": "q", "num": 1, "pane": 5}\n' >"$AT/st2/weaver/weaver_5.thread"
+echo weaver >"$AT/st2/weaver/weaver.layout"
+o=$(printf n | script -q /dev/null env -u ZELLIJ_SESSION_NAME -u ZELLIJ PATH="$AT/fakez2:$PATH" \
+	XDG_STATE_HOME="$AT/st2" FAKE_SESSIONS="$RUNNING" weaver quit 2>&1 | sed $'s/\x1b\\[[0-9;]*m//g' | tr -d '\r')
+ok "quit: asks first: what goes, what is kept and comes back, what stops" \
+	"$(printf '%s\n' "$o" | grep -cE 'quit  weaver · every agent and nvim in it|kept  1 thread · back when you start weaver|1 working: the turn stops|y quit   n keep')" "4"
+ok "quit: n keeps it" "$(printf '%s\n' "$o" | grep -c 'kill-session')" "0"
+rm -f "$AT/st2/weaver/weaver_5.json" "$AT/st2/weaver/weaver_5.thread"
+
 # --- in the weaver session: home first, then the threads by number
 echo weaver >"$SD/${SESSION}.layout"
 home=$(Z new-tab --name home -- bash --noprofile --norc -i)

@@ -6,6 +6,7 @@
 #   weaver new [task...]            start a thread: a tab with nvim and a new agent, in a new worktree
 #   weaver close [pane-id]          close an agent, its nvim and its thread's tab
 #   weaver resume [--all] [which]   bring back threads lost when their zellij went
+#   weaver quit [--yes]             quit the zellij session and everything in it (threads come back)
 #   weaver hook [--async]           Claude Code hook for every event (JSON on stdin)
 #   weaver event [--bell]           report an event from any agent (normalized JSON on stdin)
 #   weaver adapt codex [--bell]     Codex hook (its own event JSON on stdin)
@@ -2950,6 +2951,8 @@ ${g}keys$o
   ${g}^r$o          reload
   $g?$o           this help ${d}(? again: back)$o
   ${g}q  esc$o      close the dashboard
+  ${g}^q$o          quit zellij, every agent and nvim ${d}(the threads come$o
+              ${d}back as weaver starts; weaver quit asks first)$o
 
 ${g}threads$o
   $(paint "$G_NEED" "$C_RED"; printf %s "$PAINT")  needs you    $(paint "$G_DONE" "$C_GREEN"; printf %s "$PAINT")  done, not yet seen    $(paint "$G_WORK" "$g"; printf %s "$PAINT")  working
@@ -3037,10 +3040,10 @@ jump_to() {
 # fzf's input shows), as many as fit the list's width, ? always last.
 ls_footer() {
 	local width k w item out="" end="" g=$C_GREY d=$C_DIM o=$C_OFF IFS='|'
-	local browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|e NVIM' search='⏎ JUMP|esc BACK|tab SCREEN|^e NVIM'
+	local browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|e NVIM|^q QUIT' search='⏎ JUMP|esc BACK|tab SCREEN|^e NVIM'
 	# The card hidden for want of room: s shows it.
 	[ -n "${FZF_SOCK:-}" ] && [ -f "${FZF_SOCK%.sock}.tight" ] && [ "${FZF_PREVIEW_LINES:-0}" = 0 ] &&
-		browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM'
+		browse='⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM|^q QUIT'
 	ls_utf8
 	ls_size border
 	ls_width
@@ -3048,7 +3051,7 @@ ls_footer() {
 	if [ -n "${FZF_INPUT_STATE:-}" ] && [ "$FZF_INPUT_STATE" != hidden ]; then
 		set -- $search
 	elif [ "${LS_EMPTY:-}" = 1 ] || [ "${FZF_TOTAL_COUNT:-1}" = 0 ]; then
-		if [ -n "${LS_HOME:-}" ]; then set -- 'n NEW THREAD'; else set -- 'n NEW THREAD' 'q QUIT'; fi
+		if [ -n "${LS_HOME:-}" ]; then set -- 'n NEW THREAD' '^q QUIT'; else set -- 'n NEW THREAD' 'q BACK' '^q QUIT'; fi
 		end="" w=0
 	else
 		set -- $browse
@@ -5280,6 +5283,71 @@ EOF2
 	exec zellij --config "$SESSION_CONFIG" --session "$name" --new-session-with-layout "$SESSION_LAYOUT"
 }
 
+# weaver quit [--yes]: quit the zellij session you are in (outside zellij,
+# the weaver session, $WEAVER_SESSION) with every agent and nvim in it, after
+# asking. Its threads are kept, as when zellij goes: the weaver session brings
+# them back as it starts again, `weaver resume` any other's. zellij's own
+# Ctrl q quits the same way, without asking.
+cmd_quit() {
+	local yes=0 name line running="" f p n threads=0 work=0 bufs=0 out back
+	local -a states=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--yes | -y) yes=1 ;;
+		-h | --help)
+			usage
+			return 0
+			;;
+		*) die "usage: weaver quit [--yes]" ;;
+		esac
+		shift
+	done
+	command -v zellij >/dev/null 2>&1 || die "zellij is not installed"
+	name=${SESSION:-${WEAVER_SESSION:-weaver}}
+	while IFS= read -r line; do
+		case $line in "$name "*EXITED*) ;; "$name "*) running=1 ;; esac
+	done <<EOF2
+$(zellij list-sessions --no-formatting 2>/dev/null)
+EOF2
+	[ -n "$running" ] || die "no zellij session $name is running"
+	SKEY=${name//\//_}
+	if [ $yes = 0 ]; then
+		have_tty || die "quit needs a terminal to ask, or --yes"
+		for f in "$STATE_DIR/$SKEY"_*.thread; do [ -f "$f" ] && threads=$((threads + 1)); done
+		# What stops: turns under way, and edits not yet saved in the
+		# agents' nvims.
+		for f in "$STATE_DIR/$SKEY"_*.json; do
+			[ -f "$f" ] || continue
+			p=${f##*_} p=${p%.json}
+			case $p in '' | *[!0-9]*) continue ;; esac
+			states[${#states[@]}]=$f
+			sock_path "$p"
+			[ -S "$SOCK" ] || continue
+			n=$(bounded /dev/stdout nvim --server "$SOCK" --remote-expr \
+				'len(filter(getbufinfo({"bufmodified": 1}), "v:val.listed"))' 2>/dev/null)
+			case $n in '' | *[!0-9]*) ;; *) bufs=$((bufs + n)) ;; esac
+		done
+		[ ${#states[@]} -gt 0 ] &&
+			work=$(jq -s 'map(select(.state == "working")) | length' "${states[@]}" 2>/dev/null)
+		case $work in '' | *[!0-9]*) work=0 ;; esac
+		back="weaver resume brings them back"
+		weaver_session && back="back when you start weaver"
+		out=/dev/tty
+		CARD_PAD="  "
+		[ -n "${FZF_COLUMNS:-}" ] && card_place "$out" 7
+		{
+			card_row quit "$C_BOLD$name$C_OFF ${C_DIM}·$C_OFF ${C_GREY}every agent and nvim in it$C_OFF"
+			[ $threads -gt 0 ] && card_row kept "$threads thread$(plural "$threads") ${C_DIM}·$C_OFF $C_GREY$back$C_OFF"
+			[ "$work" -gt 0 ] && card_row "" "$C_GREY$work working: the turn$(plural "$work") stop$([ "$work" = 1 ] && printf s)$C_OFF"
+			[ $bufs -gt 0 ] && card_row "" "${C_RED}nvim has $bufs unsaved buffer$(plural "$bufs")$C_OFF"
+			echo
+			card_keys y quit n keep
+		} >"$out"
+		read_yes || return 130
+	fi
+	zellij kill-session "$name" 2>/dev/null || die "zellij could not quit $name"
+}
+
 # Serialise numbering threads (weaver new): a lock older than 10s was left
 # by a killed process.
 num_lock() {
@@ -5471,6 +5539,9 @@ usage: weaver [command]
                                alone, list them; with a name, number or session id, bring
                                that one back in a new tab resuming its conversation;
                                --all, every one. --forget [--yes] which: drop one
+  quit [--yes]                 quit this zellij session (outside zellij, "weaver") with
+                               every agent and nvim in it, after asking; its threads are
+                               kept and come back as the weaver session starts again
   hook [--async]              Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
@@ -5492,6 +5563,7 @@ case $cmd in
 new) cmd_new "$@" ;;
 close) cmd_close "$@" ;;
 resume) cmd_resume "$@" ;;
+quit) cmd_quit "$@" ;;
 _agent) cmd_agent_pane "$@" ;;
 _form) cmd_form "$@" ;;
 go) cmd_go "$@" ;;
