@@ -7,17 +7,23 @@ import (
 	"time"
 )
 
-// A thread closed before its nvim has bound itself: its nvim is the pane
-// started for the agent's token, in the agent's window.
+// A thread closed before its nvim is recorded as bound: its nvim is the
+// pane in the agent's window started for that agent (or, as before, for
+// the agent's token).
 func TestThreadNvimByToken(t *testing.T) {
 	panes := []Pane{
 		{ID: 4, Tab: 2, Cmd: "/bin/weaver nvim --thread 123"},
 		{ID: 5, Tab: 3, Cmd: "/bin/weaver nvim --thread 456"},
 		{ID: 6, Tab: 3, Cmd: "/bin/weaver _agent 456 claude"},
 		{ID: 7, Tab: 3, Cmd: "fish"},
+		{ID: 10, Tab: 4, Cmd: "/bin/weaver nvim --fresh 11"},
+		{ID: 11, Tab: 4, Cmd: "/bin/weaver _agent 789 claude"},
 	}
 	if nv, tok := threadNvim(panes, panes[2]); nv != "5" || tok != "456" {
 		t.Errorf("got %q %q, want 5 456", nv, tok)
+	}
+	if nv, tok := threadNvim(panes, panes[5]); nv != "10" || tok != "789" {
+		t.Errorf("--fresh: got %q %q, want 10 789", nv, tok)
 	}
 	// Another window's nvim is not its own, nor is any pane of an agent
 	// weaver did not start.

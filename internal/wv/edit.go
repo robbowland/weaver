@@ -226,9 +226,10 @@ func (e *Env) Edit(args []string) int {
 	return 0
 }
 
-// Nvim is `weaver nvim AGENT [FILE]` (or --thread TOKEN, the left pane of a
-// new thread's window, which waits for its agent to say which pane it is):
-// nvim, bound to the agent, on the agent's socket.
+// Nvim is `weaver nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,
+// on the agent's socket. --fresh: the agent was just made (a thread's), so
+// an nvim on its socket belongs to a session of the same name that went
+// (pane ids start again with each server).
 func (e *Env) Nvim(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "weaver: usage: weaver nvim <agent-pane-id> [file]")
@@ -238,24 +239,15 @@ func (e *Env) Nvim(args []string) int {
 	if len(args) > 1 {
 		file = args[1]
 	}
-	if args[0] == "--thread" {
-		d := e.StateDir + "/new/" + e.SKey + "_" + file
-		agent, file = "", ""
-		for i := 0; i < 100 && !exists(d+"/pane"); i++ {
-			time.Sleep(100 * time.Millisecond)
-		}
-		agent, _ = firstLine(d + "/pane")
-		os.RemoveAll(d)
-		if !digits(agent) {
-			fmt.Fprintln(os.Stderr, "weaver: the agent did not start; this nvim is not bound to it")
-			if p, err := exec.LookPath("nvim"); err == nil {
-				syscall.Exec(p, []string{"nvim"}, os.Environ())
-			}
+	if args[0] == "--fresh" {
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "weaver: usage: weaver nvim [--fresh] <agent-pane-id> [file]")
 			return 1
 		}
-		// Its agent was just made: an nvim on its socket belongs to a
-		// session of the same name that was closed (pane ids start again).
-		fresh = true
+		agent, file, fresh = strings.TrimPrefix(args[1], "terminal_"), "", true
+		if len(args) > 2 {
+			file = args[2]
+		}
 	}
 	if err := os.MkdirAll(e.SockDir, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, "weaver: cannot create "+e.SockDir)

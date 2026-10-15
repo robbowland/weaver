@@ -122,7 +122,7 @@ waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 2 ]'
 NV=$(pane_at 1 0) AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ] && [ -f "$SD/tmux-${S}_$AG.nvim" ]'
 ok "new: window 1, nvim on the left, the agent on the right at its least width" \
-	"$(windows)|$(panes 1 | awk '{ printf "%s:%s ", $1, $3 }')|$(panes 1 | grep -c ' nvim --thread ')|$(panes 1 | grep -c ' _agent ')" \
+	"$(windows)|$(panes 1 | awk '{ printf "%s:%s ", $1, $3 }')|$(panes 1 | grep -c ' nvim --fresh ')|$(panes 1 | grep -c ' _agent ')" \
 	"0 1 |0:155 1:44 |1|1"
 ok "new: the agent took the task, and its nvim is bound to it" \
 	"$(tail -n 1 "$AT/args.$AG")|$(head -n 1 "$SD/tmux-${S}_$AG.nvim")" "say hello|$NV"

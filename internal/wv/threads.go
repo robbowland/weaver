@@ -98,34 +98,51 @@ func (e *Env) threadNum() (int, map[int]bool) {
 	return n, used
 }
 
-// threadTab opens a thread's window, named name, in dir: nvim on the left
-// (`weaver nvim --thread tok`), the agent on the right at its width, with
-// the focus (not gone to when nofocus). Its window id.
+// threadTab opens a thread's window, named name, in dir: its agent first
+// (`weaver _agent tok kind`), then its nvim on the agent's left (`weaver nvim
+// --fresh AGENT`), told the agent's pane and bound to it before this
+// returns; the agent at its width, with the focus (not gone to when
+// nofocus). Its window id.
 func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool) (string, bool) {
 	args := []string{"new-window"}
 	if nofocus {
 		args = append(args, "-d")
 	}
-	args = append(args, "-P", "-F", "#{window_id}", "-t", "="+e.Session+":", "-n", name, "-c", dir,
-		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "nvim", "--thread", tok)
+	args = append(args, "-P", "-F", "#{window_id} #{pane_id} #{window_width}", "-t", "="+e.Session+":", "-n", name, "-c", dir,
+		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, kind)
 	out, err := e.Tmux(args...)
-	if err != nil {
+	f := strings.Fields(string(out))
+	if err != nil || len(f) < 3 {
 		return "", false
 	}
-	tab := strings.TrimPrefix(strings.TrimSpace(string(out)), "@")
-	total := 200
-	if t, err := e.Tmux("display-message", "-p", "-t", "@"+tab, "#{window_width}"); err == nil {
-		if n, ok := atoi(strings.TrimSpace(string(t))); ok {
-			total = n
-		}
+	tab, agent := strings.TrimPrefix(f[0], "@"), strings.TrimPrefix(f[1], "%")
+	total, ok := atoi(f[2])
+	if !ok {
+		total = 200
 	}
-	if _, err := e.Tmux("split-window", "-h", "-t", "@"+tab, "-l", strconv.Itoa(agentCols(total)), "-c", dir,
-		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, kind); err != nil {
+	nvCols := max(total-agentCols(total)-1, 1)
+	out, err = e.Tmux("split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", "%"+agent,
+		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "nvim", "--fresh", agent)
+	f = strings.Fields(string(out))
+	if err != nil || len(f) < 2 {
 		e.Tmux("kill-window", "-t", "@"+tab)
 		return "", false
 	}
-	e.Tmux("select-pane", "-t", "@"+tab+".0", "-T", "nvim: "+filepath.Base(dir), ";", "select-pane", "-t", "@"+tab+".1")
+	nv := strings.TrimPrefix(f[0], "%")
+	e.bindNvim(agent, nv, f[1])
+	e.Tmux("select-pane", "-t", "%"+nv, "-T", "nvim: "+filepath.Base(dir))
 	return tab, true
+}
+
+// bindNvim records nvim pane nv (process pid) as agent's:
+// <skey>_<agent>.nvim. (`weaver nvim` keeps this pid when it becomes nvim.)
+func (e *Env) bindNvim(agent, nv, pid string) {
+	os.MkdirAll(e.StateDir, 0o755)
+	nf := e.StateDir + "/" + e.SKey + "_" + agent + ".nvim"
+	tmp := nf + "." + strconv.Itoa(os.Getpid())
+	if os.WriteFile(tmp, []byte(nv+"\n"+pid+"\n"), 0o644) == nil {
+		os.Rename(tmp, nf)
+	}
 }
 
 // threadPlace: in the weaver session a thread's window index is its number
@@ -448,12 +465,6 @@ func (e *Env) AgentPane(tok, kind string) int {
 	if !digits(pane) {
 		paneJSON = jqStr(pane)
 	}
-	tellPane := func() {
-		tmp := d + "/pane." + strconv.Itoa(os.Getpid())
-		if os.WriteFile(tmp, []byte(pane+"\n"), 0o644) == nil {
-			os.Rename(tmp, d+"/pane")
-		}
-	}
 	run := func(args ...string) int {
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])
@@ -496,7 +507,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 			fmt.Fprintln(os.Stderr, "weaver: cannot take the task from "+d)
 			return 1
 		}
-		tellPane()
+		os.RemoveAll(d)
 		t := string(task)
 		// A task starting with "-" is not an option.
 		if strings.HasPrefix(t, "-") {
@@ -523,9 +534,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 		if st := rec(d + "/state.json"); st != nil {
 			put(sf, st.set("pane", paneJSON))
 		}
-		os.Remove(d + "/resume")
-		os.Remove(d + "/state.json")
-		tellPane()
+		os.RemoveAll(d)
 		if kind == "claude" {
 			return run("--resume", sid)
 		}
@@ -934,10 +943,11 @@ func (e *Env) threadRead(agent string) threadRec {
 	return threadRec{g("name"), g("task"), g("repo"), g("branch"), g("worktree"), g("here"), g("worktree_created"), g("agent")}
 }
 
-// threadNvim is the nvim pane of a thread's agent before that nvim has
-// bound itself (it waits for the agent to say which pane it is): the pane
-// in the agent's window started as `weaver nvim --thread TOK`, where the
-// agent was started as `weaver _agent TOK`; and TOK. "" when there is none.
+// threadNvim is the nvim pane of a thread's agent before it is recorded
+// as bound: the pane in the agent's window started as `weaver nvim --fresh
+// AGENT` (or, before that, `weaver nvim --thread TOK`); and TOK, from the
+// agent's own start command (`weaver _agent TOK`), whose record of the
+// thread being opened goes with it. "" when there is none.
 func threadNvim(panes []Pane, agent Pane) (string, string) {
 	f := strings.Fields(agent.Cmd)
 	tok := ""
@@ -951,7 +961,8 @@ func threadNvim(panes []Pane, agent Pane) (string, string) {
 		return "", ""
 	}
 	for _, p := range panes {
-		if p.Tab == agent.Tab && p.ID != agent.ID && strings.HasSuffix(p.Cmd, " nvim --thread "+tok) {
+		if p.Tab == agent.Tab && p.ID != agent.ID &&
+			(strings.HasSuffix(p.Cmd, " nvim --fresh "+strconv.Itoa(agent.ID)) || strings.HasSuffix(p.Cmd, " nvim --thread "+tok)) {
 			return strconv.Itoa(p.ID), tok
 		}
 	}

@@ -15,7 +15,7 @@ Neovim side (`nvim/`) meet at the contracts below. Change one only with both sid
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `weaver new` started it (below) |
-| `$STATE_DIR/new/<skey>_<token>/` | a thread tab being opened: `task` and `thread.json` until the agent's pane takes them, then `pane` (the agent's pane id) until the nvim beside it reads it |
+| `$STATE_DIR/new/<skey>_<token>/` | a thread window being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
@@ -198,11 +198,12 @@ states, turns, snapshots, log and nvim events.
 `weaver new` makes the worktree (Worktrunk's `wt switch [--create] <branch>
 --no-cd --format json`, whose `path` and `action` say where and whether it was
 made; else `git worktree add` at `<repo>/../<repo>.<branch with / as ->`), then
-one window: `new-window -n <label> -c <dir> 'weaver nvim --thread <token>'`,
-then `split-window -h -l <agent's columns> 'weaver _agent <token> <agent>'`
-(argv, no shell): nvim on the left, the agent on the right at
-`$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while nvim keeps 60)
-with the focus. In the weaver session the window moves to the index of its
+one window: `new-window -n <label> -c <dir> 'weaver _agent <token> <agent>'`,
+then `split-window -d -h -b -l <nvim's columns> 'weaver nvim --fresh <agent
+pane>'` (argv, no shell): nvim on the left, told its agent's pane and
+recorded as bound to it (`.nvim`) before `weaver new` returns, the agent on
+the right at `$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while
+nvim keeps 60) with the focus. In the weaver session the window moves to the index of its
 number and is named with its label from the start.
 
 A new branch starts, as Rob's `wnew` does, from the remote's default branch
@@ -220,18 +221,15 @@ HEAD of the checkout you are in (Worktrunk runs with `-C` that checkout; git
 gets its commit), `^` the default branch. A branch that exists only on the
 remote is checked out tracking it (`wt switch` / `git worktree add`).
 
-Neither pane knows the other's id when it starts, so they meet
-in `$STATE_DIR/new/<skey>_<token>/`: the agent's pane moves `thread.json` to
-`<skey>_<its pane>.thread`, deletes `task` (read first), writes `pane`, then
-execs the agent with the task as its prompt (`claude "<task>"`, `codex
-"<task>"`); the nvim's pane waits up to 10 s for `pane`, removes the directory
-and goes on as `weaver nvim <agent pane>`. So the agent's `.nvim` file and
-socket exist before its first hook. A thread restored after its session went
-leaves `resume` (the session id) there instead of `task`, and its agent's pane
-resumes: `claude --resume <session_id>` (`--continue` when unknown), `codex
-resume <id>` (`--last`). A thread closed before its nvim has read `pane` is
-closed whole all the same: `close` finds that nvim by the token both panes were
-started with.
+The agent's pane takes the thread from `$STATE_DIR/new/<skey>_<token>/`:
+it moves `thread.json` to `<skey>_<its pane>.thread`, deletes `task` (read
+first, which claims it), removes the directory, then execs the agent with the
+task as its prompt (`claude "<task>"`, `codex "<task>"`). A thread restored
+after its session went leaves `resume` (the session id) there instead of
+`task`, and its agent's pane resumes: `claude --resume <session_id>`
+(`--continue` when unknown), `codex resume <id>` (`--last`). A thread closed
+before its nvim is recorded as bound is closed whole all the same: `close`
+finds that nvim as the pane started for its agent.
 
 ### Thread record
 
@@ -465,9 +463,9 @@ else weaver's.
 - **Alt y:** `weaver go home`: from a thread to home, remembering the window
   in `$STATE_DIR/<skey>.last`; from home back to it (home is made again if it
   was closed).
-- **Threads:** `new-window -n LABEL -c DIR 'weaver nvim --thread TOK'`, then
-  `split-window -h -l AGENT_COLS 'weaver _agent TOK KIND'` (argv, no shell),
-  the nvim pane titled `nvim: <dir>`, the agent active. `Alt v`'s nvim is a
+- **Threads:** `new-window -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
+  `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
+  shell), the nvim pane titled `nvim: <dir>`, the agent active. `Alt v`'s nvim is a
   `split-window -h -b -l 80%` on the agent's left.
 - **Focus:** `select-window` and `select-pane` work from anywhere, and the
   focused pane (in a popup or `run-shell`) is the session's active pane.
@@ -990,3 +988,10 @@ else weaver's.
   nothing), the installer, and the states contract (a Go test now). A
   zellij session's leftover states are swept as their agents go, and the
   weaver session still resumes the threads a zellij one of its name lost.
+- 2026-10-15: A thread's window starts its agent first and then its nvim on
+  the agent's left, told the agent's pane (`weaver nvim --fresh AGENT`) and
+  recorded as bound before `weaver new` returns. Before, the nvim started
+  first and polled every 100 ms for a `pane` file the agent's pane wrote, so
+  it started up to 100 ms later and, for that moment, belonged to no agent
+  (a close then left it behind).
+
