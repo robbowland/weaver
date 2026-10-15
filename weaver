@@ -137,6 +137,8 @@ C_OFF=$'\033[0m'
 FZF_COLORS='fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1,pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff,prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999'
 
 case $0 in /*) SELF=$0 ;; *) SELF="$PWD/$0" ;; esac
+# SELF as fzf's actions run it, quoted: by this bash, not through env.
+printf -v SELF_CMD '%q %q' "${BASH:-bash}" "$SELF"
 
 
 die() {
@@ -180,13 +182,23 @@ mux_panes() {
 	fi
 	out=$(tm list-panes -s -t "=$SESSION" -F "#{pane_id}$US#{window_id}$US#{window_name}$US#{window_index}$US#{pane_dead}$US#{pane_start_command}$US#{pane_width}$US#{pane_height}$US#{pane_left}$US#{pane_top}$US#{pane_title}$US#{pane_current_path}$US#{pane_active}" 2>/dev/null) ||
 		return 1
-	printf '%s\n' "$out" | jq -Rsc '[split("\n")[] | select(length > 0) | split("\u001f")
-		| {id: (.[0][1:] | tonumber), is_plugin: false, is_floating: false,
-		   tab_id: (.[1][1:] | tonumber), tab_name: .[2], tab_position: (.[3] | tonumber),
-		   exited: (.[4] == "1"), terminal_command: .[5],
-		   pane_columns: (.[6] | tonumber), pane_rows: (.[7] | tonumber),
-		   pane_x: (.[8] | tonumber), pane_y: (.[9] | tonumber),
-		   title: .[10], pane_cwd: .[11], is_focused: (.[12] == "1")}]'
+	# zellij's shape, built here: a jq for it costs more than the list.
+	local json="" sep="" id wid name idx dead cmd w h x y title cwd act n
+	while IFS=$US read -r id wid name idx dead cmd w h x y title cwd act; do
+		id=${id#%} wid=${wid#@}
+		for n in "$id" "$wid" "$idx" "$w" "$h" "$x" "$y"; do
+			case $n in '' | *[!0-9]*) continue 2 ;; esac
+		done
+		json_str "$name" && name=$J
+		json_str "$cmd" && cmd=$J
+		json_str "$title" && title=$J
+		json_str "$cwd" && cwd=$J
+		[ "$dead" = 1 ] && dead=true || dead=false
+		[ "$act" = 1 ] && act=true || act=false
+		json="$json$sep{\"id\":$id,\"is_plugin\":false,\"is_floating\":false,\"tab_id\":$wid,\"tab_name\":$name,\"tab_position\":$idx,\"exited\":$dead,\"terminal_command\":$cmd,\"pane_columns\":$w,\"pane_rows\":$h,\"pane_x\":$x,\"pane_y\":$y,\"title\":$title,\"pane_cwd\":$cwd,\"is_focused\":$act}"
+		sep=,
+	done <<<"$out"
+	printf '[%s]\n' "$json"
 }
 
 # The session's tabs, as zellij's list-tabs -j.
@@ -382,13 +394,20 @@ file_top() {
 	find_top "${d:-/}"
 }
 # Is the agent process PID (started at PROC_START, if known) still running?
-# kill -0 alone would trust a reused pid; ps confirms the start time.
+# kill -0 alone would trust a reused pid; ps confirms the start time, from
+# PS_STARTS when ps_starts listed them all at once.
 agent_alive() {
 	local pid=$1 start=${2:-} now
 	case $pid in '' | *[!0-9]*) return 0 ;; esac
 	kill -0 "$pid" 2>/dev/null || return 1
 	[ -n "$start" ] || return 0
-	now=$(TZ=UTC LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)
+	if [ -n "${PS_STARTS:-}" ]; then
+		case $PS_STARTS in *"$NL$pid "*) ;; *) return 0 ;; esac
+		now=${PS_STARTS#*"$NL$pid "}
+		now=${now%%"$NL"*}
+	else
+		now=$(TZ=UTC LC_ALL=C ps -o lstart= -p "$pid" 2>/dev/null)
+	fi
 	[ -n "$now" ] || return 0
 	# Compare word by word: ps pads single-digit days.
 	set -f
@@ -397,6 +416,23 @@ agent_alive() {
 	set -- $start
 	set +f
 	[ "$now" = "$*" ]
+}
+# The start times of processes PID..., with one ps, for agent_alive: into
+# PS_STARTS, a line "pid start" each (single spaces), between newlines.
+ps_starts() {
+	local IFS=, out p rest
+	PS_STARTS=""
+	[ $# -gt 0 ] || return 0
+	out=$(TZ=UTC LC_ALL=C ps -o pid=,lstart= -p "$*" 2>/dev/null)
+	PS_STARTS=$NL
+	IFS=$' \t'
+	set -f
+	while read -r p rest; do
+		[ -n "$p" ] || continue
+		set -- $rest
+		PS_STARTS="$PS_STARTS$p $*$NL"
+	done <<<"$out"
+	set +f
 }
 
 # procStart of Claude Code process $1, from its session file (no spawn), into
@@ -1319,8 +1355,8 @@ pane_view() {
 		read -r VIEW_COLS VIEW_ROWS VIEW_FLOAT <<<"$WEAVER_VIEW"
 	elif [ "$MUX" = tmux ]; then
 		# Our own pane or popup, whose size is the terminal's.
-		info=$({ stty size </dev/tty; } 2>/dev/null)
-		VIEW_ROWS=${info% *} VIEW_COLS=${info#* }
+		tty_size
+		VIEW_ROWS=$TTY_ROWS VIEW_COLS=$TTY_COLS
 	else
 		[ -n "$p" ] || return 1
 		[ -n "${PANES:-}" ] || list_panes || return 1
@@ -1995,22 +2031,19 @@ cmd_edit() {
 # ---------------------------------------------------------------- agents
 
 # The Claude Code sessions running on this machine, from their
-# ~/.claude/sessions/<pid>.json files (read without a spawn each), as a JSON
-# array in CLAUDE_LIVE. Undocumented, so used only to refine the hooks' state;
-# a missing or unreadable directory just means no refinement.
+# ~/.claude/sessions/<pid>.json files (read without a spawn each), one JSON
+# line each in CLAUDE_LINES, for JQ_ROWS to parse. Undocumented, so used only
+# to refine the hooks' state; a missing or unreadable directory just means no
+# refinement.
 claude_live() {
-	local f line lines=""
-	CLAUDE_LIVE="[]"
+	local f line
+	CLAUDE_LINES=""
 	for f in "$CLAUDE_DIR"/sessions/*.json; do
 		[ -f "$f" ] || continue
 		line=""
 		{ IFS= read -r line <"$f"; } 2>/dev/null
-		lines="$lines$line$NL"
+		CLAUDE_LINES="$CLAUDE_LINES$line$NL"
 	done
-	[ -n "$lines" ] || return 0
-	CLAUDE_LIVE=$(printf '%s' "$lines" | jq -cRn '[inputs | try fromjson catch empty | objects
-		| {pid, sessionId, status, statusUpdatedAt, waitingFor, procStart}]' 2>/dev/null) || CLAUDE_LIVE="[]"
-	[ -n "$CLAUDE_LIVE" ] || CLAUDE_LIVE="[]"
 }
 
 # Every state file in this session, as US-separated rows: pane, tab, state,
@@ -2025,11 +2058,15 @@ claude_live() {
 # agent stopped with Esc (which fires no hook) as interrupted. Rows "gone"
 # (pane no longer listed) and "corrupt" (unreadable) carry the file instead.
 JQ_ROWS='
-($panes | map(select(.is_plugin | not))) as $all
+($ARGS.named.now // (now | floor)) as $now
+| ($panes | map(select(.is_plugin | not))) as $all
 | ($all | map({key: (.id | tostring), value: .}) | from_entries) as $byid
-| ($claude | map({key: (.pid | tostring), value: .}) | from_entries) as $live
+| ([$ARGS.named.claude_lines // "" | splits("\n") | select(length > 0) | try fromjson catch empty | objects
+   | {pid, sessionId, status, statusUpdatedAt, waitingFor, procStart}]
+   | map({key: (.pid | tostring), value: .}) | from_entries) as $live
 | (reduce inputs as $l ({}; .[input_filename] += $l + "\n")) as $in
-| ( ($in | to_entries[] | select(.key | endswith(".json"))
+| "now\u001f\($now)",
+  (( ($in | to_entries[] | select(.key | endswith(".json"))
 | .key as $f
 | (try (.value | fromjson) catch null) as $s
 | (try ($in[($f | rtrimstr(".json")) + ".thread"] // "" | fromjson) catch null) as $t
@@ -2086,7 +2123,7 @@ JQ_ROWS='
   else . end
 | map(if type == "array" then map(tostring | gsub("[\u0000-\u001f]+"; " ")) | join("\u001e")
       else tostring | gsub("[\u0000-\u001f]+"; " ") end)
-| join("\u001f")'
+| join("\u001f"))'
 
 # Is our list of panes the whole truth? Only when it includes the pane we run
 # in (or we run outside a pane): never garbage-collect on a partial answer.
@@ -2254,8 +2291,9 @@ ROW_FIELDS='pane tab state root since seen prompt waiting bg title nsub pid psta
 # The live agents of this session as JQ_ROWS lines, into AGENT_ROWS; the files
 # of agents that are gone (pane closed, or process dead) are removed.
 agent_rows() {
-	local rows line kind f start st trusted=0 now
+	local rows line kind f start st trusted=0 pids=""
 	local $ROW_FIELDS
+	local PS_STARTS=""
 	AGENT_ROWS=""
 	local -a files
 	# State files, and the records of threads whose agent may not have one yet.
@@ -2267,12 +2305,31 @@ agent_rows() {
 	list_panes || return 0
 	panes_trusted && trusted=1
 	claude_live
-	now=$(date +%s)
-	ROWS_NOW=$now
 	# A file removed meanwhile (an agent cleaned up) makes jq fail at the end,
-	# after it has printed the others: keep them.
-	rows=$(jq -rRn --argjson panes "$PANES" --argjson claude "$CLAUDE_LIVE" --argjson now "$now" \
+	# after it has printed the others: keep them. Its first line is the time.
+	rows=$(jq -rRn --argjson panes "$PANES" --arg claude_lines "$CLAUDE_LINES" \
 		--arg fields "$ROW_FIELDS" "$JQ_ROWS" "${files[@]}" 2>/dev/null)
+	ROWS_NOW=""
+	case $rows in "now$US"*)
+		ROWS_NOW=${rows%%"$NL"*}
+		ROWS_NOW=${ROWS_NOW#now"$US"}
+		rows=${rows#*"$NL"}
+		;;
+	esac
+	[ -n "$ROWS_NOW" ] || ROWS_NOW=$(date +%s)
+	# The agents' start times, with one ps for them all.
+	while IFS= read -r line; do
+		case $line in
+		"" | corrupt"$US"*) continue ;;
+		gone"$US"*) IFS=$US read -r kind f pid _ <<<"$line" ;;
+		*) IFS=$US read -r $ROW_FIELDS <<<"$line" ;;
+		esac
+		[ -n "$pid" ] && pids="$pids $pid"
+	done <<EOF2
+$rows
+EOF2
+	# shellcheck disable=SC2086
+	[ -n "$pids" ] && ps_starts $pids
 	while IFS= read -r line; do
 		[ -n "$line" ] || continue
 		case $line in
@@ -2433,7 +2490,7 @@ push_status() {
 		counts_fmt "$N_NEED" "$N_DONE" "$N_WORK"
 		tm set-option -t "=$SESSION:" @weaver-counts "$COUNTS_FMT" >/dev/null 2>&1
 	fi
-	printf -v q '%q' "$SELF"
+	q=$SELF_CMD
 	for s in "$SOCK_DIR/${SKEY}".fzf.*.sock; do
 		[ -S "$s" ] || continue
 		curl -s -m 1 --unix-socket "$s" -X POST -d "reload(COLOR=1 $q _rows)+refresh-preview" \
@@ -2609,8 +2666,42 @@ turn_files() {
 # The dashboard's size, into LS_COLS and LS_LINES: fzf's (FZF_COLUMNS and
 # FZF_LINES are 0 before it has drawn), else the terminal's. With "border",
 # fzf's border is counted in.
+# FILE holds TEXT and a newline after this, for readers that may read it
+# meanwhile (fzf's keys, its transforms): left alone when it holds that
+# already, else replaced whole (a rename); a new file is just written.
+put_file() {
+	local t=$2 cur
+	while :; do case $t in *"$NL") t=${t%"$NL"} ;; *) break ;; esac; done
+	if [ -f "$1" ]; then
+		cur=$(<"$1")
+		[ "$cur" = "$t" ] && return 0
+		printf '%s\n' "$t" >"$1.$$" && mv -f "$1.$$" "$1"
+	else
+		printf '%s\n' "$t" >"$1"
+	fi
+}
+
+# rm -f FILE..., when one of them is there.
+rm_some() {
+	local f
+	for f in "$@"; do
+		if [ -e "$f" ] || [ -L "$f" ]; then
+			rm -f "$@"
+			return
+		fi
+	done
+	return 0
+}
+
+# The terminal's size into TTY_ROWS and TTY_COLS (empty without one): from
+# TTY_SIZE ("ROWS COLS", as stty prints it) when the caller measured it.
+tty_size() {
+	local s=${TTY_SIZE:-}
+	[ -n "$s" ] || s=$({ stty size </dev/tty; } 2>/dev/null)
+	TTY_ROWS=${s% *} TTY_COLS=${s#* }
+}
+
 ls_size() {
-	local size
 	LS_COLS=${FZF_COLUMNS:-0} LS_LINES=${FZF_LINES:-0}
 	case $LS_COLS$LS_LINES in *[!0-9]*) LS_COLS=0 LS_LINES=0 ;; esac
 	# Inside fzf's border (the dashboard's), fzf counts without it and the
@@ -2619,8 +2710,8 @@ ls_size() {
 		LS_COLS=$((LS_COLS + 4)) LS_LINES=$((LS_LINES + 2))
 	fi
 	if [ "$LS_COLS" -eq 0 ] || [ "$LS_LINES" -eq 0 ]; then
-		size=$({ stty size </dev/tty; } 2>/dev/null)
-		LS_LINES=${size%% *} LS_COLS=${size#* }
+		tty_size
+		LS_LINES=$TTY_ROWS LS_COLS=$TTY_COLS
 		case $LS_COLS in '' | *[!0-9]*) LS_COLS=${COLUMNS:-100} ;; esac
 		case $LS_LINES in '' | *[!0-9]*) LS_LINES=${LINES:-40} ;; esac
 		case $LS_COLS$LS_LINES in *[!0-9]*) LS_COLS=100 LS_LINES=40 ;; esac
@@ -2665,7 +2756,7 @@ ls_card_room() {
 	fi
 	[ -n "$base" ] || return 0
 	printf '%s\n' "$LS_PW" >"$base.room"
-	if [ -n "$LS_PHIDE" ]; then : >"$base.tight"; else rm -f "$base.tight"; fi
+	if [ -n "$LS_PHIDE" ]; then : >"$base.tight"; else rm_some "$base.tight"; fi
 }
 
 # The tab's size and whether the dashboard's pane floats (pane_view), kept
@@ -2675,7 +2766,9 @@ ls_view() {
 	local base=${FZF_SOCK:-}
 	base=${base%.sock}
 	if [ -n "$base" ] && [ -z "${LS_REMEASURE:-}" ] && [ -f "$base.vp" ]; then
-		WEAVER_VIEW=$(cat "$base.vp" 2>/dev/null) pane_view "${MY_PANE:-}"
+		local vp=""
+		{ IFS= read -r vp <"$base.vp"; } 2>/dev/null
+		WEAVER_VIEW=$vp pane_view "${MY_PANE:-}"
 		return
 	fi
 	pane_view "${MY_PANE:-}" || return 1
@@ -2971,11 +3064,10 @@ EOF2
 	if [ "$mode" = fzf ]; then
 		# The border's label, and (no agents) what to do, for the header.
 		if [ -n "${FZF_SOCK:-}" ]; then
-			printf '%s\n' " $tl$gap$tc " >"${FZF_SOCK%.sock}.label.$$" &&
-				mv -f "${FZF_SOCK%.sock}.label.$$" "${FZF_SOCK%.sock}.label"
+			put_file "${FZF_SOCK%.sock}.label" " $tl$gap$tc "
 			out=""
 			[ $n = 0 ] && out="${grey}No threads yet.$off ${C_OFF}n$grey starts one here, ${C_OFF}Alt N$grey from anywhere;$off$NL${grey}or start claude or codex in any pane.$off"
-			printf '%s\n' "$out" >"${FZF_SOCK%.sock}.title.$$" && mv -f "${FZF_SOCK%.sock}.title.$$" "${FZF_SOCK%.sock}.title"
+			put_file "${FZF_SOCK%.sock}.title" "$out"
 			[ $n = 0 ] && : >"${FZF_SOCK%.sock}.keys"
 		fi
 		[ $n = 0 ] && return 0
@@ -3051,7 +3143,7 @@ EOF2
 	# 1-9: fzf actions that pick those agents.
 	for c in 1 2 3 4 5 6 7 8 9; do keys="$keys${keyl[c]}$NL"; done
 	[ -n "${FZF_SOCK:-}" ] &&
-		printf '%s' "$keys" >"${FZF_SOCK%.sock}.keys.$$" && mv -f "${FZF_SOCK%.sock}.keys.$$" "${FZF_SOCK%.sock}.keys"
+		put_file "${FZF_SOCK%.sock}.keys" "$keys"
 	i=0
 	while [ $i -lt $m ]; do
 		if [ "${l_isagent[i]}" = 1 ]; then
@@ -3099,11 +3191,12 @@ lost_card() {
 	[ -n "$f" ] || return 0
 	[ -n "${2:-}" ] &&
 		printf '%s%s%s%s%s%s\n' "$C_BOLD" "${2%% · *}" "$C_OFF" "$C_DIM" "${2#"${2%% · *}"}" "$C_OFF"
-	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" --arg home "$HOME" \
+	jq -r --argjson w "${FZF_PREVIEW_COLUMNS:-80}" --arg home "$HOME" \
 		--arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" "$JQ_CARD$JQ_LOST"'
 		def tilde: if . == $home then "~" elif startswith($home + "/") then "~" + .[($home | length):] else . end;
 		def tail($n): if length > $n then "…" + .[(length - $n + 1):] else . end;
-		[ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its session went" + $off,
+		(now | floor) as $now
+		| [ "lost" + $dim + " · " + $off + (($now - (.lost // $now)) | age) + $dim + " · its session went" + $off,
 		  "",
 		  field("asked"; .thread.task // .state.prompt // ""; ""; 4),
 		  (if (.state.last_message // "") != "" then field("said"; .state.last_message; $grey; 6) else empty end),
@@ -3182,11 +3275,12 @@ cmd_preview() {
 $(GIT_OPTIONAL_LOCKS=0 git -C "$root" status --porcelain=v2 --branch 2>/dev/null)
 EOF2
 	fi
-	jq -r --argjson now "$(date +%s)" --argjson w "${FZF_PREVIEW_COLUMNS:-80}" \
+	jq -r --argjson w "${FZF_PREVIEW_COLUMNS:-80}" \
 		--arg head "$head" --arg ab "$ab" --argjson changed "$changed" --argjson new "$new" --argjson shared "$n" \
 		--arg red "$C_RED" --arg green "$C_GREEN" --arg grey "$C_GREY" --arg dim "$C_DIM" --arg off "$C_OFF" \
 		--arg gseen "$G_SEEN" --arg gidle "$G_IDLE" "$JQ_CARD"'
-		(if has("state") | not then {state: "starting", since: .created, prompt: .task, agent: .agent} else . end)
+		(now | floor) as $now
+		| (if has("state") | not then {state: "starting", since: .created, prompt: .task, agent: .agent} else . end)
 		| (.state // "idle") as $st
 		| (.seen // false) as $seen
 		| ($now - (.since // .ts // $now)) as $for
@@ -3289,7 +3383,7 @@ cmd_view() {
 		printf 'hide-preview+'
 	fi
 	if [ -n "$next" ]; then printf '%s\n' "$next" >"$f"; else rm -f "$f"; fi
-	printf 'refresh-preview+transform-footer(%s _footer)\n' "$(printf '%q' "$SELF")"
+	printf 'refresh-preview+transform-footer(%s _footer)\n' "$SELF_CMD"
 }
 
 # The dashboard's header (a transform): with no agents, what to do; else a
@@ -3298,7 +3392,7 @@ cmd_view() {
 ls_title() {
 	local f="${FZF_SOCK:-}" t=""
 	f=${f%.sock}.title
-	t=$(cat "$f" 2>/dev/null)
+	[ -f "$f" ] && t=$(<"$f")
 	if [ -n "$t" ]; then
 		printf '%s\n' "$t"
 	elif [ "${FZF_INPUT_STATE:-hidden}" = hidden ]; then
@@ -3310,7 +3404,7 @@ ls_title() {
 # header, the footer, the title on the border, and the card's room when the
 # reload changed it (ls_card_room).
 ls_chrome() {
-	local base=${FZF_SOCK%.sock} pw="" last="" q
+	local base=${FZF_SOCK%.sock} pw="" last="" label
 	# The home board, with a newer weaver installed since it started: it ends,
 	# for cmd_ls to start it again in that weaver (the reload that brought
 	# this here showed the new weaver's rows, which the old keys may not know).
@@ -3318,15 +3412,42 @@ ls_chrome() {
 		echo abort
 		return 0
 	fi
-	q=$(printf '%q' "$SELF")
-	printf 'transform-header(%s _title)+transform-footer(%s _footer)' "$q" "$q"
+	ls_hf
+	[ -n "$FZF_ACT" ] && printf '%s+' "$FZF_ACT"
 	{ IFS= read -r pw <"$base.room"; } 2>/dev/null
 	{ IFS= read -r last <"$base.shown"; } 2>/dev/null
 	if [ -n "$pw" ] && [ "$pw" != "$last" ]; then
 		printf '%s\n' "$pw" >"$base.shown"
-		printf '+change-preview-window(%s)' "$pw"
+		printf 'change-preview-window(%s)+' "$pw"
 	fi
-	printf '+change-border-label:%s\n' "$(cat "$base.label" 2>/dev/null)"
+	label=""
+	{ IFS= read -r label <"$base.label"; } 2>/dev/null
+	printf 'change-border-label:%s\n' "$label"
+}
+
+# fzf's action ACTION with the text TEXT as its argument, into FZF_ACT: in
+# the first of fzf's delimiters whose closing one TEXT does not hold (the
+# text goes as it is, lines and colours too).
+fzf_act() {
+	local d
+	for d in '()' '[]' '{}' '<>' '~~' '!!' '@@' '##' '%%' '^^' '**' ';;' '//' '||'; do
+		case $2 in *"${d:1:1}"*) continue ;; esac
+		FZF_ACT="$1${d:0:1}$2${d:1:1}"
+		return 0
+	done
+	FZF_ACT=""
+	return 1
+}
+
+# The dashboard's header and footer as fzf actions, into FZF_ACT: in one
+# transform (`weaver _hf`, or _chrome's) rather than one weaver for each.
+ls_hf() {
+	local h f out=""
+	h=$(ls_title)
+	f=$(ls_footer)
+	fzf_act change-header "$h" && out=$FZF_ACT
+	fzf_act change-footer "$f" && out=${out:+$out+}$FZF_ACT
+	FZF_ACT=$out
 }
 
 # Jump to pane PANE in tab TAB and count it as seen.
@@ -3375,17 +3496,31 @@ LS_KEYS='j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9'
 cmd_home() {
 	need_session
 	if weaver_session; then
-		gc_states quiet
-		[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session
-		# The counts the status line shows may be a session that went's,
-		# and the tabs' labels too.
-		push_status labels
+		[ -d "$STATE_DIR" ] || mkdir -p "$STATE_DIR"
+		home_boot </dev/null >/dev/null 2>>"$STATE_DIR/hook.log" &
 	fi
 	LS_HOME=1 cmd_ls
 }
 
+# What the weaver session needs as it starts, behind its home board (which
+# shows first): the states of agents gone swept, the threads it lost back
+# (unless WEAVER_RESTORE=0), and the status line's counts and the tabs'
+# labels, which may be a session that went's. The push reloads the board:
+# not before its fzf listens, a moment after it starts (its socket is named
+# for this process, as cmd_ls names it).
+home_boot() {
+	local i sock="$SOCK_DIR/${SKEY}.fzf.$$.sock"
+	gc_states quiet
+	[ "${WEAVER_RESTORE:-1}" != 0 ] && resume_session nopush
+	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+		[ -S "$sock" ] && break
+		sleep 0.1
+	done
+	push_status labels
+}
+
 cmd_ls() {
-	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows foot items=0
+	local out key sel pane tab q fzf=0 sock base rc sh=/bin/sh rows foot items=0 nl label TTY_SIZE
 	local jump_act edit_act new_act quit_act resume_act
 	need_session
 	command -v fzf >/dev/null 2>&1 && [ -t 1 ] && fzf=1
@@ -3393,7 +3528,7 @@ cmd_ls() {
 		LS_MODE=plain ls_rows
 		return 0
 	fi
-	q=$(printf '%q' "$SELF")
+	q=$SELF_CMD
 	[ -x /bin/dash ] && sh=/bin/dash
 	# The dashboard ends with a key and cmd_ls acts; the home board stays.
 	if [ -n "${LS_HOME:-}" ]; then
@@ -3414,7 +3549,7 @@ cmd_ls() {
 		resume_act="print(resume)+accept"
 	fi
 	export LS_JUMP=$jump_act
-	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
+	[ -d "$SOCK_DIR" ] || { mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"; }
 	# Hooks reload this dashboard through its socket as agents change.
 	base="$SOCK_DIR/${SKEY}.fzf.$$"
 	sock="$base.sock"
@@ -3427,14 +3562,21 @@ cmd_ls() {
 	[ -n "${LS_HOME:-}" ] && : >"$base.born"
 	ls_utf8
 	while :; do
-		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
+		rm_some "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
 		# Fits the pane, and leaves the title, the header and the card's
 		# room next to the socket.
+		# The terminal, measured once for all of them.
+		TTY_SIZE=$({ stty size </dev/tty; } 2>/dev/null)
 		rows=$(FZF_SOCK=$sock ls_rows)
 		items=0
-		[ -n "$rows" ] && items=$(printf '%s\n' "$rows" | wc -l)
+		if [ -n "$rows" ]; then
+			nl=${rows//[!$NL]/}
+			items=$((${#nl} + 1))
+		fi
 		if [ "$items" -gt 0 ]; then foot=$(ls_footer); else foot=$(LS_EMPTY=1 ls_footer); fi
-		LS_PW=$(cat "$base.room" 2>/dev/null)
+		LS_PW="" label=""
+		{ IFS= read -r LS_PW <"$base.room"; } 2>/dev/null
+		{ IFS= read -r label <"$base.label"; } 2>/dev/null
 		printf '%s\n' "$LS_PW" >"$base.shown"
 		# A heading or gap never keeps the cursor: it moves on to the agent
 		# beyond, in the direction it was going. The title is fzf's header,
@@ -3442,7 +3584,7 @@ cmd_ls() {
 		out=$({ [ "$items" -gt 0 ] && printf '%s\n' "$rows"; } | fzf --listen "$sock" --with-shell "$sh -c" \
 			--track --id-nth 1 --delimiter "$TAB" --with-nth 7.. --nth 2 --tabstop 1 --no-sort --ansi --layout reverse \
 			--no-input --header "$(FZF_SOCK=$sock ls_title)" --header-first \
-			--border sharp --border-label "$(cat "$base.label" 2>/dev/null)" --border-label-pos 3 \
+			--border sharp --border-label "$label" --border-label-pos 3 \
 			--highlight-line --pointer ' ' --marker ' ' --ellipsis '…' \
 			--no-scrollbar --footer "$foot" --footer-border none \
 			--color "$FZF_COLORS" \
@@ -3461,8 +3603,8 @@ cmd_ls() {
 			--bind "s,tab:transform($q _view screen)" \
 			--bind "?:transform($q _view help)" \
 			--bind "ctrl-r:reload($q _rows)+refresh-preview" \
-			--bind "/:show-input+unbind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)" \
-			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo '$quit_act'; else echo 'hide-input+rebind($LS_KEYS)+transform-header($q _title)+transform-footer($q _footer)'; fi}")
+			--bind "/:show-input+unbind($LS_KEYS)+transform($q _hf)" \
+			--bind "esc:clear-query+transform{if [ \"\$FZF_INPUT_STATE\" = hidden ]; then echo '$quit_act'; else echo 'hide-input+rebind($LS_KEYS)+transform($q _hf)'; fi}")
 		rc=$?
 		rm -f "$sock" "$base".keys "$base".view "$base".title "$base".label "$base".room "$base".shown "$base".tight "$base".vp
 		if [ -n "${LS_HOME:-}" ]; then
@@ -3647,7 +3789,7 @@ EOF2
 	done
 	for i in ${order[@]+"${order[@]}"}; do
 		a=$((a + 1))
-		case ${k_num[i]} in [1-9]) keyl[k_num[i]]="execute-silent($(printf '%q' "$SELF") _goto ${k_pane[i]} ${k_tab[i]})" ;; esac
+		case ${k_num[i]} in [1-9]) keyl[k_num[i]]="execute-silent($SELF_CMD _goto ${k_pane[i]} ${k_tab[i]})" ;; esac
 		glyph_of "${k_state[i]}" "${k_seen[i]}"
 		num=${k_num[i]}
 		[ -n "$num" ] && printf -v num '%02d' "$num"
@@ -3737,7 +3879,7 @@ cmd_sidebar() {
 	local q sh=/bin/sh sock base tick="" parent rc
 	need_session
 	command -v fzf >/dev/null 2>&1 || die "the sidebar needs fzf"
-	q=$(printf '%q' "$SELF")
+	q=$SELF_CMD
 	[ -x /bin/dash ] && sh=/bin/dash
 	mkdir -p "$SOCK_DIR" && chmod 700 "$SOCK_DIR"
 	base="$SOCK_DIR/${SKEY}.side.${MY_PANE:-$$}"
@@ -4251,7 +4393,7 @@ FORM_FZF="--border sharp --border-label-pos 2 --no-info --no-separator --ansi --
 # switch modes) and of fzf's line editing.
 new_form() {
 	local sf=$1 q h out rc err="" query=$TASK hd first
-	q=$(printf '%q' "$SELF")
+	q=$SELF_CMD
 	hd="$q _form header $(printf '%q' "$sf") {q}"
 	# The fetch for a new branch's base starts now, while you type.
 	form_load "$sf"
@@ -4293,7 +4435,7 @@ new_form() {
 		if [ -f "$sf.task" ]; then
 			first=""
 			{ IFS= read -r first; } <"$sf.task"
-			[ "$first" = "$query" ] && TASK=$(cat "$sf.task")
+			[ "$first" = "$query" ] && TASK=$(<"$sf.task")
 		fi
 		thread_check && return 0
 		err=$CHECK_ERR
@@ -4435,7 +4577,7 @@ cmd_fetch() {
 	[ -n "$sf" ] || return 0
 	form_sock "$sf"
 	if [ -S "$FORM_SOCK" ]; then
-		q=$(printf '%q' "$SELF")
+		q=$SELF_CMD
 		curl -s -m 1 --unix-socket "$FORM_SOCK" -X POST \
 			-d "transform-header($q _form header $(printf '%q' "$sf") {q})" http://localhost >/dev/null 2>&1
 	fi
@@ -4988,7 +5130,8 @@ EOF2
 }
 
 # Every thread this session lost (when it went before), back in its tabs in
-# their numbers' order, leaving you where you are. A tmux session also takes
+# their numbers' order, leaving you where you are; then the push (not with
+# nopush, for a caller who pushes). A tmux session also takes
 # those of the zellij session of its name: moving from zellij to tmux keeps
 # them.
 resume_session() {
@@ -5005,7 +5148,7 @@ resume_session() {
 	while IFS= read -r f; do
 		NOFOCUS=1 thread_restore "$f" >/dev/null || echo "weaver: $RESTORE_ERR" >&2
 	done <<<"$files"
-	push_status labels
+	[ "${1:-}" = nopush ] || push_status labels
 }
 
 # weaver resume [--all | --forget [--yes]] [WHICH]: the threads lost with
@@ -5150,7 +5293,7 @@ cmd_new() {
 		f=$(mktemp "${TMPDIR:-/tmp}/weaver-task.XXXXXX") || die "cannot make a temporary file"
 		[ -n "$TASK" ] && printf '%s\n' "$TASK" >"$f"
 		${VISUAL:-${EDITOR:-vi}} "$f" </dev/tty >/dev/tty
-		TASK=$(cat "$f")
+		TASK=$(<"$f")
 		rm -f "$f"
 		case $TASK in *[![:space:]]*) ;; *) return 130 ;; esac
 	fi
@@ -5194,7 +5337,7 @@ cmd_agent_pane() {
 	case $kind in claude | codex) ;; *) die "unknown agent: $kind" ;; esac
 	agent_cmd "$kind"
 	if [ -n "$tok" ] && [ -n "$pane" ] && [ -f "$d/task" ]; then
-		task=$(cat "$d/task")
+		task=$(<"$d/task")
 		c=$(jq -r '.cmd // empty' "$d/thread.json" 2>/dev/null)
 		[ -n "$c" ] && AGENT_CMD=$c
 		# Claude Code starts on a session id weaver chose, named for the
@@ -5222,7 +5365,7 @@ cmd_agent_pane() {
 	# A lost thread brought back (weaver resume): its record and its state for
 	# this pane, then its conversation, resumed.
 	if [ -n "$tok" ] && [ -n "$pane" ] && [ -f "$d/resume" ]; then
-		sid=$(cat "$d/resume")
+		sid=$(<"$d/resume")
 		c=$(jq -r '.cmd // empty' "$d/thread.json" 2>/dev/null)
 		[ -n "$c" ] && AGENT_CMD=$c
 		# A dead agent's files under this pane id (an earlier zellij's) go
@@ -6102,6 +6245,7 @@ _view) cmd_view "$@" ;;
 _footer) ls_footer ;;
 _title) ls_title ;;
 _chrome) ls_chrome ;;
+_hf) ls_hf && printf '%s\n' "$FZF_ACT" ;;
 sidebar) cmd_sidebar ;;
 home) cmd_home ;;
 _restore) need_session && gc_states quiet && resume_session ;;

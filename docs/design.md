@@ -961,3 +961,16 @@ branch on `MUX` where tmux needs no workaround. The zellij suites set
   reader reads them by those names (`IFS=$US read -r $ROW_FIELDS`), so a field
   added, moved or dropped is one change in one place and never a shifted
   column. jq refuses to print a row whose fields and `ROW_FIELDS` disagree.
+- 2026-10-15: Speed, measured on the work laptop, where a process costs about
+  5 ms to start (most of it waiting on exec, not CPU), a tmux query about 7 ms
+  and a weaver call about 18 ms (bash's start and the script's parse). The
+  home board shows first: sweeping old states, restoring lost threads and the
+  status push run behind it (`home_boot`), the push waiting for the board's
+  socket. A row build is one tmux list-panes (its JSON built in bash), one jq
+  (which also reads the Claude Code sessions and the time) and one ps for
+  every agent's start time. The terminal is measured once per board; the
+  board's side files are written only when they change; fzf's actions run
+  weaver by bash rather than through env; a load is one transform that sends
+  the header and footer inline (`fzf_act` picks a delimiter the text lacks).
+  Home board start: 840 ms to 540 ms in the lab; next, the hot paths
+  compiled.
