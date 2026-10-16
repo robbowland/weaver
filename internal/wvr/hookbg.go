@@ -33,42 +33,42 @@ func (e *Env) hookBg() {
 	if h.NV != "" {
 		if h.EvFile != "" {
 			e.nvimEditEvent(h, "edit", h.Root, h.EvFile, h.Tool)
-		} else if h.Root != h.ORoot {
+		} else if h.Root != h.Old.Root {
 			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
-		ot := h.OTurn
+		ot := h.oTurn()
 		if ot == "" {
 			ot = "0"
 		}
-		if h.State != h.OState || strconv.Itoa(h.Turn) != ot || h.Prompt != h.OPrompt || h.Title != h.OTitle || h.Doing != h.ODoing {
+		if h.State != h.Old.State || strconv.Itoa(h.Turn) != ot || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
 			e.nvimStateEvent(h)
 		}
 	}
 	// tmux: the window of an agent that has just finished is flagged, for
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
-	if h.State != h.OState {
+	if h.State != h.Old.State {
 		if h.State == StateDone {
 			e.Tmux("set-option", "-w", "-t", "%"+h.Pane, "@weaver-unseen", "1")
-		} else if h.OState == StateDone {
+		} else if h.Old.State == StateDone {
 			e.Tmux("set-option", "-w", "-u", "-t", "%"+h.Pane, "@weaver-unseen")
 		}
 	}
-	if h.State != h.OState || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot ||
-		h.Doing != h.ODoing {
+	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
+		h.Doing != h.sess().Doing {
 		// A thread's label is its title (else its task or prompt) and branch.
-		if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot {
+		if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root {
 			e.PushStatusAndLabels()
 		} else {
 			e.PushStatus()
 		}
 	}
-	if h.NV != "" && h.Root != h.ORoot && e.sameRoot(h) {
+	if h.NV != "" && h.Root != h.Old.Root && e.sameRoot(h) {
 		e.renamePane(h.NV, "nvim: "+filepath.Base(h.Root))
 	}
-	if h.MarkDir != h.OMarked || h.MarkDir != "" && h.Marker != h.OMarker {
-		if h.OMarked != "" && h.OMarked != h.MarkDir {
-			wtMarker(h.OMarked, "")
+	if h.MarkDir != h.Old.MarkedRoot || h.MarkDir != "" && h.Marker != h.Old.Marker {
+		if h.Old.MarkedRoot != "" && h.Old.MarkedRoot != h.MarkDir {
+			wtMarker(h.Old.MarkedRoot, "")
 		}
 		if h.MarkDir != "" {
 			wtMarker(h.MarkDir, h.Marker)
@@ -493,7 +493,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 		return true
 	}
 	e.nvimEditEvent(h, "edit", r, newest, h.Tool)
-	if r != h.ORoot {
+	if r != h.Old.Root {
 		e.renamePane(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true

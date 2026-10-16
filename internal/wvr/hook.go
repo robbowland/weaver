@@ -38,11 +38,11 @@ type hk struct {
 	Source, Interrupt, TitleNew, PromptID, Transcript      string
 	NewCwd, Rejected, Err, Cmd, EndNew                     string
 
-	OState                                                                              State
-	OCwd, ORoot, OFile, OPrompt, OSid, OStart, OSince, OWaiting, OPending, OLast, OSeen string
-	OMarked, OMarker, OProj, OBg, OBgdesc, OPid, OProcstart, OTitle                     string
-	OTurn, OTurnEnded, OPromptID, OTranscript, OAgent, OEnd                             string
-	FilesJSON, SubsJSON, TasksJSON, OTurnRoots, Paths                                   string
+	// Old is the stored state, of whichever session; Same says it is this
+	// session's (sess).
+	Old                                               AgentState
+	Same                                              bool
+	FilesJSON, SubsJSON, TasksJSON, OTurnRoots, Paths string
 
 	State                                                                 State
 	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
@@ -398,17 +398,11 @@ func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 	if evn == "SessionEnd" {
 		h.EndNew = ctl(one(ev.get("reason", ""), 40))
 	}
-	h.OCwd, h.ORoot, h.OFile, h.OPrompt = ctl(rawOr(s, "cwd", "")), ctl(rawOr(s, "root", "")), ctl(rawOr(s, "file", "")), ctl(rawOr(s, "prompt", ""))
-	h.OState, h.OSid, h.OStart, h.OSince = State(ctl(rawOr(s, "state", ""))), ctl(rawOr(s, "session_id", "")), ctl(rawOr(s, "start_cwd", "")), ctl(rawOr(s, "since", ""))
-	h.OWaiting, h.OPending, h.OLast = ctl(rawOr(s, "waiting", "")), ctl(rawOr(s, "pending", "")), ctl(rawOr(s, "last_message", ""))
-	h.OSeen = ctl(rawOr(s, "seen", "false"))
-	h.OMarked, h.OMarker, h.OProj = ctl(rawOr(s, "marked_root", "")), ctl(rawOr(s, "marker", "")), ctl(rawOr(s, "project_root", ""))
-	h.OBg, h.OBgdesc = ctl(rawOr(s, "background", "")), ctl(rawOr(s, "background_tasks", ""))
-	h.OPid, h.OProcstart = ctl(rawOr(s, "pid", "")), ctl(rawOr(s, "proc_start", ""))
-	h.OTitle, h.OTurn, h.OTurnEnded = ctl(rawOr(o, "title", "")), ctl(rawOr(o, "turn", "0")), ctl(rawOr(o, "turn_ended", "0"))
-	h.OPromptID, h.OTranscript = ctl(rawOr(o, "prompt_id", "")), ctl(rawOr(o, "transcript", ""))
-	h.OAgent, h.OEnd = ctl(rawOr(s, "agent", "")), ctl(rawOr(o, "end_reason", ""))
-	h.ODoing, h.ODoingID, h.ODoneIDs = ctl(rawOr(o, "doing", "")), ctl(rawOr(o, "doing_id", "")), ctl(rawOr(o, "done_ids", ""))
+	// The stored state, typed; whether it is this session's.
+	if json.Unmarshal(firstJSON(st), &h.Old) != nil {
+		h.Old = AgentState{}
+	}
+	h.Same = len(o) > 0
 	h.FilesJSON = filesNew(st, o, h.File)
 	h.SubsJSON = subsNew(st, o, ev, h.Aid, h.Now)
 	h.TasksJSON = tasksNew(st, o, ev)
@@ -612,16 +606,16 @@ var reProcStart = regexp.MustCompile(`"procStart":"([^"]*)"`)
 func (h *hk) run(e *Env, me string) {
 	// A new agent session in this pane (not a resume or compaction) starts
 	// afresh; otherwise the root is never reset to the start directory.
-	if h.Sid != "" && h.Sid != h.OSid {
-		h.OCwd, h.ORoot, h.OFile, h.OPrompt, h.OState, h.OStart, h.OSince = "", "", "", "", "", "", ""
-		h.OWaiting, h.OPending, h.OLast, h.OSeen, h.OProj, h.OBg, h.OBgdesc = "", "", "", "false", "", "", ""
+	if h.Sid != "" && h.Sid != h.Old.SessionID {
+		h.Old.Cwd, h.Old.Root, h.Old.File, h.Old.Prompt, h.Old.State, h.Old.StartCwd, h.Old.Since = "", "", "", "", "", "", ""
+		h.Old.Waiting, h.Old.Pending, h.Old.LastMessage, h.Old.Seen, h.Old.ProjectRoot, h.Old.Background, h.Old.BackgroundTasks = "", "", "", false, "", 0, ""
 	}
 	h.Pid = me
 	if h.Pid == "" {
-		h.Pid = h.OPid
+		h.Pid = h.oPid()
 	}
-	h.ProcStart = h.OProcstart
-	if h.Pid != "" && (h.Pid != h.OPid || h.ProcStart == "") {
+	h.ProcStart = h.Old.ProcStart
+	if h.Pid != "" && (h.Pid != h.oPid() || h.ProcStart == "") {
 		h.ProcStart = ""
 		if l, err := firstLine(e.ClaudeDir + "/sessions/" + h.Pid + ".json"); err == nil {
 			if m := reProcStart.FindStringSubmatch(l); m != nil {
@@ -630,7 +624,7 @@ func (h *hk) run(e *Env, me string) {
 		}
 		// Not Claude Code (or before it writes its session file): the
 		// kernel's, once.
-		if h.ProcStart == "" && h.Pid != h.OPid {
+		if h.ProcStart == "" && h.Pid != h.oPid() {
 			if n, ok := atoi(h.Pid); ok {
 				h.ProcStart = strings.TrimRight(procStarts([]int{n})[n], " ")
 			}
@@ -638,18 +632,18 @@ func (h *hk) run(e *Env, me string) {
 	}
 	// A subagent reports its own cwd: only the main agent's is tracked.
 	cwd := h.Cwd
-	if h.Aid != "" && h.OCwd != "" {
-		cwd = h.OCwd
+	if h.Aid != "" && h.Old.Cwd != "" {
+		cwd = h.Old.Cwd
 	}
 	if h.Event == "CwdChanged" && h.NewCwd != "" {
 		cwd = h.NewCwd
 	}
 	h.Cwd = cwd
-	h.Start = h.OStart
+	h.Start = h.Old.StartCwd
 	if h.Start == "" {
 		h.Start = cwd
 	}
-	h.Proj = h.OProj
+	h.Proj = h.Old.ProjectRoot
 	if h.Proj == "" {
 		d := os.Getenv("CLAUDE_PROJECT_DIR")
 		if d == "" {
@@ -673,7 +667,7 @@ func (h *hk) run(e *Env, me string) {
 	// a real move counts (the worktree tools, CwdChanged, or a cwd in
 	// another repo)...
 	if h.Root == "" {
-		if cwd != h.OCwd {
+		if cwd != h.Old.Cwd {
 			switch {
 			case h.Event == "CwdChanged":
 				h.Moved = true
@@ -691,7 +685,7 @@ func (h *hk) run(e *Env, me string) {
 				}
 			}
 		}
-		if h.Moved || h.ORoot == "" {
+		if h.Moved || h.Old.Root == "" {
 			if t, ok := findTop(cwd); ok {
 				h.Root = t
 			} else {
@@ -699,13 +693,13 @@ func (h *hk) run(e *Env, me string) {
 			}
 		} else {
 			// ...else wherever it was before.
-			h.Root = h.ORoot
+			h.Root = h.Old.Root
 		}
 	}
 	// Turns: each prompt of yours starts one; it ends at Stop, StopFailure
 	// or an interrupt. The roots it touches are snapshotted at its end.
-	h.Turn, _ = atoi(h.OTurn)
-	h.TurnEnded, _ = atoi(h.OTurnEnded)
+	h.Turn, _ = atoi(h.oTurn())
+	h.TurnEnded, _ = atoi(h.oTurnEnded())
 	h.TurnRoots = h.OTurnRoots
 	if h.Event == "UserPromptSubmit" && h.Prompt != "" {
 		// Esc while the model was writing fires nothing: the previous turn
@@ -739,9 +733,9 @@ func (h *hk) run(e *Env, me string) {
 		h.TurnEnded = h.Turn
 	}
 
-	h.Waiting, h.Pending, h.Bg, h.Bgdesc = h.OWaiting, h.OPending, h.OBg, h.OBgdesc
-	h.Doing, h.DoingID, h.DoneIDs = h.ODoing, h.ODoingID, h.ODoneIDs
-	h.State = h.OState
+	h.Waiting, h.Pending, h.Bg, h.Bgdesc = h.Old.Waiting, h.Old.Pending, h.oBg(), h.Old.BackgroundTasks
+	h.Doing, h.DoingID, h.DoneIDs = h.sess().Doing, h.sess().DoingID, h.sess().DoneIDs
+	h.State = h.Old.State
 	if h.State == "" {
 		h.State = StateWorking
 	}
@@ -749,7 +743,7 @@ func (h *hk) run(e *Env, me string) {
 	case "SessionStart":
 		// A compaction is not a new start: the agent carries on as it was.
 		if h.Source == "compact" {
-			h.State = h.OState
+			h.State = h.Old.State
 			if h.State == "" {
 				h.State = StateIdle
 			}
@@ -763,7 +757,7 @@ func (h *hk) run(e *Env, me string) {
 			// A command starting (the async PreToolUse on Bash): what the
 			// agent is doing, while its turn goes on, unless it has already
 			// finished.
-			if (h.OState == StateWorking || h.OState == StateNeedsYou) && h.Cmd != "" &&
+			if (h.Old.State == StateWorking || h.Old.State == StateNeedsYou) && h.Cmd != "" &&
 				(h.ToolUseID == "" || !strings.Contains(" "+h.DoneIDs+" ", " "+h.ToolUseID+" ")) {
 				h.Doing, h.DoingID = h.Cmd, h.ToolUseID
 			}
@@ -780,11 +774,11 @@ func (h *hk) run(e *Env, me string) {
 			"worker_permission_prompt", "quota_auto_resume_stale", "":
 			// A dialog: keep the more specific text of the request that opened it.
 			h.State = StateNeedsYou
-			if h.OState != StateNeedsYou || h.OWaiting == "" {
+			if h.Old.State != StateNeedsYou || h.Old.Waiting == "" {
 				h.Waiting = h.WaitingNew
 			}
 		case "elicitation_complete", "elicitation_response":
-			if h.OState == StateNeedsYou {
+			if h.Old.State == StateNeedsYou {
 				h.State = StateWorking
 			}
 		case "quota_auto_resume_fired":
@@ -793,9 +787,9 @@ func (h *hk) run(e *Env, me string) {
 			// The reminder 60s after the agent went quiet: still StateWorking
 			// means Esc stopped it (no Stop fires), unless background work is
 			// pending.
-			switch h.OState {
+			switch h.Old.State {
 			case StateWorking:
-				if n, ok := atoi(h.OBg); !ok || n <= 0 {
+				if n, ok := atoi(h.oBg()); !ok || n <= 0 {
 					h.State = StateInterrupted
 				}
 			case "":
@@ -817,23 +811,23 @@ func (h *hk) run(e *Env, me string) {
 		h.State = StateWorking
 		if h.Event == "PostToolUseFailure" && h.Interrupt != "" {
 			h.State = StateInterrupted
-		} else if h.OState == StateNeedsYou && h.OPending != "" && h.Key != h.OPending {
+		} else if h.Old.State == StateNeedsYou && h.Old.Pending != "" && h.Key != h.Old.Pending {
 			// Another tool finished while one still waits for you.
 			h.State = StateNeedsYou
 		} else {
 			// A late async hook must not undo a Stop or an interrupt: one of
 			// the turn that ended (its prompt_id) never does; without a
 			// prompt_id, one within 3 s of it.
-			switch h.OState {
+			switch h.Old.State {
 			case StateDone, StateIdle, StateInterrupted:
 				recent := false
-				if h.OSince == "" {
+				if h.oSince() == "" {
 					recent = h.Now < 3
-				} else if n, err := strconv.ParseInt(h.OSince, 10, 64); err == nil {
+				} else if n, err := strconv.ParseInt(h.oSince(), 10, 64); err == nil {
 					recent = h.Now-n < 3
 				}
-				if h.PromptID != "" && h.PromptID == h.OPromptID || recent {
-					h.State = h.OState
+				if h.PromptID != "" && h.PromptID == h.sess().PromptID || recent {
+					h.State = h.Old.State
 				}
 			case StateEnded:
 				h.State = StateEnded
@@ -842,7 +836,7 @@ func (h *hk) run(e *Env, me string) {
 		}
 	case "PostToolBatch":
 		// Every call in the batch has resolved: the dialog has been answered.
-		if h.OState == StateNeedsYou {
+		if h.Old.State == StateNeedsYou {
 			if h.Rejected != "" {
 				h.State = StateInterrupted
 			} else {
@@ -870,14 +864,14 @@ func (h *hk) run(e *Env, me string) {
 	}
 	// Why the session ended: /exit, /clear or a logout ends it on purpose; a
 	// hangup (its session going) is "other".
-	h.EndReason = h.OEnd
+	h.EndReason = h.sess().EndReason
 	if h.Event == "SessionEnd" {
 		h.EndReason = h.EndNew
 	}
 	if h.State != StateNeedsYou {
 		h.Waiting, h.Pending = "", ""
 	}
-	if h.State != h.OState {
+	if h.State != h.Old.State {
 		switch h.State {
 		case StateNeedsYou:
 			h.rc = 10
@@ -886,33 +880,33 @@ func (h *hk) run(e *Env, me string) {
 		case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
 		}
 	}
-	h.Since = h.OSince
-	if h.State != h.OState || h.Since == "" {
+	h.Since = h.oSince()
+	if h.State != h.Old.State || h.Since == "" {
 		h.Since, h.Seen = strconv.FormatInt(h.Now, 10), "false"
 	} else {
-		h.Seen = h.OSeen
+		h.Seen = h.oSeen()
 	}
-	h.Last = h.OLast
+	h.Last = h.Old.LastMessage
 	if (h.Event == "Stop" || h.Event == "StopFailure") && h.LastNew != "" {
 		h.Last = h.LastNew
 	}
 	if h.Prompt == "" {
-		h.Prompt = h.OPrompt
+		h.Prompt = h.Old.Prompt
 	}
 	if h.EvFile != "" {
 		h.File = h.EvFile
 	} else {
-		h.File = h.OFile
+		h.File = h.Old.File
 	}
 	h.Title = h.TitleNew
 	if h.Title == "" {
-		h.Title = h.OTitle
+		h.Title = h.sess().Title
 	}
 	if h.PromptID == "" {
-		h.PromptID = h.OPromptID
+		h.PromptID = h.sess().PromptID
 	}
 	if h.Transcript == "" {
-		h.Transcript = h.OTranscript
+		h.Transcript = h.sess().Transcript
 	}
 	// Worktrunk branch markers, like its own Claude Code plugin sets for the
 	// session's start directory, but on the worktree the agent is really in.
@@ -924,6 +918,22 @@ func (h *hk) run(e *Env, me string) {
 	}
 	h.Marked = h.MarkDir
 	h.NV = readNvimPane(e, h.Pane)
+}
+
+// The stored state's members as the hook's text fields hold them.
+func (h *hk) oSince() string     { return h.Old.Since.String() }
+func (h *hk) oSeen() string      { return strconv.FormatBool(h.Old.Seen) }
+func (h *hk) oBg() string        { return strconv.Itoa(h.Old.Background) }
+func (h *hk) oPid() string       { return string(h.Old.Pid) }
+func (h *hk) oTurn() string      { return strconv.Itoa(h.sess().Turn) }
+func (h *hk) oTurnEnded() string { return strconv.Itoa(h.sess().TurnEnded) }
+
+// sess is the stored state when it is this session's, else none.
+func (h *hk) sess() AgentState {
+	if h.Same {
+		return h.Old
+	}
+	return AgentState{}
 }
 
 // stateCell is a state's glyph.
@@ -1088,10 +1098,10 @@ func (h *hk) hookLog(e *Env) {
 	case "SessionEnd":
 		h.logLine(e, "end", "")
 	}
-	if h.Moved && h.Root != h.ORoot {
+	if h.Moved && h.Root != h.Old.Root {
 		h.logLine(e, "cwd", `,"cwd":`+jsonStr(h.Cwd)+`,"root":`+jsonStr(h.Root))
 	}
-	if h.State != h.OState {
+	if h.State != h.Old.State {
 		if h.State == StateNeedsYou {
 			h.logLine(e, "needs-you", `,"waiting":`+jsonStr(h.Waiting))
 		}
@@ -1127,8 +1137,8 @@ func (e *Env) afterWrite(h *hk) {
 		}
 	}
 	// The background work, only when there is some.
-	if h.State != h.OState || h.Root != h.ORoot || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch != "" ||
-		h.Title != h.OTitle || h.Marker != h.OMarker || h.MarkDir != h.OMarked || h.Doing != h.ODoing ||
+	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch != "" ||
+		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		e.spawnBg(h)
 	}
@@ -1137,7 +1147,11 @@ func (e *Env) afterWrite(h *hk) {
 // spawnBg starts `wvr hook --bg`, detached, with this run in its
 // environment.
 func (e *Env) spawnBg(h *hk) {
-	b, err := json.Marshal(h)
+	// The stored state's lists stay behind: the background run has the new
+	// ones, and its environment has room for so much.
+	bg := *h
+	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents, bg.Old.TurnRoots = nil, nil, nil, nil
+	b, err := json.Marshal(&bg)
 	if err != nil {
 		return
 	}

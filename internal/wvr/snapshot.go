@@ -240,7 +240,7 @@ func (e *Env) hookSnapshots(h *hk) {
 	}
 	if h.SnapPrev != "" {
 		n, _ := atoi(h.SnapPrev)
-		e.snapRoots(h, "end", n, h.OTurnRoots, h.PrevPrompt, h.OPromptID)
+		e.snapRoots(h, "end", n, h.OTurnRoots, h.PrevPrompt, h.sess().PromptID)
 	}
 	if h.SnapStart != "" {
 		// The agent's root, and the roots of its previous turn: changes made
