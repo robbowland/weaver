@@ -17,6 +17,7 @@ import (
 	"time"
 
 	weaver "github.com/robbowland/weaver"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -338,7 +339,7 @@ func (e *Env) From(args []string) error {
 		}
 		dir = d
 		nw = []string{"--issue", id}
-		if _, _, ok := repoOf(d); ok {
+		if _, _, ok := git.RepoOf(d); ok {
 			nw = append(nw, "--repo", d)
 		}
 	default:

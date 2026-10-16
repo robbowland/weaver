@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -243,54 +243,6 @@ func atoi(s string) (int, bool) {
 	return n, err == nil
 }
 
-// findTop is the work tree holding directory dir: the nearest ancestor with
-// a .git, as a physical path like git's.
-func findTop(dir string) (string, bool) {
-	d, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return "", false
-	}
-	if !filepath.IsAbs(d) {
-		if d, err = filepath.Abs(d); err != nil {
-			return "", false
-		}
-	}
-	if st, err := os.Stat(d); err != nil || !st.IsDir() {
-		return "", false
-	}
-	if d == "/" {
-		d = ""
-	}
-	for {
-		if exists(d + "/.git") {
-			if d == "" {
-				return "/", true
-			}
-			return d, true
-		}
-		if d == "" {
-			return "", false
-		}
-		d = d[:strings.LastIndexByte(d, '/')]
-	}
-}
-
-// fileTop is the work tree holding a file that may not exist yet, in
-// directories that may not exist yet.
-func fileTop(f string) (string, bool) {
-	d := f[:max(strings.LastIndexByte(f, '/'), 0)]
-	for d != "" {
-		if st, err := os.Stat(d); err == nil && st.IsDir() {
-			break
-		}
-		d = d[:max(strings.LastIndexByte(d, '/'), 0)]
-	}
-	if d == "" {
-		d = "/"
-	}
-	return findTop(d)
-}
-
 var reProcStart = regexp.MustCompile(`"procStart":"([^"]*)"`)
 
 // run is the state machine, from the parse on.
@@ -340,7 +292,7 @@ func (h *hk) run(e *Env, me string) {
 		if d == "" {
 			d = h.Start
 		}
-		if t, ok := findTop(d); ok {
+		if t, ok := git.WorkTree(d); ok {
 			h.Proj = t
 		} else {
 			h.Proj = "-"
@@ -350,7 +302,7 @@ func (h *hk) run(e *Env, me string) {
 	// its subagents) just edited...
 	if h.File != "" {
 		h.EvFile = h.File
-		if t, ok := fileTop(h.File); ok {
+		if t, ok := git.FileWorkTree(h.File); ok {
 			h.Root = t
 		}
 	}
@@ -367,7 +319,7 @@ func (h *hk) run(e *Env, me string) {
 			default:
 				if cwd != h.Start {
 					d := cwd
-					if t, ok := findTop(cwd); ok {
+					if t, ok := git.WorkTree(cwd); ok {
 						d = t
 					}
 					if d != h.Proj {
@@ -377,7 +329,7 @@ func (h *hk) run(e *Env, me string) {
 			}
 		}
 		if h.Moved || h.Old.Root == "" {
-			if t, ok := findTop(cwd); ok {
+			if t, ok := git.WorkTree(cwd); ok {
 				h.Root = t
 			} else {
 				h.Root = cwd

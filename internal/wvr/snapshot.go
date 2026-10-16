@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
 )
 
@@ -23,11 +24,11 @@ type snapMsg struct{ sid, pane, prompt, promptID, transcript string }
 // turn replaces it. Its commit, whether it made one, and false when dir is
 // not in a repository.
 func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, bool, bool) {
-	top, err := gitOut(dir, nil, "", "rev-parse", "--show-toplevel")
+	top, err := git.Output(dir, nil, "", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", false, false
 	}
-	gd, err := gitOut(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "weaver")
+	gd, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "weaver")
 	if err != nil || os.MkdirAll(gd, 0o755) != nil {
 		return "", false, false
 	}
@@ -53,7 +54,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	defer os.RemoveAll(lockd)
 
 	label := point
-	tip, _ := gitOut(top, nil, "", "rev-parse", "-q", "--verify", ref+"^{commit}")
+	tip, _ := git.Output(top, nil, "", "rev-parse", "-q", "--verify", ref+"^{commit}")
 	if tip == "" && key != "reviewed" {
 		pruneSnapshots(top, gd, time.Now().Add(-snapKeep))
 	}
@@ -61,14 +62,14 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	if point == "base" {
 		label = "start"
 		// Only a chain that does not exist yet gets a base.
-		t, err := gitOut(top, nil, "", "rev-parse", "-q", "--verify", "HEAD^{tree}")
+		t, err := git.Output(top, nil, "", "rev-parse", "-q", "--verify", "HEAD^{tree}")
 		if tip != "" || err != nil {
 			return tip, false, true
 		}
 		tree = t
 	} else {
 		if !exists(idx) {
-			if index, err := gitOut(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
+			if index, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
 				if b, err := os.ReadFile(index); err == nil {
 					os.WriteFile(idx, b, 0o644)
 				}
@@ -82,7 +83,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		}
 		env := []string{"GIT_INDEX_FILE=" + idx}
 		var big []string
-		if out, err := gitOut(top, nil, "", "ls-files", "-z", "-o", "--exclude-standard"); err == nil {
+		if out, err := git.Output(top, nil, "", "ls-files", "-z", "-o", "--exclude-standard"); err == nil {
 			for _, p := range strings.Split(out, "\x00") {
 				if p == "" {
 					continue
@@ -99,10 +100,13 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 				args = append(args, ":(exclude,literal)"+p)
 			}
 			// One that was small when an earlier snapshot took it: out.
-			gitOut(top, env, strings.Join(big, "\n")+"\n", "rm", "--cached", "-f", "-q", "--ignore-unmatch", "--pathspec-from-file=-")
+			_, err := git.Output(top, env, strings.Join(big, "\n")+"\n", "rm", "--cached", "-f", "-q", "--ignore-unmatch", "--pathspec-from-file=-")
+			bestEffort(err)
 		}
-		gitOut(top, env, "", args...)
-		t, err := gitOut(top, env, "", "write-tree")
+		// What git could not read (a file it may not open) stays as it was.
+		_, err := git.Output(top, env, "", args...)
+		bestEffort(err)
+		t, err := git.Output(top, env, "", "write-tree")
 		if err != nil {
 			return "", false, false
 		}
@@ -110,7 +114,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	}
 	parent := tip
 	if tip != "" && point == "end" {
-		if c, err := gitOut(top, nil, "", "cat-file", "commit", tip); err == nil {
+		if c, err := git.Output(top, nil, "", "cat-file", "commit", tip); err == nil {
 			ls := strings.Split(c, "\n")
 			hasTurn, hasEnd := false, false
 			for _, l := range ls {
@@ -118,12 +122,12 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 				hasEnd = hasEnd || l == "Weaver-Point: end"
 			}
 			if hasTurn && hasEnd {
-				parent, _ = gitOut(top, nil, "", "rev-parse", "-q", "--verify", tip+"^")
+				parent, _ = git.Output(top, nil, "", "rev-parse", "-q", "--verify", tip+"^")
 			}
 		}
 	}
 	if tip != "" {
-		if t, err := gitOut(top, nil, "", "rev-parse", tip+"^{tree}"); err == nil && t == tree {
+		if t, err := git.Output(top, nil, "", "rev-parse", tip+"^{tree}"); err == nil && t == tree {
 			return tip, false, true
 		}
 	}
@@ -162,11 +166,11 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	if parent != "" {
 		ct = append(ct, "-p", parent)
 	}
-	commit, err := gitOut(top, ident, msg, ct...)
+	commit, err := git.Output(top, ident, msg, ct...)
 	if err != nil || commit == "" {
 		return tip, false, true
 	}
-	if _, err := gitOut(top, nil, "", "update-ref", "-m", subject, ref, commit, tip); err != nil {
+	if _, err := git.Output(top, nil, "", "update-ref", "-m", subject, ref, commit, tip); err != nil {
 		return tip, false, true
 	}
 	return commit, true, true
@@ -184,7 +188,7 @@ const snapKeep = 31 * 24 * time.Hour
 // and a copy of its index for each, for good. Run as a chain starts, which
 // is once per session in each worktree.
 func pruneSnapshots(top, gd string, before time.Time) {
-	out, err := gitOut(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/")
+	out, err := git.Output(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/")
 	if err == nil {
 		for _, l := range strings.Split(out, "\n") {
 			f := strings.Fields(l)
@@ -192,7 +196,8 @@ func pruneSnapshots(top, gd string, before time.Time) {
 				continue
 			}
 			if t, ok := atoi(f[2]); ok && int64(t) < before.Unix() {
-				gitOut(top, nil, "", "update-ref", "-d", f[0], f[1])
+				_, err := git.Output(top, nil, "", "update-ref", "-d", f[0], f[1])
+				bestEffort(err)
 			}
 		}
 	}
@@ -277,7 +282,7 @@ func Snapshot(args []string) (string, string) {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	if _, err := gitOut(dir, nil, "", "rev-parse", "--show-toplevel"); err != nil {
+	if _, err := git.Output(dir, nil, "", "rev-parse", "--show-toplevel"); err != nil {
 		return "", dir + " is not in a git repository"
 	}
 	c, _, ok := snapshot(dir, "refs/worktree/weaver/reviewed", "reviewed", 0, "reviewed", snapMsg{})

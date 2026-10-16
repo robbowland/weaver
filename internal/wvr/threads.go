@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -207,7 +208,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 			break
 		}
 		if !said && time.Since(start) >= 300*time.Millisecond {
-			fmt.Fprintf(os.Stderr, "%sweaver: fetching %s…%s\n", CDim, preferredRemote(repo), COff)
+			fmt.Fprintf(os.Stderr, "%sweaver: fetching %s…%s\n", CDim, git.PreferredRemote(repo), COff)
 			said = true
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -233,18 +234,18 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 		return fm.Base, ""
 	}
 	wait := envSeconds("WEAVER_FETCH_TIMEOUT", 10*time.Second)
-	ld := localDefault(repo)
+	ld := git.LocalDefault(repo)
 	from := "the local default branch"
 	if ld != "" {
 		from = "the local " + ld
 	}
-	rm := preferredRemote(repo)
+	rm := git.PreferredRemote(repo)
 	if rm == "" {
 		return ld, "no remote: starts from " + from
 	}
 	switch e.fetchWait(repo, wait) {
 	case fetchDone:
-		if d := remoteDefault(repo, rm); d != "" {
+		if d := git.RemoteDefault(repo, rm); d != "" {
 			return d, ""
 		}
 		return ld, rm + " has no default branch: starts from " + from
@@ -261,9 +262,9 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 // installed, else with git at Worktrunk's default path. Its directory,
 // whether this made it, and the base it was made from.
 func threadWorktree(repo, branch, base, from, note string) (string, bool, string, bool) {
-	create := !gitOK(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	create := !git.OK(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	if create {
-		if rm := preferredRemote(repo); rm != "" && gitOK(repo, "show-ref", "--verify", "--quiet", "refs/remotes/"+rm+"/"+branch) {
+		if rm := git.PreferredRemote(repo); rm != "" && git.OK(repo, "show-ref", "--verify", "--quiet", "refs/remotes/"+rm+"/"+branch) {
 			create = false
 		}
 	}
@@ -318,9 +319,9 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 	// default branch.
 	switch base {
 	case "@":
-		base, _ = git(from, "rev-parse", "--verify", "--quiet", "HEAD")
+		base, _ = git.Line(from, "rev-parse", "--verify", "--quiet", "HEAD")
 	case "^":
-		base = localDefault(repo)
+		base = git.LocalDefault(repo)
 	}
 	path := filepath.Dir(repo) + "/" + filepath.Base(repo) + "." + strings.ReplaceAll(branch, "/", "-")
 	var c *exec.Cmd
@@ -360,7 +361,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		if name == "" {
 			name = "thread-" + time.Now().Format("150405")
 		}
-		branch, _ = git(dir, "symbolic-ref", "--short", "-q", "HEAD")
+		branch, _ = git.Line(dir, "symbolic-ref", "--short", "-q", "HEAD")
 	} else {
 		branch = fm.Branch
 		if branch == "" {
@@ -371,14 +372,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		from := fm.Repo
 		if fm.Here != "" && fm.Here != fm.Repo {
 			if st, err := os.Stat(fm.Here); err == nil && st.IsDir() {
-				if r, c, ok := repoOf(fm.Here); ok && r == fm.Repo {
+				if r, c, ok := git.RepoOf(fm.Here); ok && r == fm.Repo {
 					from = c
 				}
 			}
 		}
 		// A pull request from a fork: its head, fetched as a branch here.
-		if isPR && pr.Fork && !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
-			if rm := preferredRemote(fm.Repo); rm != "" {
+		if isPR && pr.Fork && !git.OK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+			if rm := git.PreferredRemote(fm.Repo); rm != "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, pr.Label(), COff)
 				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
 				c.Stderr = os.Stderr
@@ -390,7 +391,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		// A branch that is not here yet: fetch first (it may be on the
 		// remote), and find where it would start.
 		note := ""
-		if !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+		if !git.OK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
 			base, note = e.threadBase(fm.Repo, fm)
 		}
 		var ok bool
@@ -403,7 +404,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	prBase := ""
 	if isPR && pr.Base != "" {
 		prBase = pr.Base
-		if rm := preferredRemote(fm.Repo); rm != "" {
+		if rm := git.PreferredRemote(fm.Repo); rm != "" {
 			prBase = rm + "/" + pr.Base
 		}
 		if branch != "" {
@@ -890,8 +891,8 @@ func worktreeRemovable(dir string) string {
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return "it is gone"
 	}
-	gd, ok1 := git(dir, "rev-parse", "--path-format=absolute", "--git-dir")
-	cd, ok2 := git(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	gd, ok1 := git.Line(dir, "rev-parse", "--path-format=absolute", "--git-dir")
+	cd, ok2 := git.Line(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if !ok1 || !ok2 {
 		return "it is not a git worktree"
 	}
@@ -906,15 +907,15 @@ func worktreeRemovable(dir string) string {
 		return strconv.Itoa(n) + " uncommitted file" + plural(n)
 	}
 	for _, ref := range []string{"origin/HEAD", "upstream/HEAD", "main", "master"} {
-		if !gitOK(dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}") {
+		if !git.OK(dir, "rev-parse", "--verify", "--quiet", ref+"^{commit}") {
 			continue
 		}
-		if gitOK(dir, "merge-base", "--is-ancestor", "HEAD", ref) {
+		if git.OK(dir, "merge-base", "--is-ancestor", "HEAD", ref) {
 			return ""
 		}
 	}
-	if up, ok := git(dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); ok {
-		ahead, _ := git(dir, "rev-list", "--count", "@{u}..HEAD")
+	if up, ok := git.Line(dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); ok {
+		ahead, _ := git.Line(dir, "rev-list", "--count", "@{u}..HEAD")
 		if ahead == "0" {
 			return ""
 		}

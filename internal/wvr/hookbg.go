@@ -1,7 +1,6 @@
 package wvr
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/neovim/go-client/nvim"
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -401,7 +401,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 		if d == "" {
 			continue
 		}
-		r, ok := findTop(d)
+		r, ok := git.WorkTree(d)
 		if !ok || seen[r] {
 			continue
 		}
@@ -453,7 +453,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 		return cs[i].p < cs[j].p
 	})
 	newest := cs[0].p
-	r, ok := fileTop(newest)
+	r, ok := git.FileWorkTree(newest)
 	if !ok {
 		return false
 	}
@@ -494,19 +494,4 @@ func (e *Env) followBashEdits(h *hk) bool {
 		e.renamePane(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true
-}
-
-// gitOut runs git in dir; its output without the trailing newline.
-func gitOut(dir string, env []string, stdin string, args ...string) (string, error) {
-	c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	if env != nil {
-		c.Env = append(os.Environ(), env...)
-	}
-	if stdin != "" {
-		c.Stdin = strings.NewReader(stdin)
-	}
-	var out bytes.Buffer
-	c.Stdout = &out
-	err := c.Run()
-	return strings.TrimRight(out.String(), "\n"), err
 }

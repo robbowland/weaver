@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -48,157 +48,6 @@ func loadForm(f string) form {
 
 func (fm form) save(f string) {
 	writeRecord(f, fm)
-}
-
-// git runs git -C dir with args; its output's first line, and whether it
-// succeeded.
-func git(dir string, args ...string) (string, bool) {
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
-	s := strings.TrimRight(string(out), "\n")
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
-	}
-	return s, err == nil
-}
-
-func gitOK(dir string, args ...string) bool {
-	return exec.Command("git", append([]string{"-C", dir}, args...)...).Run() == nil
-}
-
-// repoOf is the repository holding directory d: its main checkout and the
-// checkout d is in; ok false outside one.
-func repoOf(d string) (repo, checkout string, ok bool) {
-	out, err := exec.Command("git", "-C", d, "rev-parse", "--show-toplevel", "--path-format=absolute", "--git-common-dir").Output()
-	if err != nil {
-		return "", "", false
-	}
-	ls := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(ls) < 2 {
-		return "", "", false
-	}
-	checkout, common := ls[0], ls[1]
-	repo = checkout
-	if strings.HasSuffix(common, "/.git") {
-		repo = strings.TrimSuffix(common, "/.git")
-	}
-	if st, err := os.Stat(repo); err != nil || !st.IsDir() {
-		repo = checkout
-	}
-	return repo, checkout, true
-}
-
-var remotes sync.Map
-
-// preferredRemote is the remote to start from: origin, else the first. Asked
-// once per repository (the header asks several times).
-func preferredRemote(repo string) string {
-	if r, ok := remotes.Load(repo); ok {
-		return r.(string)
-	}
-	r := preferredRemote1(repo)
-	remotes.Store(repo, r)
-	return r
-}
-
-func preferredRemote1(repo string) string {
-	out, _ := exec.Command("git", "-C", repo, "remote").Output()
-	first := ""
-	for _, r := range strings.Fields(string(out)) {
-		if first == "" {
-			first = r
-		}
-		if r == "origin" {
-			return r
-		}
-	}
-	return first
-}
-
-// refs are what a repository's refs say for the form, from one git call:
-// each ref that matched (its symref target, or "" for a plain ref).
-type refs map[string]string
-
-// refFacts reads the refs the form asks about for branch br: br, locally
-// and on any remote, the remotes' HEADs, and main and master. git remote
-// runs alongside (preferredRemote is memoized).
-func refFacts(repo, br string) refs {
-	go preferredRemote(repo)
-	pats := []string{"refs/remotes/*/HEAD", "refs/heads/main", "refs/heads/master", "refs/remotes/*/main", "refs/remotes/*/master"}
-	if br != "" {
-		pats = append(pats, "refs/heads/"+br, "refs/remotes/*/"+br)
-	}
-	out, _ := exec.Command("git", append([]string{"-C", repo, "for-each-ref", "--format=%(refname)%09%(symref)"}, pats...)...).Output()
-	m := refs{}
-	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-		if r, sym, ok := strings.Cut(l, "\t"); ok {
-			m[r] = sym
-		}
-	}
-	return m
-}
-
-func (m refs) has(r string) bool { _, ok := m[r]; return ok }
-
-// remoteDefaultOf is remote's default branch (origin/main) from refs: its
-// HEAD, else its main or master.
-func (m refs) remoteDefault(remote string) string {
-	if sym := m["refs/remotes/"+remote+"/HEAD"]; strings.HasPrefix(sym, "refs/remotes/") {
-		return strings.TrimPrefix(sym, "refs/remotes/")
-	}
-	for _, b := range []string{"main", "master"} {
-		if m.has("refs/remotes/" + remote + "/" + b) {
-			return remote + "/" + b
-		}
-	}
-	return ""
-}
-
-// localDefault is the local default branch from refs: the one the remote's
-// HEAD names, else main or master.
-func (m refs) localDefault(remote string) string {
-	r := ""
-	if remote != "" {
-		if sym := m["refs/remotes/"+remote+"/HEAD"]; strings.HasPrefix(sym, "refs/remotes/"+remote+"/") {
-			r = strings.TrimPrefix(sym, "refs/remotes/"+remote+"/")
-		}
-	}
-	for _, b := range []string{r, "main", "master"} {
-		if b != "" && m.has("refs/heads/"+b) {
-			return b
-		}
-	}
-	return ""
-}
-
-// remoteDefault is remote's default branch (origin/main): its HEAD, else
-// its main or master.
-func remoteDefault(repo, remote string) string {
-	if r, ok := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/"+remote+"/HEAD"); ok {
-		return r
-	}
-	for _, b := range []string{"main", "master"} {
-		if gitOK(repo, "show-ref", "--verify", "--quiet", "refs/remotes/"+remote+"/"+b) {
-			return remote + "/" + b
-		}
-	}
-	return ""
-}
-
-// localDefault is the local default branch: the one the remote's HEAD
-// names, else main or master; "" when there is none.
-func localDefault(repo string) string {
-	r := ""
-	if rm := preferredRemote(repo); rm != "" {
-		if h, ok := git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/"+rm+"/HEAD"); ok {
-			r = h[strings.IndexByte(h, '/')+1:]
-		}
-	}
-	for _, b := range []string{r, "main", "master"} {
-		if b != "" && gitOK(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+b) {
-			return b
-		}
-	}
-	return ""
 }
 
 // Slugify is a task as a branch name: its first line in lowercase ASCII
@@ -313,7 +162,7 @@ func (e *Env) fetchStart(repo, sf string) {
 	}
 	os.Remove(f + ".rc")
 	os.Remove(f + ".pid")
-	rm := preferredRemote(repo)
+	rm := git.PreferredRemote(repo)
 	if rm == "" {
 		os.WriteFile(f+".rc", []byte("none\n"), 0o644)
 		return
@@ -404,7 +253,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		add("repo", "not in a git repository", CGrey+"not in a git repository"+COff, "^r")
 	}
 	if fm.Where == WhereHere {
-		cur, _ := git(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
+		cur, _ := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
 		w := "this checkout"
 		if cur != "" {
 			w += " · " + cur
@@ -421,18 +270,18 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		if br == "" {
 			br = Slugify(task)
 		}
-		var m refs
+		var m git.Refs
 		if fm.Repo != "" {
-			m = refFacts(fm.Repo, br)
+			m = git.RefFacts(fm.Repo, br)
 		}
 		switch {
 		case br == "":
 			add("branch", "from the task", CGrey+"from the task"+COff, "alt-b")
 			e.baseRow(fm, m, add)
-		case fm.Repo != "" && (m.has("refs/heads/"+br) ||
+		case fm.Repo != "" && (m.Has("refs/heads/"+br) ||
 			func() bool {
-				rm := preferredRemote(fm.Repo)
-				return rm != "" && m.has("refs/remotes/"+rm+"/"+br)
+				rm := git.PreferredRemote(fm.Repo)
+				return rm != "" && m.Has("refs/remotes/"+rm+"/"+br)
 			}()):
 			add("branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff, "alt-b")
 		default:
@@ -465,14 +314,14 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
-func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
+func (e *Env) baseRow(fm form, m git.Refs, add func(l, p, c, k string)) {
 	if fm.Base != "" {
 		note := ""
 		switch fm.Base {
 		case "@":
-			cur, ok := git(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
+			cur, ok := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
 			if fm.Here == "" {
-				cur, ok = git(fm.Repo, "symbolic-ref", "--short", "-q", "HEAD")
+				cur, ok = git.Line(fm.Repo, "symbolic-ref", "--short", "-q", "HEAD")
 			}
 			if !ok || cur == "" {
 				cur = "this checkout"
@@ -493,13 +342,13 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 		return
 	}
 	v, note := "", ""
-	if rm := preferredRemote(fm.Repo); rm == "" {
-		v, note = m.localDefault(""), "local: no remote"
+	if rm := git.PreferredRemote(fm.Repo); rm == "" {
+		v, note = m.LocalDefault(""), "local: no remote"
 		if v == "" {
 			v = "the default branch"
 		}
 	} else {
-		v = m.remoteDefault(rm)
+		v = m.RemoteDefault(rm)
 		if v == "" {
 			v = rm
 		}
@@ -510,7 +359,7 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 		case rc == "0":
 			note = "fetched"
 		case rc != "":
-			v, note = m.localDefault(rm), "local: could not fetch "+rm
+			v, note = m.LocalDefault(rm), "local: could not fetch "+rm
 			if v == "" {
 				v = "the default branch"
 			}
@@ -580,7 +429,7 @@ func checkThread(task string, fm form) string {
 	}
 	switch {
 	case fm.Base == "" || fm.Base == "@" || fm.Base == "^" || strings.HasPrefix(fm.Base, "pr:") || strings.HasPrefix(fm.Base, "mr:"):
-	case !gitOK(fm.Repo, "rev-parse", "--verify", "--quiet", fm.Base+"^{commit}"):
+	case !git.OK(fm.Repo, "rev-parse", "--verify", "--quiet", fm.Base+"^{commit}"):
 		return "no such base: " + fm.Base
 	}
 	return ""
@@ -679,7 +528,7 @@ func (e *Env) New(args []string) error {
 	}
 	fm := form{Branch: branch, Where: where, Agent: kind, Base: base}
 	fm.Mode = mode
-	if r, c, ok := repoOf(start); ok {
+	if r, c, ok := git.RepoOf(start); ok {
 		fm.Repo, fm.Here = r, c
 	} else {
 		if repoArg != "" {
@@ -693,7 +542,7 @@ func (e *Env) New(args []string) error {
 		// Not in a repository: the one you used last, for a new worktree.
 		if l, err := firstLine(e.StateDir + "/repos"); err == nil && l != "" {
 			if st, err := os.Stat(l); err == nil && st.IsDir() {
-				if r, _, ok := repoOf(l); ok {
+				if r, _, ok := git.RepoOf(l); ok {
 					fm.Repo = r
 				}
 			}
@@ -1028,7 +877,7 @@ func (e *Env) Form(op, sf, q string) {
 		if st, err := os.Stat(d); d == "" || err != nil || !st.IsDir() {
 			return
 		}
-		if r, c, ok := repoOf(d); ok {
+		if r, c, ok := git.RepoOf(d); ok {
 			fm.Repo, fm.Here = r, c
 		} else {
 			fm.Repo = ""
@@ -1102,10 +951,10 @@ func pickValue(out string) string {
 // default branch, fetched).
 func (e *Env) formBases(fm form) string {
 	var b strings.Builder
-	if rm := preferredRemote(fm.Repo); rm != "" && remoteDefault(fm.Repo, rm) != "" {
-		b.WriteString("=\t" + remoteDefault(fm.Repo, rm) + "  " + CGrey + "the remote default, fetched" + COff + "\n")
+	if rm := git.PreferredRemote(fm.Repo); rm != "" && git.RemoteDefault(fm.Repo, rm) != "" {
+		b.WriteString("=\t" + git.RemoteDefault(fm.Repo, rm) + "  " + CGrey + "the remote default, fetched" + COff + "\n")
 	} else {
-		d := localDefault(fm.Repo)
+		d := git.LocalDefault(fm.Repo)
 		if d == "" {
 			d = "default"
 		}
@@ -1115,7 +964,7 @@ func (e *Env) formBases(fm form) string {
 	if h == "" {
 		h = fm.Repo
 	}
-	cur, _ := git(h, "symbolic-ref", "--short", "-q", "HEAD")
+	cur, _ := git.Line(h, "symbolic-ref", "--short", "-q", "HEAD")
 	if cur == "" {
 		cur = "this checkout"
 	}
@@ -1164,7 +1013,7 @@ func (e *Env) recentRepos(first string) string {
 		}
 		seen[d] = true
 		if st, err := os.Stat(d); err == nil && st.IsDir() {
-			if r, _, ok := repoOf(d); ok {
+			if r, _, ok := git.RepoOf(d); ok {
 				ds = append(ds, r)
 			}
 		}

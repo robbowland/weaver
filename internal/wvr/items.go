@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -34,7 +35,7 @@ func ghRepo(dir string) string {
 	if err != nil {
 		return ""
 	}
-	pref := preferredRemote(dir)
+	pref := git.PreferredRemote(dir)
 	first := ""
 	for _, l := range strings.Split(string(out), "\n") {
 		k, u, ok := strings.Cut(l, " ")
@@ -86,7 +87,7 @@ func (e *Env) checkoutFor(repo, first string) string {
 			break
 		}
 		if strings.EqualFold(ghRepo(d), repo) {
-			if r, _, ok := repoOf(d); ok {
+			if r, _, ok := git.RepoOf(d); ok {
 				return r
 			}
 		}
