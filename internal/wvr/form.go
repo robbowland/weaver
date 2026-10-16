@@ -32,8 +32,8 @@ type form struct {
 	Where  string `json:"where"`
 	Agent  string `json:"agent"`
 	Base   string `json:"base"`
-	Mode   string `json:"mode,omitempty"`
-	Item   *item  `json:"item,omitempty"`
+	Mode   Mode     `json:"mode,omitempty"`
+	Item   *itemBox `json:"item,omitempty"`
 }
 
 func loadForm(f string) form {
@@ -381,13 +381,13 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	if fm.Item != nil {
-		it := *fm.Item
-		title := it.Title
+		it := fm.Item.it
+		title := it.text().Title
 		if rlen(title) > 56 {
 			title = runeSlice(title, 55) + "…"
 		}
 		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
-		if fm.Mode == "review" {
+		if fm.Mode == ModeReview {
 			add("mode", "review  read-only", "review  "+CGrey+"read-only"+COff, "alt-r")
 		} else {
 			add("mode", "work", "work", "alt-r")
@@ -529,7 +529,7 @@ const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + 
 
 // newFormLabel is the new-thread form's label: a review says so.
 func newFormLabel(fm form) string {
-	if fm.Mode == "review" {
+	if fm.Mode == ModeReview {
 		return formLabel("WEAVER", "REVIEW")
 	}
 	return formLabel("WEAVER", "NEW THREAD")
@@ -585,9 +585,11 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
-	var repoArg, from, branch, base, agent, where, itemArg, itemKind string
+	var repoArg, from, branch, base, agent, where, itemArg string
+	var itemKind ghKind
 	var task []string
-	nofocus, edit, review := false, false, false
+	nofocus, edit := false, false
+	mode := ModeWork
 	die := func(m string) (int, bool) {
 		fmt.Fprintln(os.Stderr, "weaver: "+m)
 		return 1, true
@@ -612,11 +614,11 @@ func (e *Env) New(args []string) (int, bool) {
 			case "--agent":
 				agent = v
 			case "--pr", "--issue":
-				itemArg, itemKind = v, strings.TrimPrefix(a, "--")
+				itemArg, itemKind = v, ghKind(strings.TrimPrefix(a, "--"))
 			}
 			i++
 		case "--review":
-			review = true
+			mode = ModeReview
 		case "--here":
 			where = "here"
 		case "--worktree":
@@ -675,9 +677,7 @@ func (e *Env) New(args []string) (int, bool) {
 		where = "worktree"
 	}
 	fm := form{Branch: branch, Where: where, Agent: agent, Base: base}
-	if review {
-		fm.Mode = "review"
-	}
+	fm.Mode = mode
 	if r, c, ok := repoOf(start); ok {
 		fm.Repo, fm.Here = r, c
 	} else {
@@ -713,27 +713,28 @@ func (e *Env) New(args []string) (int, bool) {
 			}
 			return die(m)
 		}
-		x, err := parseItem(itemKind, itemArg)
+		ref, err := parseItemRef(itemKind, itemArg)
 		if err != nil {
 			return dieItem(err.Error())
 		}
-		if x.Kind != "linear" {
-			if x.Repo == "" {
-				x.Repo = ghRepo(start)
+		if r, ok := ref.(githubRef); ok {
+			if r.Repo == "" {
+				r.Repo = ghRepo(start)
+				ref = r
 			}
-			if x.Repo != "" && (fm.Repo == "" || !strings.EqualFold(ghRepo(fm.Repo), x.Repo)) {
-				if c := e.checkoutFor(x.Repo, fm.Repo); c != "" {
+			if r.Repo != "" && (fm.Repo == "" || !strings.EqualFold(ghRepo(fm.Repo), r.Repo)) {
+				if c := e.checkoutFor(r.Repo, fm.Repo); c != "" {
 					fm.Repo, fm.Here = c, c
 				} else {
 					fm.Repo = ""
-					repoErr = "no checkout of " + x.Repo + " known: pick it (^r)"
+					repoErr = "no checkout of " + r.Repo + " known: pick it (^r)"
 				}
 			}
 		}
 		if isTTY(2) {
-			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, x.Ref(), COff)
+			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, refName(ref), COff)
 		}
-		x, err = fetchItem(x, start)
+		x, err := fetchItem(ref, start)
 		if isTTY(2) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
@@ -744,7 +745,7 @@ func (e *Env) New(args []string) (int, bool) {
 			fm.Branch = x.branchName()
 		}
 		fm.Where = "worktree"
-		fm.Item = &x
+		fm.Item = &itemBox{x}
 		// Already a thread on its branch: go to it.
 		if fm.Repo != "" {
 			if a := e.threadOnBranch(fm.Repo, fm.Branch); a != "" {
@@ -815,7 +816,7 @@ func (e *Env) New(args []string) (int, bool) {
 	}()
 	query := ""
 	if fm.Item != nil {
-		query = fm.Item.defaultTask(review)
+		query = fm.Item.it.defaultTask(mode)
 	}
 	for {
 		t, rc := e.newForm(sf, query, repoErr)
@@ -944,10 +945,10 @@ func (e *Env) Form(op, sf, q string) {
 	case "label":
 		fmt.Print(newFormLabel(fm))
 	case "mode":
-		if fm.Mode == "review" {
-			fm.Mode = ""
+		if fm.Mode == ModeReview {
+			fm.Mode = ModeWork
 		} else {
-			fm.Mode = "review"
+			fm.Mode = ModeReview
 		}
 		fm.save(sf)
 	case "agent":

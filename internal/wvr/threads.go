@@ -339,7 +339,11 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
 func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
-	it := fm.Item
+	var it workItem
+	if fm.Item != nil {
+		it = fm.Item.it
+	}
+	pr, isPR := it.(pullRequest)
 	var dir, name, branch, base string
 	created := false
 	if fm.Where == "here" {
@@ -365,10 +369,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 			}
 		}
 		// A pull request from a fork: its head, fetched as a branch here.
-		if it != nil && it.Kind == "pr" && it.Fork && !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+		if isPR && pr.Fork && !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
 			if rm := preferredRemote(fm.Repo); rm != "" {
-				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, it.Label(), COff)
-				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(it.Num)+"/head:"+branch)
+				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, pr.Label(), COff)
+				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
 				c.Stderr = os.Stderr
 				if c.Run() != nil {
 					return false
@@ -389,19 +393,19 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	}
 	// A pull request's thread reviews against what it merges into.
 	prBase := ""
-	if it != nil && it.Kind == "pr" && it.Base != "" {
-		prBase = it.Base
+	if isPR && pr.Base != "" {
+		prBase = pr.Base
 		if rm := preferredRemote(fm.Repo); rm != "" {
-			prBase = rm + "/" + it.Base
+			prBase = rm + "/" + pr.Base
 		}
 		if branch != "" {
 			exec.Command("git", "-C", fm.Repo, "config", "branch."+branch+".weaverbase", prBase).Run()
 		}
 	}
 	prompt := task
-	review := fm.Mode == "review"
+	review := fm.Mode == ModeReview
 	if it != nil {
-		prompt = it.prompt(task, review, prBase)
+		prompt = itemPrompt(it, task, fm.Mode, prBase)
 	}
 	tok := token()
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
@@ -427,7 +431,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
 		Here: fm.Where == "here", WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
-		rec.Item = &ThreadItem{Kind: it.Kind, Ref: it.Ref(), URL: it.URL, Title: it.Title}
+		rec.Item = &ThreadItem{Kind: it.kind(), Ref: it.Ref(), URL: it.text().URL, Title: it.text().Title}
 	}
 	if review {
 		rec.Mode = "review"
@@ -446,7 +450,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	}
 	// A review of a pull request opens its nvim on the review.
 	var nvimEnv []string
-	if review && it != nil && it.Kind == "pr" {
+	if review && isPR {
 		nvimEnv = append(nvimEnv, "WEAVER_OPEN_REVIEW=branch")
 	}
 	tab, ok := e.threadTab(tok, fm.Agent, dir, wname, nofocus, nvimEnv...)
