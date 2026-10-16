@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -45,9 +46,11 @@ type hk struct {
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
-	Old               agent.Record
-	Same              bool
-	OTurnRoots, Paths string
+	Old        agent.Record
+	Same       bool
+	OTurnRoots string
+	// Paths are where a command or MCP tool may have changed files.
+	Paths []string
 	// The lists after the event, written in the foreground only.
 	Files     []string         `json:"-"`
 	Subagents []agent.Subagent `json:"-"`
@@ -71,7 +74,7 @@ type hk struct {
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
 func (e *Env) Hook(in []byte, mode string, pane tmux.PaneID, agent, me string) int {
-	var ev hookInput
+	var ev hooks.Input
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
 		return 0
 	}
@@ -79,7 +82,7 @@ func (e *Env) Hook(in []byte, mode string, pane tmux.PaneID, agent, me string) i
 }
 
 // hook folds event ev into the state of the agent in pane.
-func (e *Env) hook(ev hookInput, mode string, pane tmux.PaneID, agentName, me string) int {
+func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me string) int {
 	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
@@ -107,7 +110,7 @@ func (e *Env) hook(ev hookInput, mode string, pane tmux.PaneID, agentName, me st
 			pk = peek(h.sf)
 		}
 	}
-	if mode == "async" && !asyncGate(ev, pk.state) {
+	if mode == "async" && !hooks.AsyncGate(ev, pk.state) {
 		return 0
 	}
 	lk := lock(h.sf)
@@ -152,7 +155,7 @@ func peek(sf string) peeked {
 
 // parse reads the event and the stored state: false when there is no
 // event to fold in.
-func (h *hk) parse(in hookInput, st []byte) bool {
+func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.Sid = oneline.Ctl(in.SessionID)
 	h.Aid = oneline.Ctl(in.AgentID)
 	now := time.Now()
@@ -160,8 +163,8 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	h.NowMs = now.UnixMilli()
 	h.Event = oneline.Ctl(in.Event)
 	h.Cwd = oneline.Ctl(in.Cwd)
-	h.File = oneline.Ctl(editFile(in))
-	if in.Event == "UserPromptSubmit" && yours(in) {
+	h.File = oneline.Ctl(in.EditFile())
+	if in.Event == "UserPromptSubmit" && in.Yours() {
 		h.Prompt = oneline.Ctl(oneline.Squash(in.Prompt, 120))
 		h.PromptLong = oneline.Ctl(oneline.Squash(in.Prompt, 2000))
 	}
@@ -170,7 +173,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	w := ""
 	switch in.Event {
 	case "PermissionRequest", "PreToolUse":
-		w = summary(in)
+		w = in.Summary()
 	case "Notification":
 		w = in.Message
 	case "StopFailure":
@@ -187,7 +190,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	h.LastNew = oneline.Ctl(oneline.Squash(in.LastMessage, 400))
 	h.Atype = oneline.Ctl(oneline.Squash(in.AgentType, 40))
 	if in.Event == "Stop" {
-		bg := background(in)
+		bg := in.BackgroundWork()
 		h.BgNew = strconv.Itoa(len(bg))
 		var ds []string
 		for _, d := range bg {
@@ -203,13 +206,13 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	h.PromptID = oneline.Ctl(in.PromptID)
 	h.Transcript = oneline.Ctl(in.Transcript)
 	h.NewCwd = oneline.Ctl(in.NewCwd)
-	if rejected(in) {
+	if in.Rejected() {
 		h.Rejected = "1"
 	}
 	h.Err = oneline.Ctl(oneline.Squash(string(in.Error), 100))
 	h.ToolUseID = oneline.Ctl(oneline.Squash(in.ToolUseID, 80))
 	if in.ToolName == "Bash" {
-		h.Cmd = oneline.Ctl(oneline.Squash(in.input().Command, 200))
+		h.Cmd = oneline.Ctl(oneline.Squash(in.Tool().Command, 200))
 	}
 	if in.Event == "SessionEnd" {
 		h.EndNew = oneline.Ctl(oneline.Squash(in.Reason, 40))
@@ -220,15 +223,15 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 		h.Old = agent.Record{}
 	}
 	h.Same = known && h.Old.SessionID == in.SessionID
-	h.Files = filesNew(h.sess().Files, h.File)
-	h.Subagents = subsNew(h.sess().Subagents, in, h.Aid, h.Now)
-	h.Tasks = tasksNew(h.sess().Tasks, in)
+	h.Files = hooks.Files(h.sess().Files, h.File)
+	h.Subagents = hooks.Subagents(h.sess().Subagents, in, h.Aid, h.Now)
+	h.Tasks = hooks.Tasks(h.sess().Tasks, in)
 	var tr []string
 	for _, r := range h.sess().TurnRoots {
 		tr = append(tr, oneline.Line(r))
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
-	h.Paths = commandPaths(in)
+	h.Paths = in.CommandPaths()
 	return h.Event != ""
 }
 
@@ -686,4 +689,12 @@ func (e *Env) HookMain(args []string) {
 			os.Stdout.WriteString(bellJSON + "\n")
 		}
 	}
+}
+
+// orEmpty is s, or an empty list for none: [] in JSON, not null.
+func orEmpty[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }

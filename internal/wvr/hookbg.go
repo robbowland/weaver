@@ -386,7 +386,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 	}
 	var roots []string
 	seen := map[string]bool{}
-	cands := append([]string{h.Cwd, h.Root}, strings.Split(h.Paths, rs)...)
+	cands := append([]string{h.Cwd, h.Root}, h.Paths...)
 	for _, p := range cands {
 		if !strings.HasPrefix(p, "/") {
 			continue

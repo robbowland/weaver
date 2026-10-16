@@ -1,4 +1,7 @@
-package wvr
+// Package hooks reads what the coding agents' hooks are given: Claude
+// Code's hook input, and other agents' events, normalized (wvr event) or
+// Codex's own (wvr adapt codex), as the same Input.
+package hooks
 
 import (
 	"encoding/json"
@@ -15,8 +18,8 @@ import (
 // Claude Code's hook input (and what `wvr event` makes of another agent's
 // events, event.go), read once into the members weaver uses.
 
-// hookInput is one hook event's input.
-type hookInput struct {
+// Input is one hook event's input.
+type Input struct {
 	Event      string `json:"hook_event_name"`
 	SessionID  string `json:"session_id"`
 	Transcript string `json:"transcript_path"`
@@ -57,8 +60,8 @@ type hookInput struct {
 	TaskSubject string     `json:"task_subject"`
 }
 
-// toolInput is what weaver reads of a tool call's input.
-type toolInput struct {
+// ToolInput is what weaver reads of a tool call's input.
+type ToolInput struct {
 	FilePath     string `json:"file_path"`
 	NotebookPath string `json:"notebook_path"`
 	Command      string `json:"command"` // Bash
@@ -67,23 +70,23 @@ type toolInput struct {
 	} `json:"questions"` // AskUserQuestion
 }
 
-func (in hookInput) input() toolInput {
-	var t toolInput
-	bestEffort(jsonx.Decode(in.ToolInput, &t))
+func (in Input) Tool() ToolInput {
+	var t ToolInput
+	_ = jsonx.Decode(in.ToolInput, &t) // none, or not an object: nothing
 	return t
 }
 
 // path is the file the tool call names, if any.
-func (t toolInput) path() string {
+func (t ToolInput) path() string {
 	if t.FilePath != "" {
 		return t.FilePath
 	}
 	return t.NotebookPath
 }
 
-// asyncGate: the async hook runs after every tool call; most of them change
+// AsyncGate: the async hook runs after every tool call; most of them change
 // nothing.
-func asyncGate(in hookInput, state agent.State) bool {
+func AsyncGate(in Input, state agent.State) bool {
 	switch in.Event {
 	case "PostToolUse":
 		t := in.ToolName
@@ -112,8 +115,8 @@ var (
 	reRejected = regexp.MustCompile(`doesn.t want to proceed with this tool use`)
 )
 
-// editFile is the file an edit tool wrote (absolute), else "".
-func editFile(in hookInput) string {
+// EditFile is the file an edit tool wrote (absolute), else "".
+func (in Input) EditFile() string {
 	switch in.ToolName {
 	case "Edit", "Write", "MultiEdit", "NotebookEdit":
 	default:
@@ -122,17 +125,17 @@ func editFile(in hookInput) string {
 	if in.Event != "PostToolUse" {
 		return ""
 	}
-	s := oneline.Line(in.input().path())
+	s := oneline.Line(in.Tool().path())
 	if s == "" || strings.HasPrefix(s, "/") {
 		return s
 	}
 	return in.Cwd + "/" + s
 }
 
-// commandPaths are the absolute paths a Bash command names (cd targets,
+// CommandPaths are the absolute paths a Bash command names (cd targets,
 // VAR=/path, arguments), or an MCP tool's input holds: where to look for
-// what it changed. At most 8, sorted, RS-separated.
-func commandPaths(in hookInput) string {
+// what it changed. At most 8, sorted.
+func (in Input) CommandPaths() []string {
 	var ps []string
 	switch {
 	case strings.HasPrefix(in.ToolName, "mcp__"):
@@ -154,14 +157,14 @@ func commandPaths(in hookInput) string {
 			}
 		}
 		var v any
-		bestEffort(json.Unmarshal(in.ToolInput, &v))
+		_ = json.Unmarshal(in.ToolInput, &v) // none: nothing to walk
 		walk(v)
 	case in.ToolName == "Bash":
-		for _, m := range reCmdPath.FindAllStringSubmatch(in.input().Command, -1) {
+		for _, m := range reCmdPath.FindAllStringSubmatch(in.Tool().Command, -1) {
 			ps = append(ps, oneline.Line(m[1]))
 		}
 	default:
-		return ""
+		return nil
 	}
 	sort.Strings(ps)
 	var u []string
@@ -173,12 +176,12 @@ func commandPaths(in hookInput) string {
 	if len(u) > 8 {
 		u = u[:8]
 	}
-	return strings.Join(u, rs)
+	return u
 }
 
-// summary is what a permission dialog asks about.
-func summary(in hookInput) string {
-	t := in.input()
+// Summary is what a permission dialog asks about.
+func (in Input) Summary() string {
+	t := in.Tool()
 	switch {
 	case in.ToolName == "Bash":
 		return "Bash: " + t.Command
@@ -195,19 +198,19 @@ func summary(in hookInput) string {
 	return in.ToolName
 }
 
-// yours is whether a prompt is yours, not another agent's message or a
+// Yours is whether a prompt is yours, not another agent's message or a
 // task's report.
-func yours(in hookInput) bool {
+func (in Input) Yours() bool {
 	if in.Source != "" && in.Source != "user" {
 		return false
 	}
 	return !reYours.MatchString(in.Prompt)
 }
 
-// background are the descriptions of the background subagents and
+// BackgroundWork are the descriptions of the background subagents and
 // workflows still running when the agent stops: it wakes when they report
 // back.
-func background(in hookInput) []string {
+func (in Input) BackgroundWork() []string {
 	var out []string
 	for _, b := range in.Background {
 		if b.Type == "subagent" || b.Type == "workflow" {
@@ -217,9 +220,9 @@ func background(in hookInput) []string {
 	return out
 }
 
-// rejected is whether you said no to a call of the batch, without saying
+// Rejected is whether you said no to a call of the batch, without saying
 // what to do instead.
-func rejected(in hookInput) bool {
+func (in Input) Rejected() bool {
 	if in.Event != "PostToolBatch" {
 		return false
 	}
@@ -232,8 +235,8 @@ func rejected(in hookInput) bool {
 	return false
 }
 
-// filesNew is the files the agent edited, file last.
-func filesNew(fs []string, file string) []string {
+// Files is the files the agent edited, file last.
+func Files(fs []string, file string) []string {
 	if file == "" {
 		return fs
 	}
@@ -250,8 +253,8 @@ func filesNew(fs []string, file string) []string {
 	return out
 }
 
-// subsNew is the subagents running after the event (aid its subagent's).
-func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent.Subagent {
+// Subagents is the subagents running after the event (aid its subagent's).
+func Subagents(subs []agent.Subagent, in Input, aid string, now int64) []agent.Subagent {
 	without := func() []agent.Subagent {
 		out := []agent.Subagent{}
 		for _, s := range subs {
@@ -269,7 +272,7 @@ func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent
 	case "SubagentStop":
 		return without()
 	case "Stop":
-		if len(background(in)) == 0 {
+		if len(in.BackgroundWork()) == 0 {
 			return []agent.Subagent{}
 		}
 	case "SessionStart":
@@ -280,8 +283,8 @@ func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent
 	return subs
 }
 
-// tasksNew is the agent's tasks after the event: the last 30.
-func tasksNew(tasks []agent.Task, in hookInput) []agent.Task {
+// Tasks is the agent's tasks after the event: the last 30.
+func Tasks(tasks []agent.Task, in Input) []agent.Task {
 	id, subject := string(in.TaskID), oneline.Squash(in.TaskSubject, 80)
 	last30 := func(a []agent.Task) []agent.Task {
 		if len(a) > 30 {
@@ -316,12 +319,4 @@ func tasksNew(tasks []agent.Task, in hookInput) []agent.Task {
 		}
 	}
 	return tasks
-}
-
-// orEmpty is s, or an empty list for none: [] in JSON, not null.
-func orEmpty[T any](s []T) []T {
-	if s == nil {
-		return []T{}
-	}
-	return s
 }
