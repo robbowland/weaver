@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -91,20 +92,13 @@ func (e *Env) linearReady() bool {
 		b, _ := os.ReadFile(f)
 		return strings.TrimSpace(string(b)) == "yes"
 	}
-	c := exec.Command(p, "auth", "status")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c := exec.CommandContext(ctx, p, "auth", "status")
+	c.WaitDelay = time.Second
 	var out bytes.Buffer
 	c.Stdout = &out
-	ok := false
-	if c.Start() == nil {
-		done := make(chan error, 1)
-		go func() { done <- c.Wait() }()
-		select {
-		case err := <-done:
-			ok = err == nil && !strings.Contains(out.String(), "Not authenticated")
-		case <-time.After(3 * time.Second):
-			c.Process.Kill()
-		}
-	}
+	ok := c.Run() == nil && !strings.Contains(out.String(), "Not authenticated")
 	ans := "no"
 	if ok {
 		ans = "yes"

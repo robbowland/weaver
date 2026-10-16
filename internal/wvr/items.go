@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -117,15 +118,12 @@ func runJSON(name string, args ...string) ([]byte, error) {
 	if _, err := exec.LookPath(name); err != nil {
 		return nil, fmt.Errorf("%s is not installed", name)
 	}
-	c := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	c := exec.CommandContext(ctx, name, args...)
+	c.WaitDelay = time.Second
 	var stderr strings.Builder
 	c.Stderr = &stderr
-	timer := time.AfterFunc(30*time.Second, func() {
-		if c.Process != nil {
-			c.Process.Kill()
-		}
-	})
-	defer timer.Stop()
 	out, err := c.Output()
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
@@ -92,6 +93,14 @@ func envInt(k string) (int, bool) {
 	}
 	n, err := strconv.Atoi(v)
 	return n, err == nil
+}
+
+// envSeconds is $k as a whole number of seconds, else d.
+func envSeconds(k string, d time.Duration) time.Duration {
+	if n, ok := envInt(k); ok {
+		return time.Duration(n) * time.Second
+	}
+	return d
 }
 
 // lsSize is the dashboard's size, columns and lines:

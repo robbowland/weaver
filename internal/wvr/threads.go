@@ -177,14 +177,23 @@ func (e *Env) rememberRepo(r string) {
 	}
 }
 
-// fetchWait waits for repo's fetch (started if need be), at most t seconds:
-// "0", git's failure status, "none" (no remote) or "timeout".
-func (e *Env) fetchWait(repo string, t int) string {
+// fetchResult is how a wait for a fetch ended.
+type fetchResult int
+
+const (
+	fetchDone     fetchResult = iota // fetched
+	fetchTimedOut                    // still fetching when the wait ended: stopped
+	fetchFailed                      // failed (offline, no access, no remote)
+)
+
+// fetchWait waits for repo's fetch (started if need be), at most wait.
+func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	e.fetchStart(repo, "")
 	f := e.fetchFile(repo)
 	said := false
 	pid := ""
-	for i := 0; i < t*10; i++ {
+	start := time.Now()
+	for time.Since(start) < wait {
 		if exists(f + ".rc") {
 			break
 		}
@@ -192,21 +201,23 @@ func (e *Env) fetchWait(repo string, t int) string {
 		if n, ok := atoi(pid); !ok || syscall.Kill(n, 0) != nil {
 			break
 		}
-		if !said && i >= 3 {
+		if !said && time.Since(start) >= 300*time.Millisecond {
 			fmt.Fprintf(os.Stderr, "%sweaver: fetching %s…%s\n", CDim, preferredRemote(repo), COff)
 			said = true
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	rc, _ := firstLine(f + ".rc")
-	if rc == "" {
-		rc = "timeout"
+	switch rc, _ := firstLine(f + ".rc"); rc {
+	case "0":
+		return fetchDone
+	case "":
 		if n, ok := atoi(pid); ok {
-			syscall.Kill(-n, syscall.SIGTERM)
+			bestEffort(syscall.Kill(-n, syscall.SIGTERM))
 		}
 		os.Remove(f + ".pid")
+		return fetchTimedOut
 	}
-	return rc
+	return fetchFailed
 }
 
 // threadBase is the base for a new branch of repo (empty: Worktrunk's
@@ -216,10 +227,7 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 	if fm.Base != "" {
 		return fm.Base, ""
 	}
-	t := 10
-	if n, ok := atoi(os.Getenv("WEAVER_FETCH_TIMEOUT")); ok {
-		t = n
-	}
+	wait := envSeconds("WEAVER_FETCH_TIMEOUT", 10*time.Second)
 	ld := localDefault(repo)
 	from := "the local default branch"
 	if ld != "" {
@@ -229,17 +237,17 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 	if rm == "" {
 		return ld, "no remote: starts from " + from
 	}
-	switch rc := e.fetchWait(repo, t); rc {
-	case "0":
+	switch e.fetchWait(repo, wait) {
+	case fetchDone:
 		if d := remoteDefault(repo, rm); d != "" {
 			return d, ""
 		}
 		return ld, rm + " has no default branch: starts from " + from
-	case "timeout":
-		return ld, rm + " took over " + strconv.Itoa(t) + "s to fetch: starts from " + from
-	default:
-		return ld, "could not fetch " + rm + " (offline?): starts from " + from
+	case fetchTimedOut:
+		return ld, rm + " took over " + wait.String() + " to fetch: starts from " + from
+	case fetchFailed:
 	}
+	return ld, "could not fetch " + rm + " (offline?): starts from " + from
 }
 
 // threadWorktree is the worktree for branch of repo, made unless it exists

@@ -331,7 +331,7 @@ func agentCols(total int) int {
 		return n
 	}
 	least := 44
-	if n, ok := atoi(os.Getenv("WEAVER_AGENT_MIN_COLS")); ok {
+	if n, ok := envInt("WEAVER_AGENT_MIN_COLS"); ok {
 		least = n
 	}
 	c := total * pct / 100
