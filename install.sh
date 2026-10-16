@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Install weaver from this checkout: what it works with (Homebrew, from the
-# Brewfile), then weaver itself (one binary, wvr) into ~/.local/bin/wvr.
+# Install weaver from this checkout: weaver itself (one binary, wvr) into
+# ~/.local/bin/wvr, then what it works with (`wvr doctor --fix`: Homebrew
+# installs what is missing, and the sign-ins are offered).
 #
-#   ./install.sh                  install what is missing, build wvr, and say what is left
-#     --no-deps                   install no dependencies
+#   ./install.sh                  build wvr, install what is missing, and say what is left
+#     --no-deps                   install nothing else (`wvr doctor` only says what is missing)
 #     --configure                 also add the Claude Code (and Codex) hooks now
 #                                 (`wvr setup`; wvr does it itself as it starts)
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
@@ -40,41 +41,17 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-# install_deps: what the Brewfile names and is missing, with Homebrew.
-install_deps() {
-	[ $deps = 1 ] || return 0
-	if ! command -v brew >/dev/null 2>&1; then
-		warn "no Homebrew (https://brew.sh): install what weaver works with yourself (see the Brewfile)"
-		return 0
-	fi
-	if brew bundle check --file="$SRC/Brewfile" >/dev/null 2>&1; then
-		return 0
-	fi
+# check_deps: Go, to build weaver (from Homebrew when it is missing).
+# What weaver itself works with is `wvr doctor --fix`'s.
+check_deps() {
+	command -v go >/dev/null 2>&1 && return 0
+	command -v brew >/dev/null 2>&1 || die "Go is needed to build weaver: https://go.dev/dl (or Homebrew: https://brew.sh)"
 	if [ $dry = 1 ]; then
-		say "would install with Homebrew:"
-		brew bundle check --file="$SRC/Brewfile" --verbose 2>/dev/null | sed -n 's/^→ /  /p'
+		say "would install Go with Homebrew, to build weaver"
 		return
 	fi
-	say "installing what weaver works with (Homebrew, from the Brewfile)"
-	brew bundle install --file="$SRC/Brewfile" --no-upgrade || die "brew bundle failed"
-}
-
-check_deps() {
-	local c missing="" v major minor rest
-	for c in go tmux nvim git; do
-		command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
-	done
-	[ -z "$missing" ] || die "missing dependencies:$missing"
-	command -v fzf >/dev/null 2>&1 ||
-		warn "fzf not found: 'wvr ls' will print a table instead of the interactive dashboard"
-	v=$(tmux -V 2>/dev/null)
-	v=${v#tmux }
-	major=${v%%.*} rest=${v#*.}
-	minor=${rest%%[!0-9]*}
-	case "$major.$minor" in [0-9]*.[0-9]*) ;; *) die "cannot parse the tmux version '$v'" ;; esac
-	if [ "$major" -lt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -lt 3 ]; }; then
-		die "tmux $v is too old: weaver needs 3.3 or newer"
-	fi
+	say "installing Go with Homebrew, to build weaver"
+	brew install go || die "brew install go failed"
 }
 
 # ours FILE: is FILE a weaver binary?
@@ -154,7 +131,6 @@ remove_agentnav() {
 	fi
 }
 
-install_deps
 check_deps
 install_files
 remove_old_copies
@@ -173,10 +149,15 @@ if [ $configure = 1 ]; then
 		"$BIN/wvr" setup "$@"
 	fi
 fi
-# What is left: sign-ins, an agent, anything Homebrew could not do.
+# What weaver works with: installed (Homebrew), its hooks and plugin, the
+# sign-ins offered; then what is left.
 if [ $dry = 0 ]; then
 	echo
-	"$BIN/wvr" doctor || true
+	if [ $deps = 1 ]; then
+		"$BIN/wvr" doctor --fix || true
+	else
+		"$BIN/wvr" doctor || true
+	fi
 	echo
 	say "start weaver with: wvr"
 fi

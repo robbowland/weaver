@@ -375,11 +375,14 @@ can supersede an earlier one, and says so.
   and its dependencies"): `brew install robbowland/kegs/weaver` brings every
   tool weaver works with, and `wvr` sets itself up as it starts. What a
   package cannot do, signing in to GitHub and Linear, happens in place: a
-  view not ready yet shows its need and runs the fix on one key. From a
-  checkout, `install.sh` installs what the `Brewfile` names and is missing
-  (`brew bundle`), and both end at `wvr doctor`, which names what is left
-  and the command for each. Every view is in the session, ready or not, so
-  you see what you could have; `h` hides one you do not use.
+  view not ready yet shows its need and runs the fix on one key. What
+  weaver works with is known to wvr alone: `wvr doctor` names what is
+  missing and the fix for each, and `wvr doctor --fix` does those it can
+  (Homebrew installs, the hooks, the plugin, the sign-ins offered); from a
+  checkout, `install.sh` builds wvr (Go first, if need be) and runs it, no
+  Brewfile beside it (Rob: "Can't that just be made into a wvr command?").
+  Every view is in the session, ready or not, so you see what you could
+  have; `h` hides one you do not use.
 
 - 2026-10-16: weaver is public (MIT) and released through Rob's tap,
   `robbowland/homebrew-kegs`, as `weaver` 0.1.0: built from the tag, with

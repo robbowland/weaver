@@ -152,8 +152,16 @@ var commands = map[string]command{
 			fmt.Println(e.StatusText())
 		}
 	})},
-	"gc":     {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
-	"doctor": {run: func(e *wvr.Env, _ []string) error { return e.Doctor(os.Stdout) }},
+	"gc": {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
+	"doctor": {run: func(e *wvr.Env, args []string) error {
+		switch arg(args, 0) {
+		case "":
+			return e.Doctor(os.Stdout)
+		case "--fix":
+			return e.Fix(os.Stdout)
+		}
+		return errors.New("usage: wvr doctor [--fix]")
+	}},
 
 	// The agents' hooks, and other agents' events.
 	"hook":  {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},

@@ -103,21 +103,24 @@ ok "the old name, weaver: kept as this build, and said" \
 rm -f "$H/.local/bin/weaver" "$H/.local/bin/old"
 inst >/dev/null
 ok "...and not made where there was none" "$([ -e "$H/.local/bin/weaver" ] && echo made || echo none)" "none"
-# What weaver works with: Homebrew installs what the Brewfile names and is
-# missing (a fake brew here, which finds it all missing).
+# What weaver works with: wvr doctor --fix has Homebrew install what is
+# missing (a fake brew here, on a PATH with git and nothing else).
 BREW=$AT/fakebrew
-mkdir -p "$BREW"
+rm -rf "$BREW" && mkdir -p "$BREW"
 cat >"$BREW/brew" <<FB
 #!/bin/bash
 echo "\$*" >>"$AT/brew.log"
-[ "\$1 \$2" = "bundle check" ] && exit 1
-exit 0
 FB
 chmod +x "$BREW/brew"
+ln -s "$(command -v git)" "$BREW/git"
 rm -f "$AT/brew.log"
-BREW=$BREW DEPS= inst >/dev/null
-ok "install installs what weaver works with, with Homebrew, from the Brewfile" \
-	"$(sed "s|$ROOT|ROOT|" "$AT/brew.log" | tr '\n' ' ')" \
-	"bundle check --file=ROOT/Brewfile bundle install --file=ROOT/Brewfile --no-upgrade "
+fixed=$(env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
+	PATH="$BREW:/usr/bin:/bin" "$H/.local/bin/wvr" doctor --fix 2>&1 </dev/null)
+rc=$?
+ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \
+	"$(cat "$AT/brew.log" 2>/dev/null | tr '\n' ' ')" \
+	"install tmux neovim fzf worktrunk gh robbowland/kegs/gh-dash robbowland/kegs/linear-tui "
+ok "...and still fails, saying what is left, while weaver cannot work" \
+	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] tmux')" "1|1"
 unset BREW
 done_suite

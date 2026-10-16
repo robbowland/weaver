@@ -28,7 +28,7 @@ func (e *Env) Start(name string) error {
 	}
 	tmux, err := exec.LookPath("tmux")
 	if err != nil {
-		return errors.New("tmux is not installed")
+		return errors.New("tmux is not installed: wvr doctor --fix installs what weaver needs")
 	}
 	e.SelfSetup()
 	dir, err := setup.Runtime()

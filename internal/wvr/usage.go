@@ -44,8 +44,9 @@ const Usage = `usage: wvr [command]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file
                                it changes; --dry-run shows the changes only
-  doctor                       what weaver works with: there, set up, and how to fix
-                               what is not
+  doctor [--fix]               what weaver works with: there, set up, and how to fix
+                               what is not; --fix installs what is missing (Homebrew),
+                               sets up the hooks, and offers the sign-ins
   version                      weaver's version
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

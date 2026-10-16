@@ -34,13 +34,16 @@ or [Codex](https://github.com/openai/codex). Signing in to GitHub and Linear
 is done in place: a view not set up yet has a dot in the status line, and
 going there offers the one key that signs it in (`gh auth login`,
 `linear-tui auth login`); `h` there hides a view you do not use.
-`wvr doctor` says what is there and what is not, with the command that
-fixes each.
 
-From a checkout, `./install.sh` does the same: it installs what is missing
-with Homebrew (from the `Brewfile`; `--no-deps` skips that), builds weaver,
-one binary carrying everything it needs, into `~/.local/bin/wvr`, and ends
-with `wvr doctor` (safe to rerun; `--dry-run` shows what it would do).
+`wvr doctor` says what is there and what is not, with the command that
+fixes each; `wvr doctor --fix` does what it can: Homebrew installs what is
+missing or too old, weaver sets up its hooks and fetches its plugin, and
+each sign-in is offered.
+
+From a checkout, `./install.sh` builds weaver, one binary carrying
+everything it needs, into `~/.local/bin/wvr` (installing Go first if it has
+to), then runs `wvr doctor --fix` (`--no-deps`: only `wvr doctor`; safe to
+rerun, `--dry-run` shows what it would do).
 
 Its command is `wvr`, and it sets itself up as it starts, when it is the
 `wvr` on your PATH: Claude Code's hooks (`~/.claude/settings.json`, backed
