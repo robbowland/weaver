@@ -489,22 +489,6 @@ func (e *Env) writeState(h *hk, lk string) {
 	bestEffort(os.Rename(lk, h.sf))
 }
 
-// logLine appends one line to the agent session's activity log: members
-// are the event's fields after "ev", as `,"k":v...`.
-func (h *hk) logLine(e *Env, ev, members string) {
-	if h.Sid == "" {
-		return
-	}
-	f, err := os.OpenFile(e.LogDir+"/"+h.Sid+".jsonl", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-	if err != nil {
-		return
-	}
-	_, err = f.WriteString(`{"t":` + strconv.FormatInt(h.Now, 10) + `,"pane":` + jsonStr(string(h.Pane)) + `,"turn":` + strconv.Itoa(h.Turn) +
-		`,"ev":"` + ev + `"` + members + "}\n")
-	bestEffort(err)
-	f.Close()
-}
-
 // hookLog is the activity log's lines for this event (docs/design.md).
 func (h *hk) hookLog(e *Env) {
 	if h.Sid == "" {
@@ -512,46 +496,40 @@ func (h *hk) hookLog(e *Env) {
 	}
 	switch h.Event {
 	case "SessionStart":
-		h.logLine(e, "session", `,"source":`+jsonStr(h.Source))
+		h.logLine(e, logSession{h.logHead("session"), h.Source})
 	case "UserPromptSubmit":
 		if h.SnapStart != "" {
-			h.logLine(e, "prompt", `,"text":`+jsonStr(h.PromptLong)+`,"prompt_id":`+jsonStr(h.PromptID))
+			h.logLine(e, logPrompt{h.logHead("prompt"), h.PromptLong, h.PromptID})
 		}
 	case "PostToolUse":
 		if h.EvFile != "" {
-			x := `,"file":` + jsonStr(h.EvFile) + `,"root":` + jsonStr(h.Root) + `,"tool":` + jsonStr(h.Tool)
-			if h.Aid != "" {
-				x += `,"agent_id":` + jsonStr(h.Aid)
-			}
-			h.logLine(e, "edit", x)
+			h.logLine(e, logEdit{h.logHead("edit"), h.EvFile, h.Root, h.Tool, h.Aid})
 		}
 	case "PostToolUseFailure":
 		if h.Interrupt != "" {
-			h.logLine(e, "interrupt", `,"tool":`+jsonStr(h.Tool))
+			h.logLine(e, logInterrupt{h.logHead("interrupt"), h.Tool})
 		}
 	case "SubagentStart", "SubagentStop":
-		x := `,"agent_id":` + jsonStr(h.Aid) + `,"agent_type":` + jsonStr(h.Atype)
+		phase := "stop"
 		if h.Event == "SubagentStart" {
-			x += `,"phase":"start"`
-		} else {
-			x += `,"phase":"stop"`
+			phase = "start"
 		}
-		h.logLine(e, "subagent", x)
+		h.logLine(e, logSubagent{h.logHead("subagent"), h.Aid, h.Atype, phase})
 	case "Stop":
-		h.logLine(e, "stop", `,"last":`+jsonStr(h.LastNew))
+		h.logLine(e, logStop{h.logHead("stop"), h.LastNew})
 	case "StopFailure":
-		h.logLine(e, "error", `,"error":`+jsonStr(h.Err))
+		h.logLine(e, logError{h.logHead("error"), h.Err})
 	case "SessionEnd":
-		h.logLine(e, "end", "")
+		h.logLine(e, h.logHead("end"))
 	}
 	if h.Moved && h.Root != h.Old.Root {
-		h.logLine(e, "cwd", `,"cwd":`+jsonStr(h.Cwd)+`,"root":`+jsonStr(h.Root))
+		h.logLine(e, logCwd{h.logHead("cwd"), h.Cwd, h.Root})
 	}
 	if h.State != h.Old.State {
 		if h.State == agent.StateNeedsYou {
-			h.logLine(e, "needs-you", `,"waiting":`+jsonStr(h.Waiting))
+			h.logLine(e, logNeedsYou{h.logHead("needs-you"), h.Waiting})
 		}
-		h.logLine(e, "state", `,"state":"`+string(h.State)+`"`)
+		h.logLine(e, logState{h.logHead("state"), h.State})
 	}
 }
 
@@ -575,10 +553,10 @@ func (e *Env) afterWrite(h *hk) {
 		// background anyway, so do it here.
 		if !e.followBashEdits(h) {
 			if h.Tool == "Bash" {
-				h.logLine(e, "bash", `,"cmd":`+jsonStr(h.Cmd))
+				h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
 			}
 			if h.NV != "" {
-				e.nvimEvent(h, "checktime", "", "", "")
+				e.nvimEvent(h, h.nvimHead("checktime"), "", "")
 			}
 		}
 	}

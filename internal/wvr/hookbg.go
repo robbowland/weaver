@@ -37,7 +37,7 @@ func (e *Env) hookBg() {
 		if h.EvFile != "" {
 			e.nvimEditEvent(h, "edit", h.Root, h.EvFile, h.Tool)
 		} else if h.Root != h.Old.Root {
-			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "")
+			e.nvimEvent(h, nvimRoot{h.nvimHead("root"), h.Root}, h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
 		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
@@ -115,7 +115,7 @@ func wtMarker(dir, m string) {
 // socket (msgpack-RPC; no nvim client started). Returns 0 on success, 128+
 // when nvim did not answer in time, 1 when nothing listens. In a hook, a
 // timeout is remembered: calls are skipped for 15s.
-func (e *Env) nvimEvent(h *hk, ev, extra, r, f string) int {
+func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) int {
 	sock := e.nvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return 1
@@ -126,8 +126,11 @@ func (e *Env) nvimEvent(h *hk, ev, extra, r, f string) int {
 			return 128
 		}
 	}
-	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(string(h.Pane)) + `,"agent":"` + h.AgentKind +
-		`","sid":` + jsonStr(h.Sid) + `,"turn":` + strconv.Itoa(h.Turn) + `,"state":"` + string(h.State) + `"` + extra + "}"
+	b, err := jsonLine(m)
+	if err != nil {
+		return 1
+	}
+	j, ev := strings.TrimSuffix(string(b), "\n"), m.name()
 	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
 	compat := "0"
 	switch ev {
@@ -203,16 +206,11 @@ func nvimEvalInt(sock, expr string, d time.Duration) (int, bool) {
 
 // nvimEditEvent: an edit (or a focus) at file f in root r.
 func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
-	x := `,"root":` + jsonStr(r) + `,"file":` + jsonStr(f) + `,"tool":` + jsonStr(tool)
-	if h.Aid != "" {
-		x += `,"agent_id":` + jsonStr(h.Aid)
-	}
-	e.nvimEvent(h, ev, x, r, f)
+	e.nvimEvent(h, nvimEdit{h.nvimHead(ev), r, f, tool, h.Aid}, r, f)
 }
 
 func (e *Env) nvimStateEvent(h *hk) {
-	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title)+
-		`,"doing":`+jsonStr(h.Doing), "", "")
+	e.nvimEvent(h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing}, "", "")
 }
 
 // PushStatus brings what shows the session's agents up to date: agents
@@ -481,11 +479,10 @@ func (e *Env) followBashEdits(h *hk) bool {
 	if !strings.Contains(rs+h.TurnRoots+rs, rs+r+rs) && h.Turn > 0 && h.Sid != "" {
 		e.snapRoots(h, "base", h.Turn, r, "", h.PromptID)
 	}
-	x := `,"file":` + jsonStr(newest)
 	if h.Tool == "Bash" {
-		h.logLine(e, "bash", `,"cmd":`+jsonStr(h.Cmd)+x)
+		h.logLine(e, logBash{h.logHead("bash"), h.Cmd, newest})
 	} else {
-		h.logLine(e, "edit", x+`,"tool":`+jsonStr(h.Tool)+`,"root":`+jsonStr(r))
+		h.logLine(e, logEdit{logHead: h.logHead("edit"), File: newest, Root: r, Tool: h.Tool})
 	}
 	if h.NV == "" {
 		return true

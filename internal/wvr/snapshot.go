@@ -232,10 +232,9 @@ func (e *Env) snapRoots(h *hk, point string, turn int, roots, prompt, promptID s
 		if point == "base" {
 			point = "start"
 		}
-		x := `,"root":` + jsonStr(r) + `,"commit":"` + c + `","point":"` + point + `"`
-		h.logLine(e, "snapshot", x)
+		h.logLine(e, logSnapshot{h.logHead("snapshot"), r, c, point})
 		if h.NV != "" {
-			e.nvimEvent(h, "snapshot", x+`,"ref":"`+ref+`"`, "", "")
+			e.nvimEvent(h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref}, "", "")
 		}
 	}
 }
