@@ -383,6 +383,13 @@ touched (they need jq and python3 as well as weaver's own dependencies):
 `test/soak/nvim-exit.sh` is a long run, by hand: nvims weaver starts, killed
 together round after round, none of which may hang.
 
+## AI use
+
+weaver is built with AI coding agents, Claude Code among them: they write
+most of its code, tests and documentation. I direct the work, make the design
+decisions, review what lands and use weaver every day. Read the code with
+that in mind, and open an issue for anything that looks wrong.
+
 ## Licence
 
 MIT: see [LICENSE](LICENSE).
