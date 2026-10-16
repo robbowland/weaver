@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/session"
 )
 
 var (
@@ -31,7 +33,7 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 	m := map[string]bool{}
 	ok := false
 	add := func(args ...string) {
-		out, err := runTmux(args...)
+		out, err := session.RunTmux(args...)
 		if err != nil {
 			return
 		}
@@ -69,27 +71,27 @@ func (e *Env) GC() {
 		return sessions == nil || sessions[skey]
 	}
 	for _, f := range paneFiles(e.StateDir, "json") {
-		l, _ := firstLine(f)
+		l, _ := files.FirstLine(f)
 		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), agent.State(sub1(reGcState, l))
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
 		if pid != "" {
-			if !agentAlive(pid, start, nil) {
-				e.retire(f, pid)
+			if !session.AgentAlive(pid, start, nil) {
+				e.Retire(f, pid)
 				continue
 			}
 		} else {
 			b := filepath.Base(f)
 			if !running(b[:strings.LastIndexByte(b, '_')]) && now-ts > 3600 {
-				e.forget(f, "")
+				e.Forget(f, "")
 				continue
 			}
 		}
 		if st == agent.StateEnded && now-ts > 3600 {
-			e.forget(f, pid)
+			e.Forget(f, pid)
 		}
 	}
 	for _, f := range paneFiles(e.StateDir, "nvim") {
-		if exists(strings.TrimSuffix(f, ".nvim") + ".json") {
+		if files.Exists(strings.TrimSuffix(f, ".nvim") + ".json") {
 			continue
 		}
 		b, _ := os.ReadFile(f)
@@ -97,7 +99,7 @@ func (e *Env) GC() {
 		alive := false
 		if len(ls) > 1 {
 			if n, ok := atoi(ls[1]); ok {
-				alive = agentAlive(ls[1], "", nil) && n > 0
+				alive = session.AgentAlive(ls[1], "", nil) && n > 0
 			}
 		}
 		if !alive {
@@ -106,7 +108,7 @@ func (e *Env) GC() {
 	}
 	// A thread whose agent never reported (no state) goes with its session.
 	for _, f := range paneFiles(e.StateDir, "thread") {
-		if exists(strings.TrimSuffix(f, ".thread") + ".json") {
+		if files.Exists(strings.TrimSuffix(f, ".thread") + ".json") {
 			continue
 		}
 		b := filepath.Base(f)

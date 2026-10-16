@@ -70,3 +70,15 @@ func Ctl(s string) string {
 		return r
 	}, s)
 }
+
+// Fit is s cut to n characters (… at the cut) and padded to n.
+func Fit(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) > n {
+		r := []rune(s)
+		s = string(r[:n-1]) + "…"
+	}
+	return s + strings.Repeat(" ", n-utf8.RuneCountInString(s))
+}

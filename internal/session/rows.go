@@ -1,17 +1,18 @@
-package wvr
+package session
 
 import (
 	"encoding/json"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
@@ -47,14 +48,6 @@ type Row struct {
 	Tnum                                                              int // its thread's number; 0 for none
 	Troots                                                            []string
 	Doing                                                             string // the command it runs now
-}
-
-// numberOr is n as a float, or d when it is not a number.
-func numberOr(n json.Number, d float64) float64 {
-	if f, err := n.Float64(); err == nil {
-		return f
-	}
-	return d
 }
 
 // AgentRows are the session's agents: from their
@@ -129,7 +122,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		st := st0
 		changed := false
-		since := numberOr(s.Since, 0)
+		since := jsonx.NumberOr(s.Since, 0)
 		switch {
 		case c == nil:
 		case st0 == agent.StateNeedsYou && cst == "busy" && cu > since:
@@ -148,7 +141,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case changed:
 			r.Since = int64(cu)
 		case s.Since != "":
-			r.Since = int64(numberOr(s.Since, 0))
+			r.Since = int64(jsonx.NumberOr(s.Since, 0))
 		default:
 			r.Since = s.TS
 		}
@@ -220,22 +213,22 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.Task),
 			Tname: oneline.Line(t.Name), Tnum: t.Num})
 	}
-	starts := procStarts(pids)
+	starts := ProcStarts(pids)
 	for _, g := range gones {
 		if !trusted {
 			continue
 		}
-		if agentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
+		if AgentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
 			continue
 		}
-		e.retire(g.f, g.pid)
+		e.Retire(g.f, g.pid)
 	}
 	out := rows[:0]
 	for _, r := range rows {
-		if r.Pid != "" && !agentAlive(r.Pid, r.Pstart, starts) {
+		if r.Pid != "" && !AgentAlive(r.Pid, r.Pstart, starts) {
 			// Killed without a SessionEnd: it is not coming back (a thread
 			// lost with its session is kept, to resume).
-			e.retire(r.Sfile, r.Pid)
+			e.Retire(r.Sfile, r.Pid)
 			continue
 		}
 		out = append(out, r)
@@ -266,7 +259,7 @@ func (e *Env) claudeLive() map[string]claudeSession {
 		if !strings.HasSuffix(d.Name(), ".json") {
 			continue
 		}
-		l, err := firstLine(e.ClaudeDir + "/sessions/" + d.Name())
+		l, err := files.FirstLine(e.ClaudeDir + "/sessions/" + d.Name())
 		if err != nil {
 			continue
 		}
@@ -279,9 +272,9 @@ func (e *Env) claudeLive() map[string]claudeSession {
 	return m
 }
 
-// procStarts are processes' start times as ps prints them (TZ=UTC, LC_ALL=C:
+// ProcStarts are processes' start times as ps prints them (TZ=UTC, LC_ALL=C:
 // "Thu Oct 15 15:38:35 2026"), by pid, from the kernel without ps.
-func procStarts(pids []int) map[int]string {
+func ProcStarts(pids []int) map[int]string {
 	m := map[int]string{}
 	for _, p := range pids {
 		k, err := unix.SysctlKinfoProc("kern.proc.pid", p)
@@ -294,9 +287,9 @@ func procStarts(pids []int) map[int]string {
 	return m
 }
 
-// agentAlive: is process pid (started at start, as ps prints it, if known)
+// AgentAlive: is process pid (started at start, as ps prints it, if known)
 // still running? kill -0 alone would trust a reused pid.
-func agentAlive(pid, start string, starts map[int]string) bool {
+func AgentAlive(pid, start string, starts map[int]string) bool {
 	n, err := strconv.Atoi(pid)
 	if err != nil || !digits(pid) {
 		return true
@@ -309,7 +302,7 @@ func agentAlive(pid, start string, starts map[int]string) bool {
 	}
 	now, ok := starts[n]
 	if !ok {
-		if s := procStarts([]int{n}); s[n] != "" {
+		if s := ProcStarts([]int{n}); s[n] != "" {
 			now = s[n]
 		} else {
 			return true
@@ -359,30 +352,30 @@ func (e *Env) LostRows() []LostRow {
 	line := func(r LostRow) string {
 		return strings.Join([]string{r.File, r.Sid, r.Name, r.Num, r.Dir, r.Lost, r.Skey, r.Task, r.Title}, "\x1f")
 	}
-	sortStable(rs, func(a, b LostRow) bool {
-		if a.lost != b.lost {
-			return a.lost > b.lost
+	sort.SliceStable(rs, func(i, j int) bool {
+		if rs[i].lost != rs[j].lost {
+			return rs[i].lost > rs[j].lost
 		}
-		return line(a) < line(b)
+		return line(rs[i]) < line(rs[j])
 	})
 	return rs
 }
 
-// retire: the agent of state file f (pid) is gone: its thread lost with its
+// Retire: the agent of state file f (pid) is gone: its thread lost with its
 // session is kept, anything else forgotten.
-func (e *Env) retire(f, pid string) {
-	if e.lostCheck(f) && e.lose(f, pid) {
+func (e *Env) Retire(f, pid string) {
+	if e.LostCheck(f) && e.Lose(f, pid) {
 		return
 	}
-	e.forget(f, pid)
+	e.Forget(f, pid)
 }
 
-// lostCheck: is the dead agent of state file f a thread lost with its
+// LostCheck: is the dead agent of state file f a thread lost with its
 // session? Only a thread with a session to resume, not ended on purpose,
 // whose session has gone since its last event.
-func (e *Env) lostCheck(f string) bool {
+func (e *Env) LostCheck(f string) bool {
 	b := strings.TrimSuffix(f, ".json")
-	if !exists(b+".thread") || !exists(f) {
+	if !files.Exists(b+".thread") || !files.Exists(f) {
 		return false
 	}
 	s, err := store.ReadState(f)
@@ -430,7 +423,7 @@ var rePid = []byte(`"pid":`)
 // pidOf is the pid in a state file's first line ("pid":N); empty without
 // one.
 func pidOf(f string) string {
-	l, _ := firstLine(f)
+	l, _ := files.FirstLine(f)
 	i := strings.Index(l, string(rePid))
 	if i < 0 {
 		return ""
@@ -443,10 +436,10 @@ func pidOf(f string) string {
 	return l[j:k]
 }
 
-// lose keeps the thread of the agent whose state file is f as lost, then
+// Lose keeps the thread of the agent whose state file is f as lost, then
 // removes its files; only if its pid is still pid when we hold its lock.
-func (e *Env) lose(f, pid string) bool {
-	if !exists(f) {
+func (e *Env) Lose(f, pid string) bool {
+	if !files.Exists(f) {
 		return true
 	}
 	l := store.Lock(f)
@@ -477,10 +470,10 @@ func (e *Env) lose(f, pid string) bool {
 	return true
 }
 
-// forget removes the files of the agent whose state file is f (its activity
+// Forget removes the files of the agent whose state file is f (its activity
 // log stays); only if its pid is still pid when we hold its lock.
-func (e *Env) forget(f, pid string) {
-	if !exists(f) {
+func (e *Env) Forget(f, pid string) {
+	if !files.Exists(f) {
 		return
 	}
 	l := store.Lock(f)
@@ -494,5 +487,3 @@ func (e *Env) forget(f, pid string) {
 	}
 	os.RemoveAll(b + ".opening")
 }
-
-func lookPath(f string) (string, error) { return exec.LookPath(f) }

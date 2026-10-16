@@ -14,9 +14,11 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -118,12 +120,12 @@ func (e *Env) fetchStart(repo, sf string) {
 	if os.MkdirAll(filepath.Dir(f), 0o755) != nil {
 		return
 	}
-	if p, err := firstLine(f + ".pid"); err == nil {
+	if p, err := files.FirstLine(f + ".pid"); err == nil {
 		if n, ok := atoi(p); ok && syscall.Kill(n, 0) == nil {
 			return
 		}
 	}
-	if rc, err := firstLine(f + ".rc"); err == nil && rc == "0" {
+	if rc, err := files.FirstLine(f + ".rc"); err == nil && rc == "0" {
 		if st, err := os.Stat(f + ".rc"); err == nil && time.Since(st.ModTime()) < time.Minute {
 			return
 		}
@@ -166,8 +168,8 @@ func (e *Env) Fetch(repo, remote, f, sf string) {
 	if sf == "" {
 		return
 	}
-	if s := e.formSock(sf); exists(s) {
-		fzfPost(s, "transform-header("+Quote(e.Self)+" _form header "+Quote(sf)+" {q})")
+	if s := e.formSock(sf); files.Exists(s) {
+		session.FzfPost(s, "transform-header("+session.Quote(e.Self)+" _form header "+session.Quote(sf)+" {q})")
 	}
 }
 
@@ -190,7 +192,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 	}
 	var rs []row
 	add := func(l, p, c, k string) { rs = append(rs, row{l, p, c, k}) }
-	if first, err := firstLine(sf + ".task"); err == nil {
+	if first, err := files.FirstLine(sf + ".task"); err == nil {
 		bs, _ := os.ReadFile(sf + ".task")
 		n := strings.Count(string(bs), "\n")
 		if len(bs) > 0 && bs[len(bs)-1] != '\n' {
@@ -321,8 +323,8 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(l, p, c, k string)) {
 			v = rm
 		}
 		f := e.fetchFile(fm.Repo)
-		rc, _ := firstLine(f + ".rc")
-		pid, _ := firstLine(f + ".pid")
+		rc, _ := files.FirstLine(f + ".rc")
+		pid, _ := files.FirstLine(f + ".pid")
 		switch {
 		case rc == "0":
 			note = "fetched"
@@ -483,7 +485,7 @@ func (e *Env) New(args []string) error {
 		}
 		if st, err := os.Stat(f); f == "" || err != nil || !st.IsDir() {
 			f = ""
-			if t, err := store.ReadThread(e.threadFile(from)); err == nil {
+			if t, err := store.ReadThread(e.ThreadFile(from)); err == nil {
 				f = t.Worktree
 			}
 		}
@@ -508,7 +510,7 @@ func (e *Env) New(args []string) error {
 			fm.Here = start
 		}
 		// Not in a repository: the one you used last, for a new worktree.
-		if l, err := firstLine(e.StateDir + "/repos"); err == nil && l != "" {
+		if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" {
 			if st, err := os.Stat(l); err == nil && st.IsDir() {
 				if r, _, ok := git.RepoOf(l); ok {
 					fm.Repo = r
@@ -599,7 +601,7 @@ func (e *Env) New(args []string) error {
 		}
 		c.Stderr = os.Stderr
 		c.Run()
-		b, _ := readTrim(f.Name())
+		b, _ := files.ReadTrim(f.Name())
 		if strings.TrimSpace(b) == "" {
 			return cli.ErrCancelled
 		}
@@ -683,8 +685,8 @@ func readKey() byte {
 // newForm is the form until you start a thread it can start: the task, or
 // 130 when you cancel.
 func (e *Env) newForm(sf, query, errs string) (string, error) {
-	q := Quote(e.Self)
-	qs := Quote(sf)
+	q := session.Quote(e.Self)
+	qs := session.Quote(sf)
 	hd := q + " _form header " + qs + " {q}"
 	fm := loadForm(sf)
 	// The fetch for a new branch's base starts now, while you type (and
@@ -733,8 +735,8 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			query = query[:i]
 		}
 		task := query
-		if first, err := firstLine(sf + ".task"); err == nil && first == query {
-			if b, err := readTrim(sf + ".task"); err == nil {
+		if first, err := files.FirstLine(sf + ".task"); err == nil && first == query {
+			if b, err := files.ReadTrim(sf + ".task"); err == nil {
 				task = b
 			}
 		}
@@ -862,7 +864,7 @@ func (e *Env) Form(op, sf, q string) {
 			e.fetchStart(fm.Repo, sf)
 		}
 	case "editor":
-		first, err := firstLine(sf + ".task")
+		first, err := files.FirstLine(sf + ".task")
 		if err != nil || first != q {
 			os.WriteFile(sf+".task", []byte(q+"\n"), 0o644)
 		}
@@ -884,7 +886,7 @@ func (e *Env) Form(op, sf, q string) {
 		c.Run()
 	case "query":
 		first := q
-		if l, err := firstLine(sf + ".task"); err == nil {
+		if l, err := files.FirstLine(sf + ".task"); err == nil {
 			first = l
 		}
 		fmt.Println(first)

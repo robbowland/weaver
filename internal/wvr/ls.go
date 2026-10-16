@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/session"
 	"golang.org/x/sys/unix"
 )
 
@@ -21,14 +23,6 @@ const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
 const lsKeys = "j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
-
-// Quote is a word for sh, as bash's printf %q would make it usable.
-func Quote(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+=:,@%") == "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
 
 func isTTY(fd int) bool {
 	_, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
@@ -66,7 +60,7 @@ func (e *Env) Ls() error {
 		fmt.Print(e.PlainRows())
 		return nil
 	}
-	q := Quote(e.Self)
+	q := session.Quote(e.Self)
 	sh := "/bin/sh"
 	if st, err := os.Stat("/bin/dash"); err == nil && st.Mode()&0o111 != 0 {
 		sh = "/bin/dash"
@@ -130,7 +124,7 @@ func (e *Env) Ls() error {
 	}
 	for {
 		for _, f := range side {
-			if exists(f) {
+			if files.Exists(f) {
 				os.Remove(f)
 			}
 		}
@@ -144,8 +138,8 @@ func (e *Env) Ls() error {
 		os.Unsetenv("LS_EMPTY")
 		header := strings.TrimRight(Title(), "\n")
 		os.Unsetenv("FZF_SOCK")
-		pw, _ := firstLine(base + ".room")
-		label, _ := firstLine(base + ".label")
+		pw, _ := files.FirstLine(base + ".room")
+		label, _ := files.FirstLine(base + ".label")
 		os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644)
 		if pw == "" {
 			pw = "down,50%,border-top,wrap,hidden"

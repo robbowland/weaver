@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
 )
@@ -39,7 +40,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		if os.Mkdir(lockd, 0o755) == nil {
 			break
 		}
-		if owner, err := firstLine(lockd + "/pid"); err == nil && owner != "" {
+		if owner, err := files.FirstLine(lockd + "/pid"); err == nil && owner != "" {
 			if p, ok := atoi(owner); ok && syscall.Kill(p, 0) != nil {
 				os.RemoveAll(lockd)
 				continue
@@ -68,7 +69,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		}
 		tree = t
 	} else {
-		if !exists(idx) {
+		if !files.Exists(idx) {
 			if index, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
 				if b, err := os.ReadFile(index); err == nil {
 					os.WriteFile(idx, b, 0o644)

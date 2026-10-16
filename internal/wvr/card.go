@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -141,7 +143,7 @@ func (e *Env) Preview(args []string) string {
 	pane, title, id := strings.TrimPrefix(args[0], "terminal_"), args[1], args[2]
 	view := "card"
 	if base := sockBase(); base != "" {
-		if v, err := firstLine(base + ".view"); err == nil {
+		if v, err := files.FirstLine(base + ".view"); err == nil {
 			view = v
 		}
 	}
@@ -185,10 +187,10 @@ func (e *Env) Preview(args []string) string {
 	}
 	sf := e.StateFile(p)
 	re := reRoot
-	if !exists(sf) {
+	if !files.Exists(sf) {
 		// A thread whose agent has not reported yet: its record.
-		sf, re = e.threadFile(p), reWorktree
-		if !exists(sf) {
+		sf, re = e.ThreadFile(p), reWorktree
+		if !files.Exists(sf) {
 			return ""
 		}
 	}
@@ -196,7 +198,7 @@ func (e *Env) Preview(args []string) string {
 	if title != "" {
 		out = titleLine(title)
 	}
-	l, _ := firstLine(sf)
+	l, _ := files.FirstLine(sf)
 	root := ""
 	if m := re.FindStringSubmatch(l); m != nil {
 		root = m[1]
@@ -207,7 +209,7 @@ func (e *Env) Preview(args []string) string {
 		if f == sf {
 			continue
 		}
-		l, _ := firstLine(f)
+		l, _ := files.FirstLine(f)
 		if m := reRoot.FindStringSubmatch(l); m != nil && m[1] == root {
 			shared++
 		}
@@ -235,12 +237,12 @@ func (e *Env) Preview(args []string) string {
 	}
 	// The work item its thread started from.
 	from := ""
-	t, terr := store.ReadThread(e.threadFile(p))
+	t, terr := store.ReadThread(e.ThreadFile(p))
 	if terr == nil {
 		from = itemLine(t)
 	}
 	s, err := store.ReadState(sf)
-	if sf == e.threadFile(p) {
+	if sf == e.ThreadFile(p) {
 		// Its agent has not reported: the thread as it starts.
 		if terr != nil {
 			return out
@@ -278,7 +280,7 @@ func card(s agent.Record, from string, w int, head, ab string, changed, nw, shar
 		st = agent.StateIdle
 	}
 	since := now
-	if v := numberOr(s.Since, 0); s.Since != "" {
+	if v := jsonx.NumberOr(s.Since, 0); s.Since != "" {
 		since = int64(v)
 	} else if s.TS != 0 {
 		since = s.TS
@@ -339,7 +341,7 @@ func card(s agent.Record, from string, w int, head, ab string, changed, nw, shar
 		for _, x := range s.Subagents {
 			sn := now
 			if x.Since != "" {
-				sn = int64(numberOr(x.Since, float64(now)))
+				sn = int64(jsonx.NumberOr(x.Since, float64(now)))
 			}
 			ps = append(ps, x.Type+" "+cardAge(now-sn))
 		}
@@ -447,7 +449,7 @@ func View(what string) string {
 		return ""
 	}
 	f := base + ".view"
-	cur, _ := firstLine(f)
+	cur, _ := files.FirstLine(f)
 	hidden := os.Getenv("FZF_PREVIEW_LINES") == "" || os.Getenv("FZF_PREVIEW_LINES") == "0"
 	next := what
 	if what+":"+cur == "screen:screen" || what+":"+cur == "help:help" {
@@ -461,7 +463,7 @@ func View(what string) string {
 		}
 		_, l := lsSize()
 		out += fmt.Sprintf("change-preview-window(down,%d,border-top,wrap)+", l/2)
-	} else if what+":"+cur == "screen:screen" && exists(base+".tight") {
+	} else if what+":"+cur == "screen:screen" && files.Exists(base+".tight") {
 		out += "hide-preview+"
 	}
 	if next != "" {
@@ -469,7 +471,7 @@ func View(what string) string {
 	} else {
 		os.Remove(f)
 	}
-	return out + "refresh-preview+transform-footer(" + Quote(selfPath()) + " _footer)\n"
+	return out + "refresh-preview+transform-footer(" + session.Quote(selfPath()) + " _footer)\n"
 }
 
-func selfPath() string { return self() }
+func selfPath() string { return session.Executable() }

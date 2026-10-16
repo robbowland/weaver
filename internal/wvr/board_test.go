@@ -4,6 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/oneline"
 )
 
 func TestCardRoom(t *testing.T) {
@@ -27,14 +31,14 @@ func TestCardRoomTight(t *testing.T) {
 	d := t.TempDir()
 	t.Setenv("FZF_SOCK", d+"/x.sock")
 	cardRoom(12, 72, 22)
-	if !exists(d + "/x.tight") {
+	if !files.Exists(d + "/x.tight") {
 		t.Error("a hidden card leaves .tight")
 	}
-	if pw, _ := firstLine(d + "/x.room"); pw != "down,50%,border-top,wrap,hidden" {
+	if pw, _ := files.FirstLine(d + "/x.room"); pw != "down,50%,border-top,wrap,hidden" {
 		t.Errorf(".room = %q", pw)
 	}
 	cardRoom(12, 72, 30)
-	if exists(d + "/x.tight") {
+	if files.Exists(d + "/x.tight") {
 		t.Error("a card with room removes .tight")
 	}
 }
@@ -66,7 +70,7 @@ func TestFit(t *testing.T) {
 		{"é⏎x", 3, "é⏎x"},
 		{"anything", 0, ""},
 	} {
-		if got := fit(c.s, c.n); got != c.want {
+		if got := oneline.Fit(c.s, c.n); got != c.want {
 			t.Errorf("fit(%q, %d) = %q, want %q", c.s, c.n, got, c.want)
 		}
 	}
@@ -95,13 +99,13 @@ func TestWhereOf(t *testing.T) {
 	must(os.WriteFile(wt+"/.git", []byte("gitdir: "+main+"/.git/worktrees/repo-wt\n"), 0o644))
 	must(os.WriteFile(main+"/.git/worktrees/repo-wt/commondir", []byte("../..\n"), 0o644))
 	must(os.WriteFile(main+"/.git/worktrees/repo-wt/HEAD", []byte("0123456789abcdef\n"), 0o644))
-	if w := whereOf(main); w.repo != "repo" || w.branch != "main" {
+	if w := git.WhereOf(main); w.Repo != "repo" || w.Branch != "main" {
 		t.Errorf("main checkout: %+v", w)
 	}
-	if w := whereOf(wt); w.repo != "repo" || w.branch != "0123456" {
+	if w := git.WhereOf(wt); w.Repo != "repo" || w.Branch != "0123456" {
 		t.Errorf("worktree, detached: %+v", w)
 	}
-	if w := whereOf(filepath.Join(d, "plain")); w.repo != "plain" || w.branch != "" || w.gitdir != "" {
+	if w := git.WhereOf(filepath.Join(d, "plain")); w.Repo != "plain" || w.Branch != "" || w.GitDir != "" {
 		t.Errorf("no repository: %+v", w)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/wvr"
 )
@@ -24,7 +25,7 @@ func main() {
 	// tmux's status line asks for the counts on every redraw: no more than a
 	// file read.
 	if cmd == "status" && len(args) >= 1 && args[0] == "--tmux" {
-		fmt.Println(wvr.StatusLine(args))
+		fmt.Println(session.StatusLine(args))
 		return
 	}
 	switch cmd {

@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -97,7 +99,7 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 	// inherits its pane: while the pane's own agent runs, its events are not
 	// ours.
 	if me != "" && pk.pid != "" && me != pk.pid {
-		if agentAlive(pk.pid, pk.start, nil) {
+		if session.AgentAlive(pk.pid, pk.start, nil) {
 			if pk.state != agent.StateEnded {
 				return 0
 			}
@@ -105,8 +107,8 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 			// The pane's last agent died with a session that is gone, and
 			// this one gave its pane to a new agent: keep the old one's
 			// thread as lost before this state replaces it.
-			if e.lostCheck(h.sf) {
-				e.lose(h.sf, pk.pid)
+			if e.LostCheck(h.sf) {
+				e.Lose(h.sf, pk.pid)
 			}
 			pk = peek(h.sf)
 		}
@@ -140,7 +142,7 @@ var (
 // peek is the stored state's state, pid and start, read from its first
 // line without parsing it.
 func peek(sf string) peeked {
-	l, _ := firstLine(sf)
+	l, _ := files.FirstLine(sf)
 	var p peeked
 	if m := rePkState.FindStringSubmatch(l); m != nil {
 		p.state = agent.State(m[1])
@@ -261,7 +263,7 @@ func (h *hk) run(e *Env, me string) {
 	h.ProcStart = h.Old.ProcStart
 	if h.Pid != "" && (h.Pid != h.oPid() || h.ProcStart == "") {
 		h.ProcStart = ""
-		if l, err := firstLine(e.ClaudeDir + "/sessions/" + h.Pid + ".json"); err == nil {
+		if l, err := files.FirstLine(e.ClaudeDir + "/sessions/" + h.Pid + ".json"); err == nil {
 			if m := reProcStart.FindStringSubmatch(l); m != nil {
 				h.ProcStart = m[1]
 			}
@@ -270,7 +272,7 @@ func (h *hk) run(e *Env, me string) {
 		// kernel's, once.
 		if h.ProcStart == "" && h.Pid != h.oPid() {
 			if n, ok := atoi(h.Pid); ok {
-				h.ProcStart = strings.TrimRight(procStarts([]int{n})[n], " ")
+				h.ProcStart = strings.TrimRight(session.ProcStarts([]int{n})[n], " ")
 			}
 		}
 	}
@@ -391,7 +393,7 @@ func (h *hk) run(e *Env, me string) {
 	// Worktrunk branch markers, like its own Claude Code plugin sets for the
 	// session's start directory, but on the worktree the agent is really in.
 	h.Marker = n.Marker
-	if os.Getenv("WEAVER_WT_MARKERS") != "0" && h.Marker != "" && h.Root != h.Proj && exists(h.Root+"/.git") {
+	if os.Getenv("WEAVER_WT_MARKERS") != "0" && h.Marker != "" && h.Root != h.Proj && files.Exists(h.Root+"/.git") {
 		h.MarkDir = h.Root
 	}
 	h.Marked = h.MarkDir
@@ -410,7 +412,7 @@ func (h *hk) sess() agent.Record {
 
 // readNvimPane is the agent's nvim pane, when that nvim still runs.
 func readNvimPane(e *Env, pane tmux.PaneID) tmux.PaneID {
-	b, err := os.ReadFile(e.paneFile(pane, "nvim"))
+	b, err := os.ReadFile(e.PaneFile(pane, "nvim"))
 	if err != nil {
 		return ""
 	}
@@ -539,9 +541,9 @@ func (e *Env) afterWrite(h *hk) {
 	if h.Sid != "" {
 		os.MkdirAll(e.LogDir, 0o755)
 	}
-	pf := e.paneFile(h.Pane, "prompt")
-	if h.SnapPrev+h.SnapEnd != "" && exists(pf) {
-		h.TurnPrompt, _ = firstLine(pf)
+	pf := e.PaneFile(h.Pane, "prompt")
+	if h.SnapPrev+h.SnapEnd != "" && files.Exists(pf) {
+		h.TurnPrompt, _ = files.FirstLine(pf)
 		h.PrevPrompt = h.TurnPrompt
 	}
 	if h.SnapStart != "" {

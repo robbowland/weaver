@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
 )
@@ -180,10 +180,10 @@ func Lock(sf string) string {
 			_ = fh.Close()
 			return l
 		}
-		owner, _ := firstLine(l)
+		owner, _ := files.FirstLine(l)
 		if n, err := strconv.Atoi(owner); err == nil && n > 0 {
 			if syscall.Kill(n, 0) != nil {
-				if again, _ := firstLine(l); again == owner {
+				if again, _ := files.FirstLine(l); again == owner {
 					os.Remove(l)
 				}
 				continue
@@ -194,16 +194,4 @@ func Lock(sf string) string {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-// firstLine is the first line of file f.
-func firstLine(f string) (string, error) {
-	b, err := os.ReadFile(f)
-	if err != nil {
-		return "", err
-	}
-	if i := strings.IndexByte(string(b), '\n'); i >= 0 {
-		b = b[:i]
-	}
-	return string(b), nil
 }

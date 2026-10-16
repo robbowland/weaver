@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
@@ -54,7 +55,7 @@ func (e *Env) threadWidth(agent tmux.PaneID) {
 // the nvim the first is opening. A lock older than 5s was left by a killed
 // process.
 func (e *Env) editLock(agent tmux.PaneID) func() {
-	d := e.paneFile(agent, "opening")
+	d := e.PaneFile(agent, "opening")
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; i < 60; i++ {
 		if os.Mkdir(d, 0o755) == nil {
@@ -62,7 +63,7 @@ func (e *Env) editLock(agent tmux.PaneID) func() {
 		}
 		now := time.Now().Unix()
 		t := now
-		if l, err := firstLine(d + "/at"); err == nil {
+		if l, err := files.FirstLine(d + "/at"); err == nil {
 			if n, ok := atoi(l); ok {
 				t = int64(n)
 			}
@@ -153,7 +154,7 @@ func (e *Env) Edit(args []string) error {
 			if h.AgentKind == "" {
 				h.AgentKind = string(agent.Claude)
 			}
-		} else if t, err := store.ReadThread(e.threadFile(agentPane)); err == nil {
+		} else if t, err := store.ReadThread(e.ThreadFile(agentPane)); err == nil {
 			root = t.Worktree
 			h.AgentKind = string(t.Agent)
 			if h.AgentKind == "" {
@@ -165,12 +166,12 @@ func (e *Env) Edit(args []string) error {
 		}
 		// git gives the root as a real path; the agent may have used a
 		// symlinked one (/tmp vs /private/tmp), so compare real paths.
-		if file != "" && exists(file) {
+		if file != "" && files.Exists(file) {
 			if d, err := filepath.EvalSymlinks(filepath.Dir(file)); err == nil {
 				file = d + "/" + filepath.Base(file)
 			}
 		}
-		if !strings.HasPrefix(file, root+"/") || !exists(file) {
+		if !strings.HasPrefix(file, root+"/") || !files.Exists(file) {
 			file = ""
 		}
 		unlock := e.editLock(agentPane)
@@ -196,7 +197,7 @@ func (e *Env) Edit(args []string) error {
 				return err
 			}
 			// A thread's window gets its split back.
-			if exists(e.paneFile(agentPane, "thread")) {
+			if files.Exists(e.PaneFile(agentPane, "thread")) {
 				e.threadWidth(agentPane)
 			}
 			// The new nvim records itself (pane and pid) as it starts; give it
@@ -210,7 +211,7 @@ func (e *Env) Edit(args []string) error {
 				time.Sleep(100 * time.Millisecond)
 			}
 			if readNvimPane(e, agentPane) != newPane {
-				nf := e.paneFile(agentPane, "nvim")
+				nf := e.PaneFile(agentPane, "nvim")
 				if f, err := os.OpenFile(nf, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
 					_, err := f.WriteString(string(newPane) + "\n\n")
 					bestEffort(err)
@@ -266,7 +267,7 @@ func (e *Env) Nvim(args []string) error {
 		return errors.New(e.SockDir + " is not owned by you")
 	}
 	os.Chmod(e.SockDir, 0o700)
-	sock := e.nvimSock(agentPane)
+	sock := e.NvimSock(agentPane)
 	// Never take the socket of an nvim still serving this agent (answering,
 	// or alive but busy): go to it instead, and let this pane close.
 	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
@@ -282,13 +283,13 @@ func (e *Env) Nvim(args []string) error {
 	sf := e.StateFile(agentPane)
 	if e.MyPane != "" {
 		os.MkdirAll(e.StateDir, 0o755)
-		nf := e.paneFile(agentPane, "nvim")
+		nf := e.PaneFile(agentPane, "nvim")
 		tmp := nf + "." + strconv.Itoa(os.Getpid())
 		// exec keeps this pid for nvim.
 		if os.WriteFile(tmp, []byte(string(e.MyPane)+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
 			os.Rename(tmp, nf)
 		}
-		if exists(sf) && digits(string(e.MyPane)) {
+		if files.Exists(sf) && digits(string(e.MyPane)) {
 			store.UpdateState(sf, func(st *agent.Record) {
 				nv := json.Number(e.MyPane)
 				st.NvimPane = &nv

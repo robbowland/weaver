@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/robbowland/weaver/internal/files"
 )
 
 // Old session chains and the private indexes nothing has used since go; a
@@ -49,7 +51,7 @@ func TestPruneSnapshots(t *testing.T) {
 		t.Errorf("refs left:\n%s", refs)
 	}
 	for f, want := range map[string]bool{"index-old": false, "index-new": true, "index-reviewed": true} {
-		if got := exists(filepath.Join(gd, f)); got != want {
+		if got := files.Exists(filepath.Join(gd, f)); got != want {
 			t.Errorf("%s: exists %v, want %v", f, got, want)
 		}
 	}

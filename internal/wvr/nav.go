@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -75,7 +77,7 @@ func (e *Env) GoHome() {
 	lf := e.StateDir + "/" + e.SKey + ".last"
 	// Back where you came from; when that is gone (or was nowhere), home.
 	back := func() {
-		if l, _ := firstLine(lf); l != "" {
+		if l, _ := files.FirstLine(lf); l != "" {
 			last, _ := tmux.ParseWindow(l)
 			for _, t := range ts {
 				if t.id == last && t.view == "" && t.id != home {
@@ -142,7 +144,7 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 		}
 		now := time.Now().Unix()
 		t := now
-		if l, err := firstLine(d + "/at"); err == nil {
+		if l, err := files.FirstLine(d + "/at"); err == nil {
 			if n, ok := atoi(l); ok {
 				t = int64(n)
 			}
@@ -265,13 +267,13 @@ func (e *Env) agentOf(p tmux.PaneID) tmux.PaneID {
 		return ""
 	}
 	for _, x := range []string{"json", "thread", "nvim"} {
-		if exists(e.paneFile(p, x)) {
+		if files.Exists(e.PaneFile(p, x)) {
 			return p
 		}
 	}
 	for _, f := range e.SessionFiles("nvim") {
-		if q, _ := firstLine(f); q == string(p) {
-			return paneOfFile(f)
+		if q, _ := files.FirstLine(f); q == string(p) {
+			return session.PaneOfFile(f)
 		}
 	}
 	return ""
@@ -303,14 +305,14 @@ func (e *Env) Seen(window string) {
 	if a == "" {
 		return
 	}
-	if l, _ := firstLine(e.StateFile(a)); doneUnseen(l) {
+	if l, _ := files.FirstLine(e.StateFile(a)); doneUnseen(l) {
 		e.MarkSeen(a)
 	}
 	left := false
 	if ps, err := e.Tmux("list-panes", "-t", win.Target(), "-F", "#{pane_id}"); err == nil {
 		for _, id := range strings.Fields(string(ps)) {
 			p, _ := tmux.ParsePane(id)
-			if l, _ := firstLine(e.StateFile(p)); doneUnseen(l) {
+			if l, _ := files.FirstLine(e.StateFile(p)); doneUnseen(l) {
 				left = true
 			}
 		}
@@ -363,7 +365,7 @@ func (e *Env) Fit(window string) {
 	ps := strings.Fields(string(out))
 	for _, id := range ps {
 		p, _ := tmux.ParsePane(id)
-		if !exists(e.threadFile(p)) {
+		if !files.Exists(e.ThreadFile(p)) {
 			continue
 		}
 		if readNvimPane(e, p) == "" || len(ps) != 2 {

@@ -18,11 +18,13 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -62,7 +64,7 @@ func (e *Env) numLock() func() {
 		}
 		now := time.Now().Unix()
 		t := now
-		if l, err := firstLine(d + "/at"); err == nil {
+		if l, err := files.FirstLine(d + "/at"); err == nil {
 			if n, ok := atoi(l); ok {
 				t = int64(n)
 			}
@@ -147,7 +149,7 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 // <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim.)
 func (e *Env) bindNvim(agent, nv tmux.PaneID, pid string) {
 	os.MkdirAll(e.StateDir, 0o755)
-	nf := e.paneFile(agent, "nvim")
+	nf := e.PaneFile(agent, "nvim")
 	tmp := nf + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(tmp, []byte(string(nv)+"\n"+pid+"\n"), 0o644) == nil {
 		os.Rename(tmp, nf)
@@ -204,10 +206,10 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	pid := ""
 	start := time.Now()
 	for time.Since(start) < wait {
-		if exists(f + ".rc") {
+		if files.Exists(f + ".rc") {
 			break
 		}
-		pid, _ = firstLine(f + ".pid")
+		pid, _ = files.FirstLine(f + ".pid")
 		if n, ok := atoi(pid); !ok || syscall.Kill(n, 0) != nil {
 			break
 		}
@@ -217,7 +219,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	switch rc, _ := firstLine(f + ".rc"); rc {
+	switch rc, _ := files.FirstLine(f + ".rc"); rc {
 	case "0":
 		return fetchDone
 	case "":
@@ -457,7 +459,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	// once its agent first reports.
 	wname := name
 	if e.WeaverSession() {
-		wname = threadLabel(n, task, dir)
+		wname = session.ThreadLabel(n, task, dir)
 	}
 	// A review of a pull request opens its nvim on the review.
 	var nvimEnv []string
@@ -506,7 +508,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		}
 		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, append(w, args...), os.Environ()))
 	}
-	if tok != "" && pane != "" && exists(d+"/task") {
+	if tok != "" && pane != "" && files.Exists(d+"/task") {
 		task, _ := os.ReadFile(d + "/task")
 		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
@@ -530,7 +532,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 				th.SessionID = sid
 			}
 			// Unwritten, the agent runs all the same: its state file tells.
-			bestEffort(store.Write(e.threadFile(pane), th))
+			bestEffort(store.Write(e.ThreadFile(pane), th))
 		}
 		if os.Remove(d+"/task") != nil {
 			return errors.New("cannot take the task from " + d)
@@ -543,22 +545,22 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		}
 		return run(append(ident, t)...)
 	}
-	if tok != "" && pane != "" && exists(d+"/resume") {
-		sid, _ := firstLine(d + "/resume")
+	if tok != "" && pane != "" && files.Exists(d+"/resume") {
+		sid, _ := files.FirstLine(d + "/resume")
 		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
 		// A dead agent's files under this pane id (an earlier session's) go
 		// first: kept as lost when they are, else forgotten.
 		sf := e.StateFile(pane)
-		if exists(sf) {
+		if files.Exists(sf) {
 			pk := peek(sf)
-			if pk.pid == "" || !agentAlive(pk.pid, pk.start, nil) {
-				e.retire(sf, pk.pid)
+			if pk.pid == "" || !session.AgentAlive(pk.pid, pk.start, nil) {
+				e.Retire(sf, pk.pid)
 			}
 		}
 		if therr == nil {
 			th.Pane = &pn
-			bestEffort(store.Write(e.threadFile(pane), th))
+			bestEffort(store.Write(e.ThreadFile(pane), th))
 		}
 		if st, err := store.ReadState(d + "/state.json"); err == nil {
 			st.Pane = pn
@@ -577,7 +579,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	if pane != "" {
 		st, _ := store.ReadState(e.StateFile(pane))
 		sid = st.SessionID
-		th, _ := store.ReadThread(e.threadFile(pane))
+		th, _ := store.ReadThread(e.ThreadFile(pane))
 		if sid == "" {
 			sid = th.SessionID
 		}
@@ -681,7 +683,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		if t == "" {
 			t = nm
 		}
-		wname = threadLabel(n, t, dir)
+		wname = session.ThreadLabel(n, t, dir)
 	}
 	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
@@ -747,10 +749,10 @@ func (e *Env) Resume(args []string) error {
 		}
 		now := time.Now().Unix()
 		for _, r := range rows {
-			w := whereOf(r.Dir)
-			wh := w.repo
-			if w.branch != "" {
-				wh += "/" + w.branch
+			w := git.WhereOf(r.Dir)
+			wh := w.Repo
+			if w.Branch != "" {
+				wh += "/" + w.Branch
 			}
 			lost, _ := strconv.ParseInt(r.Lost, 10, 64)
 			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), oneline.Cut(r.Sid, 8))
@@ -904,7 +906,7 @@ func worktreeRemovable(dir string) string {
 	if gd == cd {
 		return "it is the main checkout"
 	}
-	if exists(gd + "/locked") {
+	if files.Exists(gd + "/locked") {
 		return "it is locked"
 	}
 	out, _ := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
@@ -997,7 +999,7 @@ func (e *Env) Close(args []string) error {
 				found, n := tmux.PaneID(""), 0
 				for _, p := range panes {
 					id := p.ID
-					if p.Tab == me.Tab && (exists(e.StateFile(id)) || exists(e.threadFile(id))) {
+					if p.Tab == me.Tab && (files.Exists(e.StateFile(id)) || files.Exists(e.ThreadFile(id))) {
 						found, n = id, n+1
 					}
 				}
@@ -1019,7 +1021,7 @@ func (e *Env) Close(args []string) error {
 	if nv == "" {
 		nv, pending = threadNvim(panes, byID[agentPane])
 	}
-	th, _ := store.ReadThread(e.threadFile(agentPane))
+	th, _ := store.ReadThread(e.ThreadFile(agentPane))
 	var st agent.State
 	var pid, start, title, kind string
 	if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
@@ -1061,7 +1063,7 @@ func (e *Env) Close(args []string) error {
 	}
 	n := 0
 	if nv != "" {
-		n = max(unsaved(e.nvimSock(agentPane)), 0)
+		n = max(unsaved(e.NvimSock(agentPane)), 0)
 	}
 	// Its worktree may go only if weaver made it and nothing would be lost.
 	keep, removable, tilde := "", false, ""
@@ -1185,16 +1187,16 @@ func (e *Env) CloseTail(a []string) error {
 	if digits(tok) {
 		os.RemoveAll(e.threadsNew() + "/" + e.SKey + "_" + tok)
 	}
-	for i := 0; i < 50 && pid != "" && agentAlive(pid, start, nil); i++ {
+	for i := 0; i < 50 && pid != "" && session.AgentAlive(pid, start, nil); i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
-	if pid != "" && agentAlive(pid, start, nil) {
+	if pid != "" && session.AgentAlive(pid, start, nil) {
 		fmt.Fprintf(os.Stderr, "weaver: the agent (pid %s) is still running; its worktree stays\n", pid)
 		remove = "0"
 	}
 	sf := e.StateFile(agent)
-	if exists(sf) {
-		e.forget(sf, pid)
+	if files.Exists(sf) {
+		e.Forget(sf, pid)
 	} else {
 		b := strings.TrimSuffix(sf, ".json")
 		os.Remove(b + ".nvim")
@@ -1330,7 +1332,7 @@ func (e *Env) Quit(args []string) error {
 			if !digits(p) {
 				continue
 			}
-			if l, _ := firstLine(f); strings.Contains(l, `"state":"working"`) {
+			if l, _ := files.FirstLine(f); strings.Contains(l, `"state":"working"`) {
 				work++
 			}
 			if n := unsaved(e.SockDir + "/" + skey + "_" + p + ".sock"); n > 0 {
@@ -1338,7 +1340,7 @@ func (e *Env) Quit(args []string) error {
 			}
 		}
 		back := "wvr resume brings them back"
-		if l, _ := firstLine(e.StateDir + "/" + skey + ".layout"); l == "weaver" {
+		if l, _ := files.FirstLine(e.StateDir + "/" + skey + ".layout"); l == "weaver" {
 			back = "back when you start weaver"
 		}
 		pad := cardPlace(t, 7)

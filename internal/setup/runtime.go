@@ -12,6 +12,7 @@ import (
 	"time"
 
 	weaver "github.com/robbowland/weaver"
+	"github.com/robbowland/weaver/internal/files"
 )
 
 // Runtime is the directory holding what the binary carries (nvim/ and
@@ -81,7 +82,7 @@ func Runtime() (string, error) {
 // with the build's id, swapped in whole when the build changes.
 func syncNvim(base, id string) {
 	stable := base + "/nvim"
-	if l, err := firstLine(stable + "/.weaver-runtime"); err == nil && l == id {
+	if l, err := files.FirstLine(stable + "/.weaver-runtime"); err == nil && l == id {
 		return
 	}
 	pid := strconv.Itoa(os.Getpid())
@@ -128,16 +129,4 @@ func pruneRuntimes(dir, id string) {
 			os.RemoveAll(filepath.Join(dir, e.Name()))
 		}
 	}
-}
-
-// firstLine is the first line of file f.
-func firstLine(f string) (string, error) {
-	b, err := os.ReadFile(f)
-	if err != nil {
-		return "", err
-	}
-	if i := strings.IndexByte(string(b), '\n'); i >= 0 {
-		b = b[:i]
-	}
-	return string(b), nil
 }

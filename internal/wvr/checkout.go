@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -31,7 +33,7 @@ func (e *Env) checkoutFor(repo, first string) string {
 	}
 	if h := os.Getenv("HOME"); h != "" {
 		for _, p := range []string{"code", "src", "dev", "projects"} {
-			if d := filepath.Join(h, p, repo[strings.IndexByte(repo, '/')+1:]); exists(d + "/.git") {
+			if d := filepath.Join(h, p, repo[strings.IndexByte(repo, '/')+1:]); files.Exists(d + "/.git") {
 				named = append(named, d)
 			}
 		}
@@ -65,7 +67,7 @@ func (e *Env) threadOnBranch(repo, branch string) tmux.PaneID {
 		if err != nil || t.Repo != repo || t.Branch != branch {
 			continue
 		}
-		if p := paneOfFile(f); live[p] {
+		if p := session.PaneOfFile(f); live[p] {
 			return p
 		}
 	}

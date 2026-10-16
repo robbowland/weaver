@@ -20,7 +20,7 @@ linters:
     # best-effort.
     errcheck:
       exclude-functions:
-        - (*github.com/robbowland/weaver/internal/wvr.Env).Tmux
+        - (*github.com/robbowland/weaver/internal/session.Env).Tmux
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln

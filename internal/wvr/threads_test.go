@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -40,7 +41,7 @@ func TestThreadNvimByToken(t *testing.T) {
 // A thread still being opened holds its number; one left behind (older
 // than its nvim ever waits) does not.
 func TestThreadNumSkipsLeftovers(t *testing.T) {
-	e := &Env{StateDir: t.TempDir(), SKey: "tmux-s"}
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "tmux-s"}}
 	put := func(tok, rec string, age time.Duration) {
 		d := filepath.Join(e.threadsNew(), e.SKey+"_"+tok)
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -64,7 +65,7 @@ func TestThreadNumSkipsLeftovers(t *testing.T) {
 
 // Weaver's per-agent files are named by their pane.
 func TestPaneOfFile(t *testing.T) {
-	if p := paneOfFile("/s/tmux-w_1_42.thread"); p != "42" || p.Target() != "%42" {
+	if p := session.PaneOfFile("/s/tmux-w_1_42.thread"); p != "42" || p.Target() != "%42" {
 		t.Errorf("paneOfFile: %q", p)
 	}
 }

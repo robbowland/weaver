@@ -181,3 +181,11 @@ func Quote(s string) string {
 	b.WriteByte('"')
 	return b.String()
 }
+
+// NumberOr is n as a float, or d when it is not a number.
+func NumberOr(n json.Number, d float64) float64 {
+	if f, err := n.Float64(); err == nil {
+		return f
+	}
+	return d
+}

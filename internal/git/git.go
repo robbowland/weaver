@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/robbowland/weaver/internal/files"
 )
 
 // Line runs git -C dir with args; its output's first line, and whether it
@@ -181,7 +183,7 @@ func WorkTree(dir string) (string, bool) {
 		d = ""
 	}
 	for {
-		if exists(d + "/.git") {
+		if files.Exists(d + "/.git") {
 			if d == "" {
 				return "/", true
 			}
@@ -225,7 +227,74 @@ func Output(dir string, env []string, stdin string, args ...string) (string, err
 	return strings.TrimRight(out.String(), "\n"), err
 }
 
-func exists(f string) bool {
-	_, err := os.Lstat(f)
-	return err == nil
+// where is the repository and branch checked out at a root: read from its .git files without running git.
+// Where is a work tree as weaver names it: its repository's name, its
+// branch (or short commit), and its git directory.
+type Where struct{ Repo, Branch, GitDir string }
+
+// WhereOf is the work tree at root, read from its .git without running
+// git.
+func WhereOf(root string) Where {
+	w := Where{Repo: root[strings.LastIndexByte(root, '/')+1:]}
+	var gd, common string
+	if st, err := os.Stat(root + "/.git"); err == nil && st.IsDir() {
+		gd = root + "/.git"
+		common = gd
+	} else if err == nil && st.Mode().IsRegular() {
+		l, _ := files.FirstLine(root + "/.git")
+		gd = strings.TrimPrefix(l, "gitdir: ")
+		if !strings.HasPrefix(gd, "/") {
+			gd = root + "/" + gd
+		}
+		common = gd
+		if files.Exists(gd + "/commondir") {
+			l, _ := files.FirstLine(gd + "/commondir")
+			switch {
+			case strings.HasPrefix(l, "/"):
+				common = l
+			case l != "":
+				common = gd + "/" + l
+			}
+		}
+	} else {
+		return w
+	}
+	up := 0
+	for {
+		switch {
+		case strings.HasSuffix(common, "/.."):
+			common = strings.TrimSuffix(common, "/..")
+			up++
+			continue
+		case strings.HasSuffix(common, "/.") || strings.HasSuffix(common, "/"):
+			common = strings.TrimSuffix(common, ".")
+			common = strings.TrimSuffix(common, "/")
+			continue
+		}
+		break
+	}
+	for ; up > 0; up-- {
+		if i := strings.LastIndexByte(common, '/'); i >= 0 {
+			common = common[:i]
+		}
+	}
+	last := common[strings.LastIndexByte(common, '/')+1:]
+	switch {
+	case last == ".git" || last == ".bare":
+		p := common[:max(strings.LastIndexByte(common, '/'), 0)]
+		w.Repo = p[strings.LastIndexByte(p, '/')+1:]
+	case strings.HasSuffix(last, ".git"):
+		w.Repo = strings.TrimSuffix(last, ".git")
+	}
+	w.GitDir = gd
+	head, _ := files.FirstLine(gd + "/HEAD")
+	switch {
+	case strings.HasPrefix(head, "ref: refs/heads/"):
+		w.Branch = strings.TrimPrefix(head, "ref: refs/heads/")
+	case head == "":
+	default:
+		r := []rune(head)
+		w.Branch = string(r[:min(7, len(r))])
+	}
+	return w
 }

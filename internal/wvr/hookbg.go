@@ -3,8 +3,6 @@ package wvr
 import (
 	"context"
 	"encoding/json"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +14,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/store"
@@ -82,7 +81,7 @@ func (e *Env) hookBg() {
 // sameRoot: is h's root still the agent's? A later hook may have moved it
 // on while this one waited.
 func (e *Env) sameRoot(h *hk) bool {
-	l, _ := firstLine(h.sf)
+	l, _ := files.FirstLine(h.sf)
 	m := regexp.MustCompile(`"root":"([^"]*)"`).FindStringSubmatch(l)
 	return m == nil || m[1] == h.Root
 }
@@ -100,7 +99,7 @@ func (e *Env) renamePane(p tmux.PaneID, title string) {
 
 // wtMarker sets or clears a Worktrunk branch marker in dir.
 func wtMarker(dir, m string) {
-	if _, err := lookPath("wt"); err != nil {
+	if _, err := exec.LookPath("wt"); err != nil {
 		return
 	}
 	if m != "" {
@@ -115,12 +114,12 @@ func wtMarker(dir, m string) {
 // socket (msgpack-RPC; no nvim client started). An nvim that did not
 // answer in time is left alone for 15s.
 func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) {
-	sock := e.nvimSock(h.Pane)
+	sock := e.NvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return
 	}
 	stalled := sock + ".stalled"
-	if t, err := firstLine(stalled); err == nil {
+	if t, err := files.FirstLine(stalled); err == nil {
 		if n, ok := atoi(t); ok && h.Now-int64(n) < 15 {
 			return
 		}
@@ -141,7 +140,7 @@ func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) {
 	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + q(j) + "') : " + compat
 	if nvim.Eval(sock, expr, 2*time.Second) == nvim.Stalled {
 		bestEffort(os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644))
-	} else if exists(stalled) {
+	} else if files.Exists(stalled) {
 		os.Remove(stalled)
 	}
 }
@@ -155,167 +154,13 @@ func (e *Env) nvimStateEvent(h *hk) {
 	e.nvimEvent(h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing}, "", "")
 }
 
-// PushStatus brings what shows the session's agents up to date: agents
-// done that a client looks at count as seen, the counts go to the status
-// file and tmux's status line, and every dashboard reloads.
-func (e *Env) PushStatus() { e.pushStatus(false) }
-
-// PushStatusAndLabels is PushStatus, and in the weaver session the threads'
-// windows labelled again (a title, task or root changed).
-func (e *Env) PushStatusAndLabels() { e.pushStatus(true) }
-
-func (e *Env) pushStatus(labels bool) {
-	clients := " "
-	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
-		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "
-	}
-	rows, _ := e.AgentRows()
-	var need, done, work int
-	var seenNow []tmux.PaneID
-	for _, r := range rows {
-		if r.Pane == "" {
-			continue
-		}
-		switch r.State {
-		case agent.StateNeedsYou:
-			need++
-		case agent.StateWorking, agent.StateStarting:
-			work++
-		case agent.StateDone:
-			if r.Seen {
-				continue
-			}
-			if strings.Contains(clients, " "+string(r.Pane)+" ") {
-				seenNow = append(seenNow, r.Pane)
-			} else {
-				done++
-			}
-		case agent.StateIdle, agent.StateInterrupted, agent.StateEnded:
-			// Not counted.
-		}
-	}
-	for _, p := range seenNow {
-		e.MarkSeen(p)
-	}
-	os.MkdirAll(e.StateDir, 0o755)
-	sf := e.StateDir + "/" + e.SKey + ".status"
-	old := ""
-	if l, err := firstLine(sf); err == nil {
-		if f := strings.Fields(l); len(f) >= 3 {
-			old = strings.Join(f[:3], " ")
-		}
-	}
-	now := strconv.Itoa(need) + " " + strconv.Itoa(done) + " " + strconv.Itoa(work)
-	tmp := sf + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(now+"\n"), 0o644) == nil {
-		os.Rename(tmp, sf)
-	}
-	// tmux's status line shows the session's @weaver-counts, and an option
-	// set redraws every client: set them when they change.
-	if labels || now != old {
-		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-counts", CountsFmt(need, done, work))
-	}
-	q := Quote(e.Self)
-	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
-	for _, s := range socks {
-		if st, err := os.Stat(s); err != nil || st.Mode()&os.ModeSocket == 0 {
-			continue
-		}
-		if !fzfPost(s, "reload(COLOR=1 "+q+" _rows)+refresh-preview") {
-			b := strings.TrimSuffix(s, ".sock")
-			for _, x := range []string{s, b + ".keys", b + ".view", b + ".title", b + ".label", b + ".room", b + ".shown", b + ".tight", b + ".vp"} {
-				os.Remove(x)
-			}
-		}
-	}
-	if labels && e.WeaverSession() {
-		e.threadTabLabels(rows)
-	}
-}
-
-// fzfPost sends actions to the fzf listening on unix socket s.
-func fzfPost(s, actions string) bool {
-	c := &http.Client{Timeout: time.Second, Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", s)
-		}}}
-	r, err := c.Post("http://localhost", "text/plain", strings.NewReader(actions))
-	if err != nil {
-		return false
-	}
-	r.Body.Close()
-	return true
-}
-
-// MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands
-// out.
-func (e *Env) MarkSeen(p tmux.PaneID) {
-	sf := e.StateFile(p)
-	if !exists(sf) {
-		return
-	}
-	store.UpdateState(sf, func(st *agent.Record) { st.Seen = true })
-}
-
-// threadTabLabels: in the weaver session a thread's window is its line on
-// the status bar, "<num> <name> · <repo>/<branch>"; renamed only when that
-// is not its name already.
-func (e *Env) threadTabLabels(rows []Row) {
-	panes, _ := e.Panes()
-	names := map[string]bool{}
-	for _, p := range panes {
-		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.TabName)
-		names[string(p.Tab)+"\t"+n] = true
-	}
-	for _, r := range rows {
-		if r.Pane == "" || r.Tnum == 0 {
-			continue
-		}
-		l := r.Title
-		if l == "" {
-			l = r.Ttask
-		}
-		if l == "" {
-			l = r.Prompt
-		}
-		label := threadLabel(r.Tnum, l, r.Root)
-		if names[string(r.Tab)+"\t"+label] {
-			continue
-		}
-		e.Tmux("rename-window", "-t", r.Tab.Target(), label)
-	}
-}
-
-// threadLabel is a thread window's name in the weaver session: its number,
-// what it is about (the first line of text, fitted), and where it works.
-func threadLabel(n int, text, root string) string {
-	if i := strings.IndexByte(text, '\n'); i >= 0 {
-		text = text[:i]
-	}
-	w := whereOf(root)
-	label := padNum(n) + " " + strings.TrimRight(fit(text, 30), " ") + " · " + w.repo
-	if w.branch != "" {
-		label += "/" + w.branch
-	}
-	return label
-}
-
-func padNum(n int) string {
-	s := strconv.Itoa(n)
-	if len(s) < 2 {
-		s = "0" + s
-	}
-	return s
-}
-
 // followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
 // heredoc, a formatter, an MCP write) counts as an edit: in the repos the
 // command names, the one it ran in and the agent's root, the files git sees
 // as changed since the previous such call; the newest is followed. False
 // when nothing changed.
 func (e *Env) followBashEdits(h *hk) bool {
-	stamp := e.paneFile(h.Pane, "bash")
+	stamp := e.PaneFile(h.Pane, "bash")
 	nw := stamp + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(nw, nil, 0o644) != nil {
 		return false
@@ -398,7 +243,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 	if !ok {
 		return false
 	}
-	if exists(h.sf) {
+	if files.Exists(h.sf) {
 		store.UpdateState(h.sf, func(st *agent.Record) {
 			st.Root, st.File = r, newest
 			var fs []string

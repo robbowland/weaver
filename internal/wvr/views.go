@@ -16,6 +16,7 @@ import (
 
 	weaver "github.com/robbowland/weaver"
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -48,7 +49,7 @@ func ghDash() []string {
 		if d == "" {
 			d = os.Getenv("HOME") + "/.local/share"
 		}
-		if exists(d + "/gh/extensions/gh-dash") {
+		if files.Exists(d + "/gh/extensions/gh-dash") {
 			return []string{p, "dash"}
 		}
 	}
@@ -134,7 +135,7 @@ func (e *Env) viewOf(name string) (view, error) {
 		// linear-tui keeps a view per repository, and a thread started
 		// from it works there: the repository used last.
 		dir := home
-		if l, err := firstLine(e.StateDir + "/repos"); err == nil && l != "" && exists(l) {
+		if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" && files.Exists(l) {
 			dir = l
 		}
 		return view{name, "LINEAR", []string{p}, nil, dir}, nil

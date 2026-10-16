@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robbowland/weaver/internal/session"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,7 +23,7 @@ func TestGhDashConfig(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(bin, "gh-dash"), []byte("#!/bin/sh\necho '"+c.version+"'\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		e := &Env{StateDir: t.TempDir(), Self: "/opt/bin/wvr"}
+		e := &Env{&session.Env{StateDir: t.TempDir(), Self: "/opt/bin/wvr"}}
 		t.Setenv("GH_CONFIG_DIR", "")
 		t.Setenv("XDG_CONFIG_HOME", "/x")
 		env, err := e.ghDashConfig([]string{filepath.Join(bin, "gh-dash")})
@@ -68,7 +69,7 @@ func TestLinearReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	e := &Env{StateDir: t.TempDir()}
+	e := &Env{&session.Env{StateDir: t.TempDir()}}
 	if err := os.WriteFile(out, []byte("OAuth token  none\n\nNot authenticated. Run `linear-tui auth login` to sign in.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

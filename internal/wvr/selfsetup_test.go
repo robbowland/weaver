@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 )
 
@@ -36,31 +38,31 @@ func TestSelfSetup(t *testing.T) {
 	settings := filepath.Join(home, ".claude", "settings.json")
 
 	t.Setenv("PATH", "/usr/bin:/bin")
-	(&Env{Self: self}).SelfSetup()
-	if exists(settings) || exists(filepath.Join(home, ".claude")) {
+	(&Env{&session.Env{Self: self}}).SelfSetup()
+	if files.Exists(settings) || files.Exists(filepath.Join(home, ".claude")) {
 		t.Fatal("not the wvr on PATH, yet set up")
 	}
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	(&Env{Self: self}).SelfSetup()
-	if exists(filepath.Join(home, ".claude")) {
+	(&Env{&session.Env{Self: self}}).SelfSetup()
+	if files.Exists(filepath.Join(home, ".claude")) {
 		t.Fatal("no Claude Code here, yet its settings were made")
 	}
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	(&Env{Self: self}).SelfSetup()
+	(&Env{&session.Env{Self: self}}).SelfSetup()
 	b, err := os.ReadFile(settings)
 	if err != nil || !strings.Contains(string(b), `"`+self+`"`) {
 		t.Fatalf("hooks not set up: %s", b)
 	}
-	(&Env{Self: self}).SelfSetup()
+	(&Env{&session.Env{Self: self}}).SelfSetup()
 	if b2, _ := os.ReadFile(settings); string(b2) != string(b) {
 		t.Error("changed again")
 	}
 	if bk, _ := filepath.Glob(settings + ".bak.*"); len(bk) != 0 {
 		t.Errorf("backups of a file that was not there: %v", bk)
 	}
-	if exists(filepath.Join(home, ".codex")) {
+	if files.Exists(filepath.Join(home, ".codex")) {
 		t.Error("Codex's hooks made without ~/.codex")
 	}
 }

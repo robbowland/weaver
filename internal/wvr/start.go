@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/setup"
 )
 
@@ -34,7 +35,7 @@ func (e *Env) Start(name string) error {
 		return err
 	}
 	conf := dir + "/config/tmux.conf"
-	if !exists(conf) {
+	if !files.Exists(conf) {
 		return errors.New("missing " + conf)
 	}
 	var env []string

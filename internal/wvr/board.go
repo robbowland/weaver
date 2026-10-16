@@ -11,6 +11,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/oneline"
 	"golang.org/x/sys/unix"
 )
 
@@ -60,18 +63,6 @@ func age(s int64) string {
 }
 
 func rlen(s string) int { return utf8.RuneCountInString(s) }
-
-// fit: text cut to n characters (… at the cut) and padded to n.
-func fit(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if rlen(s) > n {
-		r := []rune(s)
-		s = string(r[:n-1]) + "…"
-	}
-	return s + strings.Repeat(" ", n-rlen(s))
-}
 
 // ttySize is the terminal's rows and columns, from /dev/tty.
 func ttySize() (int, int, bool) {
@@ -178,7 +169,7 @@ func cardRoom(items, cols, lines int) string {
 		os.WriteFile(base+".room", []byte(pw+"\n"), 0o644)
 		if hide {
 			os.WriteFile(base+".tight", nil, 0o644)
-		} else if exists(base + ".tight") {
+		} else if files.Exists(base + ".tight") {
 			os.Remove(base + ".tight")
 		}
 	}
@@ -329,10 +320,10 @@ func (e *Env) rows(plain bool) string {
 				fact = "no prompt yet"
 			}
 		}
-		w := whereOf(a.Root)
-		where := w.repo
-		if w.branch != "" {
-			where += "/" + w.branch
+		w := git.WhereOf(a.Root)
+		where := w.Repo
+		if w.Branch != "" {
+			where += "/" + w.Branch
 		}
 		// Needs you, done and working: longest first; idle: latest first.
 		k := since
@@ -371,10 +362,10 @@ func (e *Env) rows(plain bool) string {
 			name = l.Task
 		}
 		fact := "its session went · ⏎ resumes"
-		w := whereOf(l.Dir)
-		where := w.repo
-		if w.branch != "" {
-			where += "/" + w.branch
+		w := git.WhereOf(l.Dir)
+		where := w.Repo
+		if w.Branch != "" {
+			where += "/" + w.Branch
 		}
 		r := boardRow{group: 4, key: fmt.Sprintf("%d%011d%08d", 4, 10000000000-since, len(rs)), pane: l.Sid,
 			glyph: paint(GEnd, grey, dim, off), lost: true, name: name, fact: fact, where: where,
@@ -512,7 +503,7 @@ func (e *Env) rows(plain bool) string {
 	if !plain {
 		// The border's label, and (no agents) what to do, for the header.
 		if base != "" {
-			putFile(base+".label", " "+tl+gap+tc+" ")
+			bestEffort(files.Put(base+".label", " "+tl+gap+tc+" "))
 			out := ""
 			if n == 0 {
 				out = grey + "No threads yet." + off + " " + COff + "n" + grey + " starts one here, " + COff + "Alt N" + grey +
@@ -522,7 +513,7 @@ func (e *Env) rows(plain bool) string {
 						" on one starts its thread." + off
 				}
 			}
-			putFile(base+".title", out)
+			bestEffort(files.Put(base+".title", out))
 			if n == 0 {
 				os.WriteFile(base+".keys", nil, 0o644)
 			}
@@ -589,16 +580,16 @@ func (e *Env) rows(plain bool) string {
 				keyl[c[0]-'0'] = "pos(" + strconv.Itoa(len(ls)+1) + ")+" + jump
 			}
 		}
-		f := fit(r.name, cn-2)
+		f := oneline.Fit(r.name, cn-2)
 		if g >= 2 {
 			f = grey + f + off
 		}
 		out := lead + r.glyph + sep + f + "  "
 		if cf > 0 {
-			out += grey + fit(r.fact, cf-2) + off + "  "
+			out += grey + oneline.Fit(r.fact, cf-2) + off + "  "
 		}
 		if cw > 0 {
-			out += dim + fit(r.where, cw-2) + off + "  "
+			out += dim + oneline.Fit(r.where, cw-2) + off + "  "
 		}
 		out += dim + fmt.Sprintf("%*s", ageW, r.age) + off
 		id := "a" + r.pane
@@ -623,7 +614,7 @@ func (e *Env) rows(plain bool) string {
 		for c := 1; c <= 9; c++ {
 			keys += keyl[c] + "\n"
 		}
-		putFile(base+".keys", keys)
+		bestEffort(files.Put(base+".keys", keys))
 	}
 	for i, it := range ls {
 		if it.isAgent {
@@ -648,74 +639,6 @@ func (e *Env) rows(plain bool) string {
 	return b.String()
 }
 
-// where is the repository and branch checked out at a root: read from its .git files without running git.
-type where struct{ repo, branch, gitdir string }
-
-func whereOf(root string) where {
-	w := where{repo: root[strings.LastIndexByte(root, '/')+1:]}
-	var gd, common string
-	if st, err := os.Stat(root + "/.git"); err == nil && st.IsDir() {
-		gd = root + "/.git"
-		common = gd
-	} else if err == nil && st.Mode().IsRegular() {
-		l, _ := firstLine(root + "/.git")
-		gd = strings.TrimPrefix(l, "gitdir: ")
-		if !strings.HasPrefix(gd, "/") {
-			gd = root + "/" + gd
-		}
-		common = gd
-		if exists(gd + "/commondir") {
-			l, _ := firstLine(gd + "/commondir")
-			switch {
-			case strings.HasPrefix(l, "/"):
-				common = l
-			case l != "":
-				common = gd + "/" + l
-			}
-		}
-	} else {
-		return w
-	}
-	up := 0
-	for {
-		switch {
-		case strings.HasSuffix(common, "/.."):
-			common = strings.TrimSuffix(common, "/..")
-			up++
-			continue
-		case strings.HasSuffix(common, "/.") || strings.HasSuffix(common, "/"):
-			common = strings.TrimSuffix(common, ".")
-			common = strings.TrimSuffix(common, "/")
-			continue
-		}
-		break
-	}
-	for ; up > 0; up-- {
-		if i := strings.LastIndexByte(common, '/'); i >= 0 {
-			common = common[:i]
-		}
-	}
-	last := common[strings.LastIndexByte(common, '/')+1:]
-	switch {
-	case last == ".git" || last == ".bare":
-		p := common[:max(strings.LastIndexByte(common, '/'), 0)]
-		w.repo = p[strings.LastIndexByte(p, '/')+1:]
-	case strings.HasSuffix(last, ".git"):
-		w.repo = strings.TrimSuffix(last, ".git")
-	}
-	w.gitdir = gd
-	head, _ := firstLine(gd + "/HEAD")
-	switch {
-	case strings.HasPrefix(head, "ref: refs/heads/"):
-		w.branch = strings.TrimPrefix(head, "ref: refs/heads/")
-	case head == "":
-	default:
-		r := []rune(head)
-		w.branch = string(r[:min(7, len(r))])
-	}
-	return w
-}
-
 // turnFiles is how many files the agent's last turn changed, from the end
 // snapshots of turn turn of session sid in roots; empty when there is none.
 // Each snapshot commit is asked about once; the answer is kept under
@@ -729,15 +652,15 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 		if r == "" {
 			continue
 		}
-		w := whereOf(r)
-		if w.gitdir == "" {
+		w := git.WhereOf(r)
+		if w.GitDir == "" {
 			continue
 		}
-		sha, _ := firstLine(w.gitdir + "/refs/worktree/weaver/sessions/" + sid)
+		sha, _ := files.FirstLine(w.GitDir + "/refs/worktree/weaver/sessions/" + sid)
 		if sha == "" || strings.Trim(sha, "0123456789abcdef") != "" {
 			continue
 		}
-		line, _ := firstLine(e.StateDir + "/turns/" + sha)
+		line, _ := files.FirstLine(e.StateDir + "/turns/" + sha)
 		if line == "" {
 			line = gitTurn(r, sha)
 			f := strings.Fields(line)
@@ -770,7 +693,7 @@ func Footer() string {
 	g, d, o := CGrey, CDim, COff
 	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|e NVIM|^q QUIT"
 	search := "⏎ JUMP|esc BACK|tab SCREEN|^e NVIM"
-	if pl := os.Getenv("FZF_PREVIEW_LINES"); sockBase() != "" && exists(sockBase()+".tight") && (pl == "" || pl == "0") {
+	if pl := os.Getenv("FZF_PREVIEW_LINES"); sockBase() != "" && files.Exists(sockBase()+".tight") && (pl == "" || pl == "0") {
 		browse = "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM|^q QUIT"
 	}
 	cols, _ := lsSize()
@@ -813,7 +736,7 @@ func Footer() string {
 // what to do; else a blank line while browsing, whose place the search input
 // takes.
 func Title() string {
-	t, _ := readTrim(sockBase() + ".title")
+	t, _ := files.ReadTrim(sockBase() + ".title")
 	if t != "" {
 		return t + "\n"
 	}
@@ -856,20 +779,20 @@ func (e *Env) Chrome() string {
 	base := sockBase()
 	// The home board, with a newer weaver installed since it started: it
 	// ends, for the board to start again in that weaver.
-	if os.Getenv("LS_HOME") != "" && exists(base+".born") && newer(e.Self, base+".born") {
+	if os.Getenv("LS_HOME") != "" && files.Exists(base+".born") && newer(e.Self, base+".born") {
 		return "abort\n"
 	}
 	out := ""
 	if hf := HF(); hf != "" {
 		out = hf + "+"
 	}
-	pw, _ := firstLine(base + ".room")
-	last, _ := firstLine(base + ".shown")
+	pw, _ := files.FirstLine(base + ".room")
+	last, _ := files.FirstLine(base + ".shown")
 	if pw != "" && pw != last {
 		os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644)
 		out += "change-preview-window(" + pw + ")+"
 	}
-	label, _ := firstLine(base + ".label")
+	label, _ := files.FirstLine(base + ".label")
 	return out + "change-border-label:" + label + "\n"
 }
 
