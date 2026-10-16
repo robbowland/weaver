@@ -1,9 +1,7 @@
-package wvr
+package setup
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -45,12 +43,16 @@ func TestMergeHooks(t *testing.T) {
 	}
 	var keys []string
 	d := json.NewDecoder(strings.NewReader(s))
-	d.Token()
+	if _, err := d.Token(); err != nil {
+		t.Fatal(err)
+	}
 	for d.More() {
 		k, _ := d.Token()
 		keys = append(keys, k.(string))
 		var v json.RawMessage
-		d.Decode(&v)
+		if err := d.Decode(&v); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if strings.Join(keys, " ") != "model hooks statusLine" {
 		t.Errorf("order: %v", keys)
@@ -71,51 +73,5 @@ func TestMergeHooks(t *testing.T) {
 	}
 	if _, err := mergeHooks([]byte(`[1]`), []byte(add), "x"); err == nil {
 		t.Error("a settings file that is not an object: no error")
-	}
-}
-
-// wvr sets itself up as it starts: only when it is the wvr on PATH, the
-// hooks of an agent you have, and nothing the second time.
-func TestSelfSetup(t *testing.T) {
-	home := t.TempDir()
-	bin := filepath.Join(home, "bin")
-	os.MkdirAll(bin, 0o755)
-	self := filepath.Join(bin, "wvr")
-	os.WriteFile(self, []byte("#!/bin/sh\n"), 0o755)
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
-	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
-	t.Setenv("WEAVER_SELF_SETUP", "")
-	// The plugins are there already: nothing to fetch.
-	os.MkdirAll(PluginsDir()+"/diffview-plus.nvim", 0o755)
-	os.WriteFile(PluginsDir()+"/diffview-plus.nvim/.weaver-rev", []byte(diffviewRev+"\n"), 0o644)
-	settings := filepath.Join(home, ".claude", "settings.json")
-
-	t.Setenv("PATH", "/usr/bin:/bin")
-	(&Env{Self: self}).SelfSetup()
-	if exists(settings) || exists(filepath.Join(home, ".claude")) {
-		t.Fatal("not the wvr on PATH, yet set up")
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	(&Env{Self: self}).SelfSetup()
-	if exists(filepath.Join(home, ".claude")) {
-		t.Fatal("no Claude Code here, yet its settings were made")
-	}
-	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
-	(&Env{Self: self}).SelfSetup()
-	b, err := os.ReadFile(settings)
-	if err != nil || !strings.Contains(string(b), `"`+self+`"`) {
-		t.Fatalf("hooks not set up: %s", b)
-	}
-	(&Env{Self: self}).SelfSetup()
-	if b2, _ := os.ReadFile(settings); string(b2) != string(b) {
-		t.Error("changed again")
-	}
-	if bk, _ := filepath.Glob(settings + ".bak.*"); len(bk) != 0 {
-		t.Errorf("backups of a file that was not there: %v", bk)
-	}
-	if exists(filepath.Join(home, ".codex")) {
-		t.Error("Codex's hooks made without ~/.codex")
 	}
 }

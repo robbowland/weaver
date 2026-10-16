@@ -1,4 +1,4 @@
-package wvr
+package setup
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	weaver "github.com/robbowland/weaver"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/jsonx"
 )
 
@@ -21,12 +22,12 @@ import (
 // old names): its name alone, a path to it, either with arguments.
 var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 
-// Setup is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
+// Run is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
 // hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
 // exists), run by this binary's path (or PATH), each file backed up before
 // it changes; its files unpacked and its Neovim plugins fetched. `wvr`
 // does the same as it starts (SelfSetup); this shows the changes.
-func Setup(args []string, self string, out io.Writer) error {
+func Run(args []string, self string, out io.Writer) error {
 	dry, codex, bin := false, true, self
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -36,12 +37,12 @@ func Setup(args []string, self string, out io.Writer) error {
 			codex = false
 		case "--bin":
 			if i+1 >= len(args) {
-				return &Exit{Code: 2, Err: errors.New("--bin needs a path")}
+				return &cli.Exit{Code: 2, Err: errors.New("--bin needs a path")}
 			}
 			i++
 			bin = args[i]
 		default:
-			return &Exit{Code: 2, Err: errors.New("usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")}
+			return &cli.Exit{Code: 2, Err: errors.New("usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")}
 		}
 	}
 	if !dry {
@@ -50,29 +51,29 @@ func Setup(args []string, self string, out io.Writer) error {
 		}
 	}
 	warnZellij(os.Getenv("HOME"))
-	ts := timestamp()
+	ts := Timestamp()
 	// Each configuration's problem is said as it comes; the others go on.
 	var failed error
 	codexDone := false
-	for _, c := range hookConfigs() {
-		if c.label == "codex" && !codex {
+	for _, c := range Configs() {
+		if c.Label == "codex" && !codex {
 			continue
 		}
-		codexDone = codexDone || c.label == "codex"
-		ch, err := planHooks(c, bin)
+		codexDone = codexDone || c.Label == "codex"
+		ch, err := Plan(c, bin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			failed = errSaid
+			failed = cli.ErrSaid
 			continue
 		}
-		ch.show(out)
-		if dry || !ch.changed() {
+		ch.Show(out)
+		if dry || !ch.Changed() {
 			continue
 		}
-		backup, err := ch.apply(ts)
+		backup, err := ch.Apply(ts)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			failed = errSaid
+			failed = cli.ErrSaid
 			continue
 		}
 		if backup != "" {
@@ -117,43 +118,43 @@ func warnZellij(home string) {
 	}
 }
 
-// hookChange is what weaver's hooks make of an agent's hooks file: the
+// Change is what weaver's hooks make of an agent's hooks file: the
 // file as it is (existed false: not there yet) and as it would be.
-type hookChange struct {
+type Change struct {
 	label, file string
 	old, new    []byte
 	existed     bool
 }
 
-// planHooks is what putting weaver's hooks (the embedded file hooks), run by
+// Plan is what putting weaver's hooks (the embedded file hooks), run by
 // bin, into the agent's hooks file f would change.
-func planHooks(c hookConfig, bin string) (hookChange, error) {
-	add, err := weaver.Files.ReadFile(c.hooks)
+func Plan(c Config, bin string) (Change, error) {
+	add, err := weaver.Files.ReadFile(c.Hooks)
 	if err != nil {
-		return hookChange{}, err
+		return Change{}, err
 	}
-	ch := hookChange{label: c.label, file: c.file}
-	ch.old, err = os.ReadFile(c.file)
+	ch := Change{label: c.Label, file: c.File}
+	ch.old, err = os.ReadFile(c.File)
 	ch.existed = err == nil
 	if !ch.existed {
 		ch.old = []byte("{}")
 	}
 	if ch.new, err = mergeHooks(ch.old, add, bin); err != nil {
-		return hookChange{}, fmt.Errorf("cannot parse %s: %v", c.file, err)
+		return Change{}, fmt.Errorf("cannot parse %s: %v", c.File, err)
 	}
 	return ch, nil
 }
 
 // changed: does the file need writing (the same JSON, laid out differently,
 // does not)?
-func (ch hookChange) changed() bool {
+func (ch Change) Changed() bool {
 	var a, b bytes.Buffer
 	return !ch.existed || json.Compact(&a, ch.old) != nil || json.Compact(&b, ch.new) != nil || a.String() != b.String()
 }
 
-// show says what the change is: a diff, or that there is none.
-func (ch hookChange) show(out io.Writer) {
-	if !ch.changed() {
+// Show says what the change is: a diff, or that there is none.
+func (ch Change) Show(out io.Writer) {
+	if !ch.Changed() {
 		fmt.Fprintf(out, "%s: %s already runs weaver on every event\n", ch.label, ch.file)
 		return
 	}
@@ -175,12 +176,12 @@ func (ch hookChange) show(out io.Writer) {
 	}
 	d := exec.Command("diff", "-u", from, tmp.Name())
 	d.Stdout = out
-	bestEffort(d.Run()) // diff exits 1 when the files differ, which is the point
+	_ = d.Run() // diff exits 1 when the files differ, which is the point
 }
 
-// apply writes the change, the file backed up first (to its name and
+// Apply writes the change, the file backed up first (to its name and
 // .bak.ts) when it was there; the backup's name, or "".
-func (ch hookChange) apply(ts string) (string, error) {
+func (ch Change) Apply(ts string) (string, error) {
 	backup := ""
 	if ch.existed {
 		backup = ch.file + ".bak." + ts
@@ -197,7 +198,7 @@ func (ch hookChange) apply(ts string) (string, error) {
 	return backup, nil
 }
 
-func timestamp() string { return time.Now().Format("20060102-150405") }
+func Timestamp() string { return time.Now().Format("20060102-150405") }
 
 func copyFile(from, to string) error {
 	b, err := os.ReadFile(from)
@@ -252,8 +253,8 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 				var c struct {
 					Command any `json:"command"`
 				}
-				json.Unmarshal(h, &c)
-				if s, ok := c.Command.(string); ok && reOurs.MatchString(s) {
+				// A hook that is not an object is not weaver's: kept.
+				if json.Unmarshal(h, &c) == nil && isOurs(c.Command) {
 					continue
 				}
 				keep = append(keep, h)
@@ -309,4 +310,10 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 	}
 	b.WriteByte('\n')
 	return b.Bytes(), nil
+}
+
+// isOurs is whether a hook's command runs weaver.
+func isOurs(command any) bool {
+	s, ok := command.(string)
+	return ok && reOurs.MatchString(s)
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
@@ -385,7 +386,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
 				c.Stderr = os.Stderr
 				if c.Run() != nil {
-					return errSaid
+					return cli.ErrSaid
 				}
 			}
 		}
@@ -397,7 +398,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 		var ok bool
 		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
-			return errSaid
+			return cli.ErrSaid
 		}
 		name = branch
 	}
@@ -499,7 +500,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])
 		if err != nil {
-			return &Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}
+			return &cli.Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}
 		}
 		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, append(w, args...), os.Environ()))
 	}
@@ -799,7 +800,7 @@ func (e *Env) Resume(args []string) error {
 			fmt.Fprint(t, "\n"+cardKeys(pad, "y", "forget", "n", "keep"))
 			t.Close()
 			if !readYes() {
-				return errCancelled
+				return cli.ErrCancelled
 			}
 		}
 		os.Remove(f)
@@ -820,7 +821,7 @@ func (e *Env) Resume(args []string) error {
 	}
 	e.PushStatusAndLabels()
 	if failed > 0 {
-		return errSaid
+		return cli.ErrSaid
 	}
 	return nil
 }
@@ -1124,7 +1125,7 @@ func (e *Env) Close(args []string) error {
 	if !yes {
 		fmt.Fprint(out, "\n"+cardKeys(pad, "y", "close", "n", "keep"))
 		if !readYes() {
-			return errCancelled
+			return cli.ErrCancelled
 		}
 	}
 	remove := "0"
@@ -1214,7 +1215,7 @@ func (e *Env) CloseTail(a []string) error {
 			}
 			c.Stdout, c.Stderr = os.Stdout, os.Stderr
 			if c.Run() != nil {
-				rc = errSaid
+				rc = cli.ErrSaid
 			} else {
 				fmt.Println("weaver: removed " + t)
 			}
@@ -1355,7 +1356,7 @@ func (e *Env) Quit(args []string) error {
 		fmt.Fprint(t, "\n"+cardKeys(pad, "y", "quit", "n", "keep"))
 		t.Close()
 		if !readYes() {
-			return errCancelled
+			return cli.ErrCancelled
 		}
 	}
 	if _, err := e.Tmux("kill-session", "-t", "="+name); err != nil {

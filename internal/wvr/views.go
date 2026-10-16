@@ -15,6 +15,7 @@ import (
 	"time"
 
 	weaver "github.com/robbowland/weaver"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -315,7 +316,7 @@ func (e *Env) From(args []string) error {
 	// In a view, said on tmux's message line.
 	say := func(m string) error {
 		e.Tmux("display-message", "-d", "2500", "weaver: "+m)
-		return errSaid
+		return cli.ErrSaid
 	}
 	var nw []string
 	dir := os.Getenv("HOME")
@@ -342,7 +343,7 @@ func (e *Env) From(args []string) error {
 			nw = append(nw, "--repo", d)
 		}
 	default:
-		return &Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")}
+		return &cli.Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")}
 	}
 	if review {
 		nw = append(nw, "--review")

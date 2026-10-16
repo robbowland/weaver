@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -448,7 +449,7 @@ func (e *Env) New(args []string) error {
 			task = append(task, args[i+1:]...)
 			i = len(args)
 		case "-h", "--help":
-			return ErrHelp
+			return cli.ErrHelp
 		default:
 			if strings.HasPrefix(a, "-") {
 				return errors.New("unknown option: " + a + " (see wvr help)")
@@ -525,7 +526,7 @@ func (e *Env) New(args []string) error {
 			if isTTY(0) && isTTY(2) && t == "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n\n%spress a key%s", CRed, m, COff, CGrey, COff)
 				readKey()
-				return errSaid
+				return cli.ErrSaid
 			}
 			return errors.New(m)
 		}
@@ -599,7 +600,7 @@ func (e *Env) New(args []string) error {
 		c.Run()
 		b, _ := readTrim(f.Name())
 		if strings.TrimSpace(b) == "" {
-			return errCancelled
+			return cli.ErrCancelled
 		}
 		t = b
 	}
@@ -645,12 +646,12 @@ func (e *Env) New(args []string) error {
 			return nil
 		}
 		// The thread could not be made: say why, unless that is on screen.
-		if !errors.Is(err, errSaid) {
+		if !errors.Is(err, cli.ErrSaid) {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
 		}
 		fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s enter: back to the form   esc: cancel ", CRed, COff)
 		if readKey() == 0x1b {
-			return errCancelled
+			return cli.ErrCancelled
 		}
 	}
 }
@@ -721,7 +722,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			rc = x.ExitCode()
 		}
 		if rc == 130 {
-			return "", errCancelled
+			return "", cli.ErrCancelled
 		}
 		if rc > 1 {
 			return "", errors.New("fzf failed (the form needs fzf 0.62 or newer)")

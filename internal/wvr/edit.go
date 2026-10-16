@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -292,7 +293,7 @@ func (e *Env) Nvim(args []string) error {
 			})
 		}
 	}
-	dir, err := Runtime()
+	dir, err := setup.Runtime()
 	if err != nil {
 		return err
 	}
@@ -300,7 +301,7 @@ func (e *Env) Nvim(args []string) error {
 	if err != nil {
 		return errors.New("nvim is not installed")
 	}
-	env := append(os.Environ(), "WEAVER_PANE="+string(agentPane), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
+	env := append(os.Environ(), "WEAVER_PANE="+string(agentPane), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+setup.PluginsDir())
 	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
 	// The ATTENTION dialog for a stale swap file would block this nvim and
 	// every remote call: open the startup file read-only instead (weaver.lua

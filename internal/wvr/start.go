@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+
+	"github.com/robbowland/weaver/internal/setup"
 )
 
 // Start is `wvr [start [session]]` outside a session: attach to the
@@ -27,7 +29,7 @@ func (e *Env) Start(name string) error {
 		return errors.New("tmux is not installed")
 	}
 	e.SelfSetup()
-	dir, err := Runtime()
+	dir, err := setup.Runtime()
 	if err != nil {
 		return err
 	}

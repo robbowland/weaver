@@ -1,8 +1,9 @@
-package wvr
+package setup
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func Runtime() (string, error) {
 		data = os.Getenv("HOME") + "/.local/share"
 	}
 	h := sha256.New()
-	fs.WalkDir(weaver.Files, ".", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(weaver.Files, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -36,6 +37,9 @@ func Runtime() (string, error) {
 		h.Write(b)
 		return nil
 	})
+	if err != nil {
+		return "", fmt.Errorf("reading the files weaver carries: %w", err)
+	}
 	id := hex.EncodeToString(h.Sum(nil))[:16]
 	dir := data + "/weaver/runtime/" + id
 	if _, err := os.Stat(dir + "/config/tmux.conf"); err == nil {
@@ -43,7 +47,7 @@ func Runtime() (string, error) {
 		return dir, nil
 	}
 	tmp := dir + ".tmp." + strconv.Itoa(os.Getpid())
-	err := fs.WalkDir(weaver.Files, ".", func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(weaver.Files, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -104,7 +108,7 @@ func syncNvim(base, id string) {
 		return
 	}
 	old := stable + ".old." + pid
-	os.Rename(stable, old)
+	_ = os.Rename(stable, old) // none there yet is fine
 	if os.Rename(tmp, stable) != nil {
 		os.RemoveAll(tmp)
 	}
@@ -124,4 +128,16 @@ func pruneRuntimes(dir, id string) {
 			os.RemoveAll(filepath.Join(dir, e.Name()))
 		}
 	}
+}
+
+// firstLine is the first line of file f.
+func firstLine(f string) (string, error) {
+	b, err := os.ReadFile(f)
+	if err != nil {
+		return "", err
+	}
+	if i := strings.IndexByte(string(b), '\n'); i >= 0 {
+		b = b[:i]
+	}
+	return string(b), nil
 }

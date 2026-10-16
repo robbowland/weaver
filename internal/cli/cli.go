@@ -1,4 +1,6 @@
-package wvr
+// Package cli is how a weaver command ends: an Exit with its status, the
+// usage asked for, or nothing.
+package cli
 
 import (
 	"errors"
@@ -26,8 +28,8 @@ func (x *Exit) Unwrap() error { return x.Err }
 var ErrHelp = errors.New("help")
 
 var (
-	// errSaid ends a command that has said why it failed.
-	errSaid = &Exit{Code: 1}
-	// errCancelled: you cancelled it (Esc in a form).
-	errCancelled = &Exit{Code: 130}
+	// ErrSaid ends a command that has said why it failed.
+	ErrSaid = &Exit{Code: 1}
+	// ErrCancelled: you cancelled it (Esc in a form).
+	ErrCancelled = &Exit{Code: 130}
 )

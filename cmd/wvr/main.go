@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/wvr"
 )
 
@@ -33,13 +35,13 @@ func main() {
 		fmt.Println("weaver " + buildVersion())
 		return
 	case "setup":
-		exit(wvr.Setup(args, wvr.Load().Self, os.Stdout))
+		exit(setup.Run(args, wvr.Load().Self, os.Stdout))
 	case "_plugins":
-		exit(wvr.Plugins())
+		exit(setup.Plugins())
 	case "_runtime":
 		// install.sh: unpack this build's files now, so Neovim configs find
 		// its plugin before weaver next runs.
-		_, err := wvr.Runtime()
+		_, err := setup.Runtime()
 		exit(err)
 	}
 	c, ok := commands[cmd]
@@ -57,11 +59,11 @@ func main() {
 // exit ends wvr as err says: nothing, the usage, or what went wrong (said
 // once, here, unless the command has said it already).
 func exit(err error) {
-	var x *wvr.Exit
+	var x *cli.Exit
 	switch {
 	case err == nil:
 		os.Exit(0)
-	case errors.Is(err, wvr.ErrHelp):
+	case errors.Is(err, cli.ErrHelp):
 		fmt.Print(wvr.Usage)
 		os.Exit(0)
 	case errors.As(err, &x):
@@ -108,7 +110,7 @@ func prints(f func(e *wvr.Env, args []string) string) func(*wvr.Env, []string) e
 func helped(f func(e *wvr.Env, args []string) error) func(*wvr.Env, []string) error {
 	return func(e *wvr.Env, args []string) error {
 		if slices.Contains(args, "-h") || slices.Contains(args, "--help") {
-			return wvr.ErrHelp
+			return cli.ErrHelp
 		}
 		return f(e, args)
 	}
@@ -192,14 +194,14 @@ var commands = map[string]command{
 	"_from": {session: true, run: (*wvr.Env).From},
 	"_form": {run: func(e *wvr.Env, args []string) error {
 		if len(args) < 2 {
-			return &wvr.Exit{Code: 1}
+			return &cli.Exit{Code: 1}
 		}
 		e.Form(args[0], args[1], arg(args, 2))
 		return nil
 	}},
 	"_fetch": {run: func(e *wvr.Env, args []string) error {
 		if len(args) < 3 {
-			return &wvr.Exit{Code: 1}
+			return &cli.Exit{Code: 1}
 		}
 		e.Fetch(args[0], args[1], args[2], arg(args, 3))
 		return nil
