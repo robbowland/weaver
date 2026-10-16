@@ -261,13 +261,25 @@ can supersede an earlier one, and says so.
   a thread goes to it. The item's text is fenced between marker lines with a
   random nonce and said to be untrusted, since anyone who can comment wrote
   it.
-- 2026-10-16: gh-dash's config is written whole, from yours plus weaver's
-  keys and theme, rather than layered with `GH_DASH_CONFIG` or `include`:
-  gh-dash 4.0 (and forks of it) replace the global config with
-  `GH_DASH_CONFIG`'s and know no `include` (measured: the sections went back
-  to the defaults). In GITHUB, tmux passes Alt N and Alt R to gh-dash, whose
-  own bindings know the row; `_from` opens the form from a detached process,
-  so gh-dash, waiting on its command, goes on at once.
+- 2026-10-16: gh-dash runs on weaver's config alone (Rob: no several
+  configs to keep in mind), written whole as the view starts under a config
+  home of its own, gh's sign-in left where gh keeps it. Merging his own
+  config was the first try and showed why not: his gh-dash read
+  `GH_DASH_CONFIG` (another file), gh-dash 4.0 replaces the global config
+  with `GH_DASH_CONFIG`'s while later ones layer them, and either way what
+  the view showed depended on files outside weaver. In GITHUB, tmux passes
+  Alt N and Alt R to gh-dash, whose own bindings know the row; `_from` opens
+  the form from a detached process, so gh-dash, waiting on its command, goes
+  on at once.
+- 2026-10-16: The views offer only what weaver does not (Rob's audit):
+  gh-dash keeps its lists, search, preview and GitHub's own actions
+  (approve, comment, merge, ready, labels, assignees, checks); its `C`
+  checkout, which would check out into your main checkout, starts a weaver
+  thread instead, and its `d` diff a weaver review; its notifications and
+  repository-branches views go (the fork's `defaults.views`), as Queue and
+  Watch cover the one and threads and git the other. linear-tui keeps its
+  lists and Linear's own edits; its notes and hand-off to an agent work only
+  under herdr, and Alt N covers them.
 - 2026-10-16: A remote's GitHub repository is read from the URL as
   configured, not as `git remote -v` shows it: an `insteadOf` rewrite is how
   it is reached, not what it is (and the tests reach a local bare repository

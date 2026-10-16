@@ -364,12 +364,13 @@ case "$1 $2" in
 *) echo "gh (fake): $*" >&2; exit 1 ;;
 esac
 GH
-# gh-dash: on Alt N or Alt R, the command its config binds for prs, on o/r#45.
+# gh-dash: on Alt N or Alt R, the command its config (weaver's, in the config
+# home weaver gives it) binds for prs, on o/r#45.
 cat >"$AT/bin/gh-dash" <<GHD
 #!/bin/bash
 run() {
 	c=\$(awk -v k="key: \$1" '/^ *prs:/ { p = 1; next } /^ *issues:/ { p = 0 }
-		p && index(\$0, k) { f = 1; next } p && f && /command:/ { sub(/^ *command: /, ""); print; exit }' "\$GH_DASH_CONFIG")
+		p && index(\$0, k) { f = 1; next } p && f && /command:/ { sub(/^ *command: /, ""); print; exit }' "\$XDG_CONFIG_HOME/gh-dash/config.yml")
 	c=\${c#\\'}; c=\${c%\\'}; c=\${c//\{\{.RepoName\}\}/o/r}; c=\${c//\{\{.PrNumber\}\}/45}
 	echo "\$c" >>"$AT/ghdash.ran"
 	sh -c "\$c"
@@ -397,7 +398,8 @@ attach WEAVER_VIEWS="github linear"
 waitfor '[ "$(windows)" = "0 900 901 " ]'
 ok "views: GITHUB and LINEAR beside home, out of the thread numbers" \
 	"$(tx list-windows -t "=$S" -F '#{window_index}:#{window_name}:#{@weaver-view}' | tr '\n' ' ')" "0:home: 900:GITHUB:github 901:LINEAR:linear "
-ok "...gh-dash's config: weaver's keys and colours" "$(grep -c '_from github' "$SD/gh-dash.yml")|$(grep -c '#39d97a' "$SD/gh-dash.yml")" "4|1"
+GHC=$SD/gh-dash/gh-dash/config.yml
+ok "...gh-dash's own config, weaver's: its keys and colours" "$(grep -c '_from github' "$GHC")|$(grep -c '#39d97a' "$GHC")" "7|1"
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
 	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
 

@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
-
-	"gopkg.in/yaml.v3"
+	"text/template"
 
 	weaver "github.com/robbowland/weaver"
 )
@@ -84,12 +84,12 @@ func (e *Env) viewOf(name string) (view, error) {
 		if argv == nil {
 			return view{}, fmt.Errorf("gh-dash is not installed (brew install gh-dash, or gh extension install dlvhdr/gh-dash)")
 		}
-		cfg, err := e.ghDashConfig()
+		env, err := e.ghDashConfig(argv)
 		if err != nil {
 			return view{}, err
 		}
 		// From home, not a repository: gh-dash would narrow itself to one.
-		return view{name, "GITHUB", argv, []string{"GH_DASH_CONFIG=" + cfg}, home}, nil
+		return view{name, "GITHUB", argv, env, home}, nil
 	case "linear":
 		p, err := exec.LookPath("linear-tui")
 		if err != nil {
@@ -106,109 +106,63 @@ func (e *Env) viewOf(name string) (view, error) {
 	return view{}, fmt.Errorf("no view %q (github or linear)", name)
 }
 
-// ghDashConfig writes gh-dash's config for the view: yours (gh-dash's
-// global one), with weaver's keybindings added and, unless
-// $WEAVER_VIEW_THEME is 0, weaver's theme. Its path.
-func (e *Env) ghDashConfig() (string, error) {
-	add, err := weaver.Files.ReadFile("config/gh-dash.yml")
+// ghDashConfig writes the whole of gh-dash's config for the view (from
+// config/gh-dash.yml) under its own XDG_CONFIG_HOME: gh-dash reads its
+// global config first and GH_DASH_CONFIG on top, so neither may be yours.
+// The environment gh-dash runs with: that config home, gh's own config
+// where gh keeps it (its sign-in), and no GH_DASH_CONFIG.
+func (e *Env) ghDashConfig(argv []string) ([]string, error) {
+	src, err := weaver.Files.ReadFile("config/gh-dash.yml")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	add = []byte(strings.ReplaceAll(string(add), "WEAVER ", Quote(e.Self)+" "))
-	var mine yaml.Node
-	f := os.Getenv("XDG_CONFIG_HOME")
-	if f == "" {
-		f = os.Getenv("HOME") + "/.config"
-	}
-	f += "/gh-dash/config.yml"
-	if b, err := os.ReadFile(f); err == nil {
-		if err := yaml.Unmarshal(b, &mine); err != nil {
-			return "", fmt.Errorf("cannot read %s: %v", f, err)
-		}
-	}
-	var ours yaml.Node
-	if err := yaml.Unmarshal(add, &ours); err != nil {
-		return "", err
-	}
-	out := mergeGhDash(&mine, &ours, os.Getenv("WEAVER_VIEW_THEME") != "0")
-	b, err := yaml.Marshal(out)
+	t, err := template.New("gh-dash").Parse(string(src))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	os.MkdirAll(e.StateDir, 0o755)
-	p := e.StateDir + "/gh-dash.yml"
+	// The command gh-dash runs through a shell, written into YAML as it is:
+	// this binary's path when it needs no quoting, else wvr from PATH.
+	wvr := e.Self
+	if !rePlainPath.MatchString(wvr) {
+		wvr = "wvr"
+	}
+	// The fork has weaver's extras (only some views, line-by-line preview
+	// scrolling); another gh-dash would refuse them.
+	out, _ := exec.Command(argv[0], append(argv[1:], "--version")...).Output()
+	var b strings.Builder
+	if err := t.Execute(&b, struct {
+		Wvr  string
+		Fork bool
+	}{wvr, reFork.Match(out)}); err != nil {
+		return nil, err
+	}
+	home := e.StateDir + "/gh-dash"
+	if err := os.MkdirAll(home+"/gh-dash", 0o755); err != nil {
+		return nil, err
+	}
+	p := home + "/gh-dash/config.yml"
 	tmp := p + "." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, append([]byte("# Made by weaver from your gh-dash config, for its GITHUB view: edit yours.\n"), b...), 0o644); err != nil {
-		return "", err
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
+		return nil, err
 	}
-	return p, os.Rename(tmp, p)
+	if err := os.Rename(tmp, p); err != nil {
+		return nil, err
+	}
+	gh := os.Getenv("GH_CONFIG_DIR")
+	if gh == "" {
+		if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+			gh = x + "/gh"
+		} else {
+			gh = os.Getenv("HOME") + "/.config/gh"
+		}
+	}
+	return []string{"XDG_CONFIG_HOME=" + home, "GH_CONFIG_DIR=" + gh, "GH_DASH_CONFIG="}, nil
 }
 
-// mapGet is the value of key k in mapping node m, or nil.
-func mapGet(m *yaml.Node, k string) *yaml.Node {
-	if m == nil || m.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == k {
-			return m.Content[i+1]
-		}
-	}
-	return nil
-}
-
-func mapSet(m *yaml.Node, k string, v *yaml.Node) {
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == k {
-			m.Content[i+1] = v
-			return
-		}
-	}
-	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k}, v)
-}
-
-// mergeGhDash is your gh-dash config (a document node, maybe empty) with
-// ours put in: our keybindings added to each section, replacing any of
-// yours on the same key, and our theme when theme is true.
-func mergeGhDash(mine, ours *yaml.Node, theme bool) *yaml.Node {
-	top := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	if mine.Kind == yaml.DocumentNode && len(mine.Content) == 1 && mine.Content[0].Kind == yaml.MappingNode {
-		top = mine.Content[0]
-	}
-	o := ours.Content[0]
-	if kb := mapGet(o, "keybindings"); kb != nil {
-		mk := mapGet(top, "keybindings")
-		if mk == nil || mk.Kind != yaml.MappingNode {
-			mk = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-			mapSet(top, "keybindings", mk)
-		}
-		for i := 0; i+1 < len(kb.Content); i += 2 {
-			sec, add := kb.Content[i].Value, kb.Content[i+1]
-			list := mapGet(mk, sec)
-			if list == nil || list.Kind != yaml.SequenceNode {
-				list = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-				mapSet(mk, sec, list)
-			}
-			taken := map[string]bool{}
-			for _, b := range add.Content {
-				if k := mapGet(b, "key"); k != nil {
-					taken[k.Value] = true
-				}
-			}
-			var keep []*yaml.Node
-			for _, b := range list.Content {
-				if k := mapGet(b, "key"); k == nil || !taken[k.Value] {
-					keep = append(keep, b)
-				}
-			}
-			list.Content = append(keep, add.Content...)
-		}
-	}
-	if t := mapGet(o, "theme"); theme && t != nil {
-		mapSet(top, "theme", t)
-	}
-	return top
-}
+var (
+	rePlainPath = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
+	reFork      = regexp.MustCompile(`-rb[0-9]`)
+)
 
 // viewWindows are the session's view windows, by view name: window ids.
 func (e *Env) viewWindows() map[string]string {

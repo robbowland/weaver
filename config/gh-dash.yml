@@ -1,21 +1,117 @@
-# weaver's part of gh-dash in the weaver session's GITHUB view: put into a
-# copy of your own gh-dash config (keybindings added, theme replaced), which
-# gh-dash then reads. WEAVER is the weaver binary.
+# gh-dash as the weaver session's GITHUB view runs it: the whole of its
+# config, written by weaver each time the view starts (your own gh-dash
+# config is for gh-dash outside weaver). A Go template: {{.Wvr}} is the wvr
+# binary, .Fork whether gh-dash is the fork with weaver's extras (its
+# version says -rb).
+#
+# What weaver does itself is not offered twice: C (checkout) starts a weaver
+# thread in a worktree of its own and d (diff) a read-only weaver review,
+# as Alt N and Alt R do; only PRs and issues are shown, not the
+# notifications or a repository's branches.
+prSections:
+  - title: Queue
+    filters: is:open review-requested:@me draft:false sort:updated-desc
+  - title: Mine
+    filters: is:open author:@me sort:updated-desc
+  - title: Watch
+    filters: is:open involves:@me -author:@me -assignee:@me sort:updated-desc
+issuesSections:
+  - title: Queue
+    filters: is:open assignee:@me sort:updated-desc
+  - title: Mine
+    filters: is:open author:@me sort:updated-desc
+  - title: Watch
+    filters: is:open involves:@me -assignee:@me -author:@me sort:updated-desc
+defaults:
+  preview:
+    open: true
+    width: 50
+  prsLimit: 20
+  issuesLimit: 20
+  prApproveComment: LGTM
+  view: prs
+{{- if .Fork}}
+  views: [prs, issues]
+{{- end}}
+  refetchIntervalMinutes: 30
+  layout:
+    prs:
+      updatedAt:
+        width: 5
+      createdAt:
+        width: 5
+      repo:
+        width: 20
+      author:
+        width: 15
+      assignees:
+        width: 20
+        hidden: true
+      base:
+        width: 15
+        hidden: true
+      lines:
+        width: 15
+    issues:
+      updatedAt:
+        width: 5
+      createdAt:
+        width: 5
+      repo:
+        width: 15
+      creator:
+        width: 10
+      assignees:
+        width: 20
+        hidden: true
 keybindings:
+  universal:
+    - key: enter
+      builtin: togglePreview
+      name: preview
+    - key: tab
+      builtin: nextSection
+      name: next section
+    - key: shift+tab
+      builtin: prevSection
+      name: previous section
+{{- if .Fork}}
+    - key: ctrl+j
+      builtin: previewLineDown
+      name: preview down
+    - key: ctrl+k
+      builtin: previewLineUp
+      name: preview up
+{{- end}}
   prs:
+    - key: C
+      name: weaver thread
+      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}}
     - key: alt+N
       name: weaver thread
-      command: WEAVER _from github pr {{.RepoName}} {{.PrNumber}}
+      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}}
+    - key: d
+      name: weaver review (read-only)
+      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}} --review
     - key: alt+R
       name: weaver review (read-only)
-      command: WEAVER _from github pr {{.RepoName}} {{.PrNumber}} --review
+      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}} --review
+    - key: ctrl+l
+      builtin: nextSidebarTab
+      name: next preview tab
+    - key: ctrl+h
+      builtin: prevSidebarTab
+      name: previous preview tab
   issues:
+    - key: C
+      name: weaver thread
+      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}}
     - key: alt+N
       name: weaver thread
-      command: WEAVER _from github issue {{.RepoName}} {{.IssueNumber}}
+      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}}
     - key: alt+R
       name: weaver investigate (read-only)
-      command: WEAVER _from github issue {{.RepoName}} {{.IssueNumber}} --review
+      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}} --review
 # Ink and greys, red and green for signals, as the rest of weaver.
 theme:
   ui:
@@ -34,3 +130,6 @@ theme:
       primary: "#ffffff"
       secondary: "#999999"
       faint: "#616161"
+confirmQuit: false
+showAuthorIcons: true
+smartFilteringAtLaunch: false

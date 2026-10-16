@@ -180,10 +180,12 @@ to approve. The form's `alt-r` switches between the two.
 From a shell, the same: `wvr new --pr 45` (or `owner/name#45`, or its URL),
 `wvr new --issue 12`, `wvr new --issue ENG-42`, each with `--review`.
 
-gh-dash runs with a copy of your config to which weaver adds its two keys
-and its colours (`WEAVER_VIEW_THEME=0` keeps yours); your own file is not
-touched. linear-tui runs in the repository you used last, and threads from
-it start there.
+gh-dash runs on weaver's own config, written as the view starts: your
+Queue, Mine and Watch sections, weaver's keys and colours, and only PRs and
+issues. What weaver does itself is not offered twice: gh-dash's `C`
+(checkout) starts a weaver thread and `d` (diff) a weaver review. Your own
+gh-dash config stays yours, for gh-dash outside weaver. linear-tui runs in
+the repository you used last, and threads from it start there.
 
 ### When the session goes
 
@@ -390,7 +392,6 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 | `WEAVER_VIEWS` | each installed | The views beside home: `github`, `linear`, both, or `none` |
-| `WEAVER_VIEW_THEME` | `1` | `0` leaves gh-dash in your own theme |
 
 ## Development
 

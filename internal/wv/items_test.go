@@ -90,60 +90,51 @@ func TestItemPrompt(t *testing.T) {
 	}
 }
 
-// gh-dash's config for the view: yours, with weaver's keys added (yours on
-// the same key give way) and its theme.
-func TestMergeGhDash(t *testing.T) {
-	mine := `prSections:
-  - title: Queue
-    filters: is:open
-keybindings:
-  prs:
-    - key: alt+N
-      command: old
-    - key: C
-      command: keep
-theme:
-  colors:
-    text:
-      primary: "#123456"
-`
-	ours := `keybindings:
-  prs:
-    - key: alt+N
-      command: new
-  issues:
-    - key: alt+R
-      command: rev
-theme:
-  colors:
-    text:
-      primary: "#ffffff"
-`
-	var m, o yaml.Node
-	yaml.Unmarshal([]byte(mine), &m)
-	yaml.Unmarshal([]byte(ours), &o)
-	b, _ := yaml.Marshal(mergeGhDash(&m, &o, true))
-	s := string(b)
-	for _, want := range []string{"title: Queue", "command: keep", "command: new", "command: rev", `"#ffffff"`} {
-		if !strings.Contains(s, want) {
-			t.Errorf("missing %q in:\n%s", want, s)
+// gh-dash's config for the view: weaver's whole, valid YAML, its keys run
+// this binary, the fork's extras only for the fork; gh-dash's environment
+// keeps your own config out and gh's sign-in in.
+func TestGhDashConfig(t *testing.T) {
+	bin := t.TempDir()
+	for _, c := range []struct {
+		version string
+		fork    bool
+	}{{"gh-dash version 4.26.1-rb1", true}, {"gh-dash version 4.26.1", false}} {
+		os.WriteFile(filepath.Join(bin, "gh-dash"), []byte("#!/bin/sh\necho '"+c.version+"'\n"), 0o755)
+		e := &Env{StateDir: t.TempDir(), Self: "/opt/bin/wvr"}
+		t.Setenv("GH_CONFIG_DIR", "")
+		t.Setenv("XDG_CONFIG_HOME", "/x")
+		env, err := e.ghDashConfig([]string{filepath.Join(bin, "gh-dash")})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	for _, gone := range []string{"command: old", "#123456"} {
-		if strings.Contains(s, gone) {
-			t.Errorf("%q left in:\n%s", gone, s)
+		if strings.Join(env, " ") != "XDG_CONFIG_HOME="+e.StateDir+"/gh-dash GH_CONFIG_DIR=/x/gh GH_DASH_CONFIG=" {
+			t.Errorf("env: %v", env)
 		}
-	}
-	var m2, o2 yaml.Node
-	yaml.Unmarshal([]byte(mine), &m2)
-	yaml.Unmarshal([]byte(ours), &o2)
-	if b, _ := yaml.Marshal(mergeGhDash(&m2, &o2, false)); !strings.Contains(string(b), "#123456") {
-		t.Error("theme replaced with theme off")
-	}
-	var empty, o3 yaml.Node
-	yaml.Unmarshal([]byte(ours), &o3)
-	if b, _ := yaml.Marshal(mergeGhDash(&empty, &o3, true)); !strings.Contains(string(b), "command: rev") {
-		t.Errorf("no config of yours: %s", b)
+		b, err := os.ReadFile(e.StateDir + "/gh-dash/gh-dash/config.yml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			PrSections  []struct{ Title string } `yaml:"prSections"`
+			Defaults    struct{ Views []string }
+			Keybindings struct {
+				Universal, Prs, Issues []struct{ Key, Command, Builtin string }
+			}
+		}
+		if err := yaml.Unmarshal(b, &cfg); err != nil {
+			t.Fatalf("%s: not YAML: %v\n%s", c.version, err, b)
+		}
+		keys := map[string]string{}
+		for _, k := range cfg.Keybindings.Prs {
+			keys[k.Key] = k.Command + k.Builtin
+		}
+		if keys["C"] != "/opt/bin/wvr _from github pr {{.RepoName}} {{.PrNumber}}" || keys["d"] != keys["C"]+" --review" || keys["alt+R"] != keys["d"] {
+			t.Errorf("%s: pr keys: %v", c.version, keys)
+		}
+		fork := strings.Contains(string(b), "previewLineDown")
+		if fork != c.fork || (len(cfg.Defaults.Views) == 2) != c.fork || len(cfg.PrSections) != 3 {
+			t.Errorf("%s: fork extras %v, views %v, sections %d", c.version, fork, cfg.Defaults.Views, len(cfg.PrSections))
+		}
 	}
 }
 
