@@ -1,6 +1,6 @@
 # weaver design: contracts
 
-The engine (the `wvr` binary, `cmd/wvr` and `internal/wv`) and the
+The engine (the `wvr` binary, `cmd/wvr` and `internal/wvr`) and the
 Neovim side (`nvim/`) meet at the contracts below. Change one only with both
 sides agreeing, and record why in [decisions.md](decisions.md).
 

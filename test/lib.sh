@@ -21,7 +21,7 @@ as_pane() {
 pane_env() { printf 'TMUX_PANE=%%%s' "$1"; }
 pass=0 fail=0
 # weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
-eval "$(sed -nE 's/^	G(Need|Done|Seen|Work|Idle|Int|End) += "(.*)"$/\1 \2/p' "$(dirname "${BASH_SOURCE[0]}")/../internal/wv/board.go" |
+eval "$(sed -nE 's/^	G(Need|Done|Seen|Work|Idle|Int|End) += "(.*)"$/\1 \2/p' "$(dirname "${BASH_SOURCE[0]}")/../internal/wvr/board.go" |
 	while read -r n g; do printf "G_%s='%s'\n" "$(echo "$n" | tr '[:lower:]' '[:upper:]')" "$g"; done)"
 
 ok() {

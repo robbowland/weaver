@@ -1,6 +1,6 @@
 // Package wv is weaver: what it knows of its tmux session, its state files,
 // the hook engine, the dashboards and threads.
-package wv
+package wvr
 
 import (
 	"os"

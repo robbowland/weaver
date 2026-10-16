@@ -1,4 +1,4 @@
-package wv
+package wvr
 
 // Usage is `wvr help`.
 const Usage = `usage: wvr [command]

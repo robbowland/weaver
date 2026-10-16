@@ -1,4 +1,4 @@
-package wv
+package wvr
 
 import (
 	"crypto/rand"

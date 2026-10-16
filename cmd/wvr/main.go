@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/robbowland/weaver/internal/wv"
+	"github.com/robbowland/weaver/internal/wvr"
 )
 
 func main() {
@@ -20,20 +20,20 @@ func main() {
 	// tmux's status line asks for the counts on every redraw: no more than a
 	// file read.
 	if cmd == "status" && len(args) >= 2 && args[1] == "--tmux" {
-		fmt.Println(wv.StatusLine(args[1:]))
+		fmt.Println(wvr.StatusLine(args[1:]))
 		return
 	}
 	switch cmd {
 	case "help", "-h", "--help":
-		fmt.Print(wv.Usage)
+		fmt.Print(wvr.Usage)
 		return
 	case "version", "--version":
 		fmt.Println("weaver " + buildVersion())
 		return
 	case "setup":
-		os.Exit(wv.Setup(args[1:], wv.Load().Self, os.Stdout))
+		os.Exit(wvr.Setup(args[1:], wvr.Load().Self, os.Stdout))
 	case "_plugins":
-		if err := wv.Plugins(); err != nil {
+		if err := wvr.Plugins(); err != nil {
 			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
 			os.Exit(1)
 		}
@@ -41,23 +41,23 @@ func main() {
 	case "_runtime":
 		// install.sh: unpack this build's files now, so Neovim configs find
 		// its plugin before weaver next runs.
-		if _, err := wv.Runtime(); err != nil {
+		if _, err := wvr.Runtime(); err != nil {
 			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
-	e := wv.Load()
+	e := wvr.Load()
 	rc, ok := run(e, cmd, args)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wv.Usage)
+		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wvr.Usage)
 		os.Exit(2)
 	}
 	os.Exit(rc)
 }
 
 // run runs cmd; ok false when there is no such command.
-func run(e *wv.Env, cmd string, args []string) (int, bool) {
+func run(e *wvr.Env, cmd string, args []string) (int, bool) {
 	needSession := func() bool {
 		if e.Session == "" {
 			fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `wvr`)")
@@ -85,7 +85,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		}
 		return e.Event(adapter, bell), true
 	case "snapshot":
-		c, msg := wv.Snapshot(args[1:])
+		c, msg := wvr.Snapshot(args[1:])
 		if msg != "" {
 			fmt.Fprintln(os.Stderr, "weaver: "+msg)
 			return 1, true
@@ -101,7 +101,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		if len(args) > 1 {
 			w = args[1]
 		}
-		fmt.Print(wv.View(w))
+		fmt.Print(wvr.View(w))
 	case "_goto":
 		if !needSession() {
 			return 1, true
@@ -225,7 +225,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	case "resume":
 		for _, a := range args[1:] {
 			if a == "-h" || a == "--help" {
-				fmt.Print(wv.Usage)
+				fmt.Print(wvr.Usage)
 				return 0, true
 			}
 		}
@@ -253,7 +253,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	case "quit":
 		for _, a := range args[1:] {
 			if a == "-h" || a == "--help" {
-				fmt.Print(wv.Usage)
+				fmt.Print(wvr.Usage)
 				return 0, true
 			}
 		}
@@ -264,11 +264,11 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		}
 		fmt.Print(e.Rows(os.Getenv("LS_MODE") == "plain"))
 	case "_title":
-		fmt.Print(wv.Title())
+		fmt.Print(wvr.Title())
 	case "_footer":
-		fmt.Print(wv.Footer())
+		fmt.Print(wvr.Footer())
 	case "_hf":
-		fmt.Println(wv.HF())
+		fmt.Println(wvr.HF())
 	case "_chrome":
 		fmt.Print(e.Chrome())
 	case "ls":
