@@ -376,6 +376,29 @@ can supersede an earlier one, and says so.
   every tool weaver works with as a dependency (the tap's gh-dash fork and
   linear-tui among them). The formula lives in the tap only.
 
+## Code
+
+- 2026-10-16: An audit against Go's module layout guide, Google's and
+  Uber's style guides and Go Code Review Comments found the port still
+  shaped like the script: one package, everything a string, JSON built as
+  text. The engine was reshaped in small behaviour-preserving steps, each
+  under the full suite:
+  - the records, the hook's input and the board's rows are typed structs;
+    agent states, pane and window ids, work items (a sealed union), where a
+    thread works and what it does with its item are types, and a switch
+    over a closed set names every case (the `exhaustive` and
+    `gochecksumtype` linters);
+  - the state machine is a pure function, `agent.Transition`, with table
+    tests for each event;
+  - commands return errors and `main` says them, from a command table;
+  - the domain and the adapters are packages, dependencies pointing
+    inward: `agent`; `store`, `tmux`, `git`, `nvim`, `items`, `hooks`,
+    `setup`; with `jsonx`, `oneline` and `cli` beneath them. `wvr` keeps
+    the application and its screens (threads, views, board, card, form),
+    which share `Env`; splitting them waits on `Env` itself splitting.
+  - golangci-lint runs in CI on new code, with a complexity ceiling that
+    comes down as the big functions split (115, from 130).
+
 ## History
 
 - weaver began as agentnav, a bash script for Claude Code agents in zellij

@@ -399,7 +399,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Development
 
-The engine is Go (`cmd/wvr`, `internal/wvr`), the Neovim side Lua
+The engine is Go (`cmd/wvr`, `internal/`), the Neovim side Lua
 (`nvim/`); they meet at the contracts in [docs/design.md](docs/design.md),
 and [docs/decisions.md](docs/decisions.md) says why things are as they are.
 
