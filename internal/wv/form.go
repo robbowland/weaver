@@ -20,10 +20,11 @@ import (
 // open its fields live in a file, one per line: repo (the main checkout;
 // empty: not in one), here (the checkout "this checkout" means), branch (as
 // you edited it; empty: from the task), where (worktree | here), agent
-// (claude | codex), base (empty: the default); a long task written in
-// $EDITOR in FILE.task.
+// (claude | codex), base (empty: the default), mode (review: read-only;
+// empty: work), item (the work item's reference, its details in
+// FILE.item); a long task written in $EDITOR in FILE.task.
 
-type form struct{ repo, here, branch, where, agent, base string }
+type form struct{ repo, here, branch, where, agent, base, mode, item string }
 
 func loadForm(f string) form {
 	fm := form{where: "worktree", agent: "claude"}
@@ -39,12 +40,13 @@ func loadForm(f string) form {
 		return ""
 	}
 	fm.repo, fm.here, fm.branch, fm.where, fm.agent, fm.base = get(0), get(1), get(2), get(3), get(4), get(5)
+	fm.mode, fm.item = get(6), get(7)
 	return fm
 }
 
 func (fm form) save(f string) {
 	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(strings.Join([]string{fm.repo, fm.here, fm.branch, fm.where, fm.agent, fm.base}, "\n")+"\n"), 0o644) == nil {
+	if os.WriteFile(tmp, []byte(strings.Join([]string{fm.repo, fm.here, fm.branch, fm.where, fm.agent, fm.base, fm.mode, fm.item}, "\n")+"\n"), 0o644) == nil {
 		os.Rename(tmp, f)
 	}
 }
@@ -383,6 +385,19 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			add("", t, CGrey+t+COff, "^e")
 		}
 	}
+	if fm.item != "" {
+		it, _ := loadItem(sf)
+		title := it.Title
+		if rlen(title) > 56 {
+			title = runeSlice(title, 55) + "…"
+		}
+		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
+		if fm.mode == "review" {
+			add("mode", "review  read-only", "review  "+CGrey+"read-only"+COff, "alt-r")
+		} else {
+			add("mode", "work", "work", "alt-r")
+		}
+	}
 	if fm.repo != "" {
 		t := formPath(fm.repo)
 		add("repo", filepath.Base(fm.repo)+"  "+t, CBold+filepath.Base(fm.repo)+COff+"  "+CGrey+t+COff, "^r")
@@ -567,9 +582,9 @@ func checkThread(task string, fm form) string {
 // New is `weaver new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
-	var repoArg, from, branch, base, agent, where string
+	var repoArg, from, branch, base, agent, where, itemArg, itemKind string
 	var task []string
-	nofocus, edit := false, false
+	nofocus, edit, review := false, false, false
 	die := func(m string) (int, bool) {
 		fmt.Fprintln(os.Stderr, "weaver: "+m)
 		return 1, true
@@ -577,7 +592,7 @@ func (e *Env) New(args []string) (int, bool) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
-		case "--repo", "--from", "--branch", "-b", "--base", "--agent":
+		case "--repo", "--from", "--branch", "-b", "--base", "--agent", "--pr", "--issue":
 			if i+1 >= len(args) {
 				return die(a + " needs a value")
 			}
@@ -593,8 +608,12 @@ func (e *Env) New(args []string) (int, bool) {
 				base = v
 			case "--agent":
 				agent = v
+			case "--pr", "--issue":
+				itemArg, itemKind = v, strings.TrimPrefix(a, "--")
 			}
 			i++
+		case "--review":
+			review = true
 		case "--here":
 			where = "here"
 		case "--worktree":
@@ -655,6 +674,9 @@ func (e *Env) New(args []string) (int, bool) {
 		where = "worktree"
 	}
 	fm := form{branch: branch, where: where, agent: agent, base: base}
+	if review {
+		fm.mode = "review"
+	}
 	if r, c, ok := repoOf(start); ok {
 		fm.repo, fm.here = r, c
 	} else {
@@ -676,6 +698,54 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 	}
 	t := strings.Join(task, " ")
+	// A work item: its repository's checkout, its branch, and the task for
+	// it, read before the form opens.
+	var it *item
+	repoErr := ""
+	if itemArg != "" {
+		x, err := parseItem(itemKind, itemArg)
+		if err != nil {
+			return die(err.Error())
+		}
+		if x.Kind != "linear" {
+			if x.Repo == "" {
+				x.Repo = ghRepo(start)
+			}
+			if x.Repo != "" && (fm.repo == "" || !strings.EqualFold(ghRepo(fm.repo), x.Repo)) {
+				if c := e.checkoutFor(x.Repo, fm.repo); c != "" {
+					fm.repo, fm.here = c, c
+				} else {
+					fm.repo = ""
+					repoErr = "no checkout of " + x.Repo + " known: pick it (^r)"
+				}
+			}
+		}
+		if isTTY(2) {
+			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, x.Ref(), COff)
+		}
+		x, err = fetchItem(x, start)
+		if isTTY(2) {
+			fmt.Fprint(os.Stderr, "\r\033[K")
+		}
+		if err != nil {
+			return die(err.Error())
+		}
+		it = &x
+		if branch == "" {
+			fm.branch = x.branchName()
+		}
+		fm.where = "worktree"
+		fm.item = x.Ref()
+		// Already a thread on its branch: go to it.
+		if fm.repo != "" {
+			if a := e.threadOnBranch(fm.repo, fm.branch); a != "" {
+				e.focus(a)
+				e.MarkSeen(a)
+				fmt.Printf("weaver: %s already has a thread (%s): went to it\n", x.Ref(), fm.branch)
+				return 0, true
+			}
+		}
+	}
 	if edit {
 		f, err := os.CreateTemp("", "weaver-task.")
 		if err != nil {
@@ -708,10 +778,13 @@ func (e *Env) New(args []string) (int, bool) {
 		t = b
 	}
 	if t != "" {
+		if repoErr != "" {
+			return die(repoErr + " (or --repo DIR)")
+		}
 		if m := checkThread(t, fm); m != "" {
 			return die(m)
 		}
-		if !e.threadCreate(t, fm, nofocus) {
+		if !e.threadCreate(t, fm, it, nofocus) {
 			return 1, true
 		}
 		return 0, true
@@ -730,13 +803,23 @@ func (e *Env) New(args []string) (int, bool) {
 	defer func() {
 		os.Remove(sf)
 		os.Remove(sf + ".task")
+		os.Remove(sf + ".item")
 	}()
+	query := ""
+	if it != nil {
+		saveItem(sf, *it)
+		query = it.defaultTask(review)
+	}
 	for {
-		t, rc := e.newForm(sf)
+		t, rc := e.newForm(sf, query, repoErr)
 		if rc != 0 {
 			return rc, true
 		}
-		if e.threadCreate(t, loadForm(sf), nofocus) {
+		query, repoErr = t, ""
+		if i := strings.IndexByte(query, '\n'); i >= 0 {
+			query = query[:i]
+		}
+		if e.threadCreate(t, loadForm(sf), it, nofocus) {
 			return 0, true
 		}
 		// The worktree could not be made: its message is on screen.
@@ -772,7 +855,7 @@ func readKey() byte {
 
 // newForm is the form until you start a thread it can start: the task, or
 // 130 when you cancel.
-func (e *Env) newForm(sf string) (string, int) {
+func (e *Env) newForm(sf, query, errs string) (string, int) {
 	q := Quote(e.Self)
 	qs := Quote(sf)
 	hd := q + " _form header " + qs + " {q}"
@@ -782,7 +865,6 @@ func (e *Env) newForm(sf string) (string, int) {
 	if fm.where == "worktree" && fm.base == "" {
 		go e.fetchStart(fm.repo, sf)
 	}
-	query, errs := "", ""
 	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
 		os.MkdirAll(e.SockDir, 0o700)
 		os.Chmod(e.SockDir, 0o700)
@@ -798,6 +880,7 @@ func (e *Env) newForm(sf string) (string, int) {
 			"--bind", "change:bg-cancel+bg-transform-header("+hd+")",
 			"--bind", "tab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
 			"--bind", "btab:execute-silent("+q+" _form agent "+qs+")+transform-header("+hd+")",
+			"--bind", "alt-r:execute-silent("+q+" _form mode "+qs+")+transform-header("+hd+")",
 			"--bind", "alt-b:execute("+q+" _form branch "+qs+" {q})+transform-header("+hd+")",
 			"--bind", "alt-B:execute("+q+" _form base "+qs+")+transform-header("+hd+")",
 			"--bind", "ctrl-r:execute("+q+" _form repo "+qs+")+transform-header("+hd+")",
@@ -851,6 +934,13 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.where == "worktree" && fm.base == "" {
 			e.fetchStart(fm.repo, sf)
 		}
+	case "mode":
+		if fm.mode == "review" {
+			fm.mode = ""
+		} else {
+			fm.mode = "review"
+		}
+		fm.save(sf)
 	case "agent":
 		if fm.agent == "claude" {
 			fm.agent = "codex"

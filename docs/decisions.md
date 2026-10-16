@@ -236,6 +236,43 @@ can supersede an earlier one, and says so.
   repo/branch`) as it opens, not when its agent first reports; the form and
   its pickers take the board's label grammar (`[ WEAVER :: NEW THREAD ]`).
 
+## Work items and views
+
+- 2026-10-16: Threads start from a pull request or an issue, seen in the
+  best tools for them rather than a picker of weaver's own: gh-dash for
+  GitHub (12.6k stars, sections as tabs, custom keys with the row's
+  `RepoName`, `PrNumber`, `HeadRefName`, full hex theming) and
+  [k1-c/linear-tui](https://github.com/k1-c/linear-tui) for Linear, chosen
+  over roeyazroel/linear-tui (more themes, but it runs its own agent and
+  gives no way to read the selection) because it is built for agents:
+  `linear-tui context --json` reports the row under the cursor and
+  `issue show --json` the issue with Linear's branch name. Each runs in a
+  view, a window beside home that Alt y steps through (thread, home, each
+  view, back), with a strip on the status line. Contrabass and Symphony
+  poll a tracker and run agents unattended, the opposite of what is wanted;
+  workmux, agent-deck and claude-squad start nothing from an item.
+- 2026-10-16: Alt N and Alt R open the new-thread form filled in, rather
+  than start at once: you see the branch and repository before anything is
+  made, and pick a checkout when weaver knows none. Alt R is read-only:
+  Claude Code in plan mode, Codex in a read-only sandbox, and a pull
+  request's nvim on the review against its base.
+- 2026-10-16: The branch is the join key, as the 2026-10-14 brief proposed:
+  nothing is written back to GitHub or Linear, and a branch that already has
+  a thread goes to it. The item's text is fenced between marker lines with a
+  random nonce and said to be untrusted, since anyone who can comment wrote
+  it.
+- 2026-10-16: gh-dash's config is written whole, from yours plus weaver's
+  keys and theme, rather than layered with `GH_DASH_CONFIG` or `include`:
+  gh-dash 4.0 (and forks of it) replace the global config with
+  `GH_DASH_CONFIG`'s and know no `include` (measured: the sections went back
+  to the defaults). In GITHUB, tmux passes Alt N and Alt R to gh-dash, whose
+  own bindings know the row; `_from` opens the form from a detached process,
+  so gh-dash, waiting on its command, goes on at once.
+- 2026-10-16: A remote's GitHub repository is read from the URL as
+  configured, not as `git remote -v` shows it: an `insteadOf` rewrite is how
+  it is reached, not what it is (and the tests reach a local bare repository
+  for github.com/o/r that way).
+
 ## Lost threads
 
 - 2026-10-15: Threads survive their multiplexer's server crashing: a thread

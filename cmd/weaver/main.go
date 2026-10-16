@@ -117,6 +117,16 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 			return 1, true
 		}
 		e.GoHome()
+	case "view":
+		if !needSession() {
+			return 1, true
+		}
+		return e.View(args[1:]), true
+	case "_from":
+		if !needSession() {
+			return 1, true
+		}
+		return e.From(args[1:]), true
 	case "next":
 		if !needSession() {
 			return 1, true

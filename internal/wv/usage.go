@@ -12,7 +12,10 @@ const Usage = `usage: weaver [command]
                                --branch NAME, --base REF (@: this checkout's HEAD),
                                --here (the current checkout),
                                --agent claude|codex, --edit (write the task in $EDITOR),
-                               --from PANE (that agent's repository), --no-focus
+                               --from PANE (that agent's repository), --no-focus;
+                               --pr REF / --issue REF: from a pull request or issue
+                               (a number, owner/name#N, its URL, or a Linear ENG-42),
+                               --review: read-only
   close [--yes] [--remove-worktree] [pane-id]
                                close an agent (the focused one) with its nvim, and its
                                thread's window; offers to remove a thread's worktree when it
@@ -32,6 +35,7 @@ const Usage = `usage: weaver [command]
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
+  view [github|linear]         go to a view: gh-dash or linear-tui beside home
   status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
   gc                           forget agents that are gone, in every session

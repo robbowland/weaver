@@ -219,6 +219,19 @@ function M.setup()
     vim.g.weaver_swap = nil
     vim.schedule(function() util.msg('swap file exists: opened ' .. util.short(swapped) .. ' read-only', util.WARN) end)
   end
+  -- A review thread's nvim (`weaver new --review`) opens on its review, once.
+  local scope = vim.env.WEAVER_OPEN_REVIEW
+  if scope and scope ~= '' then
+    vim.env.WEAVER_OPEN_REVIEW = nil
+    local function open()
+      vim.schedule(function() require('weaver.review').open(scope) end)
+    end
+    if vim.v.vim_did_enter == 1 then
+      open()
+    else
+      api.nvim_create_autocmd('VimEnter', { once = true, callback = open })
+    end
+  end
 end
 
 function M.teardown()

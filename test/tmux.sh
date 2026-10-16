@@ -4,9 +4,10 @@
 # tests press its keys there. Threads (nvim on the left, the agent at its
 # width), hooks keyed by tmux pane, Alt y, the board's digits, Alt v, Alt 1,
 # Cmd+D (as Ghostty sends it), Alt N, the server crashing and its threads resumed (by the board's
-# enter, and by themselves), the board's x, and Ctrl q. Its own socket,
-# session name, state, Claude Code dir, nvim config and PATH, with fake
-# agents: never your tmux or agents.
+# enter, and by themselves), the board's x, Ctrl q, and threads from work
+# items in the GITHUB and LINEAR views. Its own socket, session name, state,
+# Claude Code dir, nvim config and PATH, with fake agents, gh, gh-dash and
+# linear-tui: never your tmux, agents or accounts.
 #   test/tmux.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -18,6 +19,8 @@ unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSI
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
+# No views (gh-dash, linear-tui) but where a test asks for them.
+export WEAVER_VIEWS=
 [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 SD=$XDG_STATE_HOME/weaver
 mkdir -p "$AT/bin" "$SD" "$AT/claude/sessions"
@@ -338,6 +341,135 @@ ok "resume: its worktree gone, from its repository" \
 	"$(windows)|$(tx display -p -t "%$AG" '#{pane_current_path}')|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)" \
 	"0 2 |$(cd "$AT/repo" && pwd -P)|--resume sid-g " ||
 	{ tx list-windows -t "=$S" -F '#{window_index} #{window_name}' | sed 's/^/  window: /'; panes 1 | sed 's/^/  pane: /'; ls "$SD" "$SD/lost" | sed 's/^/  state: /'; }
+
+# --- work items and views: a pull request's review and thread, an issue
+# investigated, and gh-dash and linear-tui in the session's views. Fakes: gh
+# answers for o/r, a repository here whose remote reads as github.com/o/r.
+key 11 # Ctrl q
+waitfor "! tx has-session -t =$S 2>/dev/null"
+waitfor '! kill -0 "$driver" 2>/dev/null'
+fresh_args
+gitc() { git -C "$AT/r" -c user.email=t@e -c user.name=t "$@"; }
+git init -q -b main "$AT/r" && gitc commit -q --allow-empty -m init
+gitc checkout -q -b add-flag && echo flag >"$AT/r/flag" && gitc add flag && gitc commit -q -m flag && gitc checkout -q main
+git clone -q --bare "$AT/r" "$AT/o-r.git" && gitc branch -q -D add-flag
+gitc remote add origin https://github.com/o/r.git && gitc config url."$AT/o-r.git".insteadOf https://github.com/o/r.git
+gitc fetch -q origin
+cat >"$AT/bin/gh" <<'GH'
+#!/bin/bash
+case "$1 $2" in
+"pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
+"api graphql") echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
+"issue view") echo '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","author":{"login":"dan"},"state":"OPEN","comments":[]}' ;;
+*) echo "gh (fake): $*" >&2; exit 1 ;;
+esac
+GH
+# gh-dash: on Alt N or Alt R, the command its config binds for prs, on o/r#45.
+cat >"$AT/bin/gh-dash" <<GHD
+#!/bin/bash
+run() {
+	c=\$(awk -v k="key: \$1" '/^ *prs:/ { p = 1; next } /^ *issues:/ { p = 0 }
+		p && index(\$0, k) { f = 1; next } p && f && /command:/ { sub(/^ *command: /, ""); print; exit }' "\$GH_DASH_CONFIG")
+	c=\${c#\\'}; c=\${c%\\'}; c=\${c//\{\{.RepoName\}\}/o/r}; c=\${c//\{\{.PrNumber\}\}/45}
+	echo "\$c" >>"$AT/ghdash.ran"
+	sh -c "\$c"
+}
+stty -echo -icanon
+while IFS= read -rsn1 ch; do
+	[ "\$ch" = \$'\e' ] || continue
+	IFS= read -rsn1 -t 1 d
+	case \$d in N) run alt+N ;; R) run alt+R ;; esac
+done
+GHD
+cat >"$AT/bin/linear-tui" <<'LT'
+#!/bin/bash
+case "$1" in
+context) echo '{"workspace":"w","running":true,"snapshot":{"version":1,"screen":"issue_list","rows":[{"kind":"issue","identifier":"ENG-1","title":"a"},{"kind":"issue","identifier":"ENG-42","title":"Fix it"}],"selected_row":1}}' ;;
+issue) echo '{"identifier":"ENG-42","title":"Fix it","url":"https://linear.app/acme/issue/ENG-42/fix-it","description":"Broken.","branch_name":"t/eng-42-fix-it","state":{"name":"Todo"},"creator":{"name":"Eve"},"comments":[]}' ;;
+*) exec sleep 100000 ;;
+esac
+LT
+chmod +x "$AT/bin/gh" "$AT/bin/gh-dash" "$AT/bin/linear-tui"
+printf '%s\n' "$(cd "$AT/r" && pwd -P)" >"$SD/repos"
+# The thread the last session lost stays out of this one.
+rm -rf "$SD/lost" "$SD/tmux-${S}_"*
+attach WEAVER_VIEWS="github linear"
+waitfor '[ "$(windows)" = "0 900 901 " ]'
+ok "views: GITHUB and LINEAR beside home, out of the thread numbers" \
+	"$(tx list-windows -t "=$S" -F '#{window_index}:#{window_name}:#{@weaver-view}' | tr '\n' ' ')" "0:home: 900:GITHUB:github 901:LINEAR:linear "
+ok "...gh-dash's config: weaver's keys and colours" "$(grep -c '_from github' "$SD/gh-dash.yml")|$(grep -c '#39d97a' "$SD/gh-dash.yml")" "4|1"
+ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
+	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
+
+# A review of the pull request: on its head, read-only, its nvim on the review.
+tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
+waitfor '[ "$(windows)" = "0 1 900 901 " ]'
+AG=$(pane_at 1 1)
+waitfor '[ -f "$AT/args.$AG" ]'
+WT=$(tx display -p -t "%$AG" '#{pane_current_path}')
+ok "pr --review: a thread on its branch, the agent in plan mode" \
+	"$(git -C "$WT" symbolic-ref --short HEAD)|$(sed -n '1,2p' "$AT/args.$AG" | tr '\n' ' ')" "add-flag|--permission-mode plan "
+ok "...its prompt: the task, read-only, the open review comment fenced, not the resolved one" \
+	"$(grep -c '^Review #45$' "$AT/args.$AG")|$(grep -c 'change no files' "$AT/args.$AG")|$(grep -c '^bob: Name it --who' "$AT/args.$AG")|$(grep -c 'a resolved one' "$AT/args.$AG")|$(grep -c '^===== BEGIN UNTRUSTED GITHUB' "$AT/args.$AG")" \
+	"1|1|1|0|1"
+ok "...its record and its base for reviews" "$(jq -r '"\(.item.ref) \(.mode)"' "$SD/tmux-${S}_$AG.thread")|$(git -C "$AT/r" config branch.add-flag.weaverbase)" \
+	"o/r#45 review|origin/main"
+NS=/tmp/weaver-$(id -u)/tmux-${S}_$AG.sock
+waitfor '[ "$(nvim --server "$NS" --remote-expr "tabpagenr(\"\$\")" 2>/dev/null)" = 2 ]' 100
+ok "...its nvim opens on the review" "$(nvim --server "$NS" --remote-expr 'tabpagenr("$")' 2>/dev/null)" "2"
+tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --pr 45 'again' >$AT/new.out 2>&1"
+ok "pr: its branch already has a thread: to it" "$(cat "$AT/new.out")|$(windows)" \
+	"weaver: o/r#45 already has a thread (add-flag): went to it|0 1 900 901 "
+
+# An issue investigated: its own branch, plan mode.
+tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --no-focus --review --issue o/r#12 'Look into #12' >$AT/new.out 2>&1"
+waitfor '[ "$(windows)" = "0 1 2 900 901 " ]'
+AG2=$(pane_at 2 1)
+waitfor '[ -f "$AT/args.$AG2" ]'
+ok "issue --review: N-title branch, plan mode, investigate" \
+	"$(git -C "$(tx display -p -t "%$AG2" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(sed -n 2p "$AT/args.$AG2")|$(grep -c 'without changing any files' "$AT/args.$AG2")" \
+	"12-fix-the-flaky-test|plan|1"
+
+# Alt y: a thread, home, each view, and back; Alt j and Alt k pass the views.
+tx select-window -t "=$S:2"
+seq=""
+for i in 1 2 3 4; do
+	key 1b79
+	sleep 0.4
+	seq="$seq$(where | cut -d ' ' -f 1) "
+done
+ok "Alt y: home, GITHUB, LINEAR, back to the thread" "$seq" "0 900 901 2 "
+key 1b6a # Alt j, from the last thread
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+ok "Alt j: past the views, round to home" "$(where | cut -d ' ' -f 1)" "0"
+key 1b6b # Alt k
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+ok "Alt k: back past them" "$(where | cut -d ' ' -f 1)" "2"
+
+# gh-dash's Alt N on the pull request: weaver's command, then its thread.
+tx select-window -t "=$S:900"
+key 1b4e # Alt N
+waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
+ok "GITHUB: Alt N runs weaver's command for the row, and goes to its thread" \
+	"$(tail -n 1 "$AT/ghdash.ran" 2>/dev/null | sed 's/^.* _from/_from/')|$(where | cut -d ' ' -f 1)" "_from github pr o/r 45|1"
+
+# linear-tui's Alt N: the form, for the issue under its cursor.
+tx select-window -t "=$S:901"
+key 1b4e
+waitfor '[ -n "$(ls "$SD" | grep -E "^form\.[^.]+\.item$")" ]'
+FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
+hdr=$(FZF_COLUMNS=96 weaver _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
+ok "LINEAR: Alt N, the form for the issue under the cursor" \
+	"$(sed -n '1p;3p;8p' "$FORM" | tr '\n' ' ')|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
+	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
+waitfor '[ "$(grep -c "Implement ENG-42" "$AT/screen.log")" -gt 0 ]'
+key 0d # enter
+waitfor '[ "$(windows)" = "0 1 2 3 900 901 " ]'
+AG3=$(pane_at 3 1)
+waitfor '[ -f "$AT/args.$AG3" ]'
+ok "...enter: its thread, on Linear's branch" \
+	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(grep -c '^Implement ENG-42$' "$AT/args.$AG3")|$(grep -c '^Linear issue ENG-42 by Eve' "$AT/args.$AG3")" \
+	"t/eng-42-fix-it|1|1"
 
 echo "-- $pass passed, $fail failed"
 exit $fail

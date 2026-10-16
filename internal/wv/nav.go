@@ -30,53 +30,76 @@ func (e *Env) Goto(pane, tab string) {
 }
 
 type tab struct {
-	id, name string
-	active   bool
+	id, name, view string
+	active         bool
 }
 
 func (e *Env) tabs() []tab {
-	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id}"+us+"#{window_name}"+us+"#{window_active}")
+	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id}"+us+"#{window_name}"+us+"#{window_active}"+us+"#{@weaver-view}")
 	if err != nil {
 		return nil
 	}
 	var ts []tab
 	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
 		f := strings.Split(l, us)
-		if len(f) == 3 {
-			ts = append(ts, tab{strings.TrimPrefix(f[0], "@"), f[1], f[2] == "1"})
+		if len(f) == 4 {
+			ts = append(ts, tab{strings.TrimPrefix(f[0], "@"), f[1], f[3], f[2] == "1"})
 		}
 	}
 	return ts
 }
 
-// GoHome is `weaver go home` (Alt y): from home back to the tab you came
-// from; from anywhere else, home (made again first if it was closed).
+// GoHome is `weaver go home` (Alt y): from a thread (or anywhere else) to
+// home, made again first if it was closed; from home on through the views
+// (THREADS, GITHUB, LINEAR), and from the last back to where you came from.
 func (e *Env) GoHome() {
 	ts := e.tabs()
-	cur, home := "", ""
+	var cur tab
+	home := ""
 	for _, t := range ts {
-		if t.active && cur == "" {
-			cur = t.id
+		if t.active && cur.id == "" {
+			cur = t
 		}
-		if t.name == "home" && home == "" {
+		if t.name == "home" && t.view == "" && home == "" {
 			home = t.id
 		}
 	}
 	lf := e.StateDir + "/" + e.SKey + ".last"
-	if home != "" && cur == home {
-		last, _ := firstLine(lf)
-		if !digits(last) {
-			return
-		}
-		for _, t := range ts {
-			if t.id == last {
-				e.Tmux("select-window", "-t", "@"+last)
+	// Back where you came from; when that is gone (or was nowhere), home.
+	back := func() {
+		if last, _ := firstLine(lf); digits(last) {
+			for _, t := range ts {
+				if t.id == last && t.view == "" && t.id != home {
+					e.Tmux("select-window", "-t", "@"+last)
+					return
+				}
 			}
 		}
+		if home != "" && cur.id != home {
+			e.Tmux("select-window", "-t", "@"+home)
+		}
+	}
+	views := viewNames()
+	at := -1
+	if cur.view != "" {
+		for i, v := range views {
+			if v == cur.view {
+				at = i
+			}
+		}
+	}
+	switch {
+	case home != "" && cur.id == home, at >= 0:
+		if at+1 < len(views) {
+			if _, err := e.OpenView(views[at+1], false); err == nil {
+				return
+			}
+		}
+		back()
 		return
 	}
-	if cur != "" {
-		os.WriteFile(lf, []byte(cur+"\n"), 0o644)
+	if cur.id != "" && cur.view == "" {
+		os.WriteFile(lf, []byte(cur.id+"\n"), 0o644)
 	}
 	if home == "" {
 		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {

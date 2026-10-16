@@ -102,8 +102,8 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // (`weaver _agent tok kind`), then its nvim on the agent's left (`weaver nvim
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
-// nofocus). Its window id.
-func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool) (string, bool) {
+// nofocus), nvim with nvimEnv too. Its window id.
+func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool, nvimEnv ...string) (string, bool) {
 	args := []string{"new-window"}
 	if nofocus {
 		args = append(args, "-d")
@@ -121,8 +121,12 @@ func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool) (string, bool
 		total = 200
 	}
 	nvCols := max(total-agentCols(total)-1, 1)
-	out, err = e.Tmux("split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", "%"+agent,
-		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "nvim", "--fresh", agent)
+	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", "%" + agent,
+		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION=" + e.Session}
+	for _, v := range nvimEnv {
+		sw = append(sw, "-e", v)
+	}
+	out, err = e.Tmux(append(sw, e.Self, "nvim", "--fresh", agent)...)
 	f = strings.Fields(string(out))
 	if err != nil || len(f) < 2 {
 		e.Tmux("kill-window", "-t", "@"+tab)
@@ -334,7 +338,7 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
-func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
+func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	var dir, name, branch, base string
 	created := false
 	if fm.where == "here" {
@@ -359,6 +363,17 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 				}
 			}
 		}
+		// A pull request from a fork: its head, fetched as a branch here.
+		if it != nil && it.Kind == "pr" && it.Fork && !gitOK(fm.repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+			if rm := preferredRemote(fm.repo); rm != "" {
+				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, it.Label(), COff)
+				c := exec.Command("git", "-C", fm.repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(it.Num)+"/head:"+branch)
+				c.Stderr = os.Stderr
+				if c.Run() != nil {
+					return false
+				}
+			}
+		}
 		// A branch that is not here yet: fetch first (it may be on the
 		// remote), and find where it would start.
 		note := ""
@@ -371,13 +386,29 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 		}
 		name = branch
 	}
+	// A pull request's thread reviews against what it merges into.
+	prBase := ""
+	if it != nil && it.Kind == "pr" && it.Base != "" {
+		prBase = it.Base
+		if rm := preferredRemote(fm.repo); rm != "" {
+			prBase = rm + "/" + it.Base
+		}
+		if branch != "" {
+			exec.Command("git", "-C", fm.repo, "config", "branch."+branch+".weaverbase", prBase).Run()
+		}
+	}
+	prompt := task
+	review := fm.mode == "review"
+	if it != nil {
+		prompt = it.prompt(task, review, prBase)
+	}
 	tok := token()
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	if os.MkdirAll(d, 0o755) != nil {
 		fmt.Fprintln(os.Stderr, "weaver: cannot create "+d)
 		return false
 	}
-	os.WriteFile(d+"/task", []byte(task), 0o644)
+	os.WriteFile(d+"/task", []byte(prompt), 0o644)
 	// Its stable number: the lowest free one (two at once must not share).
 	unlock := e.numLock()
 	n, _ := e.threadNum()
@@ -391,10 +422,26 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	if created {
 		cr = "true"
 	}
-	rec := `{"num":` + strconv.Itoa(n) + `,"cmd":` + jqStr(agentCmd(fm.agent)) + `,"name":` + jqStr(name) + `,"task":` + jqStr(task) +
+	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
+	cmd := agentCmd(fm.agent)
+	if review {
+		if fm.agent == "codex" {
+			cmd += " --sandbox read-only"
+		} else {
+			cmd += " --permission-mode plan"
+		}
+	}
+	extra := ""
+	if it != nil {
+		extra = `,"item":{"kind":` + jqStr(it.Kind) + `,"ref":` + jqStr(it.Ref()) + `,"url":` + jqStr(it.URL) + `,"title":` + jqStr(it.Title) + `}`
+	}
+	if review {
+		extra += `,"mode":"review"`
+	}
+	rec := `{"num":` + strconv.Itoa(n) + `,"cmd":` + jqStr(cmd) + `,"name":` + jqStr(name) + `,"task":` + jqStr(task) +
 		`,"repo":` + jqStr(fm.repo) + `,"branch":` + jqStr(branch) + `,"worktree":` + jqStr(dir) + `,"here":` + here +
 		`,"worktree_created":` + cr + `,"agent":` + jqStr(fm.agent) + `,"created":` + strconv.FormatInt(time.Now().Unix(), 10) +
-		`,"base":` + jqStr(base) + "}\n"
+		`,"base":` + jqStr(base) + extra + "}\n"
 	if os.WriteFile(d+"/thread.json", []byte(rec), 0o644) != nil {
 		unlock()
 		fmt.Fprintln(os.Stderr, "weaver: cannot write the thread record")
@@ -407,7 +454,12 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	if e.WeaverSession() {
 		wname = threadLabel(n, task, dir)
 	}
-	tab, ok := e.threadTab(tok, fm.agent, dir, wname, nofocus)
+	// A review of a pull request opens its nvim on the review.
+	var nvimEnv []string
+	if review && it != nil && it.Kind == "pr" {
+		nvimEnv = append(nvimEnv, "WEAVER_OPEN_REVIEW=branch")
+	}
+	tab, ok := e.threadTab(tok, fm.agent, dir, wname, nofocus, nvimEnv...)
 	if !ok {
 		os.RemoveAll(d)
 		if created {

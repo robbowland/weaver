@@ -234,13 +234,42 @@ func (e *Env) Preview(args []string) string {
 	if !ok {
 		return out
 	}
+	// The work item its thread started from.
+	if tb, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + pane + ".thread"); err == nil {
+		if t, ok := readObj(tb); ok {
+			if f := itemLine(t); f != "" {
+				s["from"] = f
+			}
+		}
+	}
 	return out + card(s, previewCols(), head, ab, changed, nw, shared)
+}
+
+// itemLine is a thread record's work item for its card: PR o/r#45, issue
+// o/r#12 or ENG-42, and review when it is one; "" without one.
+func itemLine(t obj) string {
+	it, _ := t["item"].(map[string]any)
+	ref, _ := it["ref"].(string)
+	if ref == "" {
+		return ""
+	}
+	l := ref
+	switch it["kind"] {
+	case "pr":
+		l = "PR " + ref
+	case "issue":
+		l = "issue " + ref
+	}
+	if t["mode"] == "review" {
+		l += " · review, read-only"
+	}
+	return l
 }
 
 func card(s obj, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
 	if _, ok := s["state"]; !ok {
-		s = obj{"state": "starting", "since": s["created"], "prompt": s["task"], "agent": s["agent"]}
+		s = obj{"state": "starting", "since": s["created"], "prompt": s["task"], "agent": s["agent"], "from": s["from"]}
 	}
 	st := tostring(s.get("state", "idle"))
 	seen := s.get("seen", false) == true
@@ -263,6 +292,9 @@ func card(s obj, w int, head, ab string, changed, nw, shared int) string {
 	}
 	ls := []string{first, ""}
 	add := func(f []string) { ls = append(ls, f...) }
+	if f := s.get("from", ""); f != "" {
+		add(field(w, "from", f, "", 1))
+	}
 	add(field(w, "asked", s.get("prompt", ""), "", 4))
 	if st == "needs-you" {
 		add(field(w, "waits", s.get("waiting", "you"), "", 3))

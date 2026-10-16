@@ -1,0 +1,36 @@
+# weaver's part of gh-dash in the weaver session's GITHUB view: put into a
+# copy of your own gh-dash config (keybindings added, theme replaced), which
+# gh-dash then reads. WEAVER is the weaver binary.
+keybindings:
+  prs:
+    - key: alt+N
+      name: weaver thread
+      command: WEAVER _from github pr {{.RepoName}} {{.PrNumber}}
+    - key: alt+R
+      name: weaver review (read-only)
+      command: WEAVER _from github pr {{.RepoName}} {{.PrNumber}} --review
+  issues:
+    - key: alt+N
+      name: weaver thread
+      command: WEAVER _from github issue {{.RepoName}} {{.IssueNumber}}
+    - key: alt+R
+      name: weaver investigate (read-only)
+      command: WEAVER _from github issue {{.RepoName}} {{.IssueNumber}} --review
+# Ink and greys, red and green for signals, as the rest of weaver.
+theme:
+  ui:
+    sectionsShowCount: true
+  colors:
+    text:
+      primary: "#ffffff"
+      secondary: "#999999"
+      inverted: "#000000"
+      faint: "#616161"
+      warning: "#ff3b2f"
+      success: "#39d97a"
+    background:
+      selected: "#303030"
+    border:
+      primary: "#ffffff"
+      secondary: "#999999"
+      faint: "#616161"

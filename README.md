@@ -7,6 +7,11 @@ which are working, which are done, and which are waiting on you. One key shows
 them all, another jumps to whoever has waited longest, and a neovim bound to
 each agent follows it into the worktree and file it is really editing.
 
+Beside the threads, the session shows your pull requests and issues in
+[gh-dash](https://github.com/dlvhdr/gh-dash) and
+[linear-tui](https://github.com/k1-c/linear-tui), and a key on any of them
+starts a thread on it, or a read-only review.
+
 weaver drives Claude Code through its hooks, and Codex through an adapter;
 any other agent can report through `weaver event`
 ([docs/design.md](docs/design.md#events-from-other-agents)).
@@ -16,7 +21,10 @@ any other agent can report through `weaver event`
 macOS, with tmux 3.3+, Neovim 0.10+, git and fzf (for the interactive
 dashboard); [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
 in your Neovim config for reviews, and [Worktrunk](https://worktrunk.dev) if
-you want it to make the worktrees.
+you want it to make the worktrees. For the [views](#views-github-and-linear):
+[gh-dash](https://github.com/dlvhdr/gh-dash) (with `gh`, signed in) and
+[linear-tui](https://github.com/k1-c/linear-tui) (signed in), each one only
+if you want its view.
 
 ```sh
 brew install robbowland/kegs/weaver
@@ -84,10 +92,11 @@ Agents you start by hand in any tmux session report to weaver as well, and
 
 | Key | Does |
 | --- | --- |
-| `Alt N` | Start a thread: a form for the task, then a window with nvim and the agent |
-| `Alt j` / `Alt k` | The next / previous window, so the threads in their numbers' order (home included) |
+| `Alt N` | Start a thread: a form for the task, then a window with nvim and the agent. In a view, a thread on the item under the cursor |
+| `Alt R` | In a view, a read-only review of the item under the cursor |
+| `Alt j` / `Alt k` | The next / previous window, so the threads in their numbers' order (home included, the views not) |
 | `Alt h` / `Alt l` | The pane to the left / right |
-| `Alt y` | Home, and from home back to where you came from |
+| `Alt y` | Home, then each view (GITHUB, LINEAR), then back to where you came from |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
@@ -145,6 +154,36 @@ merged into the default branch or pushed), it then offers to remove it
 
 When the agent exits its pane stays; enter there resumes its conversation
 (`claude --resume`, `codex resume`), never sending the task twice.
+
+### Views: GitHub and Linear
+
+Beside home are a view for each tool you have: **GITHUB**, gh-dash with your
+own sections, and **LINEAR**, linear-tui. `Alt y` steps from a thread to
+home, on through them, and back; on home and in a view the status line shows
+the strip of them (`THREADS   GITHUB   LINEAR`).
+
+On a pull request or an issue there, `Alt N` opens the new-thread form
+filled in for it: the task (`Address the review on #45`, `Implement #12`),
+its branch (the pull request's own, `12-fix-the-flaky-test` for a GitHub
+issue, Linear's name for a Linear one) and the repository's checkout, found
+among those weaver knows (`^r` when it knows none). Enter starts it, and the
+agent gets the task with the item's description, its unresolved review
+comments and its comments, fenced and marked as untrusted text. A branch
+that already has a thread goes to that thread instead.
+
+`Alt R` is the read-only twin: on a pull request, a thread on its head
+whose nvim opens on the review against what it merges into, and whose agent
+reviews without changing files (Claude Code in plan mode, Codex in a
+read-only sandbox); on an issue, an investigation that ends in a plan for you
+to approve. The form's `alt-r` switches between the two.
+
+From a shell, the same: `weaver new --pr 45` (or `owner/name#45`, or its URL),
+`weaver new --issue 12`, `weaver new --issue ENG-42`, each with `--review`.
+
+gh-dash runs with a copy of your config to which weaver adds its two keys
+and its colours (`WEAVER_VIEW_THEME=0` keeps yours); your own file is not
+touched. linear-tui runs in the repository you used last, and threads from
+it start there.
 
 ### When the session goes
 
@@ -350,6 +389,8 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
+| `WEAVER_VIEWS` | each installed | The views beside home: `github`, `linear`, both, or `none` |
+| `WEAVER_VIEW_THEME` | `1` | `0` leaves gh-dash in your own theme |
 
 ## Development
 
@@ -378,7 +419,8 @@ touched (they need jq and python3 as well as weaver's own dependencies):
   throwaway tmux server in a pseudo-terminal and the tests press its keys
   there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
   Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
-  their threads resumed, Ctrl q.
+  their threads resumed, Ctrl q, and threads from pull requests and issues
+  in the GITHUB and LINEAR views (with fake `gh`, gh-dash and linear-tui).
 
 `test/soak/nvim-exit.sh` is a long run, by hand: nvims weaver starts, killed
 together round after round, none of which may hang.

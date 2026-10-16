@@ -20,6 +20,7 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `weaver close` finishing in the background said |
+| `$STATE_DIR/gh-dash.yml` | gh-dash's config for the GITHUB view: yours with weaver's keybindings and theme (see [Views](#views)), written as the view starts |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
@@ -254,12 +255,47 @@ the agent's other files. Readers ignore fields they don't know.
 | `created` | int | epoch s |
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
+| `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
+| `mode` | string | `review`: read-only (its `cmd` carries the flags); absent otherwise |
 
 The window's current name is tmux's; in the weaver session weaver labels it
 (`threadTabLabels`).
 
 A task's slug: its first line in lowercase ASCII letters and digits, every
 other run of characters one `-`, at most 48 characters, cut at a `-`.
+
+### Work items
+
+`weaver new --pr REF` and `--issue REF` (with `--review`, read-only) start a
+thread from a GitHub pull request or issue, or a Linear issue. REF is a
+number (of the repository you are in), `owner/name#N` or its URL; for
+`--issue` also a Linear identifier (`ENG-42`) or URL. They are read, never
+written: `gh pr view` and `gh api graphql` (the unresolved review threads),
+`gh issue view`, `linear-tui issue show --json`. The branch is what ties a
+thread to its item:
+
+| Item | Branch | Default task |
+| --- | --- | --- |
+| pull request | its head (`pr-N`, fetched from `pull/N/head`, for one from a fork) | `Address the review on #N`, `Review #N` |
+| GitHub issue | `N-<title's slug>` | `Implement #N`, `Investigate #N` |
+| Linear issue | Linear's `branch_name`, else `<id>-<title's slug>` | `Implement ENG-42`, `Investigate ENG-42` |
+
+A pull request's repository is found among the checkouts weaver knows (yours,
+recent threads' and agents', `~/code/<name>` and the like, zoxide's of the
+same name) by the GitHub URL of a remote as configured; none known, the form
+asks (`^r`). A branch that already has a running thread in this session goes
+to that thread instead. A pull request's branch gets `git config
+branch.<branch>.weaverbase <remote>/<base>`, so reviews compare with what it
+merges into.
+
+The agent is sent the task, a line on what to do in this worktree, and the
+item's text (description, unresolved review comments with file:line,
+comments, the latest kept within 48 KB) between two marker lines carrying a
+random nonce, said to be untrusted: written by anyone who can comment.
+`--review` runs Claude Code with `--permission-mode plan`, Codex with
+`--sandbox read-only`; a pull request's review starts its nvim with
+`WEAVER_OPEN_REVIEW=branch`, which `weaver.lua` takes (once, then unsets) to
+open `:AgentReview branch` after VimEnter.
 
 ### Commands for the dashboard
 
@@ -465,8 +501,10 @@ else weaver's.
   issue Inbox, when it comes, is a second window beside home, out of the
   thread numbering.
 - **Alt y:** `weaver go home`: from a thread to home, remembering the window
-  in `$STATE_DIR/<skey>.last`; from home back to it (home is made again if it
-  was closed).
+  in `$STATE_DIR/<skey>.last`; from home on to each view in turn, and from the
+  last back to it (or home, when it has gone); home is made again if it was
+  closed.
+- **Views:** see [Views](#views).
 - **Threads:** `new-window -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
   `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
   shell), the nvim pane titled `nvim: <dir>`, the agent active. `Alt v`'s nvim is a
@@ -522,4 +560,39 @@ else weaver's.
   starts or attaches a session, so an install reaches a running server. Every
   setting may be read twice: array options take explicit indices
   (`terminal-features[90]`).
+
+## Views
+
+Windows of the weaver session beside home, out of the thread numbering (index
+900 and on, in this order), each running the best tool for its work items
+where it is installed; `$WEAVER_VIEWS` names them instead (`none`, or
+`github linear`). The home board's start-up (`_boot`) starts them detached, so
+the first Alt y to one finds it ready; one that quits is started again on the
+next. Each window has the window option `@weaver-view` (its name).
+
+| View | Window | Runs | Where |
+| --- | --- | --- | --- |
+| `github` | `GITHUB` | `gh-dash` (else `gh dash`) with `GH_DASH_CONFIG=$STATE_DIR/gh-dash.yml` | `$HOME`, so gh-dash does not narrow itself to a repository |
+| `linear` | `LINEAR` | `linear-tui` | the repository used last (`$STATE_DIR/repos`): linear-tui keeps a view per repository, and threads from it start there |
+
+`$STATE_DIR/gh-dash.yml` is your gh-dash config (`$XDG_CONFIG_HOME/gh-dash/config.yml`)
+with `config/gh-dash.yml` put in: its keybindings added to `keybindings.prs`
+and `keybindings.issues` (yours on the same keys give way), and its theme in
+place of yours unless `$WEAVER_VIEW_THEME` is `0`. Written in full rather than
+through gh-dash's own layering or `include`, which an older gh-dash (4.0)
+lacks: there `GH_DASH_CONFIG` replaces the global config.
+
+- **Alt N / Alt R** in a view: a thread from the item under the cursor, or a
+  read-only review of it. In GITHUB tmux passes the key to gh-dash, whose
+  binding runs `weaver _from github pr|issue <RepoName> <Number> [--review]`.
+  In LINEAR tmux runs `weaver _from linear [--review]`, which reads the
+  issue from `linear-tui context --json --workspace <the view's directory>`:
+  the snapshot's `issue` on `issue_detail`, else `rows[selected_row]` when it
+  is an issue (version 1 only). `_from` opens `weaver new --pr/--issue … [--review]`
+  in a popup (96 x 20) from a detached process, so the view goes on.
+- **Strip:** the session option `@weaver-strip`, set as the views start, is
+  `THREADS` and each view's label, the current one in ink; the status line
+  shows it on home and in a view.
+- **Alt j / Alt k** step past the views (`next-window` again while
+  `@weaver-view` is set), so they cycle threads and home only.
 
