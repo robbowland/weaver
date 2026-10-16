@@ -1,10 +1,9 @@
-package wvr
+package items
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/git"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Reading work items (workitem.go): finding a repository's checkout, and
@@ -27,10 +25,10 @@ var (
 	reGHRemote  = regexp.MustCompile(`github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$`)
 )
 
-// ghRepo is the GitHub repository (owner/name) of checkout dir: its
+// GitHubRepo is the GitHub repository (owner/name) of checkout dir: its
 // preferred remote's, else any remote's on GitHub. From the URLs as
 // configured (an insteadOf rewrite is how it is reached, not what it is).
-func ghRepo(dir string) string {
+func GitHubRepo(dir string) string {
 	out, err := exec.Command("git", "-C", dir, "config", "--get-regexp", `^remote\..*\.url$`).Output()
 	if err != nil {
 		return ""
@@ -56,60 +54,21 @@ func ghRepo(dir string) string {
 	return first
 }
 
-// checkoutFor is the main checkout of GitHub repository owner/name, from
-// those weaver knows: first (the one you are in), the repositories of
-// recent threads and agents, and those zoxide knows of the same name. ""
-// when none is.
-func (e *Env) checkoutFor(repo, first string) string {
-	name := strings.ToLower(repo[strings.IndexByte(repo, '/')+1:])
-	var named, rest []string
-	for _, l := range strings.Split(e.recentRepos(first), "\n") {
-		d, _, _ := strings.Cut(l, "\t")
-		if d == "" {
-			continue
-		}
-		if strings.ToLower(filepath.Base(d)) == name {
-			named = append(named, d)
-		} else {
-			rest = append(rest, d)
-		}
-	}
-	if h := os.Getenv("HOME"); h != "" {
-		for _, p := range []string{"code", "src", "dev", "projects"} {
-			if d := filepath.Join(h, p, repo[strings.IndexByte(repo, '/')+1:]); exists(d + "/.git") {
-				named = append(named, d)
-			}
-		}
-	}
-	// zoxide's directories of another name are many: only weaver's own.
-	for i, d := range append(named, rest...) {
-		if i >= len(named) && i-len(named) >= 20 {
-			break
-		}
-		if strings.EqualFold(ghRepo(d), repo) {
-			if r, _, ok := git.RepoOf(d); ok {
-				return r
-			}
-		}
-	}
-	return ""
-}
-
-// fetchItem reads the item ref names: through gh for GitHub (in dir, for
+// Fetch reads the item ref names: through gh for GitHub (in dir, for
 // a number without its repository), through linear-tui for Linear.
-func fetchItem(ref itemRef, dir string) (workItem, error) {
+func Fetch(ref Ref, dir string) (Item, error) {
 	switch r := ref.(type) {
-	case githubRef:
+	case GitHubRef:
 		if r.Repo == "" {
-			if r.Repo = ghRepo(dir); r.Repo == "" {
-				return nil, fmt.Errorf("%s: not in a GitHub repository; say which (owner/name#%d)", r.label(), r.Num)
+			if r.Repo = GitHubRepo(dir); r.Repo == "" {
+				return nil, fmt.Errorf("%s: not in a GitHub repository; say which (owner/name#%d)", r.Label(), r.Num)
 			}
 		}
-		if r.Kind == ghPR {
+		if r.Kind == KindPR {
 			return fetchPR(r)
 		}
 		return fetchIssue(r)
-	case linearRef:
+	case LinearRef:
 		return fetchLinear(r)
 	}
 	return nil, fmt.Errorf("no such work item: %v", ref)
@@ -148,17 +107,17 @@ type ghComment struct {
 	Body string `json:"body"`
 }
 
-func ghNotes(cs []ghComment) []itemNote {
-	var ns []itemNote
+func ghNotes(cs []ghComment) []Note {
+	var ns []Note
 	for _, c := range cs {
 		if strings.TrimSpace(c.Body) != "" {
-			ns = append(ns, itemNote{Author: c.Author.Login, Body: c.Body})
+			ns = append(ns, Note{Author: c.Author.Login, Body: c.Body})
 		}
 	}
 	return ns
 }
 
-func fetchPR(r githubRef) (workItem, error) {
+func fetchPR(r GitHubRef) (Item, error) {
 	out, err := runJSON("gh", "pr", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
 		"number,title,body,url,author,state,headRefName,baseRefName,isCrossRepository,comments")
 	if err != nil {
@@ -174,12 +133,12 @@ func fetchPR(r githubRef) (workItem, error) {
 	if err := json.Unmarshal(out, &p); err != nil {
 		return nil, fmt.Errorf("gh: %v", err)
 	}
-	it := pullRequest{Repo: r.Repo, Num: r.Num, Head: p.HeadRefName, Base: p.BaseRefName, Fork: p.IsCrossRepository,
-		itemText: itemText{Title: p.Title, Body: p.Body, URL: p.URL, State: p.State, Author: p.Author.Login, Comments: ghNotes(p.Comments)}}
+	it := PullRequest{Repo: r.Repo, Num: r.Num, Head: p.HeadRefName, Base: p.BaseRefName, Fork: p.IsCrossRepository,
+		Text: Text{Title: p.Title, Body: p.Body, URL: p.URL, State: p.State, Author: p.Author.Login, Comments: ghNotes(p.Comments)}}
 	// Review comments are in threads, which gh pr view leaves out: the
 	// unresolved ones, as the author has yet to answer them.
 	owner, name, _ := strings.Cut(r.Repo, "/")
-	q := `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:30){nodes{author{login} body}}}}}}}`
+	q := `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){PullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:30){nodes{author{login} body}}}}}}}`
 	if out, err := runJSON("gh", "api", "graphql", "-f", "query="+q, "-F", "o="+owner, "-F", "r="+name, "-F", "n="+strconv.Itoa(r.Num)); err == nil {
 		var g struct {
 			Data struct {
@@ -219,7 +178,7 @@ func fetchPR(r githubRef) (workItem, error) {
 	return it, nil
 }
 
-func fetchIssue(r githubRef) (workItem, error) {
+func fetchIssue(r GitHubRef) (Item, error) {
 	out, err := runJSON("gh", "issue", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
 		"number,title,body,url,author,state,comments")
 	if err != nil {
@@ -233,7 +192,7 @@ func fetchIssue(r githubRef) (workItem, error) {
 	if err := json.Unmarshal(out, &p); err != nil {
 		return nil, fmt.Errorf("gh: %v", err)
 	}
-	return githubIssue{Repo: r.Repo, Num: r.Num, itemText: itemText{Title: p.Title, Body: p.Body, URL: p.URL,
+	return GitHubIssue{Repo: r.Repo, Num: r.Num, Text: Text{Title: p.Title, Body: p.Body, URL: p.URL,
 		State: p.State, Author: p.Author.Login, Comments: ghNotes(p.Comments)}}, nil
 }
 
@@ -252,7 +211,7 @@ func person(v any) string {
 	return ""
 }
 
-func fetchLinear(r linearRef) (workItem, error) {
+func fetchLinear(r LinearRef) (Item, error) {
 	out, err := runJSON("linear-tui", "issue", "show", r.ID, "--json")
 	if err != nil {
 		return nil, err
@@ -270,37 +229,50 @@ func fetchLinear(r linearRef) (workItem, error) {
 	if err := json.Unmarshal(out, &p); err != nil {
 		return nil, fmt.Errorf("linear-tui: %v", err)
 	}
-	it := linearIssue{ID: r.ID, Branch: p.BranchName, itemText: itemText{Title: p.Title, URL: p.URL, Body: p.Description,
+	it := LinearIssue{ID: r.ID, Branch: p.BranchName, Text: Text{Title: p.Title, URL: p.URL, Body: p.Description,
 		State: p.State.Name, Author: person(p.Creator)}}
 	if p.Identifier != "" {
 		it.ID = p.Identifier
 	}
 	for _, c := range p.Comments {
 		if strings.TrimSpace(c.Body) != "" {
-			it.Comments = append(it.Comments, itemNote{Author: person(c.Author), Body: c.Body})
+			it.Comments = append(it.Comments, Note{Author: person(c.Author), Body: c.Body})
 		}
 	}
 	return it, nil
 }
 
-// threadOnBranch is the agent pane of a running thread of this session on
-// branch of repo, or "".
-func (e *Env) threadOnBranch(repo, branch string) tmux.PaneID {
-	live := map[tmux.PaneID]bool{}
-	ps, _ := e.Panes()
-	for _, p := range ps {
-		if !p.Exited {
-			live[p.ID] = true
+// LinearSelected is the Linear issue under linear-tui's cursor in dir (or
+// the one it has open), from its view snapshot.
+func LinearSelected(dir string) (string, error) {
+	out, err := runJSON("linear-tui", "context", "--json", "--workspace", dir)
+	if err != nil {
+		return "", err
+	}
+	var c struct {
+		Snapshot *struct {
+			Version     int    `json:"version"`
+			Screen      string `json:"screen"`
+			Issue       *struct{ Identifier string }
+			Rows        []struct{ Kind, Identifier string }
+			SelectedRow *int `json:"selected_row"`
+		} `json:"snapshot"`
+	}
+	if err := json.Unmarshal(out, &c); err != nil {
+		return "", fmt.Errorf("linear-tui context: %v", err)
+	}
+	s := c.Snapshot
+	switch {
+	case s == nil:
+		return "", fmt.Errorf("linear-tui has no view open in %s", filepath.Base(dir))
+	case s.Version != 1:
+		return "", fmt.Errorf("linear-tui's view is version %d, which this weaver does not know", s.Version)
+	case s.Screen == "issue_detail" && s.Issue != nil && s.Issue.Identifier != "":
+		return s.Issue.Identifier, nil
+	case s.SelectedRow != nil && *s.SelectedRow >= 0 && *s.SelectedRow < len(s.Rows):
+		if r := s.Rows[*s.SelectedRow]; r.Kind == "issue" && r.Identifier != "" {
+			return r.Identifier, nil
 		}
 	}
-	for _, f := range e.SessionFiles("thread") {
-		t, err := readThread(f)
-		if err != nil || t.Repo != repo || t.Branch != branch {
-			continue
-		}
-		if p := paneOfFile(f); live[p] {
-			return p
-		}
-	}
-	return ""
+	return "", fmt.Errorf("no issue under linear-tui's cursor")
 }

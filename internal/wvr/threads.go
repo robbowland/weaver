@@ -18,6 +18,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -348,16 +349,16 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
 func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
-	var it workItem
+	var it items.Item
 	if fm.Item != nil {
-		it = fm.Item.it
+		it = fm.Item.Item
 	}
-	pr, isPR := it.(pullRequest)
+	pr, isPR := it.(items.PullRequest)
 	var dir, name, branch, base string
 	created := false
 	if fm.Where == WhereHere {
 		dir = fm.Here
-		name = Slugify(task)
+		name = items.Slugify(task)
 		if name == "" {
 			name = "thread-" + time.Now().Format("150405")
 		}
@@ -365,7 +366,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	} else {
 		branch = fm.Branch
 		if branch == "" {
-			branch = Slugify(task)
+			branch = items.Slugify(task)
 		}
 		// The checkout of the repository that @ means: the one you are in
 		// when it belongs to it, else the main one.
@@ -412,9 +413,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 	}
 	prompt := task
-	review := fm.Mode == ModeReview
+	review := fm.Mode == items.ModeReview
 	if it != nil {
-		prompt = itemPrompt(it, task, fm.Mode, prBase)
+		prompt = items.Prompt(it, task, fm.Mode, prBase)
 	}
 	tok := token()
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
@@ -439,7 +440,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
 		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
-		rec.Item = &ThreadItem{Kind: it.kind(), Ref: it.Ref(), URL: it.text().URL, Title: it.text().Title}
+		rec.Item = &ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
 	}
 	if review {
 		rec.Mode = "review"

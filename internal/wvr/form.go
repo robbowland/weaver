@@ -14,6 +14,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -36,8 +37,8 @@ type form struct {
 	Where  Where      `json:"where"`
 	Agent  agent.Kind `json:"agent"`
 	Base   string     `json:"base"`
-	Mode   Mode       `json:"mode,omitempty"`
-	Item   *itemBox   `json:"item,omitempty"`
+	Mode   items.Mode `json:"mode,omitempty"`
+	Item   *items.Box `json:"item,omitempty"`
 }
 
 func loadForm(f string) form {
@@ -48,41 +49,6 @@ func loadForm(f string) form {
 
 func (fm form) save(f string) {
 	writeRecord(f, fm)
-}
-
-// Slugify is a task as a branch name: its first line in lowercase ASCII
-// letters and digits joined by '-', at most 48 characters, cut at a '-'.
-func Slugify(t string) string {
-	if i := strings.IndexByte(t, '\n'); i >= 0 {
-		t = t[:i]
-	}
-	var b strings.Builder
-	dash := false
-	for i := 0; i < len(t); i++ {
-		c := t[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
-			b.WriteByte(c)
-			dash = false
-			continue
-		}
-		if !dash {
-			b.WriteByte('-')
-		}
-		dash = true
-	}
-	s := strings.TrimSuffix(strings.TrimPrefix(b.String(), "-"), "-")
-	if len(s) > 48 {
-		s = s[:49]
-		if strings.Contains(s[:48], "-") {
-			s = s[:strings.LastIndexByte(s, '-')]
-		} else {
-			s = s[:48]
-		}
-	}
-	return strings.TrimSuffix(s, "-")
 }
 
 func tildify(p string) string {
@@ -234,13 +200,13 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	if fm.Item != nil {
-		it := fm.Item.it
-		title := it.text().Title
+		it := fm.Item.Item
+		title := it.Content().Title
 		if rlen(title) > 56 {
 			title = oneline.Cut(title, 55) + "…"
 		}
 		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
-		if fm.Mode == ModeReview {
+		if fm.Mode == items.ModeReview {
 			add("mode", "review  read-only", "review  "+CGrey+"read-only"+COff, "alt-r")
 		} else {
 			add("mode", "work", "work", "alt-r")
@@ -268,7 +234,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		add("where", "new worktree", "new worktree", "tab")
 		br := fm.Branch
 		if br == "" {
-			br = Slugify(task)
+			br = items.Slugify(task)
 		}
 		var m git.Refs
 		if fm.Repo != "" {
@@ -382,7 +348,7 @@ const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + 
 
 // newFormLabel is the new-thread form's label: a review says so.
 func newFormLabel(fm form) string {
-	if fm.Mode == ModeReview {
+	if fm.Mode == items.ModeReview {
 		return formLabel("WEAVER", "REVIEW")
 	}
 	return formLabel("WEAVER", "NEW THREAD")
@@ -419,7 +385,7 @@ func checkThread(task string, fm form) string {
 	}
 	br := fm.Branch
 	if br == "" {
-		br = Slugify(task)
+		br = items.Slugify(task)
 	}
 	switch {
 	case br == "":
@@ -441,10 +407,10 @@ func (e *Env) New(args []string) error {
 	var repoArg, branch, base, agentArg, itemArg string
 	var from tmux.PaneID
 	var where Where
-	var itemKind ghKind
+	var itemKind items.GitHubKind
 	var task []string
 	nofocus, edit := false, false
-	mode := ModeWork
+	mode := items.ModeWork
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
@@ -465,11 +431,11 @@ func (e *Env) New(args []string) error {
 			case "--agent":
 				agentArg = v
 			case "--pr", "--issue":
-				itemArg, itemKind = v, ghKind(strings.TrimPrefix(a, "--"))
+				itemArg, itemKind = v, items.GitHubKind(strings.TrimPrefix(a, "--"))
 			}
 			i++
 		case "--review":
-			mode = ModeReview
+			mode = items.ModeReview
 		case "--here":
 			where = WhereHere
 		case "--worktree":
@@ -563,16 +529,16 @@ func (e *Env) New(args []string) error {
 			}
 			return errors.New(m)
 		}
-		ref, err := parseItemRef(itemKind, itemArg)
+		ref, err := items.ParseRef(itemKind, itemArg)
 		if err != nil {
 			return dieItem(err.Error())
 		}
-		if r, ok := ref.(githubRef); ok {
+		if r, ok := ref.(items.GitHubRef); ok {
 			if r.Repo == "" {
-				r.Repo = ghRepo(start)
+				r.Repo = items.GitHubRepo(start)
 				ref = r
 			}
-			if r.Repo != "" && (fm.Repo == "" || !strings.EqualFold(ghRepo(fm.Repo), r.Repo)) {
+			if r.Repo != "" && (fm.Repo == "" || !strings.EqualFold(items.GitHubRepo(fm.Repo), r.Repo)) {
 				if c := e.checkoutFor(r.Repo, fm.Repo); c != "" {
 					fm.Repo, fm.Here = c, c
 				} else {
@@ -582,9 +548,9 @@ func (e *Env) New(args []string) error {
 			}
 		}
 		if isTTY(2) {
-			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, refName(ref), COff)
+			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, items.RefName(ref), COff)
 		}
-		x, err := fetchItem(ref, start)
+		x, err := items.Fetch(ref, start)
 		if isTTY(2) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
@@ -592,10 +558,10 @@ func (e *Env) New(args []string) error {
 			return dieItem(err.Error())
 		}
 		if branch == "" {
-			fm.Branch = x.branchName()
+			fm.Branch = x.BranchName()
 		}
 		fm.Where = WhereWorktree
-		fm.Item = &itemBox{x}
+		fm.Item = &items.Box{Item: x}
 		// Already a thread on its branch: go to it.
 		if fm.Repo != "" {
 			if a := e.threadOnBranch(fm.Repo, fm.Branch); a != "" {
@@ -663,7 +629,7 @@ func (e *Env) New(args []string) error {
 	}()
 	query := ""
 	if fm.Item != nil {
-		query = fm.Item.it.defaultTask(mode)
+		query = fm.Item.Item.DefaultTask(mode)
 	}
 	for {
 		t, err := e.newForm(sf, query, repoErr)
@@ -795,10 +761,10 @@ func (e *Env) Form(op, sf, q string) {
 	case "label":
 		fmt.Print(newFormLabel(fm))
 	case "mode":
-		if fm.Mode == ModeReview {
-			fm.Mode = ModeWork
+		if fm.Mode == items.ModeReview {
+			fm.Mode = items.ModeWork
 		} else {
-			fm.Mode = ModeReview
+			fm.Mode = items.ModeReview
 		}
 		fm.save(sf)
 	case "agent":
@@ -841,7 +807,7 @@ func (e *Env) Form(op, sf, q string) {
 		}
 		br := fm.Branch
 		if br == "" {
-			br = Slugify(q)
+			br = items.Slugify(q)
 		}
 		args := append([]string{"--disabled", "--reverse"}, formFzf...)
 		args = append(args, "--border-label", formLabel("NEW THREAD", "BRANCH"), "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
@@ -857,7 +823,7 @@ func (e *Env) Form(op, sf, q string) {
 		out := strings.TrimRight(string(b), "\n")
 		if out != "" && exec.Command("git", "check-ref-format", "--branch", out).Run() == nil {
 			fm.Branch = out
-			if out == Slugify(q) {
+			if out == items.Slugify(q) {
 				fm.Branch = ""
 			}
 			fm.save(sf)

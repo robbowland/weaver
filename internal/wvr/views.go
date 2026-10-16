@@ -3,12 +3,10 @@ package wvr
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +16,7 @@ import (
 
 	weaver "github.com/robbowland/weaver"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -333,7 +332,7 @@ func (e *Env) From(args []string) error {
 		if d == "" {
 			d = dir
 		}
-		id, err := linearSelected(d)
+		id, err := items.LinearSelected(d)
 		if err != nil {
 			return say(err.Error())
 		}
@@ -375,39 +374,4 @@ func (e *Env) From(args []string) error {
 		return say("could not open the form")
 	}
 	return nil
-}
-
-// linearSelected is the Linear issue under linear-tui's cursor in dir (or
-// the one it has open), from its view snapshot.
-func linearSelected(dir string) (string, error) {
-	out, err := runJSON("linear-tui", "context", "--json", "--workspace", dir)
-	if err != nil {
-		return "", err
-	}
-	var c struct {
-		Snapshot *struct {
-			Version     int    `json:"version"`
-			Screen      string `json:"screen"`
-			Issue       *struct{ Identifier string }
-			Rows        []struct{ Kind, Identifier string }
-			SelectedRow *int `json:"selected_row"`
-		} `json:"snapshot"`
-	}
-	if err := json.Unmarshal(out, &c); err != nil {
-		return "", fmt.Errorf("linear-tui context: %v", err)
-	}
-	s := c.Snapshot
-	switch {
-	case s == nil:
-		return "", fmt.Errorf("linear-tui has no view open in %s", filepath.Base(dir))
-	case s.Version != 1:
-		return "", fmt.Errorf("linear-tui's view is version %d, which this weaver does not know", s.Version)
-	case s.Screen == "issue_detail" && s.Issue != nil && s.Issue.Identifier != "":
-		return s.Issue.Identifier, nil
-	case s.SelectedRow != nil && *s.SelectedRow >= 0 && *s.SelectedRow < len(s.Rows):
-		if r := s.Rows[*s.SelectedRow]; r.Kind == "issue" && r.Identifier != "" {
-			return r.Identifier, nil
-		}
-	}
-	return "", fmt.Errorf("no issue under linear-tui's cursor")
 }
