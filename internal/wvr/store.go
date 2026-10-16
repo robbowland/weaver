@@ -161,3 +161,7 @@ func writeAtomic(f string, b []byte) error {
 func (e *Env) threadFile(p string) string {
 	return e.StateDir + "/" + e.SKey + "_" + p + ".thread"
 }
+
+// bestEffort marks an error left unhandled on purpose: what failed (a
+// marker, a cache, a view started early) costs nothing that matters.
+func bestEffort(error) {}

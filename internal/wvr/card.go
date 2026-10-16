@@ -447,7 +447,7 @@ func View(what string) string {
 		if what == "screen" {
 			next = ""
 		}
-		_, l := lsSize(true)
+		_, l := lsSize()
 		out += fmt.Sprintf("change-preview-window(down,%d,border-top,wrap)+", l/2)
 	} else if what+":"+cur == "screen:screen" && exists(base+".tight") {
 		out += "hide-preview+"

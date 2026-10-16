@@ -97,13 +97,13 @@ func envInt(k string) (int, bool) {
 // lsSize is the dashboard's size, columns and lines:
 // fzf's, which inside its border (border=true) is 4 columns and 2 lines
 // short of the pane; else the terminal's.
-func lsSize(border bool) (int, int) {
+func lsSize() (int, int) {
 	c, ok1 := envInt("FZF_COLUMNS")
 	l, ok2 := envInt("FZF_LINES")
 	if !ok1 || !ok2 {
 		c, l = 0, 0
 	}
-	if border && c > 0 && l > 0 {
+	if c > 0 && l > 0 {
 		c, l = c+4, l+2
 	}
 	if c == 0 || l == 0 {
@@ -184,11 +184,15 @@ type boardRow struct {
 	lost                                     bool
 }
 
-// Rows prints the dashboard's lines. fzf mode (plain
-// false): one TAB-separated item per line, id pane tab prev next label
-// display, and the border's label, the header and the 1-9 keys next to
-// $FZF_SOCK. Plain: the board as text, $COLUMNS wide.
-func (e *Env) Rows(plain bool) string {
+// Rows is the dashboard's lines for fzf: one TAB-separated item per line,
+// id pane tab prev next label display, with the border's label, the header
+// and the 1-9 keys next to $FZF_SOCK.
+func (e *Env) Rows() string { return e.rows(false) }
+
+// PlainRows is the board as text, $COLUMNS wide (`wvr ls | cat`).
+func (e *Env) PlainRows() string { return e.rows(true) }
+
+func (e *Env) rows(plain bool) string {
 	var b strings.Builder
 	colour := os.Getenv("COLOR")
 	if _, set := os.LookupEnv("COLOR"); !set && !plain {
@@ -427,7 +431,7 @@ func (e *Env) Rows(plain bool) string {
 		if n > 0 {
 			items = n + groups*2 - 1
 		}
-		lsCols, lsLines = lsSize(true)
+		lsCols, lsLines = lsSize()
 		if n > 0 && items+4 > lsLines {
 			gaps, items = false, n+groups
 		}
@@ -769,7 +773,7 @@ func Footer() string {
 	if pl := os.Getenv("FZF_PREVIEW_LINES"); sockBase() != "" && exists(sockBase()+".tight") && (pl == "" || pl == "0") {
 		browse = "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM|^q QUIT"
 	}
-	cols, _ := lsSize(true)
+	cols, _ := lsSize()
 	width := lsWidth(cols) - 6
 	w := 0
 	var items []string

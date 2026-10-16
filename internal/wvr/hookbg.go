@@ -33,7 +33,7 @@ func (e *Env) hookBg() {
 		if h.EvFile != "" {
 			e.nvimEditEvent(h, "edit", h.Root, h.EvFile, h.Tool)
 		} else if h.Root != h.ORoot {
-			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "", true)
+			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
 		ot := h.OTurn
@@ -56,7 +56,11 @@ func (e *Env) hookBg() {
 	if h.State != h.OState || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot ||
 		h.Doing != h.ODoing {
 		// A thread's label is its title (else its task or prompt) and branch.
-		e.PushStatus(h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot)
+		if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.OTitle || h.Root != h.ORoot {
+			e.PushStatusAndLabels()
+		} else {
+			e.PushStatus()
+		}
 	}
 	if h.NV != "" && h.Root != h.ORoot && e.sameRoot(h) {
 		e.renamePane(h.NV, "nvim: "+filepath.Base(h.Root))
@@ -111,17 +115,15 @@ func wtMarker(dir, m string) {
 // socket (msgpack-RPC; no nvim client started). Returns 0 on success, 128+
 // when nvim did not answer in time, 1 when nothing listens. In a hook, a
 // timeout is remembered: calls are skipped for 15s.
-func (e *Env) nvimEvent(h *hk, ev, extra, r, f string, hook bool) int {
+func (e *Env) nvimEvent(h *hk, ev, extra, r, f string) int {
 	sock := e.SockDir + "/" + e.SKey + "_" + h.Pane + ".sock"
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return 1
 	}
 	stalled := sock + ".stalled"
-	if hook {
-		if t, err := firstLine(stalled); err == nil {
-			if n, ok := atoi(t); ok && h.Now-int64(n) < 15 {
-				return 128
-			}
+	if t, err := firstLine(stalled); err == nil {
+		if n, ok := atoi(t); ok && h.Now-int64(n) < 15 {
+			return 128
 		}
 	}
 	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(h.Pane) + `,"agent":"` + h.AgentKind +
@@ -137,9 +139,7 @@ func (e *Env) nvimEvent(h *hk, ev, extra, r, f string, hook bool) int {
 	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + q(j) + "') : " + compat
 	rc := nvimEval(sock, expr, 2*time.Second)
 	if rc >= 128 {
-		if hook {
-			os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644)
-		}
+		bestEffort(os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644))
 	} else if exists(stalled) {
 		os.Remove(stalled)
 	}
@@ -207,19 +207,24 @@ func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
 	if h.Aid != "" {
 		x += `,"agent_id":` + jsonStr(h.Aid)
 	}
-	e.nvimEvent(h, ev, x, r, f, true)
+	e.nvimEvent(h, ev, x, r, f)
 }
 
 func (e *Env) nvimStateEvent(h *hk) {
 	e.nvimEvent(h, "state", `,"prompt":`+jsonStr(h.Prompt)+`,"waiting":`+jsonStr(h.Waiting)+`,"title":`+jsonStr(h.Title)+
-		`,"doing":`+jsonStr(h.Doing), "", "", true)
+		`,"doing":`+jsonStr(h.Doing), "", "")
 }
 
-// PushStatus brings what shows the session's agents up to date: agents done that a client looks at count as seen,
-// the counts go to the status file and tmux's status line, every dashboard
-// reloads, and (labels, in the weaver session) the threads' windows are
-// labelled.
-func (e *Env) PushStatus(labels bool) {
+// PushStatus brings what shows the session's agents up to date: agents
+// done that a client looks at count as seen, the counts go to the status
+// file and tmux's status line, and every dashboard reloads.
+func (e *Env) PushStatus() { e.pushStatus(false) }
+
+// PushStatusAndLabels is PushStatus, and in the weaver session the threads'
+// windows labelled again (a title, task or root changed).
+func (e *Env) PushStatusAndLabels() { e.pushStatus(true) }
+
+func (e *Env) pushStatus(labels bool) {
 	clients := " "
 	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
 		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "

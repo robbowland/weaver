@@ -174,7 +174,7 @@ func (e *Env) Boot(sock string) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	e.PushStatus(true)
+	e.PushStatusAndLabels()
 	if e.WeaverSession() {
 		e.StartViews()
 	}

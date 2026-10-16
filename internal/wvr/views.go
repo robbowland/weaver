@@ -219,11 +219,20 @@ func (e *Env) viewWindows() map[string]string {
 	return ws
 }
 
-// OpenView shows view name (started first if it is not running); with
-// quiet, starts it without going there. Its window id.
-func (e *Env) OpenView(name string, quiet bool) (string, error) {
+// OpenView shows view name, started first if it is not running. Its
+// window id.
+func (e *Env) OpenView(name string) (string, error) {
+	return e.view(name, true)
+}
+
+// startView starts view name, if it is not running, without going there.
+func (e *Env) startView(name string) (string, error) {
+	return e.view(name, false)
+}
+
+func (e *Env) view(name string, show bool) (string, error) {
 	if id := e.viewWindows()[name]; id != "" {
-		if !quiet {
+		if show {
 			e.Tmux("select-window", "-t", "@"+id)
 		}
 		return id, nil
@@ -238,7 +247,7 @@ func (e *Env) OpenView(name string, quiet bool) (string, error) {
 		idx++
 	}
 	args := []string{"new-window", "-P", "-F", "#{window_id}"}
-	if quiet {
+	if !show {
 		args = append(args, "-d")
 	}
 	args = append(args, "-t", "="+e.Session+":"+strconv.Itoa(idx), "-n", v.label, "-c", v.dir, "-e", "WEAVER_TMUX_SESSION="+e.Session)
@@ -270,7 +279,8 @@ func (e *Env) SetStrip() {
 // Alt y to one finds it ready.
 func (e *Env) StartViews() {
 	for _, n := range e.viewNames() {
-		e.OpenView(n, true)
+		_, err := e.startView(n)
+		bestEffort(err)
 	}
 }
 
@@ -288,7 +298,7 @@ func (e *Env) View(args []string) int {
 		return 1
 	}
 	e.SetStrip()
-	if _, err := e.OpenView(name, false); err != nil {
+	if _, err := e.OpenView(name); err != nil {
 		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
 		return 1
 	}

@@ -26,12 +26,12 @@ import (
 // here), the agent (claude | codex), the base (empty: the default), Mode
 // (review: read-only; empty: work) and the work item it starts from.
 type form struct {
-	Repo   string `json:"repo"`
-	Here   string `json:"here"`
-	Branch string `json:"branch"`
-	Where  string `json:"where"`
-	Agent  string `json:"agent"`
-	Base   string `json:"base"`
+	Repo   string   `json:"repo"`
+	Here   string   `json:"here"`
+	Branch string   `json:"branch"`
+	Where  string   `json:"where"`
+	Agent  string   `json:"agent"`
+	Base   string   `json:"base"`
 	Mode   Mode     `json:"mode,omitempty"`
 	Item   *itemBox `json:"item,omitempty"`
 }

@@ -165,7 +165,7 @@ func run(e *wvr.Env, cmd string, args []string) (int, bool) {
 			return 1, true
 		}
 		if len(args) > 1 && args[1] == "--push" {
-			e.PushStatus(false)
+			e.PushStatus()
 		} else {
 			fmt.Println(e.StatusText())
 		}
@@ -262,7 +262,11 @@ func run(e *wvr.Env, cmd string, args []string) (int, bool) {
 		if !needSession() {
 			return 1, true
 		}
-		fmt.Print(e.Rows(os.Getenv("LS_MODE") == "plain"))
+		if os.Getenv("LS_MODE") == "plain" {
+			fmt.Print(e.PlainRows())
+		} else {
+			fmt.Print(e.Rows())
+		}
 	case "_title":
 		fmt.Print(wvr.Title())
 	case "_footer":

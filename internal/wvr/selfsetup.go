@@ -3,7 +3,6 @@ package wvr
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,23 +52,25 @@ func (e *Env) SelfSetup() {
 		return
 	}
 	for _, c := range hookConfigs() {
-		f := c.file
 		// Only for an agent you have: its config directory is there.
-		if _, err := os.Stat(filepath.Dir(f)); err != nil {
+		if _, err := os.Stat(filepath.Dir(c.file)); err != nil {
 			continue
 		}
-		old, _ := os.ReadFile(f)
-		if !configureHooks(io.Discard, c.label, f, c.hooks, e.Self, false, timestamp()) {
+		ch, err := planHooks(c, e.Self)
+		if err != nil || !ch.changed() {
 			continue
 		}
-		if now, _ := os.ReadFile(f); !bytes.Equal(old, now) {
-			bk := ""
-			if len(old) > 0 {
-				bk = " (the old file backed up beside it)"
-			}
-			fmt.Fprintf(os.Stderr, "%swvr: %s now runs weaver's hooks by %s%s: restart its running sessions to pick them up%s\n",
-				CGrey, tildify(f), tildify(e.Self), bk, COff)
+		backup, err := ch.apply(timestamp())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%swvr: %v%s\n", CGrey, err, COff)
+			continue
 		}
+		bk := ""
+		if backup != "" {
+			bk = " (the old file backed up beside it)"
+		}
+		fmt.Fprintf(os.Stderr, "%swvr: %s now runs weaver's hooks by %s%s: restart its running sessions to pick them up%s\n",
+			CGrey, tildify(c.file), tildify(e.Self), bk, COff)
 	}
 	if !pluginsCurrent() {
 		c := exec.Command(e.Self, "_plugins")

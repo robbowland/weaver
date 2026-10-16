@@ -63,7 +63,7 @@ func (e *Env) Home() int {
 func (e *Env) Ls() int {
 	home := os.Getenv("LS_HOME") != ""
 	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(1) {
-		fmt.Print(e.Rows(true))
+		fmt.Print(e.PlainRows())
 		return 0
 	}
 	q := Quote(e.Self)
@@ -135,7 +135,7 @@ func (e *Env) Ls() int {
 			}
 		}
 		os.Setenv("FZF_SOCK", sock)
-		rows := e.Rows(false)
+		rows := e.Rows()
 		items := strings.Count(rows, "\n")
 		if items == 0 {
 			os.Setenv("LS_EMPTY", "1")

@@ -98,7 +98,7 @@ func (e *Env) Edit(args []string) int {
 			target = strings.TrimPrefix(strings.TrimPrefix(a, "terminal_"), "%")
 		}
 	}
-	release, _ := e.uiLock(false)
+	release := e.uiLock()
 	defer release()
 	panes, ok := e.Panes()
 	if !ok {

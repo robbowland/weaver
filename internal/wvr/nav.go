@@ -26,7 +26,7 @@ func (e *Env) Goto(pane, tab string) {
 	}
 	e.focus(pane)
 	e.MarkSeen(pane)
-	e.PushStatus(false)
+	e.PushStatus()
 }
 
 type tab struct {
@@ -91,7 +91,7 @@ func (e *Env) GoHome() {
 	switch {
 	case home != "" && cur.id == home, at >= 0:
 		if at+1 < len(views) {
-			if _, err := e.OpenView(views[at+1], false); err == nil {
+			if _, err := e.OpenView(views[at+1]); err == nil {
 				return
 			}
 		}
@@ -110,10 +110,21 @@ func (e *Env) GoHome() {
 	e.Tmux("select-window", "-t", "@"+home)
 }
 
-// uiLock is one `wvr edit` or `wvr next` per session at a time; with
-// nowait a second press while the first is at work is dropped (false). A
-// lock older than 10s was left by a killed process. Its release.
-func (e *Env) uiLock(nowait bool) (func(), bool) {
+// uiLock is one `wvr edit` or `wvr next` per session at a time: it waits
+// for the one at work (at most 10 s). A lock older than 10 s was left by a
+// killed process. Its release.
+func (e *Env) uiLock() func() {
+	release, _ := e.takeUILock(false)
+	return release
+}
+
+// tryUILock is uiLock for a key pressed again while the first press is at
+// work: dropped (false) rather than waiting.
+func (e *Env) tryUILock() (func(), bool) {
+	return e.takeUILock(true)
+}
+
+func (e *Env) takeUILock(nowait bool) (func(), bool) {
 	d := e.StateDir + "/" + e.SKey + ".ui"
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; ; i++ {
@@ -149,7 +160,7 @@ func (e *Env) uiLock(nowait bool) (func(), bool) {
 func (e *Env) Next() {
 	// Pressed again while the last press is still at work: that one moves
 	// you, so this one does nothing.
-	release, ok := e.uiLock(true)
+	release, ok := e.tryUILock()
 	if !ok {
 		return
 	}
@@ -242,7 +253,7 @@ func (e *Env) Next() {
 	e.focus(cs[pick].pane)
 	e.MarkSeen(cs[pick].pane)
 	e.Tmux("display-message", "-d", "2500", fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
-	e.PushStatus(false)
+	e.PushStatus()
 }
 
 // agentOf is the agent of pane p: the pane itself when it is an agent (it
@@ -301,7 +312,7 @@ func (e *Env) Seen(win string) {
 	if !left {
 		e.Tmux("set-option", "-w", "-u", "-t", "@"+win, "@weaver-unseen")
 	}
-	e.PushStatus(false)
+	e.PushStatus()
 }
 
 // agentCols is the agent's columns in a thread window total columns wide:

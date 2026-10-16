@@ -846,7 +846,7 @@ func (e *Env) Resume(args []string) int {
 		}
 		fmt.Println(msg)
 	}
-	e.PushStatus(true)
+	e.PushStatusAndLabels()
 	if failed > 0 {
 		return 1
 	}
@@ -1253,7 +1253,7 @@ func (e *Env) CloseTail(a []string) int {
 			}
 		}
 	}
-	e.PushStatus(false)
+	e.PushStatus()
 	return rc
 }
 

@@ -58,10 +58,26 @@ func Setup(args []string, self string, out io.Writer) int {
 		if c.label == "codex" && !codex {
 			continue
 		}
-		if !configureHooks(out, c.label, c.file, c.hooks, bin, dry, ts) {
-			rc = 1
-		}
 		codexDone = codexDone || c.label == "codex"
+		ch, err := planHooks(c, bin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+			rc = 1
+			continue
+		}
+		ch.show(out)
+		if dry || !ch.changed() {
+			continue
+		}
+		backup, err := ch.apply(ts)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+			rc = 1
+			continue
+		}
+		if backup != "" {
+			fmt.Fprintf(out, "backed up to %s\n", backup)
+		}
 	}
 	if !dry && rc == 0 {
 		if err := Plugins(); err != nil {
@@ -101,61 +117,84 @@ func warnZellij(home string) {
 	}
 }
 
-// configureHooks puts weaver's hooks (the embedded file hooks) into the
-// agent's JSON hooks file f, showing what changes: false when it could not.
-func configureHooks(out io.Writer, label, f, hooks, bin string, dry bool, ts string) bool {
-	add, err := weaver.Files.ReadFile(hooks)
+// hookChange is what weaver's hooks make of an agent's hooks file: the
+// file as it is (existed false: not there yet) and as it would be.
+type hookChange struct {
+	label, file string
+	old, new    []byte
+	existed     bool
+}
+
+// planHooks is what putting weaver's hooks (the embedded file hooks), run by
+// bin, into the agent's hooks file f would change.
+func planHooks(c hookConfig, bin string) (hookChange, error) {
+	add, err := weaver.Files.ReadFile(c.hooks)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-		return false
+		return hookChange{}, err
 	}
-	old, err := os.ReadFile(f)
-	had := err == nil
-	if !had {
-		old = []byte("{}")
+	ch := hookChange{label: c.label, file: c.file}
+	ch.old, err = os.ReadFile(c.file)
+	ch.existed = err == nil
+	if !ch.existed {
+		ch.old = []byte("{}")
 	}
-	nw, err := mergeHooks(old, add, bin)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "weaver: cannot parse %s: %v\n", f, err)
-		return false
+	if ch.new, err = mergeHooks(ch.old, add, bin); err != nil {
+		return hookChange{}, fmt.Errorf("cannot parse %s: %v", c.file, err)
 	}
+	return ch, nil
+}
+
+// changed: does the file need writing (the same JSON, laid out differently,
+// does not)?
+func (ch hookChange) changed() bool {
 	var a, b bytes.Buffer
-	if had && json.Compact(&a, old) == nil && json.Compact(&b, nw) == nil && a.String() == b.String() {
-		fmt.Fprintf(out, "%s: %s already runs weaver on every event\n", label, f)
-		return true
+	return !ch.existed || json.Compact(&a, ch.old) != nil || json.Compact(&b, ch.new) != nil || a.String() != b.String()
+}
+
+// show says what the change is: a diff, or that there is none.
+func (ch hookChange) show(out io.Writer) {
+	if !ch.changed() {
+		fmt.Fprintf(out, "%s: %s already runs weaver on every event\n", ch.label, ch.file)
+		return
 	}
-	fmt.Fprintf(out, "--- %s: %s\n", label, f)
-	if tmp, err := os.CreateTemp("", "weaver-setup."); err == nil {
-		tmp.Write(nw)
-		tmp.Close()
-		from := f
-		if !had {
-			from = "/dev/null"
+	fmt.Fprintf(out, "--- %s: %s\n", ch.label, ch.file)
+	tmp, err := os.CreateTemp("", "weaver-setup.")
+	if err != nil {
+		return
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(ch.new); err != nil {
+		return
+	}
+	if tmp.Close() != nil {
+		return
+	}
+	from := ch.file
+	if !ch.existed {
+		from = "/dev/null"
+	}
+	d := exec.Command("diff", "-u", from, tmp.Name())
+	d.Stdout = out
+	bestEffort(d.Run()) // diff exits 1 when the files differ, which is the point
+}
+
+// apply writes the change, the file backed up first (to its name and
+// .bak.ts) when it was there; the backup's name, or "".
+func (ch hookChange) apply(ts string) (string, error) {
+	backup := ""
+	if ch.existed {
+		backup = ch.file + ".bak." + ts
+		if err := copyFile(ch.file, backup); err != nil {
+			return "", fmt.Errorf("cannot back up %s; not changing it", ch.file)
 		}
-		d := exec.Command("diff", "-u", from, tmp.Name())
-		d.Stdout = out
-		d.Run()
-		os.Remove(tmp.Name())
-	}
-	if dry {
-		return true
-	}
-	if had {
-		if err := copyFile(f, f+".bak."+ts); err != nil {
-			fmt.Fprintf(os.Stderr, "weaver: cannot back up %s; not changing it\n", f)
-			return false
-		}
-		fmt.Fprintf(out, "backed up to %s\n", f+".bak."+ts)
-	} else if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "weaver: cannot create %s\n", filepath.Dir(f))
-		return false
+	} else if err := os.MkdirAll(filepath.Dir(ch.file), 0o755); err != nil {
+		return "", fmt.Errorf("cannot create %s", filepath.Dir(ch.file))
 	}
 	// Through the file, so a linked settings file stays a link.
-	if err := os.WriteFile(f, nw, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "weaver: cannot write %s (backup: %s.bak.%s)\n", f, f, ts)
-		return false
+	if err := os.WriteFile(ch.file, ch.new, 0o644); err != nil {
+		return backup, fmt.Errorf("cannot write %s (backup: %s)", ch.file, backup)
 	}
-	return true
+	return backup, nil
 }
 
 func timestamp() string { return time.Now().Format("20060102-150405") }

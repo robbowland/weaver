@@ -1154,7 +1154,7 @@ func (e *Env) afterWrite(h *hk) {
 				h.logLine(e, "bash", `,"cmd":`+jsonStr(h.Cmd))
 			}
 			if h.NV != "" {
-				e.nvimEvent(h, "checktime", "", "", "", true)
+				e.nvimEvent(h, "checktime", "", "", "")
 			}
 		}
 	}
