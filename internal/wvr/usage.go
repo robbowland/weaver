@@ -35,7 +35,7 @@ const Usage = `usage: wvr [command]
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
-  view [github|linear]         go to a view: gh-dash or linear-tui beside home (one
+  view [github|linear]         go to a view beside home: GITHUB or LINEAR (one
                                not set up shows how; one you hid shows again)
   status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed

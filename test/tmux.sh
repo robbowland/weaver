@@ -6,7 +6,7 @@
 # Cmd+D (as Ghostty sends it), Alt N, the server crashing and its threads resumed (by the board's
 # enter, and by themselves), the board's x, Ctrl q, and threads from work
 # items in the GITHUB and LINEAR views. Its own socket, session name, state,
-# Claude Code dir, nvim config and PATH, with fake agents, gh, gh-dash and
+# Claude Code dir, nvim config and PATH, with fake agents, gh and
 # linear-tui: never your tmux, agents or accounts.
 #   test/tmux.sh
 set -u
@@ -19,7 +19,7 @@ unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSI
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
-# No views (gh-dash, linear-tui) but where a test asks for them.
+# No views (GITHUB, LINEAR) but where a test asks for them.
 export WEAVER_VIEWS=
 # wvr sets itself up as it starts: not here (it would fetch plugins).
 export WEAVER_SELF_SETUP=0
@@ -345,8 +345,9 @@ ok "resume: its worktree gone, from its repository" \
 	{ tx list-windows -t "=$S" -F '#{window_index} #{window_name}' | sed 's/^/  window: /'; panes 1 | sed 's/^/  pane: /'; ls "$SD" "$SD/lost" | sed 's/^/  state: /'; }
 
 # --- work items and views: a pull request's review and thread, an issue
-# investigated, and gh-dash and linear-tui in the session's views. Fakes: gh
-# answers for o/r, a repository here whose remote reads as github.com/o/r.
+# investigated, and the GITHUB and LINEAR views. Fakes: gh answers for o/r,
+# a repository here whose remote reads as github.com/o/r, and its searches
+# find #45 (review requested) and #12 (assigned).
 key 11 # Ctrl q
 waitfor "! tx has-session -t =$S 2>/dev/null"
 waitfor '! kill -0 "$driver" 2>/dev/null'
@@ -361,32 +362,18 @@ cat >"$AT/bin/gh" <<'GH'
 #!/bin/bash
 case "$1 $2" in
 "pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
-"api graphql") echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
+"api graphql")
+	case "$*" in
+	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
+	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	*'search(type: ISSUE'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
+	esac
+	echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
 "issue view") echo '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","author":{"login":"dan"},"state":"OPEN","comments":[]}' ;;
 "auth token") echo "gho_fake" ;;
 *) echo "gh (fake): $*" >&2; exit 1 ;;
 esac
 GH
-# gh-dash: on Alt N or Alt R, the command its config (weaver's, in the config
-# home weaver gives it) binds for prs, on o/r#45.
-cat >"$AT/bin/gh-dash" <<GHD
-#!/bin/bash
-run() {
-	c=\$(awk -v k="key: \$1" '/^ *prs:/ { p = 1; next } /^ *issues:/ { p = 0 }
-		p && index(\$0, k) { f = 1; next } p && f && /command:/ { sub(/^ *command: /, ""); print; exit }' "\$XDG_CONFIG_HOME/gh-dash/config.yml")
-	c=\${c#\\'}; c=\${c%\\'}; c=\${c//\{\{.RepoName\}\}/o/r}; c=\${c//\{\{.PrNumber\}\}/45}
-	echo "\$c" >>"$AT/ghdash.ran"
-	sh -c "\$c"
-}
-stty -echo -icanon
-# Keys named as gh-dash on Charm v2 names them: alt+shift+n, enter.
-while IFS= read -rsn1 ch; do
-	[ -z "\$ch" ] && { run enter; continue; }
-	[ "\$ch" = \$'\e' ] || continue
-	IFS= read -rsn1 -t 1 d
-	case \$d in N) run alt+shift+n ;; R) run alt+shift+r ;; esac
-done
-GHD
 # Signed in unless $AT/linear-signedout is there; auth login signs it in.
 printf '#!/bin/bash\nOUT=%q\n' "$AT/linear-signedout" >"$AT/bin/linear-tui"
 cat >>"$AT/bin/linear-tui" <<'LT'
@@ -400,7 +387,7 @@ issue) echo '{"identifier":"ENG-42","title":"Fix it","url":"https://linear.app/a
 *) exec sleep 100000 ;;
 esac
 LT
-chmod +x "$AT/bin/gh" "$AT/bin/gh-dash" "$AT/bin/linear-tui"
+chmod +x "$AT/bin/gh" "$AT/bin/linear-tui"
 printf '%s\n' "$(cd "$AT/r" && pwd -P)" >"$SD/repos"
 # The thread the last session lost stays out of this one.
 rm -rf "$SD/lost" "$SD/tmux-${S}_"*
@@ -408,8 +395,10 @@ attach WEAVER_VIEWS="github linear"
 waitfor '[ "$(windows)" = "0 900 901 " ]'
 ok "views: GITHUB and LINEAR beside home, out of the thread numbers" \
 	"$(tx list-windows -t "=$S" -F '#{window_index}:#{window_name}:#{@weaver-view}' | tr '\n' ' ')" "0:home: 900:GITHUB:github 901:LINEAR:linear "
-GHC=$SD/gh-dash/gh-dash/config.yml
-ok "...gh-dash's own config, weaver's: its keys and colours" "$(grep -c '_from github' "$GHC")|$(grep -c '#39d97a' "$GHC")" "13|1"
+waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "Add a flag"'
+ok "GITHUB: weaver's own, what GitHub finds for you, a section under its heading" \
+	"$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')|$(tx capture-pane -p -t "=$S:900" | grep -c 'Add a flag')|$(tx capture-pane -p -t "=$S:900" | grep -c 'none yet: ⏎ starts one on add-flag')" "1|2|1" ||
+	{ tx capture-pane -p -t "=$S:900" | sed 's/^/  github: /' | head -20; tx display -p -t "=$S:900" '#{pane_start_command} #{pane_dead}' | sed 's/^/  pane: /'; }
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
 	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
 
@@ -458,18 +447,20 @@ key 1b6b # Alt k
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
 ok "Alt k: back past them" "$(where | cut -d ' ' -f 1)" "2"
 
-# gh-dash's Alt N on the pull request: weaver's command, then its thread.
+# The pull request has a thread now (its review, above): the GITHUB view
+# shows it, and Alt N and enter go there.
 tx select-window -t "=$S:900"
+waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "goes there"'
+ok "GITHUB: a pull request's row and card show the thread it has" \
+	"$(tx capture-pane -p -t "=$S:900" | grep -c '01 \[')|$(tx capture-pane -p -t "=$S:900" | grep -c '⏎ goes there')" "2|1"
 key 1b4e # Alt N
 waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
-ok "GITHUB: Alt N runs weaver's command for the row, and goes to its thread" \
-	"$(tail -n 1 "$AT/ghdash.ran" 2>/dev/null | sed 's/^.* _from/_from/')|$(where | cut -d ' ' -f 1)" "_from github pr o/r 45|1"
+ok "...Alt N goes to its thread" "$(where | cut -d ' ' -f 1)" "1"
 tx select-window -t "=$S:900"
 waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'
 key 0d # enter
 waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
-ok "...and enter the same: a pull request there is for starting a thread" \
-	"$(grep -c '_from github pr o/r 45$' "$AT/ghdash.ran")|$(where | cut -d ' ' -f 1)" "2|1"
+ok "...and enter the same: a pull request there is for its thread" "$(where | cut -d ' ' -f 1)" "1"
 
 # linear-tui's Alt N: the form, for the issue under its cursor.
 tx select-window -t "=$S:901"

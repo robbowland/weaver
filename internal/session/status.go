@@ -169,6 +169,13 @@ func (e *Env) pushStatus(labels bool) {
 			}
 		}
 	}
+	// The GITHUB view shows the threads of its items too.
+	views, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".gh.*.sock")
+	for _, s := range views {
+		if !FzfPost(s, "reload("+q+" _github rows)+refresh-preview") {
+			os.Remove(s)
+		}
+	}
 	if labels && e.WeaverSession() {
 		e.threadTabLabels(rows)
 	}

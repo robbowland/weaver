@@ -271,6 +271,31 @@ can supersede an earlier one, and says so.
   Alt N and Alt R to gh-dash, whose own bindings know the row; `_from` opens
   the form from a detached process, so gh-dash, waiting on its command, goes
   on at once.
+- 2026-10-16: GITHUB is weaver's own view, no longer gh-dash (Rob: "the whole
+  point of those views is to start a thread on the associated
+  worktree/branch with the initial context", and gh-dash's page did not
+  look like weaver). gh-dash's worth for that was its data: the searches
+  and the fields of a pull request they ask for, about 600 lines of its
+  18,000, transplanted into `internal/github` with credit (MIT, Dolev
+  Hadar), through `gh api graphql` so no new dependency. The rest was its
+  own UI, the part that did not match. The view is the board's: rows under
+  their sections, the thread an item has, a card that leads with what enter
+  does. A search takes about a second and GitHub answers aliased ones in
+  turn (9 s for six), so each is a request of its own, all at once (5 s),
+  behind a cache that shows at once. gh-dash's in-view reading (activity,
+  checks, files, approve and merge) goes: `o` opens the item on GitHub, and
+  a review thread reads it in nvim. Backlog (Rob): the sections
+  configurable, and a way to open gh-dash in full.
+- 2026-10-16: Which tools weaver absorbs (Rob: "for gh-dash, linear-tui
+  where we want just parts and to change a lot - better to rip it off, but
+  for small tools that are like unix commands - just use them"): a big app
+  of which weaver wants a part, and to change much, gives that part to
+  weaver with credit; a small tool that does one thing (fzf, gh, git, tmux,
+  Worktrunk) is run as it is.
+- 2026-10-16: In gh-dash on Charm v2, Alt N reached weaver's bindings as
+  `alt+shift+n`, so `alt+N` never fired: the stand-in gh-dash of the suite
+  named keys as weaver did, and agreed with it. A stand-in agrees with what
+  it is given; the real tool was checked by hand from then on.
 - 2026-10-16: The views offer only what weaver does not (Rob's audit):
   gh-dash keeps its lists, search, preview and GitHub's own actions
   (approve, comment, merge, ready, labels, assignees, checks); its `C`

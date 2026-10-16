@@ -7,10 +7,10 @@ which are working, which are done, and which are waiting on you. One key shows
 them all, another jumps to whoever has waited longest, and a neovim bound to
 each agent follows it into the worktree and file it is really editing.
 
-Beside the threads, the session shows your pull requests and issues in
-[gh-dash](https://github.com/dlvhdr/gh-dash) and
-[linear-tui](https://github.com/k1-c/linear-tui), and a key on any of them
-starts a thread on it, or a read-only review.
+Beside the threads, the session shows your pull requests and issues (its
+own GITHUB view, and [linear-tui](https://github.com/k1-c/linear-tui) for
+Linear), and enter on any of them starts a thread on it, Alt R a
+read-only review.
 
 wvr drives Claude Code through its hooks, and Codex through an adapter;
 any other agent can report through `wvr event`
@@ -20,8 +20,7 @@ any other agent can report through `wvr event`
 
 macOS, with [Homebrew](https://brew.sh). One command installs weaver and
 everything it works with: tmux, Neovim, fzf, [Worktrunk](https://worktrunk.dev)
-for the worktrees, and for the [views](#views-github-and-linear) gh with
-gh-dash (a fork with weaver's extras) and
+for the worktrees, and for the [views](#views-github-and-linear) gh and
 [linear-tui](https://github.com/k1-c/linear-tui). Then start it:
 
 ```sh
@@ -167,8 +166,8 @@ When the agent exits its pane stays; enter there resumes its conversation
 
 ### Views: GitHub and Linear
 
-Beside home are two views: **GITHUB**, gh-dash with your own sections, and
-**LINEAR**, linear-tui. `Alt y` steps from a thread to home, on through them,
+Beside home are two views: **GITHUB**, weaver's own list of your pull
+requests and issues, and **LINEAR**, linear-tui. `Alt y` steps from a thread to home, on through them,
 and back; on home and in a view the status line shows the strip of them
 (`THREADS   GITHUB   LINEAR`). A view not set up yet has a dot
 (`LINEAR ·`): its window says what it needs, its tool installed or signed
@@ -193,12 +192,16 @@ to approve. The form's `alt-r` switches between the two.
 From a shell, the same: `wvr new --pr 45` (or `owner/name#45`, or its URL),
 `wvr new --issue 12`, `wvr new --issue ENG-42`, each with `--review`.
 
-gh-dash runs on weaver's own config, written as the view starts: your
-Queue, Mine and Watch sections, weaver's keys and colours, and only PRs and
-issues. What weaver does itself is not offered twice: gh-dash's `C`
-(checkout) starts a weaver thread and `d` (diff) a weaver review. Your own
-gh-dash config stays yours, for gh-dash outside weaver. linear-tui runs in
-the repository you used last, and threads from it start there.
+GITHUB looks like the board: your pull requests (or, on `s`, issues) under
+their sections, Queue (review requested), Mine and Watch; a row says the one
+thing to know (changes requested, a check failing, draft, approved) and
+shows the thread it has, and the card says what enter does: start a thread
+on its branch, or go to the one it has. `o` opens it on GitHub, `/`
+searches, `^r` asks GitHub again (it does every 5 minutes, and shows what it
+said last at once). The searches and the fields they read come from
+[gh-dash](https://github.com/dlvhdr/gh-dash) (MIT, Dolev Hadar), with
+thanks. linear-tui runs in the repository you used last, and threads from
+it start there.
 
 ### When the session goes
 
@@ -439,7 +442,7 @@ touched (they need jq and python3 as well as weaver's own dependencies):
   there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
   Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
   their threads resumed, Ctrl q, and threads from pull requests and issues
-  in the GITHUB and LINEAR views (with fake `gh`, gh-dash and linear-tui).
+  in the GITHUB and LINEAR views (with fake `gh` and linear-tui).
 
 `test/soak/nvim-exit.sh` is a long run, by hand: nvims weaver starts, killed
 together round after round, none of which may hang.
@@ -450,6 +453,13 @@ wvr is built with AI coding agents, Claude Code among them: they write
 most of its code, tests and documentation. I direct the work, make the design
 decisions, review what lands and use weaver every day. Read the code with
 that in mind, and open an issue for anything that looks wrong.
+
+## Credits
+
+The GITHUB view's searches of GitHub, and the fields of a pull request they
+read, come from [gh-dash](https://github.com/dlvhdr/gh-dash) by Dolev Hadar
+(MIT); [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
+(GPL-3.0) is what reviews are built on, fetched rather than carried.
 
 ## Licence
 

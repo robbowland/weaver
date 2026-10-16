@@ -20,7 +20,7 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
-| `$STATE_DIR/gh-dash/gh-dash/config.yml` | gh-dash's config for the GITHUB view, weaver's whole (see [Views](#views)), written as the view starts |
+| `$STATE_DIR/github.json` | what GitHub said last for the GITHUB view's sections (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
@@ -598,24 +598,25 @@ window option `@weaver-view` (its name).
 
 | View | Window | Runs | Where |
 | --- | --- | --- | --- |
-| `github` | `GITHUB` | `gh-dash` (else `gh dash`) in the environment below | `$HOME`, so gh-dash does not narrow itself to a repository |
+| `github` | `GITHUB` | `wvr _github`: fzf over what `internal/github` finds | `$HOME` |
 | `linear` | `LINEAR` | `linear-tui` | the repository used last (`$STATE_DIR/repos`): linear-tui keeps a view per repository, and threads from it start there |
 
-gh-dash runs on weaver's config alone: `config/gh-dash.yml`, a Go template
-(`.Wvr` the binary's path, `.Fork` whether `gh-dash --version` says `-rb`, the
-fork with weaver's extras), written to `$STATE_DIR/gh-dash/gh-dash/config.yml`
-each time the view starts, with `XDG_CONFIG_HOME=$STATE_DIR/gh-dash` (gh-dash
-reads its global config there, then `GH_DASH_CONFIG` on top, which is set
-empty) and `GH_CONFIG_DIR` where gh keeps its own (its sign-in). Your gh-dash
-config is for gh-dash outside weaver. What weaver does itself is not offered
-twice: `C` (checkout) and `d` (diff) run weaver's commands, as Alt N and Alt R
-do; the fork shows only PRs and issues (`defaults.views`), not the
-notifications or a repository's branches.
+GITHUB is weaver's own: the pull requests and issues of its sections (Queue:
+review requested or assigned; Mine; Watch: involving you), each a search
+through `gh api graphql` (`internal/github`; the searches and the fields
+they read are gh-dash's, MIT, credited there), all asked for at once and
+kept in `$STATE_DIR/github.json`. The view (`wvr _github`, fzf on
+`$SOCK_DIR/<skey>.gh.<pid>.sock`) shows that at once, asks again behind it
+when it is over 2 minutes old and every 5 minutes after (`^r` now), and
+reloads when a thread changes (the status push) or is made. A row shows the
+thread the item has: its item's ref, else its repository and branch (a pull
+request's head; an issue's `N-…`). Which kind it shows (`s`) is kept in
+`$STATE_DIR/<skey>.github-kind`.
 
 - **Alt N / Alt R** in a view: a thread from the item under the cursor, or a
-  read-only review of it. In GITHUB tmux passes the key to gh-dash, whose
-  binding (also on `C`, and `d` for a review) runs `wvr _from github pr|issue
-  <RepoName> <Number> [--review]`.
+  read-only review of it. In GITHUB tmux passes the key to the view, whose
+  fzf (also enter) runs `wvr _from github pr|issue <owner/name> <number>
+  [--review]`.
   In LINEAR tmux runs `wvr _from linear [--review]`, which reads the
   issue from `linear-tui context --json --workspace <the view's directory>`:
   the snapshot's `issue` on `issue_detail`, else `rows[selected_row]` when it

@@ -476,6 +476,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	}
 	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
+	// The boards and the GITHUB view show it now, not at its agent's first
+	// hook.
+	e.PushStatus()
 	fmt.Printf("weaver: thread %s in %s (tab %s)\n", name, tildify(dir), tab)
 	return nil
 }

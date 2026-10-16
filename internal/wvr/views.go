@@ -7,15 +7,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
-	"text/template"
 	"time"
 
-	weaver "github.com/robbowland/weaver"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
@@ -25,7 +22,7 @@ import (
 )
 
 // Views: the weaver session's windows beside home that show work from
-// elsewhere through the best tool for it: GITHUB (gh-dash) and LINEAR
+// elsewhere: GITHUB (weaver's own, internal/github) and LINEAR
 // (linear-tui). Out of the thread numbering, at viewBase and on; one whose
 // tool is not installed or signed in yet shows how to set it up. Alt y steps from a
 // thread to home, on through the views, and back to the thread; in a view,
@@ -39,23 +36,6 @@ type view struct {
 	argv        []string
 	env         []string
 	dir         string
-}
-
-// ghDash is how gh-dash runs: its own binary, else as gh's extension.
-func ghDash() []string {
-	if p, err := exec.LookPath("gh-dash"); err == nil {
-		return []string{p}
-	}
-	if p, err := exec.LookPath("gh"); err == nil {
-		d := os.Getenv("XDG_DATA_HOME")
-		if d == "" {
-			d = os.Getenv("HOME") + "/.local/share"
-		}
-		if files.Exists(d + "/gh/extensions/gh-dash") {
-			return []string{p, "dash"}
-		}
-	}
-	return nil
 }
 
 // viewNames are the session's views, in order: $WEAVER_VIEWS (none, or
@@ -144,8 +124,6 @@ func (e *Env) viewNeeds(name string) viewNeed {
 		switch {
 		case !onPath("gh"):
 			return viewNeed{viewMissing, "gh is not installed", brewFix("gh")}
-		case ghDash() == nil:
-			return viewNeed{viewMissing, "gh-dash is not installed", brewFix("robbowland/kegs/gh-dash")}
 		case !e.signedIn("gh"):
 			return viewNeed{viewSignedOut, "gh is not signed in to GitHub", []string{"gh", "auth", "login"}}
 		}
@@ -208,16 +186,7 @@ func (e *Env) viewOf(name string) (view, error) {
 	home := os.Getenv("HOME")
 	switch name {
 	case "github":
-		argv := ghDash()
-		if argv == nil {
-			return view{}, fmt.Errorf("gh-dash is not installed (brew install gh-dash, or gh extension install dlvhdr/gh-dash)")
-		}
-		env, err := e.ghDashConfig(argv)
-		if err != nil {
-			return view{}, err
-		}
-		// From home, not a repository: gh-dash would narrow itself to one.
-		return view{name, "GITHUB", argv, env, home}, nil
+		return view{name, "GITHUB", []string{e.Self, "_github"}, nil, home}, nil
 	case "linear":
 		p, err := exec.LookPath("linear-tui")
 		if err != nil {
@@ -233,64 +202,6 @@ func (e *Env) viewOf(name string) (view, error) {
 	}
 	return view{}, fmt.Errorf("no view %q (github or linear)", name)
 }
-
-// ghDashConfig writes the whole of gh-dash's config for the view (from
-// config/gh-dash.yml) under its own XDG_CONFIG_HOME: gh-dash reads its
-// global config first and GH_DASH_CONFIG on top, so neither may be yours.
-// The environment gh-dash runs with: that config home, gh's own config
-// where gh keeps it (its sign-in), and no GH_DASH_CONFIG.
-func (e *Env) ghDashConfig(argv []string) ([]string, error) {
-	src, err := weaver.Files.ReadFile("config/gh-dash.yml")
-	if err != nil {
-		return nil, err
-	}
-	t, err := template.New("gh-dash").Funcs(template.FuncMap{"list": func(xs ...string) []string { return xs }}).Parse(string(src))
-	if err != nil {
-		return nil, err
-	}
-	// The command gh-dash runs through a shell, written into YAML as it is:
-	// this binary's path when it needs no quoting, else wvr from PATH.
-	wvr := e.Self
-	if !rePlainPath.MatchString(wvr) {
-		wvr = "wvr"
-	}
-	// The fork has weaver's extras (only some views, line-by-line preview
-	// scrolling); another gh-dash would refuse them.
-	out, _ := exec.Command(argv[0], append(argv[1:], "--version")...).Output()
-	var b strings.Builder
-	if err := t.Execute(&b, struct {
-		Wvr  string
-		Fork bool
-	}{wvr, reFork.Match(out)}); err != nil {
-		return nil, err
-	}
-	home := e.StateDir + "/gh-dash"
-	if err := os.MkdirAll(home+"/gh-dash", 0o755); err != nil {
-		return nil, err
-	}
-	p := home + "/gh-dash/config.yml"
-	tmp := p + "." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
-		return nil, err
-	}
-	if err := os.Rename(tmp, p); err != nil {
-		return nil, err
-	}
-	gh := os.Getenv("GH_CONFIG_DIR")
-	if gh == "" {
-		if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-			gh = x + "/gh"
-		} else {
-			gh = os.Getenv("HOME") + "/.config/gh"
-		}
-	}
-	return []string{"XDG_CONFIG_HOME=" + home, "GH_CONFIG_DIR=" + gh, "GH_DASH_CONFIG="}, nil
-}
-
-var (
-	rePlainPath = regexp.MustCompile(`^[A-Za-z0-9_./-]+$`)
-	reFork      = regexp.MustCompile(`-rb[0-9]`)
-)
 
 // viewWindows are the session's view windows, by view name: window ids.
 func (e *Env) viewWindows() map[string]tmux.WindowID {
@@ -405,7 +316,7 @@ func (e *Env) View(args []string) error {
 	return nil
 }
 
-// From is `wvr _from github pr|issue REPO NUM [--review]` (gh-dash's
+// From is `wvr _from github pr|issue REPO NUM [--review]` (the GITHUB view's
 // Alt N and Alt R) and `wvr _from linear [--review]` (the LINEAR view's):
 // the new-thread form for that item, in a popup, while the view goes on.
 func (e *Env) From(args []string) error {
@@ -454,7 +365,7 @@ func (e *Env) From(args []string) error {
 		nw = append(nw, "--review")
 	}
 	// The form in a popup, from a process of its own: whatever ran this
-	// (gh-dash, waiting on its command) goes on at once.
+	// (a view, waiting on its command) goes on at once.
 	// On the client looking at this session: what ran this may have none
 	// (tmux's run-shell).
 	argv := []string{"display-popup"}

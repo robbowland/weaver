@@ -11,7 +11,7 @@ import (
 
 // viewAbout is what a view shows, for its setup screen.
 var viewAbout = map[string]string{
-	"github": "your pull requests and issues, in gh-dash",
+	"github": "your pull requests and issues, to start threads from",
 	"linear": "your Linear issues, in linear-tui",
 }
 

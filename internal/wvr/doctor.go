@@ -159,11 +159,6 @@ func (e *Env) checks() []check {
 		gh.ok, gh.found, gh.remedy = false, "not signed in, for the GITHUB view and --pr/--issue", signIn{[]string{"gh", "auth", "login"}}
 	}
 	cs = append(cs, gh)
-	dash := check{name: "gh-dash", weight: optional, ok: true}
-	if ghDash() == nil {
-		dash.ok, dash.found, dash.remedy = false, "not installed, for the GITHUB view", brewInstall{"robbowland/kegs/gh-dash"}
-	}
-	cs = append(cs, dash)
 	lin := tool("linear-tui", "linear-tui", "robbowland/kegs/linear-tui", optional, "")
 	if lin.ok && !e.signedIn("linear-tui") {
 		lin.ok, lin.found, lin.remedy = false, "not signed in, for the LINEAR view", signIn{[]string{"linear-tui", "auth", "login"}}
