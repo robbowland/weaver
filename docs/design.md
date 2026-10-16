@@ -582,11 +582,19 @@ diffview-plus is GPL-3.0, so weaver fetches it rather than carry it.
 
 Windows of the weaver session beside home, out of the thread numbering
 (GITHUB at index 900, LINEAR at 901), each running the best tool for its work
-items where it is installed and ready (linear-tui signed in: `linear-tui auth
-status`, asked at most once a minute, the answer in `$STATE_DIR/linear-auth`);
-`$WEAVER_VIEWS` names them instead (`none`, or `github linear`). The home board's start-up (`_boot`) starts them detached, so
-the first Alt y to one finds it ready; one that quits is started again on the
-next. Each window has the window option `@weaver-view` (its name).
+items. Every view is in the session but those hidden from their setup
+screen (`$STATE_DIR/hidden-views`; `wvr view NAME` shows one again);
+`$WEAVER_VIEWS` names them instead (`none`, or `github linear`).
+
+A view is ready when its tool is installed and signed in (`gh auth status`,
+`linear-tui auth status`, each asked at most once a minute, the answer in
+`$STATE_DIR/gh-auth`, `$STATE_DIR/linear-auth`). One not ready shows in the
+strip with a faint dot, and its window runs `wvr _viewsetup NAME`: what it
+needs, and a key that runs the fix (`brew install` its tool, or its `auth
+login`); once ready, the window becomes the view. The home board's start-up
+(`_boot`) starts the ready ones detached, so the first Alt y to one finds it
+ready; one that quits is started again on the next. Each window has the
+window option `@weaver-view` (its name).
 
 | View | Window | Runs | Where |
 | --- | --- | --- | --- |

@@ -363,6 +363,7 @@ case "$1 $2" in
 "pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
 "api graphql") echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
 "issue view") echo '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","author":{"login":"dan"},"state":"OPEN","comments":[]}' ;;
+"auth status") echo "Logged in to github.com account alice" ;;
 *) echo "gh (fake): $*" >&2; exit 1 ;;
 esac
 GH
@@ -384,8 +385,13 @@ while IFS= read -rsn1 ch; do
 	case \$d in N) run alt+N ;; R) run alt+R ;; esac
 done
 GHD
-cat >"$AT/bin/linear-tui" <<'LT'
-#!/bin/bash
+# Signed in unless $AT/linear-signedout is there; auth login signs it in.
+printf '#!/bin/bash\nOUT=%q\n' "$AT/linear-signedout" >"$AT/bin/linear-tui"
+cat >>"$AT/bin/linear-tui" <<'LT'
+case "$1 $2" in
+"auth login") rm -f "$OUT"; echo "Signed in." ; exit 0 ;;
+"auth status") if [ -f "$OUT" ]; then echo "Not authenticated."; else echo "OAuth token  acme (rob)"; fi; exit 0 ;;
+esac
 case "$1" in
 context) echo '{"workspace":"w","running":true,"snapshot":{"version":1,"screen":"issue_list","rows":[{"kind":"issue","identifier":"ENG-1","title":"a"},{"kind":"issue","identifier":"ENG-42","title":"Fix it"}],"selected_row":1}}' ;;
 issue) echo '{"identifier":"ENG-42","title":"Fix it","url":"https://linear.app/acme/issue/ENG-42/fix-it","description":"Broken.","branch_name":"t/eng-42-fix-it","state":{"name":"Todo"},"creator":{"name":"Eve"},"comments":[]}' ;;
@@ -474,6 +480,20 @@ waitfor '[ -f "$AT/args.$AG3" ]'
 ok "...enter: its thread, on Linear's branch" \
 	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(grep -c '^Implement ENG-42$' "$AT/args.$AG3")|$(grep -c '^Linear issue ENG-42 by Eve' "$AT/args.$AG3")" \
 	"t/eng-42-fix-it|1|1"
+
+# A view not set up: a dot in the strip, its window says what it needs and
+# what fixes it; enter runs that, and the window becomes the view.
+tx kill-window -t "=$S:901"
+: >"$AT/linear-signedout"
+rm -f "$SD/linear-auth"
+tx run-shell -t "=$S:" "wvr view linear"
+waitfor 'tx capture-pane -p -t "=$S:901" 2>/dev/null | grep -q "linear-tui auth login"'
+ok "a view not signed in: a dot in the strip, and its window says what it needs" \
+	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*not signed in')" "1|1"
+tx send-keys -t "=$S:901" Enter
+waitfor '[ "$(tx display -p -t "=$S:901" "#{pane_current_command}")" = sleep ]'
+ok "...enter signs it in, and the window becomes the view" \
+	"$([ -f "$AT/linear-signedout" ] && echo still || echo in)|$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c '·')" "in|0"
 
 echo "-- $pass passed, $fail failed"
 exit $fail

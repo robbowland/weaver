@@ -128,7 +128,9 @@ func Intro() string {
 	return "No agents in this session yet.\n\n" +
 		g + "n" + o + "       start a thread: a task, its worktree, and a tab with\n" +
 		"        nvim and the agent " + d + "(wvr new)" + o + "\n" +
-		g + "Alt N" + o + "   the same from anywhere in the session\n\n" +
+		g + "Alt N" + o + "   the same from anywhere in the session\n" +
+		g + "Alt y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +
+		"        dot is not set up yet: going there sets it up)" + o + "\n\n" +
 		d + "Or start claude or codex in any pane: weaver follows it\n" +
 		"through its hooks." + o + "\n"
 }

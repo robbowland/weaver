@@ -838,6 +838,12 @@ func cardPlace(t *os.File, rows int) string {
 	if os.Getenv("FZF_COLUMNS") == "" {
 		return "  "
 	}
+	return placeCard(t, rows)
+}
+
+// placeCard clears terminal t and places a card of rows lines a third of
+// the way down, centred: the left margin to print it at.
+func placeCard(t *os.File, rows int) string {
 	ws, err := unix.IoctlGetWinsize(int(t.Fd()), unix.TIOCGWINSZ)
 	if err != nil {
 		return "  "

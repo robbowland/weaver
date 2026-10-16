@@ -394,7 +394,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
-| `WEAVER_VIEWS` | each installed | The views beside home: `github`, `linear`, both, or `none` |
+| `WEAVER_VIEWS` | both, but hidden ones | The views beside home: `github`, `linear`, both, or `none` |
 | `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves the hooks and plugins as they are as it starts (`wvr setup` still does it) |
 
 ## Development

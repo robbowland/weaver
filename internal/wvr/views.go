@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,13 +20,14 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Views: the weaver session's windows beside home that show work from
 // elsewhere through the best tool for it: GITHUB (gh-dash) and LINEAR
-// (linear-tui). Out of the thread numbering, at viewBase and on, each where
-// its tool is installed (or as $WEAVER_VIEWS says). Alt y steps from a
+// (linear-tui). Out of the thread numbering, at viewBase and on; one whose
+// tool is not installed or signed in yet shows how to set it up. Alt y steps from a
 // thread to home, on through the views, and back to the thread; in a view,
 // Alt N starts a thread from the item under the cursor and Alt R a
 // read-only review of it, through the new-thread form.
@@ -57,8 +59,8 @@ func ghDash() []string {
 }
 
 // viewNames are the session's views, in order: $WEAVER_VIEWS (none, or
-// names), else every one whose tool is installed and ready (linear-tui
-// signed in).
+// names), else every view weaver has but those you hid. One not ready yet
+// shows faint in the strip, and going there sets it up.
 func (e *Env) viewNames() []string {
 	all := []string{"github", "linear"}
 	want, set := os.LookupEnv("WEAVER_VIEWS")
@@ -73,32 +75,108 @@ func (e *Env) viewNames() []string {
 		}
 		return ns
 	}
+	hidden := e.hiddenViews()
 	var ns []string
-	if ghDash() != nil {
-		ns = append(ns, "github")
-	}
-	if e.linearReady() {
-		ns = append(ns, "linear")
+	for _, n := range all {
+		if !hidden[n] {
+			ns = append(ns, n)
+		}
 	}
 	return ns
 }
 
-// linearReady: is linear-tui installed and signed in? Asked of linear-tui
-// (`auth status`) at most once a minute, the answer kept in
-// $STATE_DIR/linear-auth: Alt y asks every press.
-func (e *Env) linearReady() bool {
-	p, err := exec.LookPath("linear-tui")
-	if err != nil {
-		return false
+// hiddenViews are the views you hid from their setup screen, kept in
+// $STATE_DIR/hidden-views; `wvr view NAME` brings one back.
+func (e *Env) hiddenViews() map[string]bool {
+	m := map[string]bool{}
+	b, _ := os.ReadFile(e.StateDir + "/hidden-views")
+	for _, n := range strings.Fields(string(b)) {
+		m[n] = true
 	}
-	f := e.StateDir + "/linear-auth"
+	return m
+}
+
+func (e *Env) setHidden(name string, hide bool) {
+	m := e.hiddenViews()
+	if m[name] == hide {
+		return
+	}
+	m[name] = hide
+	var ns []string
+	for n, h := range m {
+		if h {
+			ns = append(ns, n)
+		}
+	}
+	sort.Strings(ns)
+	bestEffort(store.WriteAtomic(e.StateDir+"/hidden-views", []byte(strings.Join(ns, "\n")+"\n")))
+}
+
+// viewState is how ready a view is to show.
+type viewState int
+
+const (
+	viewReady     viewState = iota
+	viewMissing             // a tool it needs is not installed
+	viewSignedOut           // its tool is not signed in
+)
+
+// viewNeed is what a view needs before it shows: how ready it is, what is
+// missing, and the command that fixes it (none when weaver knows none).
+type viewNeed struct {
+	state viewState
+	what  string
+	fix   []string
+}
+
+// brewFix is installing formula with Homebrew, when there is Homebrew.
+func brewFix(formula string) []string {
+	if !onPath("brew") {
+		return nil
+	}
+	return []string{"brew", "install", formula}
+}
+
+// viewNeeds is what view name needs before it shows.
+func (e *Env) viewNeeds(name string) viewNeed {
+	switch name {
+	case "github":
+		switch {
+		case !onPath("gh"):
+			return viewNeed{viewMissing, "gh is not installed", brewFix("gh")}
+		case ghDash() == nil:
+			return viewNeed{viewMissing, "gh-dash is not installed", brewFix("robbowland/kegs/gh-dash")}
+		case !e.signedIn("gh"):
+			return viewNeed{viewSignedOut, "gh is not signed in to GitHub", []string{"gh", "auth", "login"}}
+		}
+	case "linear":
+		switch {
+		case !onPath("linear-tui"):
+			return viewNeed{viewMissing, "linear-tui is not installed", brewFix("robbowland/kegs/linear-tui")}
+		case !e.signedIn("linear-tui"):
+			return viewNeed{viewSignedOut, "linear-tui is not signed in to Linear", []string{"linear-tui", "auth", "login"}}
+		}
+	}
+	return viewNeed{state: viewReady}
+}
+
+func onPath(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// signedIn: is tool (gh, linear-tui) signed in, as its `auth status` says?
+// Asked at most once a minute, the answer kept in $STATE_DIR (linear-auth,
+// gh-auth): Alt y asks on every press.
+func (e *Env) signedIn(tool string) bool {
+	f := e.authFile(tool)
 	if st, err := os.Stat(f); err == nil && time.Since(st.ModTime()) < time.Minute {
 		b, _ := os.ReadFile(f)
 		return strings.TrimSpace(string(b)) == "yes"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c := exec.CommandContext(ctx, p, "auth", "status")
+	c := exec.CommandContext(ctx, tool, "auth", "status")
 	c.WaitDelay = time.Second
 	var out bytes.Buffer
 	c.Stdout = &out
@@ -107,9 +185,15 @@ func (e *Env) linearReady() bool {
 	if ok {
 		ans = "yes"
 	}
-	os.MkdirAll(e.StateDir, 0o755)
-	os.WriteFile(f, []byte(ans+"\n"), 0o644)
+	bestEffort(store.WriteAtomic(f, []byte(ans+"\n")))
 	return ok
+}
+
+func (e *Env) authFile(tool string) string {
+	if tool == "linear-tui" {
+		return e.StateDir + "/linear-auth"
+	}
+	return e.StateDir + "/" + tool + "-auth"
 }
 
 // viewOf is view name as it runs in this session.
@@ -236,6 +320,11 @@ func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
 		return id, nil
 	}
 	v, err := e.viewOf(name)
+	if e.viewNeeds(name).state != viewReady {
+		// Not ready: its window shows what it needs, and becomes the view
+		// once it has it.
+		v, err = view{name, strings.ToUpper(name), []string{e.Self, "_viewsetup", name}, nil, os.Getenv("HOME")}, nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -264,11 +353,15 @@ func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
 }
 
 // SetStrip sets the session's view strip, the status line's left on home
-// and in a view: THREADS and each view, the one you are on in ink.
+// and in a view: THREADS and each view, the one you are on in ink, one not
+// set up yet with a faint dot.
 func (e *Env) SetStrip() {
 	strip := "#{?#{==:#{window_index},0},#[fg=#ffffff],#[fg=#616161]}THREADS"
 	for _, n := range e.viewNames() {
 		strip += "   #{?#{==:#{@weaver-view}," + n + "},#[fg=#ffffff],#[fg=#616161]}" + strings.ToUpper(n)
+		if e.viewNeeds(n).state != viewReady {
+			strip += " #[fg=#616161]·"
+		}
 	}
 	e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-strip", strip)
 }
@@ -277,22 +370,26 @@ func (e *Env) SetStrip() {
 // Alt y to one finds it ready.
 func (e *Env) StartViews() {
 	for _, n := range e.viewNames() {
-		_, err := e.startView(n)
-		bestEffort(err)
+		if e.viewNeeds(n).state == viewReady {
+			_, err := e.startView(n)
+			bestEffort(err)
+		}
 	}
 }
 
-// View is `wvr view [NAME]`: go to view NAME (the first, without one).
+// View is `wvr view [NAME]`: go to view NAME (the first, without one),
+// shown again if you hid it.
 func (e *Env) View(args []string) error {
 	ns := e.viewNames()
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
+		e.setHidden(name, false)
 	} else if len(ns) > 0 {
 		name = ns[0]
 	}
 	if name == "" {
-		return errors.New("no views: install gh-dash or linear-tui (or set WEAVER_VIEWS)")
+		return errors.New("no views (WEAVER_VIEWS names none)")
 	}
 	e.SetStrip()
 	if _, err := e.OpenView(name); err != nil {
