@@ -259,6 +259,8 @@ func (e *Env) OpenView(name string, quiet bool) (string, error) {
 	}
 	id := strings.TrimPrefix(strings.TrimSpace(string(out)), "@")
 	e.Tmux("set-option", "-w", "-t", "@"+id, "@weaver-view", name)
+	// A session started before its views (or an older weaver) has no strip.
+	e.SetStrip()
 	return id, nil
 }
 
@@ -275,7 +277,6 @@ func (e *Env) SetStrip() {
 // StartViews starts the session's views in the background, so the first
 // Alt y to one finds it ready.
 func (e *Env) StartViews() {
-	e.SetStrip()
 	for _, n := range viewNames() {
 		e.OpenView(n, true)
 	}
