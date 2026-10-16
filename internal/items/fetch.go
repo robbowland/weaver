@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/linear"
 )
 
 // Reading work items (workitem.go): finding a repository's checkout, and
-// fetching an item through gh or linear-tui.
+// fetching an item through gh or Linear's API.
 
 var (
 	reGHURL     = regexp.MustCompile(`^https?://github\.com/([\w.-]+/[\w.-]+)/(pull|issues)/(\d+)`)
@@ -55,7 +55,7 @@ func GitHubRepo(dir string) string {
 }
 
 // Fetch reads the item ref names: through gh for GitHub (in dir, for
-// a number without its repository), through linear-tui for Linear.
+// a number without its repository), through Linear's API for Linear.
 func Fetch(ref Ref, dir string) (Item, error) {
 	switch r := ref.(type) {
 	case GitHubRef:
@@ -196,83 +196,23 @@ func fetchIssue(r GitHubRef) (Item, error) {
 		State: p.State, Author: p.Author.Login, Comments: ghNotes(p.Comments)}}, nil
 }
 
-// person is a name from linear-tui's JSON, a string or an object with one.
-func person(v any) string {
-	switch x := v.(type) {
-	case string:
-		return x
-	case map[string]any:
-		for _, k := range []string{"name", "display_name", "displayName", "email"} {
-			if s, ok := x[k].(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
 func fetchLinear(r LinearRef) (Item, error) {
-	out, err := runJSON("linear-tui", "issue", "show", r.ID, "--json")
+	p, err := linear.Get(r.ID)
 	if err != nil {
 		return nil, err
 	}
-	var p struct {
-		Identifier, Title, URL, Description string
-		BranchName                          string `json:"branch_name"`
-		State                               struct{ Name string }
-		Creator                             any
-		Comments                            []struct {
-			Author any
-			Body   string
-		}
+	it := LinearIssue{ID: p.Identifier, Branch: p.BranchName, Text: Text{Title: p.Title, URL: p.URL, Body: p.Description,
+		State: p.State.Name}}
+	if p.Creator != nil {
+		it.Author = p.Creator.Name
 	}
-	if err := json.Unmarshal(out, &p); err != nil {
-		return nil, fmt.Errorf("linear-tui: %v", err)
-	}
-	it := LinearIssue{ID: r.ID, Branch: p.BranchName, Text: Text{Title: p.Title, URL: p.URL, Body: p.Description,
-		State: p.State.Name, Author: person(p.Creator)}}
-	if p.Identifier != "" {
-		it.ID = p.Identifier
+	if it.ID == "" {
+		it.ID = r.ID
 	}
 	for _, c := range p.Comments {
 		if strings.TrimSpace(c.Body) != "" {
-			it.Comments = append(it.Comments, Note{Author: person(c.Author), Body: c.Body})
+			it.Comments = append(it.Comments, Note{Author: c.Author, Body: c.Body})
 		}
 	}
 	return it, nil
-}
-
-// LinearSelected is the Linear issue under linear-tui's cursor in dir (or
-// the one it has open), from its view snapshot.
-func LinearSelected(dir string) (string, error) {
-	out, err := runJSON("linear-tui", "context", "--json", "--workspace", dir)
-	if err != nil {
-		return "", err
-	}
-	var c struct {
-		Snapshot *struct {
-			Version     int    `json:"version"`
-			Screen      string `json:"screen"`
-			Issue       *struct{ Identifier string }
-			Rows        []struct{ Kind, Identifier string }
-			SelectedRow *int `json:"selected_row"`
-		} `json:"snapshot"`
-	}
-	if err := json.Unmarshal(out, &c); err != nil {
-		return "", fmt.Errorf("linear-tui context: %v", err)
-	}
-	s := c.Snapshot
-	switch {
-	case s == nil:
-		return "", fmt.Errorf("linear-tui has no view open in %s", filepath.Base(dir))
-	case s.Version != 1:
-		return "", fmt.Errorf("linear-tui's view is version %d, which this weaver does not know", s.Version)
-	case s.Screen == "issue_detail" && s.Issue != nil && s.Issue.Identifier != "":
-		return s.Issue.Identifier, nil
-	case s.SelectedRow != nil && *s.SelectedRow >= 0 && *s.SelectedRow < len(s.Rows):
-		if r := s.Rows[*s.SelectedRow]; r.Kind == "issue" && r.Identifier != "" {
-			return r.Identifier, nil
-		}
-	}
-	return "", fmt.Errorf("no issue under linear-tui's cursor")
 }

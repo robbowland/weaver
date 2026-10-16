@@ -47,6 +47,8 @@ const Usage = `usage: wvr [command]
   doctor [--fix]               what weaver works with: there, set up, and how to fix
                                what is not; --fix installs what is missing (Homebrew),
                                sets up the hooks, and offers the sign-ins
+  linear login                 sign in to Linear with a personal API key (kept in the
+                               macOS Keychain), for the LINEAR view and Linear issues
   version                      weaver's version
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

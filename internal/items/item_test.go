@@ -2,8 +2,6 @@ package items
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -112,33 +110,5 @@ func TestItemBox(t *testing.T) {
 	var none Box
 	if json.Unmarshal([]byte(`{}`), &none) == nil {
 		t.Error("an item of no kind: no error")
-	}
-}
-
-// linear-tui's selection: the open issue, else the row under the cursor.
-func TestLinearSelected(t *testing.T) {
-	bin := t.TempDir()
-	out := filepath.Join(bin, "out.json")
-	if err := os.WriteFile(filepath.Join(bin, "linear-tui"), []byte("#!/bin/sh\ncat '"+out+"'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	for _, c := range []struct{ json, want string }{
-		{`{"snapshot":{"version":1,"screen":"issue_list","rows":[{"kind":"issue","identifier":"ENG-1"},{"kind":"issue","identifier":"ENG-2"}],"selected_row":1}}`, "ENG-2"},
-		{`{"snapshot":{"version":1,"screen":"issue_detail","issue":{"identifier":"ENG-9"},"rows":[{"kind":"issue","identifier":"ENG-1"}],"selected_row":0}}`, "ENG-9"},
-		{`{"snapshot":{"version":1,"screen":"project_list","rows":[{"kind":"project","id":"p"}],"selected_row":0}}`, "error"},
-		{`{"snapshot":{"version":2,"screen":"issue_list"}}`, "error"},
-		{`{"snapshot":null,"worktree_issue":"ENG-3"}`, "error"},
-	} {
-		if err := os.WriteFile(out, []byte(c.json), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		got, err := LinearSelected(bin)
-		if err != nil {
-			got = "error"
-		}
-		if got != c.want {
-			t.Errorf("%s: got %q (%v) want %q", c.json, got, err, c.want)
-		}
 	}
 }

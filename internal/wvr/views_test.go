@@ -10,29 +10,24 @@ import (
 	"github.com/robbowland/weaver/internal/session"
 )
 
-// A view is ready once its tool is installed and signed in, asked at most
-// once a minute; till then the strip shows it with a dot, and its setup
-// screen offers the fix.
+// A view is ready once it is signed in (gh installed, for GITHUB), asked at
+// most once a minute; till then the strip shows it with a dot, and its
+// setup screen offers the fix.
 func TestViewNeeds(t *testing.T) {
 	bin := t.TempDir()
-	out := filepath.Join(bin, "status")
-	if err := os.WriteFile(filepath.Join(bin, "linear-tui"), []byte("#!/bin/sh\ncat '"+out+"'\n"), 0o755); err != nil {
-		t.Fatal(err)
+	// No Keychain item: security finds none.
+	for name, body := range map[string]string{"brew": "", "security": "exit 44"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(bin, "brew"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("PATH", bin)
+	t.Setenv("LINEAR_API_KEY", "")
 	e := &Env{&session.Env{StateDir: t.TempDir()}}
-	if err := os.WriteFile(out, []byte("OAuth token  none\n\nNot authenticated. Run `linear-tui auth login` to sign in.\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if n := e.viewNeeds("linear"); n.state != viewSignedOut || strings.Join(n.fix, " ") != "wvr linear login" {
+		t.Errorf("no key: %+v", n)
 	}
-	if n := e.viewNeeds("linear"); n.state != viewSignedOut || strings.Join(n.fix, " ") != "linear-tui auth login" {
-		t.Errorf("signed out: %+v", n)
-	}
-	if err := os.WriteFile(out, []byte("OAuth token  acme (rob)\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("LINEAR_API_KEY", "lin_api_x")
 	if e.viewNeeds("linear").state == viewReady {
 		t.Error("asked again within the minute")
 	}
@@ -41,13 +36,13 @@ func TestViewNeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n := e.viewNeeds("linear"); n.state != viewReady {
-		t.Errorf("signed in: %+v", n)
+		t.Errorf("a key: %+v", n)
 	}
 	if n := e.viewNeeds("github"); n.state != viewMissing || strings.Join(n.fix, " ") != "brew install gh" {
 		t.Errorf("no gh: %+v", n)
 	}
-	t.Setenv("PATH", "/usr/bin:/bin")
-	if n := e.viewNeeds("linear"); n.state != viewMissing || n.fix != nil {
+	t.Setenv("PATH", t.TempDir())
+	if n := e.viewNeeds("github"); n.state != viewMissing || n.fix != nil {
 		t.Errorf("not installed, no Homebrew: %+v", n)
 	}
 	// Hidden from its setup screen, a view leaves the strip; wvr view NAME

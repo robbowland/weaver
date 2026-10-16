@@ -271,14 +271,15 @@ thread from a GitHub pull request or issue, or a Linear issue. REF is a
 number (of the repository you are in), `owner/name#N` or its URL; for
 `--issue` also a Linear identifier (`ENG-42`) or URL. They are read, never
 written: `gh pr view` and `gh api graphql` (the unresolved review threads),
-`gh issue view`, `linear-tui issue show --json`. The branch is what ties a
+`gh issue view`, and Linear's GraphQL API (`internal/linear`: the issue and
+its comments). The branch is what ties a
 thread to its item:
 
 | Item | Branch | Default task |
 | --- | --- | --- |
 | pull request | its head (`pr-N`, fetched from `pull/N/head`, for one from a fork) | `Address the review on #N`, `Review #N` |
 | GitHub issue | `N-<title's slug>` | `Implement #N`, `Investigate #N` |
-| Linear issue | Linear's `branch_name`, else `<id>-<title's slug>` | `Implement ENG-42`, `Investigate ENG-42` |
+| Linear issue | Linear's `branchName`, else `<id>-<title's slug>` | `Implement ENG-42`, `Investigate ENG-42` |
 
 A pull request's repository is found among the checkouts weaver knows (yours,
 recent threads' and agents', `~/code/<name>` and the like, zoxide's of the
@@ -581,47 +582,62 @@ diffview-plus is GPL-3.0, so weaver fetches it rather than carry it.
 ## Views
 
 Windows of the weaver session beside home, out of the thread numbering
-(GITHUB at index 900, LINEAR at 901), each running the best tool for its work
-items. Every view is in the session but those hidden from their setup
+(GITHUB at index 900, LINEAR at 901), each weaver's own list of a service's
+work items (`itemsview.go`, one view over a source per service). Every view is in the session but those hidden from their setup
 screen (`$STATE_DIR/hidden-views`; `wvr view NAME` shows one again);
 `$WEAVER_VIEWS` names them instead (`none`, or `github linear`).
 
-A view is ready when its tool is installed and signed in (`gh auth token`,
-which has no network round trip, and `linear-tui auth status`, each asked at most once a minute, the answer in
-`$STATE_DIR/gh-auth`, `$STATE_DIR/linear-auth`). One not ready shows in the
-strip with a faint dot, and its window runs `wvr _viewsetup NAME`: what it
-needs, and a key that runs the fix (`brew install` its tool, or its `auth
-login`); once ready, the window becomes the view. The home board's start-up
+A view is ready when it is signed in: GITHUB when gh is installed and has a
+token (`gh auth token`, which has no network round trip), LINEAR when weaver
+has a Linear API key (`$LINEAR_API_KEY`, else the Keychain item
+`weaver.linear` that `wvr linear login` keeps, after Linear has taken it).
+Each is asked at most once a minute, the answer in `$STATE_DIR/github-auth`
+and `$STATE_DIR/linear-auth`. One not ready shows in the strip with a faint
+dot, and its window runs `wvr _viewsetup NAME`: what it needs, and a key
+that runs the fix (`brew install gh`, `gh auth login`, `wvr linear login`);
+once ready, the window becomes the view. The home board's start-up
 (`_boot`) starts the ready ones detached, so the first Alt y to one finds it
 ready; one that quits is started again on the next. Each window has the
 window option `@weaver-view` (its name).
 
 | View | Window | Runs | Where |
 | --- | --- | --- | --- |
-| `github` | `GITHUB` | `wvr _github`: fzf over what `internal/github` finds | `$HOME` |
-| `linear` | `LINEAR` | `linear-tui` | the repository used last (`$STATE_DIR/repos`): linear-tui keeps a view per repository, and threads from it start there |
+| `github` | `GITHUB` | `wvr _items github`: what `internal/github` finds | `$HOME` |
+| `linear` | `LINEAR` | `wvr _items linear`: what `internal/linear` finds | `$HOME` |
 
-GITHUB is weaver's own: the pull requests and issues of its sections (Queue:
-review requested or assigned; Mine; Watch: involving you), each a search
-through `gh api graphql` (`internal/github`; the searches and the fields
-they read are gh-dash's, MIT, credited there), all asked for at once and
-kept in `$STATE_DIR/github.json`. The view (`wvr _github`, fzf on
-`$SOCK_DIR/<skey>.gh.<pid>.sock`) shows that at once, asks again behind it
-when it is over 2 minutes old and every 5 minutes after (`^r` now), and
-reloads when a thread changes (the status push) or is made. A row shows the
-thread the item has: its item's ref, else its repository and branch (a pull
-request's head; an issue's `N-…`). Which kind it shows (`s`) is kept in
-`$STATE_DIR/<skey>.github-kind`.
+Each source has three sections: Queue (yours to do), Mine (yours, with
+someone else) and Watch (what you follow).
+
+- GITHUB: pull requests and issues, each section a search through `gh api
+  graphql` (`internal/github`; the searches and the fields they read are
+  gh-dash's, MIT, credited there), kept in `$STATE_DIR/github.json`. Which
+  kind it shows (`s`) is kept in `$STATE_DIR/<skey>.github-kind`.
+- LINEAR: issues, each section an `issues(filter:)` query of Linear's
+  GraphQL API, filtered on `isMe` so no request for the viewer comes first
+  (Queue: assigned, unstarted or started; Mine: created, assigned to
+  someone else, open; Watch: subscribed, neither, open), with linear-tui's
+  issue fields (MIT, credited there), kept in `$STATE_DIR/linear.json`.
+
+A view (fzf on `$SOCK_DIR/<skey>.view.<name>.<pid>.sock`) shows what its
+source said last at once, asks again behind it when that is over 2 minutes
+old and every 5 minutes after (`^r` now), and reloads when a thread changes
+(the status push) or is made. A section's requests go at once, and one that
+fails keeps what it had. A row shows the thread the item has: its item's
+ref, else its branch (a pull request's head; a GitHub issue's `N-…`;
+Linear's branch name). The card is the thread first (the one it has, or
+the branch enter starts one on), the item's fields, and its description,
+rendered from markdown by `internal/markdown` (goldmark's parser, weaver's
+palette: headings, lists and task lists, quotes, code, tables; no HTML,
+images or link targets). Not glamour, whose highlighter registers every
+lexer as it loads, which costs every hook 6 ms.
 
 - **Alt N / Alt R** in a view: a thread from the item under the cursor, or a
-  read-only review of it. In GITHUB tmux passes the key to the view, whose
-  fzf (also enter) runs `wvr _from github pr|issue <owner/name> <number>
-  [--review]`.
-  In LINEAR tmux runs `wvr _from linear [--review]`, which reads the
-  issue from `linear-tui context --json --workspace <the view's directory>`:
-  the snapshot's `issue` on `issue_detail`, else `rows[selected_row]` when it
-  is an issue (version 1 only). `_from` opens `wvr new --pr/--issue … [--review]`
-  in a popup (96 x 20) from a detached process, so the view goes on.
+  read-only review of it. tmux passes the key to the view, whose fzf (also
+  enter) runs `wvr _items NAME from REF [--review]`, which runs `wvr _from
+  github pr|issue <owner/name> <number>` or `wvr _from linear <ID>`. `_from`
+  opens `wvr new --pr/--issue … [--review]` in a popup (96 x 20) from a
+  detached process, so the view goes on; a Linear issue's thread starts in
+  the repository used last (`$STATE_DIR/repos`).
 - **Strip:** the session option `@weaver-strip`, set as the views start, is
   `THREADS` and each view's label, the current one in ink; the status line
   shows it on home and in a view.

@@ -6,8 +6,8 @@
 # Cmd+D (as Ghostty sends it), Alt N, the server crashing and its threads resumed (by the board's
 # enter, and by themselves), the board's x, Ctrl q, and threads from work
 # items in the GITHUB and LINEAR views. Its own socket, session name, state,
-# Claude Code dir, nvim config and PATH, with fake agents, gh and
-# linear-tui: never your tmux, agents or accounts.
+# Claude Code dir, nvim config and PATH, with fake agents, gh, Keychain and
+# Linear API: never your tmux, agents, keys or accounts.
 #   test/tmux.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -15,7 +15,7 @@ ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-tmux.XXXXXX)
 SOCK=$AT/tmux.sock
 S=wt$$
-unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_RESTORE
+unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
 export WEAVER_SESSION=$S XDG_STATE_HOME=$AT/state WEAVER_TMUX_SOCKET=$SOCK CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
@@ -62,8 +62,10 @@ waitfor() {
 	return 1
 }
 driver=""
+linear=""
 cleanup() {
 	tx kill-server >/dev/null 2>&1
+	[ -n "$linear" ] && kill "$linear" 2>/dev/null
 	[ -n "$driver" ] && kill "$driver" 2>/dev/null
 	rm -rf "$AT"
 }
@@ -374,20 +376,21 @@ case "$1 $2" in
 *) echo "gh (fake): $*" >&2; exit 1 ;;
 esac
 GH
-# Signed in unless $AT/linear-signedout is there; auth login signs it in.
-printf '#!/bin/bash\nOUT=%q\n' "$AT/linear-signedout" >"$AT/bin/linear-tui"
-cat >>"$AT/bin/linear-tui" <<'LT'
-case "$1 $2" in
-"auth login") rm -f "$OUT"; echo "Signed in." ; exit 0 ;;
-"auth status") if [ -f "$OUT" ]; then echo "Not authenticated."; else echo "OAuth token  acme (rob)"; fi; exit 0 ;;
-esac
+# The Keychain: weaver's Linear key in $AT/linear-key.
+printf '#!/bin/bash\nK=%q\n' "$AT/linear-key" >"$AT/bin/security"
+cat >>"$AT/bin/security" <<'SEC'
 case "$1" in
-context) echo '{"workspace":"w","running":true,"snapshot":{"version":1,"screen":"issue_list","rows":[{"kind":"issue","identifier":"ENG-1","title":"a"},{"kind":"issue","identifier":"ENG-42","title":"Fix it"}],"selected_row":1}}' ;;
-issue) echo '{"identifier":"ENG-42","title":"Fix it","url":"https://linear.app/acme/issue/ENG-42/fix-it","description":"Broken.","branch_name":"t/eng-42-fix-it","state":{"name":"Todo"},"creator":{"name":"Eve"},"comments":[]}' ;;
-*) exec sleep 100000 ;;
+find-generic-password) [ -f "$K" ] && cat "$K" && exit 0; exit 44 ;;
+-i) read -r l; set -- $l; while [ $# -gt 0 ]; do [ "$1" = -w ] && printf '%s\n' "$2" >"$K"; shift; done ;;
 esac
-LT
-chmod +x "$AT/bin/gh" "$AT/bin/linear-tui"
+SEC
+echo lin_fake >"$AT/linear-key"
+# Linear's API: ENG-42 assigned to you.
+python3 -I "$HERE/fake_linear.py" "$AT/linear-port" &
+linear=$!
+waitfor '[ -s "$AT/linear-port" ]'
+export WEAVER_LINEAR_URL=http://127.0.0.1:$(cat "$AT/linear-port")/graphql
+chmod +x "$AT/bin/gh" "$AT/bin/security"
 printf '%s\n' "$(cd "$AT/r" && pwd -P)" >"$SD/repos"
 # The thread the last session lost stays out of this one.
 rm -rf "$SD/lost" "$SD/tmux-${S}_"*
@@ -462,13 +465,17 @@ key 0d # enter
 waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
 ok "...and enter the same: a pull request there is for its thread" "$(where | cut -d ' ' -f 1)" "1"
 
-# linear-tui's Alt N: the form, for the issue under its cursor.
+# LINEAR: what Linear finds for you; enter, the form for the issue.
 tx select-window -t "=$S:901"
-key 1b4e
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "none yet"'
+ok "LINEAR: weaver's own, what Linear finds for you, its card" \
+	"$(tx capture-pane -p -t "=$S:901" | grep -c 'QUEUE · 1')|$(tx capture-pane -p -t "=$S:901" | grep -c 'Fix it')|$(tx capture-pane -p -t "=$S:901" | grep -c 'none yet: ⏎ starts one on t/eng-42-fix-it')|$(tx capture-pane -p -t "=$S:901" | grep -c 'STEPS')" "1|2|1|1" ||
+	tx capture-pane -p -t "=$S:901" | sed 's/^/  linear: /' | head -30
+key 0d # enter
 waitfor 'f=$(ls "$SD" | grep -E "^form\.[^.]+$" | head -n 1); [ -n "$f" ] && [ "$(jq -r .item.linear.id "$SD/$f" 2>/dev/null)" = ENG-42 ]'
 FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
 hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
-ok "LINEAR: Alt N, the form for the issue under the cursor" \
+ok "...enter, the form for the issue, in the repository used last" \
 	"$(jq -r '"\(.repo) \(.branch) \(.item.linear.id) "' "$FORM")|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
 	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
 waitfor '[ "$(grep -c "Implement ENG-42" "$AT/screen.log")" -gt 0 ]'
@@ -476,23 +483,32 @@ key 0d # enter
 waitfor '[ "$(windows)" = "0 1 2 3 900 901 " ]'
 AG3=$(pane_at 3 1)
 waitfor '[ -f "$AT/args.$AG3" ]'
-ok "...enter: its thread, on Linear's branch" \
-	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(grep -c '^Implement ENG-42$' "$AT/args.$AG3")|$(grep -c '^Linear issue ENG-42 by Eve' "$AT/args.$AG3")" \
-	"t/eng-42-fix-it|1|1"
+ok "...enter: its thread, on Linear's branch, its comments in the prompt" \
+	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(grep -c '^Implement ENG-42$' "$AT/args.$AG3")|$(grep -c '^Linear issue ENG-42 by Eve' "$AT/args.$AG3")|$(grep -c 'Seen it' "$AT/args.$AG3")" \
+	"t/eng-42-fix-it|1|1|1"
+tx select-window -t "=$S:901"
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "goes there"'
+ok "...the view shows the thread it has" "$(tx capture-pane -p -t "=$S:901" | grep -c '03 \[')|$(tx capture-pane -p -t "=$S:901" | grep -c '⏎ goes there')" "2|1"
 
 # A view not set up: a dot in the strip, its window says what it needs and
 # what fixes it; enter runs that, and the window becomes the view.
 tx kill-window -t "=$S:901"
-: >"$AT/linear-signedout"
-rm -f "$SD/linear-auth"
+rm -f "$AT/linear-key" "$SD/linear-auth"
 tx run-shell -t "=$S:" "wvr view linear"
-waitfor 'tx capture-pane -p -t "=$S:901" 2>/dev/null | grep -q "linear-tui auth login"'
+waitfor 'tx capture-pane -p -t "=$S:901" 2>/dev/null | grep -q "wvr linear login"'
 ok "a view not signed in: a dot in the strip, and its window says what it needs" \
-	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*not signed in')" "1|1"
+	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*no Linear API key')" "1|1"
 tx send-keys -t "=$S:901" Enter
-waitfor '[ "$(tx display -p -t "=$S:901" "#{pane_current_command}")" = sleep ]'
-ok "...enter signs it in, and the window becomes the view" \
-	"$([ -f "$AT/linear-signedout" ] && echo still || echo in)|$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c '·')" "in|0"
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "key:"'
+tx send-keys -t "=$S:901" -l lin_wrong
+tx send-keys -t "=$S:901" Enter
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "did not sign in"'
+ok "...enter asks for a key, and says when Linear refuses it" "$(tx capture-pane -p -t "=$S:901" | grep -c 'did not sign in')|$([ -f "$AT/linear-key" ] && echo kept || echo none)" "1|none"
+tx send-keys -t "=$S:901" -l lin_fake
+tx send-keys -t "=$S:901" Enter
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "LINEAR \]"' 100
+ok "...a good one is kept, and the window becomes the view" \
+	"$(cat "$AT/linear-key" 2>/dev/null)|$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c '·')" "lin_fake|0"
 
 echo "-- $pass passed, $fail failed"
 exit $fail

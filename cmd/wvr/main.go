@@ -220,7 +220,9 @@ var commands = map[string]command{
 	"_agent":     {session: true, run: func(e *wvr.Env, args []string) error { return e.AgentPane(arg(args, 0), arg(args, 1)) }},
 	"_resume":    {session: true, run: done(func(e *wvr.Env, _ []string) { e.ResumeSession() })},
 	"_viewsetup": {session: true, run: func(e *wvr.Env, args []string) error { return e.ViewSetup(arg(args, 0)) }},
-	"_github":    {session: true, run: (*wvr.Env).GitHub},
+	"_items":     {session: true, run: (*wvr.Env).Items},
+	"_github":    {session: true, run: func(e *wvr.Env, args []string) error { return e.Items(append([]string{"github"}, args...)) }},
+	"linear":     {run: (*wvr.Env).Linear},
 	"_close":     {session: true, run: (*wvr.Env).CloseTail},
 }
 

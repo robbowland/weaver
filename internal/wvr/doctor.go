@@ -42,8 +42,11 @@ type remedy interface{ text() string }
 type (
 	brewInstall struct{ formula string }
 	brewUpgrade struct{ formula string }
-	signIn      struct{ argv []string }
-	selfFix     struct {
+	signIn      struct {
+		view string // whose sign-in
+		argv []string
+	}
+	selfFix struct {
 		command string // how you would do it yourself
 		do      func() error
 	}
@@ -155,13 +158,13 @@ func (e *Env) checks() []check {
 	}
 	// The views, and what work items need.
 	gh := tool("gh", "gh", "gh", optional, "")
-	if gh.ok && !e.signedIn("gh") {
-		gh.ok, gh.found, gh.remedy = false, "not signed in, for the GITHUB view and --pr/--issue", signIn{[]string{"gh", "auth", "login"}}
+	if gh.ok && !e.signedIn("github") {
+		gh.ok, gh.found, gh.remedy = false, "not signed in, for the GITHUB view and --pr/--issue", signIn{"github", []string{"gh", "auth", "login"}}
 	}
 	cs = append(cs, gh)
-	lin := tool("linear-tui", "linear-tui", "robbowland/kegs/linear-tui", optional, "")
-	if lin.ok && !e.signedIn("linear-tui") {
-		lin.ok, lin.found, lin.remedy = false, "not signed in, for the LINEAR view", signIn{[]string{"linear-tui", "auth", "login"}}
+	lin := check{name: "Linear", weight: optional, ok: e.signedIn("linear"), found: "signed in"}
+	if !lin.ok {
+		lin.found, lin.remedy = "no API key, for the LINEAR view and Linear issues", signIn{"linear", []string{"wvr", "linear", "login"}}
 	}
 	cs = append(cs, lin)
 	plug := check{name: "diffview-plus.nvim", weight: optional, ok: setup.PluginsCurrent()}
@@ -269,12 +272,16 @@ func (e *Env) Fix(out io.Writer) error {
 			if !yes {
 				continue
 			}
-			s := exec.Command(r.argv[0], r.argv[1:]...)
+			argv := append([]string{}, r.argv...)
+			if argv[0] == "wvr" {
+				argv[0] = e.Self
+			}
+			s := exec.Command(argv[0], argv[1:]...)
 			s.Stdin, s.Stdout, s.Stderr = os.Stdin, os.Stdout, os.Stderr
 			if err := s.Run(); err != nil {
 				fmt.Fprintf(out, "wvr: %s: %v\n", r.text(), err)
 			}
-			os.Remove(e.authFile(r.argv[0]))
+			os.Remove(e.authFile(r.view))
 		}
 	}
 	fmt.Fprintln(out)

@@ -169,10 +169,12 @@ func (e *Env) pushStatus(labels bool) {
 			}
 		}
 	}
-	// The GITHUB view shows the threads of its items too.
-	views, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".gh.*.sock")
+	// The views (GITHUB, LINEAR) show the threads of their items too:
+	// <skey>.view.NAME.PID.sock.
+	views, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".view.*.*.sock")
 	for _, s := range views {
-		if !FzfPost(s, "reload("+q+" _github rows)+refresh-preview") {
+		name, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(s), e.SKey+".view."), ".")
+		if !FzfPost(s, "reload("+q+" _items "+name+" rows)+refresh-preview") {
 			os.Remove(s)
 		}
 	}

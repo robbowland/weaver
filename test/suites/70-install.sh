@@ -119,7 +119,7 @@ fixed=$(env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state
 rc=$?
 ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \
 	"$(cat "$AT/brew.log" 2>/dev/null | tr '\n' ' ')" \
-	"install tmux neovim fzf worktrunk gh robbowland/kegs/linear-tui "
+	"install tmux neovim fzf worktrunk gh "
 ok "...and still fails, saying what is left, while weaver cannot work" \
 	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] tmux')" "1|1"
 unset BREW

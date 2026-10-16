@@ -12,7 +12,7 @@ import (
 // viewAbout is what a view shows, for its setup screen.
 var viewAbout = map[string]string{
 	"github": "your pull requests and issues, to start threads from",
-	"linear": "your Linear issues, in linear-tui",
+	"linear": "your Linear issues, to start threads from",
 }
 
 // ViewSetup is `wvr _viewsetup NAME`, a view's window while the view is not
@@ -53,13 +53,17 @@ func (e *Env) ViewSetup(name string) error {
 		switch k := readKey(); {
 		case (k == '\r' || k == '\n') && need.fix != nil:
 			fmt.Fprint(tty, "\033[H\033[2J")
-			c := exec.Command(need.fix[0], need.fix[1:]...)
+			argv := append([]string{}, need.fix...)
+			if argv[0] == "wvr" {
+				argv[0] = e.Self
+			}
+			c := exec.Command(argv[0], argv[1:]...)
 			c.Stdin, c.Stdout, c.Stderr = tty, tty, tty
 			if err := c.Run(); err != nil {
 				said = strings.Join(need.fix, " ") + ": " + err.Error()
 			}
 			// Asked again now, not in a minute.
-			os.Remove(e.authFile(need.fix[0]))
+			os.Remove(e.authFile(name))
 			e.SetStrip()
 		case k == 'h' || k == 'H':
 			e.setHidden(name, true)

@@ -7,10 +7,9 @@ which are working, which are done, and which are waiting on you. One key shows
 them all, another jumps to whoever has waited longest, and a neovim bound to
 each agent follows it into the worktree and file it is really editing.
 
-Beside the threads, the session shows your pull requests and issues (its
-own GITHUB view, and [linear-tui](https://github.com/k1-c/linear-tui) for
-Linear), and enter on any of them starts a thread on it, Alt R a
-read-only review.
+Beside the threads, the session shows your pull requests and issues, on
+GitHub and on Linear, and enter on any of them starts a thread on it, Alt R
+a read-only review.
 
 wvr drives Claude Code through its hooks, and Codex through an adapter;
 any other agent can report through `wvr event`
@@ -20,8 +19,8 @@ any other agent can report through `wvr event`
 
 macOS, with [Homebrew](https://brew.sh). One command installs weaver and
 everything it works with: tmux, Neovim, fzf, [Worktrunk](https://worktrunk.dev)
-for the worktrees, and for the [views](#views-github-and-linear) gh and
-[linear-tui](https://github.com/k1-c/linear-tui). Then start it:
+for the worktrees, and gh for the [GITHUB view](#views-github-and-linear).
+Then start it:
 
 ```sh
 brew install robbowland/kegs/weaver
@@ -31,8 +30,9 @@ wvr
 Bring your own agent: [Claude Code](https://github.com/anthropics/claude-code)
 or [Codex](https://github.com/openai/codex). Signing in to GitHub and Linear
 is done in place: a view not set up yet has a dot in the status line, and
-going there offers the one key that signs it in (`gh auth login`,
-`linear-tui auth login`); `h` there hides a view you do not use.
+going there offers the one key that signs it in (`gh auth login`, or
+`wvr linear login`, which asks for a Linear API key and keeps it in the
+Keychain); `h` there hides a view you do not use.
 
 `wvr doctor` says what is there and what is not, with the command that
 fixes each; `wvr doctor --fix` does what it can: Homebrew installs what is
@@ -166,12 +166,12 @@ When the agent exits its pane stays; enter there resumes its conversation
 
 ### Views: GitHub and Linear
 
-Beside home are two views: **GITHUB**, weaver's own list of your pull
-requests and issues, and **LINEAR**, linear-tui. `Alt y` steps from a thread to home, on through them,
+Beside home are two views: **GITHUB**, your pull requests and issues, and
+**LINEAR**, your Linear issues. `Alt y` steps from a thread to home, on through them,
 and back; on home and in a view the status line shows the strip of them
 (`THREADS   GITHUB   LINEAR`). A view not set up yet has a dot
-(`LINEAR ·`): its window says what it needs, its tool installed or signed
-in, and enter does that, after which it is the view. `h` there hides it
+(`LINEAR ·`): its window says what it needs (gh installed and signed in, a
+Linear API key), and enter does that, after which it is the view. `h` there hides it
 (`wvr view linear` shows it again; `$WEAVER_VIEWS` picks them outright).
 
 On a pull request or an issue there, `Alt N` opens the new-thread form
@@ -192,16 +192,21 @@ to approve. The form's `alt-r` switches between the two.
 From a shell, the same: `wvr new --pr 45` (or `owner/name#45`, or its URL),
 `wvr new --issue 12`, `wvr new --issue ENG-42`, each with `--review`.
 
-GITHUB looks like the board: your pull requests (or, on `s`, issues) under
-their sections, Queue (review requested), Mine and Watch; a row says the one
-thing to know (changes requested, a check failing, draft, approved) and
-shows the thread it has, and the card says what enter does: start a thread
-on its branch, or go to the one it has. `o` opens it on GitHub, `/`
-searches, `^r` asks GitHub again (it does every 5 minutes, and shows what it
-said last at once). The searches and the fields they read come from
-[gh-dash](https://github.com/dlvhdr/gh-dash) (MIT, Dolev Hadar), with
-thanks. linear-tui runs in the repository you used last, and threads from
-it start there.
+The views look like the board: items under their sections, Queue (yours to
+do: review requested, assigned), Mine (yours, with someone else) and Watch
+(what you follow); a row says the one thing to know (changes requested, a
+check failing, draft, approved; urgent, or the issue's state) and shows the
+thread it has, and the card says what enter does (start a thread on its
+branch, or go to the one it has), then the item's fields and its
+description. `s` switches GITHUB between pull requests and issues, `o`
+opens an item where it lives, `/` searches, `^r` asks again (a view does
+every 5 minutes, and shows what it heard last at once). A thread from a
+Linear issue starts in the repository you used last.
+
+The GitHub searches and the fields they read come from
+[gh-dash](https://github.com/dlvhdr/gh-dash) (MIT, Dolev Hadar), and the
+Linear queries from [linear-tui](https://github.com/k1-c/linear-tui) (MIT,
+k1-c), with thanks.
 
 ### When the session goes
 
@@ -408,6 +413,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 | `WEAVER_VIEWS` | both, but hidden ones | The views beside home: `github`, `linear`, both, or `none` |
+| `LINEAR_API_KEY` | unset | The Linear API key weaver reads Linear with, over the one `wvr linear login` keeps in the Keychain |
 | `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves the hooks and plugins as they are as it starts (`wvr setup` still does it) |
 
 ## Development
@@ -442,7 +448,7 @@ touched (they need jq and python3 as well as weaver's own dependencies):
   there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
   Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
   their threads resumed, Ctrl q, and threads from pull requests and issues
-  in the GITHUB and LINEAR views (with fake `gh` and linear-tui).
+  in the GITHUB and LINEAR views (with a fake `gh`, Keychain and Linear API).
 
 `test/soak/nvim-exit.sh` is a long run, by hand: nvims weaver starts, killed
 together round after round, none of which may hang.
@@ -458,7 +464,9 @@ that in mind, and open an issue for anything that looks wrong.
 
 The GITHUB view's searches of GitHub, and the fields of a pull request they
 read, come from [gh-dash](https://github.com/dlvhdr/gh-dash) by Dolev Hadar
-(MIT); [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
+(MIT); the LINEAR view's queries, and the fields of an issue they read, from
+[linear-tui](https://github.com/k1-c/linear-tui) by k1-c (MIT);
+[diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
 (GPL-3.0) is what reviews are built on, fetched rather than carried.
 
 ## Licence

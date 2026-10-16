@@ -1,7 +1,6 @@
 package wvr
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,16 +14,15 @@ import (
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
-	"github.com/robbowland/weaver/internal/git"
-	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Views: the weaver session's windows beside home that show work from
-// elsewhere: GITHUB (weaver's own, internal/github) and LINEAR
-// (linear-tui). Out of the thread numbering, at viewBase and on; one whose
-// tool is not installed or signed in yet shows how to set it up. Alt y steps from a
+// elsewhere: GITHUB (internal/github) and LINEAR (internal/linear), each
+// through itemsview.go. Out of the thread numbering, at viewBase and on; one
+// not signed in yet shows how to set it up. Alt y steps from a
 // thread to home, on through the views, and back to the thread; in a view,
 // Alt N starts a thread from the item under the cursor and Alt R a
 // read-only review of it, through the new-thread form.
@@ -124,15 +122,12 @@ func (e *Env) viewNeeds(name string) viewNeed {
 		switch {
 		case !onPath("gh"):
 			return viewNeed{viewMissing, "gh is not installed", brewFix("gh")}
-		case !e.signedIn("gh"):
+		case !e.signedIn("github"):
 			return viewNeed{viewSignedOut, "gh is not signed in to GitHub", []string{"gh", "auth", "login"}}
 		}
 	case "linear":
-		switch {
-		case !onPath("linear-tui"):
-			return viewNeed{viewMissing, "linear-tui is not installed", brewFix("robbowland/kegs/linear-tui")}
-		case !e.signedIn("linear-tui"):
-			return viewNeed{viewSignedOut, "linear-tui is not signed in to Linear", []string{"linear-tui", "auth", "login"}}
+		if !e.signedIn("linear") {
+			return viewNeed{viewSignedOut, "weaver has no Linear API key", []string{"wvr", "linear", "login"}}
 		}
 	}
 	return viewNeed{state: viewReady}
@@ -143,29 +138,29 @@ func onPath(name string) bool {
 	return err == nil
 }
 
-// signedIn: is tool (gh, linear-tui) signed in, as its auth says?
-// Asked at most once a minute, the answer kept in $STATE_DIR (linear-auth,
-// gh-auth): Alt y asks on every press.
-func (e *Env) signedIn(tool string) bool {
-	f := e.authFile(tool)
+// signedIn is whether view name's service is signed in: gh has a token, or
+// weaver a Linear key. Asked at most once a minute, the answer kept in
+// $STATE_DIR (github-auth, linear-auth): Alt y asks on every press.
+func (e *Env) signedIn(name string) bool {
+	f := e.authFile(name)
 	if st, err := os.Stat(f); err == nil && time.Since(st.ModTime()) < time.Minute {
 		b, _ := os.ReadFile(f)
 		return strings.TrimSpace(string(b)) == "yes"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	// gh's auth status checks its token over the network (2 s): whether it
-	// has one is enough, and its token is never kept.
-	args := []string{"auth", "status"}
-	if tool == "gh" {
-		args = []string{"auth", "token"}
+	ok := false
+	switch name {
+	case "github":
+		// gh's auth status checks its token over the network (2 s): whether
+		// it has one is enough, and its token is never kept.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		c := exec.CommandContext(ctx, "gh", "auth", "token")
+		c.WaitDelay = time.Second
+		ok = c.Run() == nil
+	case "linear":
+		_, err := linear.Key()
+		ok = err == nil
 	}
-	c := exec.CommandContext(ctx, tool, args...)
-	c.WaitDelay = time.Second
-	var out bytes.Buffer
-	c.Stdout = &out
-	ok := c.Run() == nil && !strings.Contains(out.String(), "Not authenticated")
-	out.Reset()
 	ans := "no"
 	if ok {
 		ans = "yes"
@@ -174,31 +169,13 @@ func (e *Env) signedIn(tool string) bool {
 	return ok
 }
 
-func (e *Env) authFile(tool string) string {
-	if tool == "linear-tui" {
-		return e.StateDir + "/linear-auth"
-	}
-	return e.StateDir + "/" + tool + "-auth"
-}
+func (e *Env) authFile(name string) string { return e.StateDir + "/" + name + "-auth" }
 
 // viewOf is view name as it runs in this session.
 func (e *Env) viewOf(name string) (view, error) {
-	home := os.Getenv("HOME")
 	switch name {
-	case "github":
-		return view{name, "GITHUB", []string{e.Self, "_github"}, nil, home}, nil
-	case "linear":
-		p, err := exec.LookPath("linear-tui")
-		if err != nil {
-			return view{}, fmt.Errorf("linear-tui is not installed (see github.com/k1-c/linear-tui)")
-		}
-		// linear-tui keeps a view per repository, and a thread started
-		// from it works there: the repository used last.
-		dir := home
-		if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" && files.Exists(l) {
-			dir = l
-		}
-		return view{name, "LINEAR", []string{p}, nil, dir}, nil
+	case "github", "linear":
+		return view{name, strings.ToUpper(name), []string{e.Self, "_items", name}, nil, os.Getenv("HOME")}, nil
 	}
 	return view{}, fmt.Errorf("no view %q (github or linear)", name)
 }
@@ -316,9 +293,10 @@ func (e *Env) View(args []string) error {
 	return nil
 }
 
-// From is `wvr _from github pr|issue REPO NUM [--review]` (the GITHUB view's
-// Alt N and Alt R) and `wvr _from linear [--review]` (the LINEAR view's):
-// the new-thread form for that item, in a popup, while the view goes on.
+// From is `wvr _from github pr|issue REPO NUM [--review]` and `wvr _from
+// linear ID [--review]` (a view's enter and Alt R): the new-thread form for
+// that item, in a popup, while the view goes on. A Linear issue's thread
+// works in the repository used last.
 func (e *Env) From(args []string) error {
 	review := false
 	var rest []string
@@ -329,37 +307,19 @@ func (e *Env) From(args []string) error {
 			rest = append(rest, a)
 		}
 	}
-	// In a view, said on tmux's message line.
-	say := func(m string) error {
-		e.Tmux("display-message", "-d", "2500", "weaver: "+m)
-		return cli.ErrSaid
-	}
 	var nw []string
 	dir := os.Getenv("HOME")
 	switch {
 	case len(rest) == 4 && rest[0] == "github" && (rest[1] == "pr" || rest[1] == "issue"):
 		nw = []string{"--" + rest[1], rest[2] + "#" + rest[3]}
-	case len(rest) >= 1 && rest[0] == "linear":
-		d := ""
-		if id := e.viewWindows()["linear"]; id != "" {
-			if out, err := e.Tmux("display-message", "-p", "-t", id.Target(), "#{pane_current_path}"); err == nil {
-				d = strings.TrimSpace(string(out))
-			}
-		}
-		if d == "" {
-			d = dir
-		}
-		id, err := items.LinearSelected(d)
-		if err != nil {
-			return say(err.Error())
-		}
-		dir = d
-		nw = []string{"--issue", id}
-		if _, _, ok := git.RepoOf(d); ok {
-			nw = append(nw, "--repo", d)
+	case len(rest) == 2 && rest[0] == "linear":
+		nw = []string{"--issue", rest[1]}
+		if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" && files.Exists(l) {
+			dir = l
+			nw = append(nw, "--repo", l)
 		}
 	default:
-		return &cli.Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")}
+		return &cli.Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear ID [--review]")}
 	}
 	if review {
 		nw = append(nw, "--review")
@@ -388,7 +348,8 @@ func (e *Env) From(args []string) error {
 	c := exec.Command("tmux", argv...)
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
-		return say("could not open the form")
+		e.Tmux("display-message", "-d", "2500", "weaver: could not open the form")
+		return cli.ErrSaid
 	}
 	return nil
 }

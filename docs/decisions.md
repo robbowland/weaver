@@ -445,6 +445,26 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-16: LINEAR is weaver's own too, as GITHUB became (Rob: "do the
+  same porting for linear-tui, take what we need, strip what we don't";
+  "keep the fork, but remove it as a dependency of weaver"). From
+  linear-tui (Rust, 33k lines, MIT, k1-c): its issue fields and how a list
+  of them is asked for, transplanted into `internal/linear` with credit; the
+  two views are one (`itemsview.go`) over a source each.
+  - Signing in is a personal API key, pasted into `wvr linear login`,
+    checked with Linear, and kept in the Keychain (`security`, fed on stdin
+    so the key is on no command line); `$LINEAR_API_KEY` wins when set.
+    Not linear-tui's OAuth: its client ID is k1-c's registered app, and
+    using it would be weaver passing as linear-tui; nor reading
+    linear-tui's tokens, which keeps the dependency. weaver's own OAuth
+    app would need registering and a callback server, for a read-only list.
+  - A thread from a Linear issue works in the repository used last: Linear
+    knows no repository, and linear-tui's view per repository did the same.
+  - The card renders the description's markdown (Rob: "a better terminal
+    markdown renderer for the PR descriptions"): glamour first, which
+    looked right but took every `wvr` from 3.7 to 9.8 ms to start (chroma
+    registers every lexer and style as it loads), on every agent hook; so
+    a renderer of weaver's own over goldmark (0.3 ms), in its palette.
 
 ## History
 

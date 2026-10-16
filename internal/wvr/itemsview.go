@@ -1,0 +1,573 @@
+package wvr
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
+	"github.com/robbowland/weaver/internal/store"
+)
+
+// The views of work items, GITHUB and LINEAR: a service's items under
+// their sections, as the board shows threads, for starting threads from
+// them. Enter on one opens the new-thread form for it (or goes to its
+// thread), Alt R a read-only review; o opens it where it lives. What the
+// service said is kept in $STATE_DIR (github.json, linear.json), so a view
+// shows it at once and asks again behind it.
+
+// itemSource is a service a view shows the work items of.
+type itemSource interface {
+	// name is the view's: github, linear.
+	name() string
+	// kinds are what s switches between, the first shown first.
+	kinds() []string
+	// label is what the header calls a kind: PULL REQUESTS, ISSUES.
+	label(kind string) string
+	// read is what the service said last, from its cache.
+	read(e *Env) itemData
+	// fetch asks the service again and keeps the answer.
+	fetch(e *Env)
+}
+
+// itemData is what a service said: when, what went wrong, and its
+// sections of each kind.
+type itemData struct {
+	fetched  time.Time
+	err      string
+	sections map[string][]itemSection
+}
+
+// itemSection is a section's items, and how many there are in all.
+type itemSection struct {
+	title string
+	total int
+	items []viewItem
+}
+
+// viewItem is a work item as the view shows it, whichever service it is
+// from.
+type viewItem struct {
+	ref     string // what a thread from it records: o/r#45, ENG-42
+	title   string
+	fact    string // the one thing to know, coloured
+	where   string // repository and number, or identifier
+	sub     string // the card's line under the title
+	updated time.Time
+	url     string
+	from    []string // what `wvr _from` takes for it
+	// branch is the branch a thread on it works on, or a prefix of it
+	// (an issue's N-...), in repo when the service has repositories;
+	// startOn is the branch a new one would start on.
+	branch       string
+	branchPrefix bool
+	startOn      string
+	repo         string
+	fields       []cardField
+	body         string // markdown
+}
+
+// cardField is one of the card's labelled lines.
+type cardField struct {
+	label, text, colour string
+	lines               int
+}
+
+// viewThread is a thread of this session, as a view matches it to an item.
+type viewThread struct {
+	num    int
+	state  agent.State
+	seen   bool
+	since  int64
+	ref    string // its work item's
+	repo   string // its repository on GitHub, owner/name
+	branch string
+}
+
+// itemThreads are the session's threads.
+func (e *Env) itemThreads() []viewThread {
+	rows, _ := e.AgentRows()
+	slugs := map[string]string{}
+	var ts []viewThread
+	for _, r := range rows {
+		if r.Tnum == 0 {
+			continue
+		}
+		f := r.Sfile
+		if !strings.HasSuffix(f, ".thread") {
+			f = strings.TrimSuffix(f, ".json") + ".thread"
+		}
+		th, err := store.ReadThread(f)
+		if err != nil {
+			continue
+		}
+		t := viewThread{num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch}
+		if th.Item != nil {
+			t.ref = th.Item.Ref
+		}
+		if th.Repo != "" {
+			s, ok := slugs[th.Repo]
+			if !ok {
+				s = items.GitHubRepo(th.Repo)
+				slugs[th.Repo] = s
+			}
+			t.repo = s
+		}
+		ts = append(ts, t)
+	}
+	return ts
+}
+
+// threadOf is the thread for it, if the session has one: its item, else
+// its branch.
+func threadOf(ts []viewThread, it viewItem) (viewThread, bool) {
+	for _, t := range ts {
+		if t.ref == it.ref {
+			return t, true
+		}
+	}
+	for _, t := range ts {
+		if it.branch == "" || t.branch == "" || it.repo != "" && t.repo != it.repo {
+			continue
+		}
+		if t.branch == it.branch || it.branchPrefix && strings.HasPrefix(t.branch, it.branch) {
+			return t, true
+		}
+	}
+	return viewThread{}, false
+}
+
+// cell is the thread's cell, painted as the board paints it.
+func (t viewThread) cell() string {
+	switch t.state {
+	case agent.StateNeedsYou:
+		return paint(GNeed, CRed, CDim, COff)
+	case agent.StateDone:
+		if t.seen {
+			return paint(GSeen, CDim, CDim, COff)
+		}
+		return paint(GDone, CGreen, CDim, COff)
+	case agent.StateWorking, agent.StateStarting:
+		return paint(GWork, CGrey, CDim, COff)
+	case agent.StateInterrupted:
+		return paint(GInt, CGrey, CDim, COff)
+	case agent.StateIdle, agent.StateEnded:
+	}
+	return paint(GIdle, CDim, CDim, COff)
+}
+
+// word is the thread's state as the card says it.
+func (t viewThread) word() string {
+	switch t.state {
+	case agent.StateNeedsYou:
+		return CRed + "needs you" + COff
+	case agent.StateDone:
+		if !t.seen {
+			return CGreen + "done" + COff
+		}
+	case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
+	}
+	return string(t.state)
+}
+
+// untick is a title without its code's backticks, which GitHub and Linear
+// show as code and a line shows as noise.
+func untick(s string) string { return strings.ReplaceAll(s, "`", "") }
+
+var reAnsi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func visible(s string) int { return rlen(reAnsi.ReplaceAllString(s, "")) }
+
+// fitAnsi is s (in one colour) cut to n visible characters and padded to
+// n, its colour kept.
+func fitAnsi(s string, n int) string {
+	if visible(s) <= n {
+		return s + strings.Repeat(" ", n-visible(s))
+	}
+	colour := reAnsi.FindString(s)
+	if !strings.HasPrefix(s, colour) {
+		colour = ""
+	}
+	return colour + oneline.Fit(reAnsi.ReplaceAllString(s, ""), n) + COff
+}
+
+// itemKind is the kind src's view shows, kept in
+// $STATE_DIR/<skey>.<name>-kind.
+func (e *Env) itemKind(src itemSource) string {
+	ks := src.kinds()
+	if l, _ := files.FirstLine(e.StateDir + "/" + e.SKey + "." + src.name() + "-kind"); l != "" {
+		for _, k := range ks {
+			if k == l {
+				return k
+			}
+		}
+	}
+	return ks[0]
+}
+
+// switchKind shows src's next kind.
+func (e *Env) switchKind(src itemSource) {
+	ks := src.kinds()
+	next := ks[0]
+	for i, k := range ks {
+		if k == e.itemKind(src) {
+			next = ks[(i+1)%len(ks)]
+		}
+	}
+	bestEffort(store.WriteAtomic(e.StateDir+"/"+e.SKey+"."+src.name()+"-kind", []byte(next+"\n")))
+}
+
+// itemSock is where src's views listen: <skey>.view.<name>.<pid>.sock.
+func (e *Env) itemSocks(name string) []string {
+	ms, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".view." + name + ".*.sock")
+	return ms
+}
+
+// reloadItems has every view of src show its cache again.
+func (e *Env) reloadItems(src itemSource) {
+	q := session.Quote(e.Self)
+	for _, s := range e.itemSocks(src.name()) {
+		session.FzfPost(s, "reload("+q+" _items "+src.name()+" rows)+refresh-preview+transform("+q+" _items "+src.name()+" chrome)")
+	}
+}
+
+// itemRows are the view's lines for fzf, a section at a time under its
+// heading: id ref prev next display. Headings and the gaps between are not
+// items (prev and next are the items around them, for the cursor to step
+// over them).
+func (e *Env) itemRows(src itemSource) string {
+	d := src.read(e)
+	ts := e.itemThreads()
+	cols, _ := lsSize()
+	// Less the border, fzf's gutter and the card's.
+	w := lsWidth(cols) - 8
+	type line struct{ id, ref, text string }
+	var ls []line
+	now := time.Now()
+	sections := d.sections[e.itemKind(src)]
+	// The columns, as wide as their widest (within bounds).
+	wf, ww := 8, 8
+	for _, s := range sections {
+		for _, it := range s.items {
+			wf, ww = max(wf, visible(it.fact)), max(ww, rlen(it.where))
+		}
+	}
+	wf, ww = min(wf, 22), min(ww, 24)
+	wt := max(w-2-1-3-2-wf-2-ww-2-3, 12)
+	for i, s := range sections {
+		if len(s.items) == 0 {
+			continue
+		}
+		if len(ls) > 0 {
+			ls = append(ls, line{id: "g" + strconv.Itoa(i)})
+		}
+		count := strconv.Itoa(s.total)
+		if s.total > len(s.items) {
+			count = strconv.Itoa(len(s.items)) + " of " + count
+		}
+		ls = append(ls, line{id: "h" + strconv.Itoa(i), text: CGrey + strings.ToUpper(s.title) + " · " + count + COff})
+		for _, it := range s.items {
+			num, cell := "  ", "   "
+			if t, ok := threadOf(ts, it); ok {
+				num, cell = fmt.Sprintf("%02d", t.num), t.cell()
+			}
+			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + fitAnsi(it.fact, wf) + "  " +
+				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
+			ls = append(ls, line{id: "i" + strconv.Itoa(len(ls)), ref: it.ref, text: text})
+		}
+	}
+	var b strings.Builder
+	for i, l := range ls {
+		prev, next := "", ""
+		if l.id[0] != 'i' {
+			for j := i - 1; j >= 0; j-- {
+				if ls[j].id[0] == 'i' {
+					prev = strconv.Itoa(j + 1)
+					break
+				}
+			}
+			for j := i + 1; j < len(ls); j++ {
+				if ls[j].id[0] == 'i' {
+					next = strconv.Itoa(j + 1)
+					break
+				}
+			}
+		}
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\n", l.id, l.ref, prev, next, l.text)
+	}
+	return b.String()
+}
+
+// itemTitle is the view's header: what it shows, how many, and how fresh.
+func (e *Env) itemTitle(src itemSource) string {
+	d := src.read(e)
+	kind := e.itemKind(src)
+	n := 0
+	for _, s := range d.sections[kind] {
+		n += len(s.items)
+	}
+	t := CBold + "[ WEAVER :: " + src.label(kind) + " ]" + COff + " " + strconv.Itoa(n)
+	switch {
+	case d.fetched.IsZero() && d.err == "":
+		t += "   " + CDim + "asking…" + COff
+	case d.err != "":
+		t += "   " + CRed + oneline.Cut(d.err, 60) + COff
+	default:
+		t += "   " + CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
+	}
+	return t
+}
+
+// itemFooter is the view's keys: browsing, or searching.
+func itemFooter(src itemSource) string {
+	g, d, o := CGrey, CDim, COff
+	items := []string{"⏎ THREAD", "Alt-R REVIEW", "o OPEN"}
+	if len(src.kinds()) > 1 {
+		items = append(items, "s "+strings.ToUpper(strings.Join(src.kinds(), "/")))
+	}
+	items = append(items, "/ SEARCH", "^r REFRESH")
+	if in := os.Getenv("FZF_INPUT_STATE"); in != "" && in != "hidden" {
+		items = []string{"⏎ THREAD", "esc BACK"}
+	}
+	out := ""
+	for _, it := range items {
+		k, rest, _ := strings.Cut(it, " ")
+		out += g + k + o + " " + d + rest + o + "  "
+	}
+	return out
+}
+
+// itemChrome is the view's header and footer, for fzf's load and keys.
+func (e *Env) itemChrome(src itemSource) string {
+	var acts []string
+	if a, ok := fzfAct("change-header", e.itemTitle(src)); ok {
+		acts = append(acts, a)
+	}
+	if a, ok := fzfAct("change-footer", itemFooter(src)); ok {
+		acts = append(acts, a)
+	}
+	return strings.Join(acts, "+") + "\n"
+}
+
+// findItem is src's item ref, of any kind.
+func findItem(d itemData, ref string) (viewItem, bool) {
+	for _, ss := range d.sections {
+		for _, s := range ss {
+			for _, it := range s.items {
+				if it.ref == ref {
+					return it, true
+				}
+			}
+		}
+	}
+	return viewItem{}, false
+}
+
+// itemCard is item ref's card: the thread first (what it has, or what
+// enter starts), then what the service says, then its description.
+func (e *Env) itemCard(src itemSource, ref string) string {
+	it, ok := findItem(src.read(e), ref)
+	if !ok {
+		return ""
+	}
+	w := previewCols()
+	now := time.Now()
+	ls := []string{CBold + oneline.Line(it.title) + COff, CDim + it.sub + " · " + age(int64(now.Sub(it.updated).Seconds())) + COff, ""}
+	if t, ok := threadOf(e.itemThreads(), it); ok {
+		ls = append(ls, CDim+oneline.Cut("thread           ", 11)+COff+fmt.Sprintf("%02d %s %s", t.num, t.cell(), t.word())+
+			CDim+" · "+age(now.Unix()-t.since)+" · ⏎ goes there"+COff)
+	} else {
+		on := ""
+		if it.startOn != "" {
+			on = " on " + it.startOn
+		}
+		ls = append(ls, field(w, "thread", "none yet: ⏎ starts one"+on, CGrey, 2)...)
+	}
+	for _, f := range it.fields {
+		ls = append(ls, field(w, f.label, f.text, f.colour, max(f.lines, 1))...)
+	}
+	if body := renderMarkdown(it.body, max(w-2, 20)); body != "" {
+		ls = append(ls, "", body)
+	}
+	return strings.ReplaceAll(strings.Join(ls, "\n"), nbsp, " ") + "\n"
+}
+
+// itemFrom opens the new-thread form for item ref (review: read-only).
+func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
+	it, ok := findItem(src.read(e), ref)
+	if !ok {
+		return fmt.Errorf("no item %s in the %s view", ref, src.name())
+	}
+	args := append([]string{}, it.from...)
+	if review {
+		args = append(args, "--review")
+	}
+	return e.From(args)
+}
+
+// itemKeys are the view's keys while browsing; searching (/) unbinds them so
+// they type.
+const itemKeys = "j,k,g,G,o,s,q"
+
+// Items is `wvr _items NAME [rows|chrome|card REF|from REF [--review]|open
+// REF|switch|fetch|fetch-bg]`: view NAME (github, linear), for good
+// (ctrl-c starts it again), and what its fzf runs. It shows what the
+// service said last at once, and asks again behind it when that is more
+// than 2 minutes old, and every 5 minutes it is open.
+func (e *Env) Items(args []string) error {
+	var src itemSource
+	switch firstArg(args) {
+	case "github":
+		src = githubSource{}
+	case "linear":
+		src = linearSource{}
+	default:
+		return fmt.Errorf("usage: wvr _items github|linear [...]")
+	}
+	args = args[1:]
+	ref := ""
+	if len(args) > 1 {
+		ref = args[1]
+	}
+	switch sub := firstArg(args); sub {
+	case "rows":
+		fmt.Print(e.itemRows(src))
+		return nil
+	case "chrome":
+		fmt.Print(e.itemChrome(src))
+		return nil
+	case "card":
+		fmt.Print(e.itemCard(src, ref))
+		return nil
+	case "from":
+		return e.itemFrom(src, ref, len(args) > 2 && args[2] == "--review")
+	case "open":
+		if it, ok := findItem(src.read(e), ref); ok && it.url != "" {
+			return exec.Command("open", it.url).Run()
+		}
+		return nil
+	case "switch":
+		e.switchKind(src)
+		return nil
+	case "fetch":
+		src.fetch(e)
+		e.reloadItems(src)
+		return nil
+	case "fetch-bg":
+		c := exec.Command(e.Self, "_items", src.name(), "fetch")
+		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		return c.Start()
+	case "":
+	default:
+		return fmt.Errorf("no _items %s %s", src.name(), sub)
+	}
+	return e.itemsView(src)
+}
+
+// itemsView is the view itself.
+func (e *Env) itemsView(src itemSource) error {
+	if _, err := exec.LookPath("fzf"); err != nil {
+		return err
+	}
+	bestEffort(os.MkdirAll(e.SockDir, 0o700))
+	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
+	defer os.Remove(sock)
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
+	go func() {
+		<-sig
+		os.Remove(sock)
+		os.Exit(129)
+	}()
+	refresh := func() {
+		src.fetch(e)
+		e.reloadItems(src)
+	}
+	if d := src.read(e); time.Since(d.fetched) > 2*time.Minute {
+		go refresh()
+	}
+	go func() {
+		for range time.Tick(5 * time.Minute) {
+			refresh()
+		}
+	}()
+	q := session.Quote(e.Self)
+	me := q + " _items " + src.name()
+	reload := "reload(" + me + " rows)+transform(" + me + " chrome)"
+	act := func(cmd string) string {
+		return "transform:case {1} in i*) echo 'execute-silent(" + me + " " + cmd + " {2})' ;; esac"
+	}
+	for {
+		rows := e.itemRows(src)
+		// The cursor on the first item, not its section's heading.
+		first := 1
+		for i, l := range strings.Split(rows, "\n") {
+			if strings.HasPrefix(l, "i") {
+				first = i + 1
+				break
+			}
+		}
+		// The card beside the list when there is room, as on the board.
+		pw := "down,55%,border-top,wrap"
+		if cols, _ := lsSize(); cardRight(cols) {
+			pw = "right," + strconv.Itoa(cardW) + ",border-left,wrap"
+		}
+		args := []string{"--listen", sock, "--with-shell", "/bin/sh -c",
+			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
+			"--delimiter", "\t", "--with-nth", "5..", "--tabstop", "1",
+			"--no-sort", "--ansi", "--layout", "reverse", "--no-input",
+			"--header", e.itemTitle(src), "--header-first", "--footer", itemFooter(src), "--footer-border", "none",
+			"--border", "sharp", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
+			"--no-scrollbar", "--color", FzfColors,
+			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
+			"--preview", me + " card {2}", "--preview-window", pw,
+			"--bind", "load:transform(" + me + " chrome)",
+			"--bind", `focus:transform:case {1} in i*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
+			"--bind", "j:down,k:up,g,home:first,G,end:last",
+			"--bind", "enter,double-click,alt-N,alt-n:" + act("from"),
+			"--bind", "alt-R,alt-r:transform:case {1} in i*) echo 'execute-silent(" + me + " from {2} --review)' ;; esac",
+			"--bind", "o:" + act("open"),
+			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + strings.ReplaceAll(e.itemTitle(src), ")", "") + "   …)",
+			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
+			"--bind", "esc:clear-query+hide-input+rebind(" + itemKeys + ")+transform(" + me + " chrome)",
+			"--bind", "q:ignore",
+		}
+		if len(src.kinds()) > 1 {
+			args = append(args, "--bind", "s:execute-silent("+me+" switch)+"+reload+"+first")
+		} else {
+			args = append(args, "--bind", "s:ignore")
+		}
+		c := exec.Command("fzf", args...)
+		c.Stdin = strings.NewReader(rows)
+		c.Stderr = os.Stderr
+		err := c.Run()
+		// ctrl-c ends fzf: the view carries on, not without its terminal.
+		if x, ok := err.(*exec.ExitError); ok && x.ExitCode() == 2 {
+			return nil
+		}
+		t, err := os.Open("/dev/tty")
+		if err != nil {
+			return nil
+		}
+		_ = t.Close() // opened only to see that there is one
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func firstArg(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return ""
+}

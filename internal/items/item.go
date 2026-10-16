@@ -1,7 +1,7 @@
 // Package items is the work a thread starts from (`wvr new --pr / --issue`):
 // a GitHub pull request or issue, or a Linear issue. Named first (Ref),
-// then read (Item) through the tools that already speak to them, gh and
-// linear-tui, never written to: the branch ties a thread to its item.
+// then read (Item) through gh and Linear's API, never written to: the
+// branch ties a thread to its item.
 package items
 
 import (
