@@ -672,7 +672,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
 		back()
-		return "", fmt.Errorf("%s: tmux could not open its tab", nm)
+		return "", fmt.Errorf("%s: tmux could not open its window", nm)
 	}
 	os.Remove(d + "/lost.json")
 	e.threadPlace(tab, n)

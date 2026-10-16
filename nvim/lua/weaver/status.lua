@@ -167,8 +167,8 @@ end
 
 -- Highlights --------------------------------------------------------------
 
--- Micrographics colours when that scheme is loaded, else links to groups
--- every scheme defines.
+-- The colours of g:micrographics_palette when a colour scheme sets it (the
+-- Micrographics scheme does), else links to groups every scheme defines.
 local function set_highlights()
   local p = vim.g.micrographics_palette
   local bar = api.nvim_get_hl(0, { name = 'WinBar', link = false })
@@ -189,8 +189,8 @@ end
 
 -- The bar ---------------------------------------------------------------
 
--- weaver's state cells (the G_* at the top of `weaver`): Micrographics task
--- cells, a mark between faint brackets.
+-- weaver's state cells (the G* in internal/wv/board.go): task cells, a mark
+-- between faint brackets.
 local GLYPH = {
   working = { '/', 'WeaverBar' },
   ['needs-you'] = { '!', 'WeaverBarAlert' },

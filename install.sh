@@ -72,8 +72,8 @@ install_files() {
 	# Its files unpacked now (its Neovim plugin kept at $DEST/nvim for Neovim
 	# configs), not when it first needs them.
 	"$BIN/weaver" _runtime || warn "could not unpack weaver's files under $DEST"
-	# The binary carries the script, the Neovim plugin and the configs (it
-	# unpacks them under $DEST/runtime). An older install's copies beside it
+	# The binary carries the Neovim plugin and the configs (it unpacks them
+	# under $DEST/runtime). An older install's copies beside it
 	# stay while what it started may still use them (an nvim loaded its plugin
 	# from there).
 	say "installed $BIN/weaver"

@@ -24,7 +24,7 @@ func TestProcStartsMatchPs(t *testing.T) {
 		if g := strings.Join(strings.Fields(got[p]), " "); g != want {
 			t.Errorf("pid %d: kernel %q, ps %q", p, g, want)
 		}
-		// launchd (pid 1) is root's: kill -0 is refused, as in the script.
+		// launchd (pid 1) is root's: kill -0 is refused.
 		if p != 1 && !agentAlive(strconv.Itoa(p), string(out), got) {
 			t.Errorf("pid %d: alive with ps's start time", p)
 		}

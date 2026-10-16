@@ -3,7 +3,7 @@ KEYS
   j k  g G    move; first, last
   /           search (esc: back)
   n           new thread (weaver new)
-  x           close the thread, its nvim and its tab
+  x           close the thread, its nvim and its window
               (and offers to remove a merged worktree)
   e  ^e       jump and open its nvim
   s  tab      resume card ↔ screen
@@ -20,5 +20,5 @@ THREADS
   ×2  two agents share the worktree: their turn diffs mix
 
 LOST (its session went: a crash, or quit)
-  ⏎           resume it in a new tab (weaver resume)
+  ⏎           resume it in a new window (weaver resume)
   x           forget it (its worktree stays)

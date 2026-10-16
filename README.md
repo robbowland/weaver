@@ -65,7 +65,7 @@ configured by `config/tmux.conf`, then `~/.config/weaver/tmux.conf` when you
 have one), so it never touches a tmux of yours, and closing the terminal only
 detaches from it: `weaver` again picks up where you were.
 
-The weaver session has no tab bar; weaver does the switching:
+The weaver session has no window list; weaver does the switching:
 
 - **home**, window 0: the board of every thread, full size;
 - one window per thread, its index the thread's number: its nvim, the agent
@@ -135,10 +135,10 @@ the agent's own weaver nvim, so following, the bar, reviews and `Alt v` all
 work from the first prompt.
 
 If you quit a thread's nvim, `Alt v` brings it back on the left with the
-agent at its width again (when nothing else is in the tab).
+agent at its width again (when nothing else is in the window).
 
 `weaver close` (`x` in the dashboard) closes an agent, its nvim and its
-thread's tab, after asking; panes you added to the tab stay. For a worktree
+thread's window, after asking; panes you added to the window stay. For a worktree
 weaver made, and only when nothing would be lost (nothing uncommitted, and
 merged into the default branch or pushed), it then offers to remove it
 (`wt remove`, else `git worktree remove`); the branch always stays.
@@ -156,7 +156,7 @@ thread is kept as lost rather than forgotten:
   window, its number kept, its agent resuming its conversation beside a bound
   nvim (`WEAVER_RESTORE=0` lists them on home instead).
 - Anywhere else, lost threads are listed last on the dashboard, under `LOST`:
-  enter resumes one in a new tab, `x` forgets it (its worktree stays).
+  enter resumes one in a new window, `x` forgets it (its worktree stays).
 - `weaver resume` lists them; `weaver resume NAME` (a number, or a session
   id) brings one back, `--all` every one, `--forget NAME` drops one.
 

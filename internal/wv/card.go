@@ -92,7 +92,7 @@ func Help() string {
 		"  " + g + "j k  g G" + o + "    move; first, last\n" +
 		"  " + g + "/" + o + "           search " + d + "(esc: back)" + o + "\n" +
 		"  " + g + "n" + o + "           new thread " + d + "(weaver new)" + o + "\n" +
-		"  " + g + "x" + o + "           close the thread, its nvim and its tab\n" +
+		"  " + g + "x" + o + "           close the thread, its nvim and its window\n" +
 		"              " + d + "(and offers to remove a merged worktree)" + o + "\n" +
 		"  " + g + "e  ^e" + o + "       jump and open its nvim\n" +
 		"  " + g + "s  tab" + o + "      resume card ↔ screen\n" +
@@ -109,7 +109,7 @@ func Help() string {
 		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
-		"  " + g + "⏎" + o + "           resume it in a new tab " + d + "(weaver resume)" + o + "\n" +
+		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(weaver resume)" + o + "\n" +
 		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n"
 }
 
@@ -395,7 +395,7 @@ func (e *Env) lostCard(sid, title string) string {
 	}
 	ls = append(ls, field(w, "in", dir, CGrey, 1)...)
 	ls = append(ls, field(w, "session", strings.TrimPrefix(tostring(lostSkey(o)), "tmux-")+" · "+tostring(st.get("session_id", "")), CDim, 2)...)
-	ls = append(ls, "", CDim+"⏎ resume it in a new tab   x forget it"+COff)
+	ls = append(ls, "", CDim+"⏎ resume it in a new window   x forget it"+COff)
 	return out + strings.Join(ls, "\n") + "\n"
 }
 

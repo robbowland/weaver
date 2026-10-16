@@ -236,7 +236,7 @@ func (e *Env) Ls() int {
 		}
 		switch key {
 		case "resume":
-			// A lost thread: back in a new tab (where you land).
+			// A lost thread: back in a new window (where you land).
 			if pane != "" {
 				exec.Command(e.Self, "resume", pane).Run()
 			}
