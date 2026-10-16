@@ -260,9 +260,10 @@ func (e *Env) Event(adapter string, bell bool) int {
 	if agent == "" || agent[0] < 'a' || agent[0] > 'z' || strings.Trim(agent, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
 		return 0
 	}
-	// A pane is digits: tmux's %3 and zellij's terminal_3 are pane 3.
-	pane = strings.TrimPrefix(strings.TrimPrefix(pane, "terminal_"), "%")
-	if !digits(pane) {
+	// tmux's %3 and zellij's terminal_3 are pane 3.
+	if p, ok := parsePane(pane); ok {
+		pane = string(p)
+	} else {
 		pane = ""
 	}
 	if !digits(pid) {

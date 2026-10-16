@@ -33,8 +33,9 @@ func (e *Env) Goto(pane, tab string) {
 }
 
 type tab struct {
-	id, name, view string
-	active         bool
+	id         WindowID
+	name, view string
+	active     bool
 }
 
 func (e *Env) tabs() []tab {
@@ -45,8 +46,8 @@ func (e *Env) tabs() []tab {
 	var ts []tab
 	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
 		f := strings.Split(l, us)
-		if len(f) == 4 {
-			ts = append(ts, tab{strings.TrimPrefix(f[0], "@"), f[1], f[3], f[2] == "1"})
+		if id, ok := parseWindow(f[0]); ok && len(f) == 4 {
+			ts = append(ts, tab{id, f[1], f[3], f[2] == "1"})
 		}
 	}
 	return ts
@@ -58,7 +59,7 @@ func (e *Env) tabs() []tab {
 func (e *Env) GoHome() {
 	ts := e.tabs()
 	var cur tab
-	home := ""
+	var home WindowID
 	for _, t := range ts {
 		if t.active && cur.id == "" {
 			cur = t
@@ -70,16 +71,17 @@ func (e *Env) GoHome() {
 	lf := e.StateDir + "/" + e.SKey + ".last"
 	// Back where you came from; when that is gone (or was nowhere), home.
 	back := func() {
-		if last, _ := firstLine(lf); digits(last) {
+		if l, _ := firstLine(lf); l != "" {
+			last, _ := parseWindow(l)
 			for _, t := range ts {
 				if t.id == last && t.view == "" && t.id != home {
-					e.Tmux("select-window", "-t", "@"+last)
+					e.Tmux("select-window", "-t", last.target())
 					return
 				}
 			}
 		}
 		if home != "" && cur.id != home {
-			e.Tmux("select-window", "-t", "@"+home)
+			e.Tmux("select-window", "-t", home.target())
 		}
 	}
 	views := e.viewNames()
@@ -102,7 +104,7 @@ func (e *Env) GoHome() {
 		return
 	}
 	if cur.id != "" && cur.view == "" {
-		os.WriteFile(lf, []byte(cur.id+"\n"), 0o644)
+		bestEffort(os.WriteFile(lf, []byte(string(cur.id)+"\n"), 0o644))
 	}
 	if home == "" {
 		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {
@@ -110,7 +112,7 @@ func (e *Env) GoHome() {
 		}
 		return
 	}
-	e.Tmux("select-window", "-t", "@"+home)
+	e.Tmux("select-window", "-t", home.target())
 }
 
 // uiLock is one `wvr edit` or `wvr next` per session at a time: it waits

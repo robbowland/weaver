@@ -204,16 +204,16 @@ var (
 )
 
 // viewWindows are the session's view windows, by view name: window ids.
-func (e *Env) viewWindows() map[string]string {
+func (e *Env) viewWindows() map[string]WindowID {
 	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id} #{@weaver-view}")
-	ws := map[string]string{}
+	ws := map[string]WindowID{}
 	if err != nil {
 		return ws
 	}
 	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		id, v, _ := strings.Cut(l, " ")
-		if v != "" {
-			ws[v] = strings.TrimPrefix(id, "@")
+		if w, ok := parseWindow(id); ok && v != "" {
+			ws[v] = w
 		}
 	}
 	return ws
@@ -221,19 +221,19 @@ func (e *Env) viewWindows() map[string]string {
 
 // OpenView shows view name, started first if it is not running. Its
 // window id.
-func (e *Env) OpenView(name string) (string, error) {
+func (e *Env) OpenView(name string) (WindowID, error) {
 	return e.view(name, true)
 }
 
 // startView starts view name, if it is not running, without going there.
-func (e *Env) startView(name string) (string, error) {
+func (e *Env) startView(name string) (WindowID, error) {
 	return e.view(name, false)
 }
 
-func (e *Env) view(name string, show bool) (string, error) {
+func (e *Env) view(name string, show bool) (WindowID, error) {
 	if id := e.viewWindows()[name]; id != "" {
 		if show {
-			e.Tmux("select-window", "-t", "@"+id)
+			e.Tmux("select-window", "-t", id.target())
 		}
 		return id, nil
 	}
@@ -258,8 +258,8 @@ func (e *Env) view(name string, show bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tmux could not open the %s view", v.label)
 	}
-	id := strings.TrimPrefix(strings.TrimSpace(string(out)), "@")
-	e.Tmux("set-option", "-w", "-t", "@"+id, "@weaver-view", name)
+	id, _ := parseWindow(string(out))
+	e.Tmux("set-option", "-w", "-t", id.target(), "@weaver-view", name)
 	// A session started before its views (or an older weaver) has no strip.
 	e.SetStrip()
 	return id, nil
@@ -330,7 +330,7 @@ func (e *Env) From(args []string) int {
 	case len(rest) >= 1 && rest[0] == "linear":
 		d := ""
 		if id := e.viewWindows()["linear"]; id != "" {
-			if out, err := e.Tmux("display-message", "-p", "-t", "@"+id, "#{pane_current_path}"); err == nil {
+			if out, err := e.Tmux("display-message", "-p", "-t", id.target(), "#{pane_current_path}"); err == nil {
 				d = strings.TrimSpace(string(out))
 			}
 		}
