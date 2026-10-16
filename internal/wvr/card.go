@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -234,11 +235,11 @@ func (e *Env) Preview(args []string) string {
 	}
 	// The work item its thread started from.
 	from := ""
-	t, terr := readThread(e.threadFile(p))
+	t, terr := store.ReadThread(e.threadFile(p))
 	if terr == nil {
 		from = itemLine(t)
 	}
-	s, err := readState(sf)
+	s, err := store.ReadState(sf)
 	if sf == e.threadFile(p) {
 		// Its agent has not reported: the thread as it starts.
 		if terr != nil {
@@ -253,7 +254,7 @@ func (e *Env) Preview(args []string) string {
 
 // itemLine is a thread record's work item for its card: PR o/r#45, issue
 // o/r#12 or ENG-42, and review when it is one; "" without one.
-func itemLine(t Thread) string {
+func itemLine(t store.Thread) string {
 	if t.Item == nil || t.Item.Ref == "" {
 		return ""
 	}
@@ -404,7 +405,7 @@ func (e *Env) lostCard(sid, title string) string {
 	if err != nil {
 		return out
 	}
-	var lo Lost
+	var lo store.Lost
 	if json.Unmarshal(jsonx.First(b), &lo) != nil {
 		return out
 	}

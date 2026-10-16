@@ -17,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -44,12 +45,12 @@ type form struct {
 
 func loadForm(f string) form {
 	fm := form{Where: WhereWorktree, Agent: agent.Claude}
-	readRecord(f, &fm)
+	bestEffort(store.Read(f, &fm)) // none yet: the defaults
 	return fm
 }
 
 func (fm form) save(f string) {
-	writeRecord(f, fm)
+	bestEffort(store.Write(f, fm)) // unsaved, the form starts from what it had
 }
 
 func tildify(p string) string {
@@ -474,7 +475,7 @@ func (e *Env) New(args []string) error {
 		}
 	case from != "":
 		f := ""
-		if s, err := readState(e.StateFile(from)); err == nil {
+		if s, err := store.ReadState(e.StateFile(from)); err == nil {
 			f = s.Root
 			if f == "" {
 				f = s.Cwd
@@ -482,7 +483,7 @@ func (e *Env) New(args []string) error {
 		}
 		if st, err := os.Stat(f); f == "" || err != nil || !st.IsDir() {
 			f = ""
-			if t, err := readThread(e.threadFile(from)); err == nil {
+			if t, err := store.ReadThread(e.threadFile(from)); err == nil {
 				f = t.Worktree
 			}
 		}
@@ -966,10 +967,10 @@ func (e *Env) recentRepos(first string) string {
 	for _, f := range append(fs, ts...) {
 		d := ""
 		if strings.HasSuffix(f, ".thread") {
-			if t, err := readThread(f); err == nil {
+			if t, err := store.ReadThread(f); err == nil {
 				d = t.Repo
 			}
-		} else if s, err := readState(f); err == nil {
+		} else if s, err := store.ReadState(f); err == nil {
 			d = s.Root
 			if d == "" {
 				d = s.Cwd

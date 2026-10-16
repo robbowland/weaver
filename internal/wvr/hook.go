@@ -17,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -113,7 +114,7 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 	if mode == "async" && !hooks.AsyncGate(ev, pk.state) {
 		return 0
 	}
-	lk := lock(h.sf)
+	lk := store.Lock(h.sf)
 	st, _ := os.ReadFile(h.sf)
 	if !h.parse(ev, st) {
 		os.Remove(lk)

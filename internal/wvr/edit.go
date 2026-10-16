@@ -14,6 +14,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/setup"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -140,7 +141,7 @@ func (e *Env) Edit(args []string) error {
 		e.MarkSeen(agentPane)
 		h := &hk{Pane: agentPane, AgentKind: "claude"}
 		root, file := "", ""
-		if s, err := readState(e.StateFile(agentPane)); err == nil {
+		if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
 			root = s.Root
 			if root == "" {
 				root = s.Cwd
@@ -151,7 +152,7 @@ func (e *Env) Edit(args []string) error {
 			if h.AgentKind == "" {
 				h.AgentKind = string(agent.Claude)
 			}
-		} else if t, err := readThread(e.threadFile(agentPane)); err == nil {
+		} else if t, err := store.ReadThread(e.threadFile(agentPane)); err == nil {
 			root = t.Worktree
 			h.AgentKind = string(t.Agent)
 			if h.AgentKind == "" {
@@ -287,7 +288,7 @@ func (e *Env) Nvim(args []string) error {
 			os.Rename(tmp, nf)
 		}
 		if exists(sf) && digits(string(e.MyPane)) {
-			updateState(sf, func(st *agent.Record) {
+			store.UpdateState(sf, func(st *agent.Record) {
 				nv := json.Number(e.MyPane)
 				st.NvimPane = &nv
 			})

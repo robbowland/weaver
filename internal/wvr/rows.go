@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -94,11 +95,11 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	var gones []gone
 	var pids []int
 	for _, f := range jsons {
-		s, err := readState(f)
+		s, err := store.ReadState(f)
 		if err != nil {
 			continue // gone, or corrupt
 		}
-		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
+		t, terr := store.ReadThread(strings.TrimSuffix(f, ".json") + ".thread")
 		p := byID[paneOfNum(s.Pane)]
 		if p == nil {
 			g := gone{f, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart), s.State}
@@ -201,7 +202,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if have[strings.TrimSuffix(f, ".thread")+".json"] {
 			continue
 		}
-		t, err := readThread(f)
+		t, err := store.ReadThread(f)
 		if err != nil || t.Pane == nil {
 			continue
 		}
@@ -339,7 +340,7 @@ func (e *Env) LostRows() []LostRow {
 		if err != nil {
 			continue
 		}
-		var lo Lost
+		var lo store.Lost
 		if json.Unmarshal(jsonx.First(b), &lo) != nil {
 			continue
 		}
@@ -384,7 +385,7 @@ func (e *Env) lostCheck(f string) bool {
 	if !exists(b+".thread") || !exists(f) {
 		return false
 	}
-	s, err := readState(f)
+	s, err := store.ReadState(f)
 	if err != nil || s.SessionID == "" {
 		return false
 	}
@@ -424,35 +425,6 @@ func (e *Env) serverLost(skey string, ts float64, srv string) bool {
 	return true
 }
 
-// lock serialises read-modify-write of state file sf:
-// sf.lock created exclusively holding our pid; a lock whose owner is gone is
-// removed; after ~2s, a private file instead. Its path.
-func lock(sf string) string {
-	l := sf + ".lock"
-	me := strconv.Itoa(os.Getpid())
-	for i := 1; ; i++ {
-		fh, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err == nil {
-			fh.WriteString(me + "\n")
-			fh.Close()
-			return l
-		}
-		owner, _ := firstLine(l)
-		if n, err := strconv.Atoi(owner); err == nil && digits(owner) {
-			if syscall.Kill(n, 0) != nil {
-				if again, _ := firstLine(l); again == owner {
-					os.Remove(l)
-				}
-				continue
-			}
-		}
-		if i >= 100 {
-			return sf + "." + me + ".tmp"
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 var rePid = []byte(`"pid":`)
 
 // pidOf is the pid in a state file's first line ("pid":N); empty without
@@ -477,25 +449,25 @@ func (e *Env) lose(f, pid string) bool {
 	if !exists(f) {
 		return true
 	}
-	l := lock(f)
+	l := store.Lock(f)
 	defer os.Remove(l)
 	if pidOf(f) != pid {
 		return true
 	}
 	b := strings.TrimSuffix(f, ".json")
-	st, err := readState(f)
+	st, err := store.ReadState(f)
 	sid := st.SessionID
 	if err != nil || sid == "" {
 		return false
 	}
-	th, err := readThread(b + ".thread")
+	th, err := store.ReadThread(b + ".thread")
 	if err != nil {
 		return false
 	}
 	base := filepath.Base(b)
 	skey := base[:strings.LastIndexByte(base, '_')]
-	rec := Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
-	if writeRecord(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
+	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
+	if store.Write(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
 		return false
 	}
 	for _, x := range []string{f, b + ".nvim", b + ".bash", b + ".prompt", b + ".thread"} {
@@ -511,7 +483,7 @@ func (e *Env) forget(f, pid string) {
 	if !exists(f) {
 		return
 	}
-	l := lock(f)
+	l := store.Lock(f)
 	defer os.Remove(l)
 	if pidOf(f) != pid {
 		return

@@ -7,6 +7,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -60,7 +61,7 @@ func (e *Env) threadOnBranch(repo, branch string) tmux.PaneID {
 		}
 	}
 	for _, f := range e.SessionFiles("thread") {
-		t, err := readThread(f)
+		t, err := store.ReadThread(f)
 		if err != nil || t.Repo != repo || t.Branch != branch {
 			continue
 		}

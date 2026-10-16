@@ -22,6 +22,7 @@ import (
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -89,7 +90,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 		}
 	}
 	for _, f := range fs {
-		if t, err := readThread(f); err == nil && t.Num > 0 {
+		if t, err := store.ReadThread(f); err == nil && t.Num > 0 {
 			used[t.Num] = true
 		}
 	}
@@ -438,15 +439,15 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 			cmd += " --permission-mode plan"
 		}
 	}
-	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
+	rec := store.Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
 		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
-		rec.Item = &ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
+		rec.Item = &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
 	}
 	if review {
 		rec.Mode = "review"
 	}
-	if writeRecord(d+"/thread.json", rec) != nil {
+	if store.Write(d+"/thread.json", rec) != nil {
 		unlock()
 		return errors.New("cannot write the thread record")
 	}
@@ -489,7 +490,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	pane := e.MyPane
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	cmd := agentCmd(kind)
-	cmdOf := func(t Thread) {
+	cmdOf := func(t store.Thread) {
 		if t.Cmd != "" {
 			cmd = t.Cmd
 		}
@@ -506,7 +507,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	}
 	if tok != "" && pane != "" && exists(d+"/task") {
 		task, _ := os.ReadFile(d + "/task")
-		th, therr := readThread(d + "/thread.json")
+		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
 		// Claude Code starts on a session id weaver chose, named for the
 		// thread: the thread knows its conversation before its first hook,
@@ -527,7 +528,8 @@ func (e *Env) AgentPane(tok, agentName string) error {
 			if sid != "" {
 				th.SessionID = sid
 			}
-			writeRecord(e.threadFile(pane), th)
+			// Unwritten, the agent runs all the same: its state file tells.
+			bestEffort(store.Write(e.threadFile(pane), th))
 		}
 		if os.Remove(d+"/task") != nil {
 			return errors.New("cannot take the task from " + d)
@@ -542,7 +544,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	}
 	if tok != "" && pane != "" && exists(d+"/resume") {
 		sid, _ := firstLine(d + "/resume")
-		th, therr := readThread(d + "/thread.json")
+		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
 		// A dead agent's files under this pane id (an earlier session's) go
 		// first: kept as lost when they are, else forgotten.
@@ -555,12 +557,12 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		}
 		if therr == nil {
 			th.Pane = &pn
-			writeRecord(e.threadFile(pane), th)
+			bestEffort(store.Write(e.threadFile(pane), th))
 		}
-		if st, err := readState(d + "/state.json"); err == nil {
+		if st, err := store.ReadState(d + "/state.json"); err == nil {
 			st.Pane = pn
 			// Without it the agent's first hook starts its state afresh.
-			bestEffort(writeRecord(sf, st))
+			bestEffort(store.Write(sf, st))
 		}
 		os.RemoveAll(d)
 		if kind == agent.Claude {
@@ -572,9 +574,9 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	// in, else the one weaver started it on.
 	sid := ""
 	if pane != "" {
-		st, _ := readState(e.StateFile(pane))
+		st, _ := store.ReadState(e.StateFile(pane))
 		sid = st.SessionID
-		th, _ := readThread(e.threadFile(pane))
+		th, _ := store.ReadThread(e.threadFile(pane))
 		if sid == "" {
 			sid = th.SessionID
 		}
@@ -609,7 +611,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		os.Rename(d+"/lost.json", lf)
 		os.RemoveAll(d)
 	}
-	lo, err := readLost(d + "/lost.json")
+	lo, err := store.ReadLost(d + "/lost.json")
 	if err != nil {
 		back()
 		return "", fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
@@ -661,8 +663,8 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
 	s2.State, s2.TS, s2.Since, s2.Seen = agent.StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
 	s2.Subagents, s2.Background, s2.BackgroundTasks = []agent.Subagent{}, 0, ""
-	if writeRecord(d+"/thread.json", t2) != nil ||
-		writeRecord(d+"/state.json", s2) != nil ||
+	if store.Write(d+"/thread.json", t2) != nil ||
+		store.Write(d+"/state.json", s2) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		unlock()
 		back()
@@ -786,7 +788,7 @@ func (e *Env) Resume(args []string) error {
 		}
 		f := match[0]
 		nm := "the thread"
-		if lo, err := readLost(f); err == nil && lo.Thread.Name != "" {
+		if lo, err := store.ReadLost(f); err == nil && lo.Thread.Name != "" {
 			nm = oneline.Line(lo.Thread.Name)
 		}
 		if !yes {
@@ -1016,10 +1018,10 @@ func (e *Env) Close(args []string) error {
 	if nv == "" {
 		nv, pending = threadNvim(panes, byID[agentPane])
 	}
-	th, _ := readThread(e.threadFile(agentPane))
+	th, _ := store.ReadThread(e.threadFile(agentPane))
 	var st agent.State
 	var pid, start, title, kind string
-	if s, err := readState(e.StateFile(agentPane)); err == nil {
+	if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
 		st, pid, start = s.State, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart)
 		title, kind = oneline.Line(s.Title), oneline.Line(s.Agent)
 	}

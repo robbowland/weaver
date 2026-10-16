@@ -18,6 +18,7 @@ import (
 	"github.com/neovim/go-client/nvim"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -314,7 +315,7 @@ func (e *Env) MarkSeen(p tmux.PaneID) {
 	if !exists(sf) {
 		return
 	}
-	updateState(sf, func(st *agent.Record) { st.Seen = true })
+	store.UpdateState(sf, func(st *agent.Record) { st.Seen = true })
 }
 
 // threadTabLabels: in the weaver session a thread's window is its line on
@@ -458,7 +459,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 		return false
 	}
 	if exists(h.sf) {
-		updateState(h.sf, func(st *agent.Record) {
+		store.UpdateState(h.sf, func(st *agent.Record) {
 			st.Root, st.File = r, newest
 			var fs []string
 			for _, f := range st.Files {

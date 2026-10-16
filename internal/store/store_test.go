@@ -1,4 +1,4 @@
-package wvr
+package store
 
 import (
 	"os"
@@ -24,7 +24,7 @@ func TestReadStateTolerant(t *testing.T) {
 		if err := os.WriteFile(f, []byte(c.json), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		s, err := readState(f)
+		s, err := ReadState(f)
 		if (err == nil) != c.ok || s.Prompt != c.prompt {
 			t.Errorf("%s: err %v prompt %q, want ok %v prompt %q", c.json, err, s.Prompt, c.ok, c.prompt)
 		}
