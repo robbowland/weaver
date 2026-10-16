@@ -9,6 +9,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -80,7 +81,7 @@ func (l Lost) Task() string {
 	if l.Thread.Task != "" {
 		return l.Thread.Task
 	}
-	return clean(l.State.Prompt)
+	return oneline.Line(l.State.Prompt)
 }
 
 func readLost(f string) (Lost, error) {

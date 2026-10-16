@@ -13,6 +13,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -45,38 +46,6 @@ type Row struct {
 	Tnum                                                              int // its thread's number; 0 for none
 	Troots                                                            []string
 	Doing                                                             string // the command it runs now
-}
-
-// clean makes each run of control characters one space (jq's
-// gsub("[\u0000-\u001f]+"; " ")).
-func clean(s string) string {
-	if !hasCtl(s) {
-		return s
-	}
-	var b strings.Builder
-	ctl := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c < 0x20 {
-			if !ctl {
-				b.WriteByte(' ')
-			}
-			ctl = true
-			continue
-		}
-		ctl = false
-		b.WriteByte(c)
-	}
-	return b.String()
-}
-
-func hasCtl(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < 0x20 {
-			return true
-		}
-	}
-	return false
 }
 
 // numberOr is n as a float, or d when it is not a number.
@@ -132,7 +101,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
 		p := byID[paneOfNum(s.Pane)]
 		if p == nil {
-			g := gone{f, clean(string(s.Pid)), clean(s.ProcStart), s.State}
+			g := gone{f, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart), s.State}
 			gones = append(gones, g)
 			if n, err := strconv.Atoi(g.pid); err == nil {
 				pids = append(pids, n)
@@ -169,10 +138,10 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case st0 == agent.StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = agent.StateInterrupted, true
 		}
-		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: agent.State(clean(string(st)))}
-		r.Root = clean(s.Root)
+		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: agent.State(oneline.Line(string(st)))}
+		r.Root = oneline.Line(s.Root)
 		if r.Root == "" {
-			r.Root = clean(s.Cwd)
+			r.Root = oneline.Line(s.Cwd)
 		}
 		switch {
 		case changed:
@@ -183,23 +152,23 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			r.Since = s.TS
 		}
 		r.Seen = s.Seen
-		r.Prompt = clean(s.Prompt)
+		r.Prompt = oneline.Line(s.Prompt)
 		if st == agent.StateNeedsYou && st0 != agent.StateNeedsYou {
 			r.Waiting = "input"
 			if cwait != "" {
-				r.Waiting = clean(cwait)
+				r.Waiting = oneline.Line(cwait)
 			}
 		} else {
-			r.Waiting = clean(s.Waiting)
+			r.Waiting = oneline.Line(s.Waiting)
 		}
 		r.Bg = s.Background
-		r.Title = clean(s.Title)
+		r.Title = oneline.Line(s.Title)
 		r.Nsub = len(s.Subagents)
-		r.Pid = clean(string(s.Pid))
-		r.Pstart = clean(s.ProcStart)
+		r.Pid = oneline.Line(string(s.Pid))
+		r.Pstart = oneline.Line(s.ProcStart)
 		r.Sfile = f
 		r.Turn = s.Turn
-		r.Last = clean(s.LastMessage)
+		r.Last = oneline.Line(s.LastMessage)
 		d := 0
 		for _, x := range s.Tasks {
 			if x.Done {
@@ -207,20 +176,20 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			}
 		}
 		r.Tdone, r.Ttotal = d, len(s.Tasks)
-		r.File = clean(filepath.Base(s.File))
+		r.File = oneline.Line(filepath.Base(s.File))
 		if s.File == "" {
 			r.File = ""
 		}
-		r.Sid = clean(s.SessionID)
-		r.Tabname = clean(p.TabName)
-		r.Agent = clean(s.Agent)
-		r.Bgtasks = clean(s.BackgroundTasks)
-		r.Doing = clean(s.Doing)
+		r.Sid = oneline.Line(s.SessionID)
+		r.Tabname = oneline.Line(p.TabName)
+		r.Agent = oneline.Line(s.Agent)
+		r.Bgtasks = oneline.Line(s.BackgroundTasks)
+		r.Doing = oneline.Line(s.Doing)
 		if terr == nil {
-			r.Ttask, r.Tname, r.Tnum = clean(t.Task), clean(t.Name), t.Num
+			r.Ttask, r.Tname, r.Tnum = oneline.Line(t.Task), oneline.Line(t.Name), t.Num
 		}
 		for _, x := range s.TurnRoots {
-			r.Troots = append(r.Troots, clean(x))
+			r.Troots = append(r.Troots, oneline.Line(x))
 		}
 		if n, err := strconv.Atoi(r.Pid); err == nil {
 			pids = append(pids, n)
@@ -246,9 +215,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			since = now
 		}
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
-			Root: clean(t.Worktree), Since: since, Prompt: clean(t.Task), Sfile: f,
-			Tabname: clean(p.TabName), Agent: clean(string(t.Agent)), Ttask: clean(t.Task),
-			Tname: clean(t.Name), Tnum: t.Num})
+			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
+			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.Task),
+			Tname: oneline.Line(t.Name), Tnum: t.Num})
 	}
 	starts := procStarts(pids)
 	for _, g := range gones {
@@ -379,9 +348,9 @@ func (e *Env) LostRows() []LostRow {
 		if lo.Thread.Num > 0 {
 			num = strconv.Itoa(lo.Thread.Num)
 		}
-		r := LostRow{File: f, Sid: clean(st.SessionID), Name: clean(lo.Thread.Name), Num: num,
-			Dir: clean(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: clean(lo.Key()),
-			Task: clean(lo.Task()), Title: clean(st.Title)}
+		r := LostRow{File: f, Sid: oneline.Line(st.SessionID), Name: oneline.Line(lo.Thread.Name), Num: num,
+			Dir: oneline.Line(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: oneline.Line(lo.Key()),
+			Task: oneline.Line(lo.Task()), Title: oneline.Line(st.Title)}
 		r.lost, _ = strconv.ParseFloat(r.Lost, 64)
 		rs = append(rs, r)
 	}

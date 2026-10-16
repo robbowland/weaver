@@ -615,14 +615,14 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		return "", fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
 	}
 	st, th := lo.State, lo.Thread
-	sid := clean(st.SessionID)
+	sid := oneline.Line(st.SessionID)
 	kind := th.Agent
 	if kind == "" {
 		kind = agent.Kind(st.Agent)
 	}
-	dir := clean(lo.Dir())
-	nm := clean(th.Name)
-	repo := clean(th.Repo)
+	dir := oneline.Line(lo.Dir())
+	nm := oneline.Line(th.Name)
+	repo := oneline.Line(th.Repo)
 	// Its worktree gone: its repository's main checkout, from where Claude
 	// Code finds a session in any worktree of it.
 	if s, err := os.Stat(dir); err != nil || !s.IsDir() {
@@ -671,9 +671,9 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	unlock()
 	wname := nm
 	if e.WeaverSession() {
-		t := clean(st.Title)
+		t := oneline.Line(st.Title)
 		if t == "" {
-			t = clean(th.Task)
+			t = oneline.Line(th.Task)
 		}
 		if t == "" {
 			t = nm
@@ -787,7 +787,7 @@ func (e *Env) Resume(args []string) error {
 		f := match[0]
 		nm := "the thread"
 		if lo, err := readLost(f); err == nil && lo.Thread.Name != "" {
-			nm = clean(lo.Thread.Name)
+			nm = oneline.Line(lo.Thread.Name)
 		}
 		if !yes {
 			t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
@@ -1020,8 +1020,8 @@ func (e *Env) Close(args []string) error {
 	var st agent.State
 	var pid, start, title, kind string
 	if s, err := readState(e.StateFile(agentPane)); err == nil {
-		st, pid, start = s.State, clean(string(s.Pid)), clean(s.ProcStart)
-		title, kind = clean(s.Title), clean(s.Agent)
+		st, pid, start = s.State, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart)
+		title, kind = oneline.Line(s.Title), oneline.Line(s.Agent)
 	}
 	tab := byID[agentPane].Tab
 	// The window's other panes, which close must leave alone (and which
@@ -1033,7 +1033,7 @@ func (e *Env) Close(args []string) error {
 			others = true
 		}
 	}
-	name := clean(th.Name)
+	name := oneline.Line(th.Name)
 	if name == "" {
 		name = title
 	}
