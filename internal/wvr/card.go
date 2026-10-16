@@ -112,9 +112,9 @@ func Help() string {
 		"  " + g + "s  tab" + o + "      the card ↔ the agent's screen\n" +
 		"  " + g + "^r" + o + "          reload\n" +
 		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
-		"  " + g + "q  esc" + o + "      close the dashboard " + d + "(home: back to your thread)" + o + "\n" +
+		"  " + g + "q  esc" + o + "      back to your thread\n" +
 		"  " + g + "^q" + o + "          quit the session, every agent and nvim " + d + "(the threads" + o + "\n" +
-		"              " + d + "come back as wvr starts; wvr quit asks first)" + o + "\n" +
+		"              " + d + "come back as wvr starts; mid-turn, it asks first)" + o + "\n" +
 		"\n" +
 		g + "THREADS" + o + "\n" +
 		"  " + p(GNeed, CRed) + "  needs you    " + p(GDone, CGreen) + "  done, not yet seen    " + p(GWork, g) + "  working\n" +

@@ -229,13 +229,13 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			w += " · " + cur
 		}
 		if fm.Here == fm.Repo {
-			add("where", w, w, "tab")
+			add("where", w, w, "alt-w")
 		} else {
 			t := formPath(fm.Here)
-			add("where", w+"  "+t, w+"  "+CGrey+t+COff, "tab")
+			add("where", w+"  "+t, w+"  "+CGrey+t+COff, "alt-w")
 		}
 	} else {
-		add("where", "new worktree", "new worktree", "tab")
+		add("where", "new worktree", "new worktree", "alt-w")
 		br := fm.Branch
 		if br == "" {
 			br = items.Slugify(task)
@@ -260,9 +260,9 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	if agentInstalled(fm.Agent) {
-		add("agent", string(fm.Agent), string(fm.Agent), "shift-tab")
+		add("agent", string(fm.Agent), string(fm.Agent), "alt-a")
 	} else {
-		add("agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff, "shift-tab")
+		add("agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff, "alt-a")
 	}
 	// The keys in a column of their own at the right edge: fzf's width (its
 	// header's, less its border and margins).
@@ -385,7 +385,7 @@ func checkThread(task string, fm form) string {
 		return ""
 	}
 	if fm.Repo == "" {
-		return "not in a git repository: pick one (^r), or work in this checkout (tab)"
+		return "not in a git repository: pick one (^r), or work in this checkout (alt-w)"
 	}
 	br := fm.Branch
 	if br == "" {
@@ -707,8 +707,10 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "      task  ", "--ghost", "what should the agent do?",
 			"--query", query, "--header", h, "--footer", formFooter, "--color", FzfColors,
 			"--bind", "change:bg-cancel+bg-transform-header("+hd+")",
-			"--bind", "tab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
-			"--bind", "btab:execute-silent("+q+" _form agent "+qs+")+transform-header("+hd+")",
+			// Each field on an Alt letter (tab and shift-tab both toggle where,
+			// which has two values).
+			"--bind", "alt-w,tab,btab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
+			"--bind", "alt-a:execute-silent("+q+" _form agent "+qs+")+transform-header("+hd+")",
 			"--bind", "alt-r:execute-silent("+q+" _form mode "+qs+")+transform-header("+hd+")+transform-border-label("+q+" _form label "+qs+")",
 			"--bind", "alt-b:execute("+q+" _form branch "+qs+" {q})+transform-header("+hd+")",
 			"--bind", "alt-B:execute("+q+" _form base "+qs+")+transform-header("+hd+")",

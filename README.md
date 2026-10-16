@@ -110,7 +110,7 @@ Agents you start by hand in any tmux session report to weaver as well, and
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
 | `Cmd D` / `Cmd Shift D` | Split the pane right / down (Ghostty sends them as `keybind = super+d=csi:100;9~` and `super+shift+d=csi:100;10~`) |
-| `Ctrl q` | Quit the session, every agent and nvim in it; the threads come back as `wvr` starts |
+| `Ctrl q` | Quit the session, every agent and nvim in it; the threads come back as `wvr` starts (while an agent is mid-turn, it asks first) |
 
 tmux's own keys work behind its prefix, `Ctrl b` (`Ctrl b d` detaches, `Ctrl b
 [` scrolls back).
@@ -129,11 +129,12 @@ repository of the pane you were on (else the one you used last):
 | Key | Does |
 | --- | --- |
 | `enter` | Start the thread |
-| `tab` | New worktree, or this checkout (for a quick question) |
+| `alt-w` | New worktree, or this checkout (for a quick question); `tab` too |
 | `alt-b` | Edit the branch name (from the task by default); an existing branch, here or on the remote, continues in its own worktree |
 | `alt-B` | Where a new branch starts: the remote's default branch, fetched (the default), `@` (the HEAD of the checkout you are in), or any branch |
 | `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
-| `shift-tab` | Claude Code or Codex |
+| `alt-a` | Claude Code or Codex |
+| `alt-r` | A read-only thread: a review, or an investigation |
 | `ctrl-e` | Write a long task in `$EDITOR` |
 | `esc` | Cancel |
 
@@ -228,7 +229,8 @@ kept: `claude --resume` finds them.
 
 So quitting everything is safe: `Ctrl q` (from any pane) quits the session
 with every agent and nvim in it, and `wvr` brings its threads back next
-time. `wvr quit` does the same after asking, says what stops (turns under
+time. While an agent is mid-turn (working, or waiting on you), whose turn
+quitting would stop, it asks first. `wvr quit` does the same after asking, says what stops (turns under
 way, unsaved buffers in the agents' nvims), and from outside the session
 quits the `weaver` session left running behind a closed window.
 
@@ -290,9 +292,10 @@ worktree, so their per-turn diffs mix.
 The cursor never rests on a heading, and stays on its agent as the board
 reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 `j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
-(`wvr new`), `x` closes one (`wvr close`), `e` jumps and opens its nvim,
-`s` (or `tab`) swaps the resume card for the agent's screen, `?` lists them
-all, `q` or `esc` closes the dashboard, and `Ctrl q` quits the session. With no
+(`wvr new`), `x` closes one (`wvr close`), `v` (or `e`) jumps and opens its
+nvim, `s` (or `tab`) swaps the resume card for the agent's screen, `?` lists
+them all and the keys that work anywhere, `q` or `esc` goes back to your
+thread, and `Ctrl q` quits the session. With no
 agents, it says how to start one.
 
 The resume card says what the agent was asked, what it waits on or runs,

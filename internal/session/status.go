@@ -155,6 +155,8 @@ func (e *Env) pushStatus(labels bool) {
 	// set redraws every client: set them when they change.
 	if labels || now != old {
 		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-counts", CountsFmt(need, done, work))
+		// Ctrl q asks first while a turn is under way (0: it quits at once).
+		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-busy", strconv.Itoa(need+work))
 	}
 	q := Quote(e.Self)
 	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")

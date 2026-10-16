@@ -260,9 +260,9 @@ hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" "Fix the flaky test!" | sed 's/\x1
 ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
 	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test ')" \
 	"repo where branch base agent |1"
-key 09 # tab: this checkout
+key 1b77 # alt-w: this checkout
 waitfor '[ "$(jq -r .where "$FORM")" = here ]'
-ok "form: tab works in this checkout" "$(jq -r .where "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
+ok "form: alt-w works in this checkout" "$(jq -r .where "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
 	"here|this checkout"
 key 1b # esc: the form goes, nothing made
 sleep 1
@@ -315,8 +315,18 @@ ok "restart: the thread comes back by itself, resumed, and you stay home" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--resume sid-1 |0" ||
 	{ ls "$SD/lost" | sed 's/^/  lost: /'; tail -n 8 "$SD/hook.log" 2>/dev/null | sed 's/^/  log: /'; }
 
-# --- the board's x closes it (y to confirm); Ctrl q quits
+# --- Ctrl q asks while an agent is mid-turn; the board's x closes it (y to
+# confirm); Ctrl q quits
 waitfor '[ "$(board_rows)" = 1 ]'
+hookj "$AG" "$(ev UserPromptSubmit ',"prompt_id":"pq","prompt":"go on"')"
+waitfor '[ "$(tx display -p -t "=$S:" "#{@weaver-busy}")" = 1 ]'
+n=$(grep -c 'an agent is mid-turn' "$AT/screen.log")
+key 11 # Ctrl q
+waitfor '[ "$(grep -c "an agent is mid-turn" "$AT/screen.log")" -gt "$n" ]'
+key 6e # n
+sleep 0.5
+ok "Ctrl q mid-turn: asks first, and n keeps the session" \
+	"$([ "$(grep -c 'an agent is mid-turn' "$AT/screen.log")" -gt "$n" ] && echo asked)|$(tx has-session -t "=$S" 2>/dev/null && echo running || echo gone)" "asked|running"
 n=$(grep -c 'the agent, its nvim and its window' "$AT/screen.log")
 key 78 # x
 waitfor '[ "$(grep -c "the agent, its nvim and its window" "$AT/screen.log")" -gt "$n" ]'

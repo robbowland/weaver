@@ -9,9 +9,9 @@ KEYS
   s  tab      the card ↔ the agent's screen
   ^r          reload
   ?           this help (? again: back)
-  q  esc      close the dashboard (home: back to your thread)
+  q  esc      back to your thread
   ^q          quit the session, every agent and nvim (the threads
-              come back as wvr starts; wvr quit asks first)
+              come back as wvr starts; mid-turn, it asks first)
 
 THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working

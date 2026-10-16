@@ -367,6 +367,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   (`wvr resume`), x forgets it (`wvr resume --forget`), and the preview
   shows its card (`wvr _preview <session id>`).
 - **Quit:** `Ctrl q` kills the session, and the threads come back as above.
+  While an agent is mid-turn (the session option `@weaver-busy`, needs-you
+  plus working, set with the counts), tmux asks first (`confirm-before`).
   `wvr quit [--yes]` kills the session you are in (outside tmux,
   `$WEAVER_SESSION`) after a card: the threads kept, the turns under way, and
   the agents' nvims' unsaved buffers (each nvim asked over its socket, as

@@ -330,6 +330,10 @@ can supersede an earlier one, and says so.
   lost threads come back, it loses nothing. `wvr quit` asks first and
   works from outside the session, for one left running behind a closed
   window.
+- 2026-10-16: `Ctrl q` asks first while an agent is mid-turn (working, or
+  waiting on you): its thread comes back, but the turn under way, and the
+  command it runs, stop. Otherwise it quits at once: a question asked every
+  time becomes a reflex and protects nothing (Raskin).
 
 ## The weaver session
 
@@ -445,6 +449,21 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-16: An interaction pass, against Nielsen's ten heuristics,
+  Shneiderman's golden rules and clig.dev (Rob: "check that the
+  interactions are all logical and the UX makes sense").
+  - One meaning per key: `q` and `esc` go back (home's had gone on to
+    GITHUB since the views came); `v` is the board's nvim as Alt v is
+    everywhere; `tab` switches a view's kind as it switches the board's
+    card; the form's fields are each on an Alt letter (`alt-w` where,
+    `alt-a` agent), since `shift-tab` set a different field than `tab`,
+    where it conventionally undoes it.
+  - Recognition over recall: a view's `?` explains its keys, sections and
+    signals in its own service's words, and the board's lists the keys that
+    work anywhere; an empty view says it is empty; a failed refresh says how
+    old what it shows is.
+  - Feedback: enter or Alt R on an item with a thread goes there and says
+    so on tmux's line.
 - 2026-10-16: LINEAR is weaver's own too, as GITHUB became (Rob: "do the
   same porting for linear-tui, take what we need, strip what we don't";
   "keep the fork, but remove it as a dependency of weaver"). From
