@@ -371,6 +371,11 @@ can supersede an earlier one, and says so.
   hooks at itself, and only for an agent whose config directory exists.
   `wvr setup` stays, for a dry run.
 
+- 2026-10-16: weaver is public (MIT) and released through Rob's tap,
+  `robbowland/homebrew-kegs`, as `weaver` 0.1.0: built from the tag, with
+  every tool weaver works with as a dependency (the tap's gh-dash fork and
+  linear-tui among them). The formula lives in the tap only.
+
 ## History
 
 - weaver began as agentnav, a bash script for Claude Code agents in zellij
