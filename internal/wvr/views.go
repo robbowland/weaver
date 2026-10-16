@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -279,7 +280,7 @@ func (e *Env) StartViews() {
 }
 
 // View is `wvr view [NAME]`: go to view NAME (the first, without one).
-func (e *Env) View(args []string) int {
+func (e *Env) View(args []string) error {
 	ns := e.viewNames()
 	name := ""
 	if len(args) > 0 {
@@ -288,21 +289,19 @@ func (e *Env) View(args []string) int {
 		name = ns[0]
 	}
 	if name == "" {
-		fmt.Fprintln(os.Stderr, "weaver: no views: install gh-dash or linear-tui (or set WEAVER_VIEWS)")
-		return 1
+		return errors.New("no views: install gh-dash or linear-tui (or set WEAVER_VIEWS)")
 	}
 	e.SetStrip()
 	if _, err := e.OpenView(name); err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-		return 1
+		return err
 	}
-	return 0
+	return nil
 }
 
 // From is `wvr _from github pr|issue REPO NUM [--review]` (gh-dash's
 // Alt N and Alt R) and `wvr _from linear [--review]` (the LINEAR view's):
 // the new-thread form for that item, in a popup, while the view goes on.
-func (e *Env) From(args []string) int {
+func (e *Env) From(args []string) error {
 	review := false
 	var rest []string
 	for _, a := range args {
@@ -312,9 +311,10 @@ func (e *Env) From(args []string) int {
 			rest = append(rest, a)
 		}
 	}
-	say := func(m string) int {
+	// In a view, said on tmux's message line.
+	say := func(m string) error {
 		e.Tmux("display-message", "-d", "2500", "weaver: "+m)
-		return 1
+		return errSaid
 	}
 	var nw []string
 	dir := os.Getenv("HOME")
@@ -341,8 +341,7 @@ func (e *Env) From(args []string) int {
 			nw = append(nw, "--repo", d)
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "weaver: usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")
-		return 2
+		return &Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")}
 	}
 	if review {
 		nw = append(nw, "--review")
@@ -373,7 +372,7 @@ func (e *Env) From(args []string) int {
 	if err := c.Start(); err != nil {
 		return say("could not open the form")
 	}
-	return 0
+	return nil
 }
 
 // linearSelected is the Linear issue under linear-tui's cursor in dir (or

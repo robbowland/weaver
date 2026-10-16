@@ -3,6 +3,7 @@ package wvr
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -341,7 +342,7 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
-func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
+func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	var it workItem
 	if fm.Item != nil {
 		it = fm.Item.it
@@ -378,7 +379,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
 				c.Stderr = os.Stderr
 				if c.Run() != nil {
-					return false
+					return errSaid
 				}
 			}
 		}
@@ -390,7 +391,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 		}
 		var ok bool
 		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
-			return false
+			return errSaid
 		}
 		name = branch
 	}
@@ -413,8 +414,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	tok := token()
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	if os.MkdirAll(d, 0o755) != nil {
-		fmt.Fprintln(os.Stderr, "weaver: cannot create "+d)
-		return false
+		return errors.New("cannot create " + d)
 	}
 	os.WriteFile(d+"/task", []byte(prompt), 0o644)
 	// Its stable number: the lowest free one (two at once must not share).
@@ -441,8 +441,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	}
 	if writeRecord(d+"/thread.json", rec) != nil {
 		unlock()
-		fmt.Fprintln(os.Stderr, "weaver: cannot write the thread record")
-		return false
+		return errors.New("cannot write the thread record")
 	}
 	unlock()
 	// In the weaver session its window has its label from the start, not
@@ -460,16 +459,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			fmt.Fprintf(os.Stderr, "weaver: tmux could not open the tab for %s (its new worktree stays: %s)\n", name, dir)
-		} else {
-			fmt.Fprintf(os.Stderr, "weaver: tmux could not open the tab for %s\n", name)
+			return fmt.Errorf("tmux could not open the tab for %s (its new worktree stays: %s)", name, dir)
 		}
-		return false
+		return fmt.Errorf("tmux could not open the tab for %s", name)
 	}
 	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
 	fmt.Printf("weaver: thread %s in %s (tab %s)\n", name, tildify(dir), tab)
-	return true
+	return nil
 }
 
 // AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
@@ -477,11 +474,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 // it where the agent is, and start the agent with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
-func (e *Env) AgentPane(tok, agent string) int {
+func (e *Env) AgentPane(tok, agent string) error {
 	kind, ok := parseAgentKind(agent)
 	if !ok {
-		fmt.Fprintln(os.Stderr, "weaver: unknown agent: "+agent)
-		return 1
+		return errors.New("unknown agent: " + agent)
 	}
 	pane := e.MyPane
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
@@ -493,15 +489,13 @@ func (e *Env) AgentPane(tok, agent string) int {
 	}
 	paneNum, _ := atoi(string(pane))
 	pn := jsonInt(paneNum)
-	run := func(args ...string) int {
+	run := func(args ...string) error {
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: "+w[0]+" is not installed")
-			return 127
+			return &Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}
 		}
-		syscall.Exec(p, append(w, args...), os.Environ())
-		return 1
+		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, append(w, args...), os.Environ()))
 	}
 	if tok != "" && pane != "" && exists(d+"/task") {
 		task, _ := os.ReadFile(d + "/task")
@@ -529,8 +523,7 @@ func (e *Env) AgentPane(tok, agent string) int {
 			writeRecord(e.threadFile(pane), th)
 		}
 		if os.Remove(d+"/task") != nil {
-			fmt.Fprintln(os.Stderr, "weaver: cannot take the task from "+d)
-			return 1
+			return errors.New("cannot take the task from " + d)
 		}
 		os.RemoveAll(d)
 		t := string(task)
@@ -718,7 +711,7 @@ func (e *Env) ResumeSession() {
 }
 
 // Resume is `wvr resume [--all | --forget [--yes]] [WHICH]`.
-func (e *Env) Resume(args []string) int {
+func (e *Env) Resume(args []string) error {
 	all, drop, yes, which := false, false, false, ""
 	usage := "usage: wvr resume [--all | --forget [--yes]] [session-id | name | number]"
 	for _, a := range args {
@@ -731,8 +724,7 @@ func (e *Env) Resume(args []string) int {
 			yes = true
 		default:
 			if strings.HasPrefix(a, "-") {
-				fmt.Fprintln(os.Stderr, "weaver: "+usage)
-				return 1
+				return errors.New(usage)
 			}
 			which = a
 		}
@@ -741,7 +733,7 @@ func (e *Env) Resume(args []string) int {
 	if !all && which == "" {
 		if len(rows) == 0 {
 			fmt.Println("weaver: no lost threads")
-			return 0
+			return nil
 		}
 		now := time.Now().Unix()
 		for _, r := range rows {
@@ -754,7 +746,7 @@ func (e *Env) Resume(args []string) int {
 			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), runeSlice(r.Sid, 8))
 		}
 		fmt.Println("wvr resume NAME (a number, or a session id) brings one back; --all, every one")
-		return 0
+		return nil
 	}
 	var match []string
 	if all {
@@ -776,17 +768,14 @@ func (e *Env) Resume(args []string) int {
 		if which != "" {
 			n = "named " + which + " "
 		}
-		fmt.Fprintf(os.Stderr, "weaver: no lost thread %s(wvr resume lists them)\n", n)
-		return 1
+		return fmt.Errorf("no lost thread %s(wvr resume lists them)", n)
 	}
 	if !all && len(match) != 1 {
-		fmt.Fprintf(os.Stderr, "weaver: %s names %d lost threads: give its session id (wvr resume lists them)\n", which, len(match))
-		return 1
+		return fmt.Errorf("%s names %d lost threads: give its session id (wvr resume lists them)", which, len(match))
 	}
 	if drop {
 		if all {
-			fmt.Fprintln(os.Stderr, "weaver: --forget takes one lost thread")
-			return 1
+			return errors.New("--forget takes one lost thread")
 		}
 		f := match[0]
 		nm := "the thread"
@@ -796,8 +785,7 @@ func (e *Env) Resume(args []string) int {
 		if !yes {
 			t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "weaver: --forget needs a terminal to ask, or --yes")
-				return 1
+				return errors.New("--forget needs a terminal to ask, or --yes")
 			}
 			pad := cardPlace(t, 6)
 			fmt.Fprint(t, cardRow(pad, "forget", CBold+nm+COff))
@@ -805,15 +793,14 @@ func (e *Env) Resume(args []string) int {
 			fmt.Fprint(t, "\n"+cardKeys(pad, "y", "forget", "n", "keep"))
 			t.Close()
 			if !readYes() {
-				return 130
+				return errCancelled
 			}
 		}
 		os.Remove(f)
-		return 0
+		return nil
 	}
 	if e.Session == "" {
-		fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `wvr`)")
-		return 1
+		return errors.New("not inside a tmux session (start one with `wvr`)")
 	}
 	failed := 0
 	for _, f := range match {
@@ -827,9 +814,9 @@ func (e *Env) Resume(args []string) int {
 	}
 	e.PushStatusAndLabels()
 	if failed > 0 {
-		return 1
+		return errSaid
 	}
-	return 0
+	return nil
 }
 
 // cardPlace clears the terminal and gives the pad that sets a card about
@@ -965,7 +952,7 @@ func threadNvim(panes []Pane, agent Pane) (PaneID, string) {
 // Close is `wvr close [--yes] [--remove-worktree] [PANE]`: close an
 // agent (the focused one) with its nvim, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
-func (e *Env) Close(args []string) int {
+func (e *Env) Close(args []string) error {
 	yes, rmwt, target := false, false, PaneID("")
 	for _, a := range args {
 		switch {
@@ -974,16 +961,14 @@ func (e *Env) Close(args []string) int {
 		case a == "--remove-worktree":
 			rmwt = true
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr close [--yes] [--remove-worktree] [pane-id]")
-			return 1
+			return errors.New("usage: wvr close [--yes] [--remove-worktree] [pane-id]")
 		default:
 			target, _ = parsePane(a)
 		}
 	}
 	panes, ok := e.Panes()
 	if !ok {
-		fmt.Fprintln(os.Stderr, "weaver: tmux would not list the panes")
-		return 1
+		return errors.New("tmux would not list the panes")
 	}
 	byID := map[PaneID]Pane{}
 	for _, p := range panes {
@@ -1018,8 +1003,7 @@ func (e *Env) Close(args []string) int {
 		if t == "" {
 			t = "?"
 		}
-		fmt.Fprintln(os.Stderr, "weaver: no agent in pane "+t)
-		return 1
+		return errors.New("no agent in pane " + t)
 	}
 	nv, pending := readNvimPane(e, agent), ""
 	if nv == "" {
@@ -1098,8 +1082,7 @@ func (e *Env) Close(args []string) int {
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: close needs a terminal to ask, or --yes")
-			return 1
+			return errors.New("close needs a terminal to ask, or --yes")
 		}
 		tty, out = t, t
 		defer t.Close()
@@ -1135,7 +1118,7 @@ func (e *Env) Close(args []string) int {
 	if !yes {
 		fmt.Fprint(out, "\n"+cardKeys(pad, "y", "close", "n", "keep"))
 		if !readYes() {
-			return 130
+			return errCancelled
 		}
 	}
 	remove := "0"
@@ -1168,7 +1151,7 @@ func (e *Env) Close(args []string) int {
 		}
 		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		c.Start()
-		return 0
+		return nil
 	}
 	return e.CloseTail(tail)
 }
@@ -1178,7 +1161,7 @@ func (e *Env) Close(args []string) int {
 // the agent to exit, forget it, and remove its worktree if asked, checking
 // again first. TOK: the thread was still being opened (its nvim had not
 // bound itself), and its record of that goes too.
-func (e *Env) CloseTail(a []string) int {
+func (e *Env) CloseTail(a []string) error {
 	for len(a) < 8 {
 		a = append(a, "")
 	}
@@ -1207,12 +1190,11 @@ func (e *Env) CloseTail(a []string) int {
 		os.Remove(b + ".nvim")
 		os.Remove(b + ".thread")
 	}
-	rc := 0
+	var rc error
 	if remove == "1" {
 		t := tildify(dir)
 		if why := worktreeRemovable(dir); why != "" {
-			fmt.Fprintf(os.Stderr, "weaver: kept %s: %s\n", t, why)
-			rc = 1
+			rc = fmt.Errorf("kept %s: %s", t, why)
 		} else {
 			r := repo
 			if r == "" {
@@ -1226,7 +1208,7 @@ func (e *Env) CloseTail(a []string) int {
 			}
 			c.Stdout, c.Stderr = os.Stdout, os.Stderr
 			if c.Run() != nil {
-				rc = 1
+				rc = errSaid
 			} else {
 				fmt.Println("weaver: removed " + t)
 			}
@@ -1239,28 +1221,25 @@ func (e *Env) CloseTail(a []string) int {
 // Send is `wvr send [--force] PANE < TEXT`: the text to agent PANE's
 // prompt, as if you typed it (a bracketed paste, then enter), only while it
 // waits for you to say more (idle, done, interrupted) unless forced.
-func (e *Env) Send(args []string) int {
+func (e *Env) Send(args []string) error {
 	want, force := PaneID(""), false
-	usage := "weaver: usage: wvr send [--force] PANE < TEXT"
+	usage := "usage: wvr send [--force] PANE < TEXT"
 	for _, a := range args {
 		switch {
 		case a == "--force":
 			force = true
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintln(os.Stderr, usage)
-			return 1
+			return errors.New(usage)
 		default:
 			want, _ = parsePane(a)
 		}
 	}
 	if !digits(string(want)) || isTTY(0) {
-		fmt.Fprintln(os.Stderr, usage)
-		return 1
+		return errors.New(usage)
 	}
 	text, _ := io.ReadAll(os.Stdin)
 	if strings.TrimSpace(string(text)) == "" {
-		fmt.Fprintln(os.Stderr, "weaver: nothing to send")
-		return 1
+		return errors.New("nothing to send")
 	}
 	rows, _ := e.AgentRows()
 	var st State
@@ -1271,21 +1250,17 @@ func (e *Env) Send(args []string) int {
 		}
 	}
 	if st == "" {
-		fmt.Fprintln(os.Stderr, "weaver: no agent in pane "+string(want))
-		return 1
+		return errors.New("no agent in pane " + string(want))
 	}
 	if !force {
 		switch st {
 		case StateIdle, StateDone, StateInterrupted:
 		case StateNeedsYou:
-			fmt.Fprintln(os.Stderr, "weaver: the agent waits on a dialog: answer it first (or --force)")
-			return 1
+			return errors.New("the agent waits on a dialog: answer it first (or --force)")
 		case StateWorking, StateEnded, StateStarting:
-			fmt.Fprintf(os.Stderr, "weaver: the agent is %s: send when it waits for you (or --force)\n", st)
-			return 1
+			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
 		default:
-			fmt.Fprintf(os.Stderr, "weaver: the agent is %s: send when it waits for you (or --force)\n", st)
-			return 1
+			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
 		}
 	}
 	args2 := []string{"load-buffer", "-b", "weaver-send", "-"}
@@ -1295,30 +1270,27 @@ func (e *Env) Send(args []string) int {
 	c := exec.Command("tmux", args2...)
 	c.Stdin = strings.NewReader(string(text))
 	if c.Run() != nil {
-		fmt.Fprintln(os.Stderr, "weaver: tmux would not take the text")
-		return 1
+		return errors.New("tmux would not take the text")
 	}
 	if _, err := e.Tmux("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", want.target()); err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: tmux would not paste into pane "+string(want))
-		return 1
+		return errors.New("tmux would not paste into pane " + string(want))
 	}
 	time.Sleep(200 * time.Millisecond)
 	e.Tmux("send-keys", "-t", want.target(), "Enter")
-	return 0
+	return nil
 }
 
 // Quit is `wvr quit [--yes]`: quit the session (outside one, the weaver
 // session) with every agent and nvim in it, after asking. Its threads are
 // kept: they come back as the weaver session starts again.
-func (e *Env) Quit(args []string) int {
+func (e *Env) Quit(args []string) error {
 	yes := false
 	for _, a := range args {
 		switch a {
 		case "--yes", "-y":
 			yes = true
 		default:
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr quit [--yes]")
-			return 1
+			return errors.New("usage: wvr quit [--yes]")
 		}
 	}
 	name := e.Session
@@ -1329,15 +1301,13 @@ func (e *Env) Quit(args []string) int {
 		name = "weaver"
 	}
 	if _, err := e.Tmux("has-session", "-t", "="+name); err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: no tmux session "+name+" is running")
-		return 1
+		return errors.New("no tmux session " + name + " is running")
 	}
 	skey := "tmux-" + strings.ReplaceAll(name, "/", "_")
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: quit needs a terminal to ask, or --yes")
-			return 1
+			return errors.New("quit needs a terminal to ask, or --yes")
 		}
 		threads, work, bufs := 0, 0, 0
 		ts, _ := filepath.Glob(e.StateDir + "/" + skey + "_*.thread")
@@ -1379,12 +1349,11 @@ func (e *Env) Quit(args []string) int {
 		fmt.Fprint(t, "\n"+cardKeys(pad, "y", "quit", "n", "keep"))
 		t.Close()
 		if !readYes() {
-			return 130
+			return errCancelled
 		}
 	}
 	if _, err := e.Tmux("kill-session", "-t", "="+name); err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: tmux could not quit "+name)
-		return 1
+		return errors.New("tmux could not quit " + name)
 	}
-	return 0
+	return nil
 }

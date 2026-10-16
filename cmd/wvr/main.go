@@ -3,9 +3,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/robbowland/weaver/internal/wvr"
@@ -15,12 +17,12 @@ func main() {
 	args := os.Args[1:]
 	cmd := ""
 	if len(args) > 0 {
-		cmd = args[0]
+		cmd, args = args[0], args[1:]
 	}
 	// tmux's status line asks for the counts on every redraw: no more than a
 	// file read.
-	if cmd == "status" && len(args) >= 2 && args[1] == "--tmux" {
-		fmt.Println(wvr.StatusLine(args[1:]))
+	if cmd == "status" && len(args) >= 1 && args[0] == "--tmux" {
+		fmt.Println(wvr.StatusLine(args))
 		return
 	}
 	switch cmd {
@@ -31,264 +33,189 @@ func main() {
 		fmt.Println("weaver " + buildVersion())
 		return
 	case "setup":
-		os.Exit(wvr.Setup(args[1:], wvr.Load().Self, os.Stdout))
+		exit(wvr.Setup(args, wvr.Load().Self, os.Stdout))
 	case "_plugins":
-		if err := wvr.Plugins(); err != nil {
-			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
-			os.Exit(1)
-		}
-		return
+		exit(wvr.Plugins())
 	case "_runtime":
 		// install.sh: unpack this build's files now, so Neovim configs find
 		// its plugin before weaver next runs.
-		if _, err := wvr.Runtime(); err != nil {
-			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
-			os.Exit(1)
-		}
-		return
+		_, err := wvr.Runtime()
+		exit(err)
 	}
-	e := wvr.Load()
-	rc, ok := run(e, cmd, args)
+	c, ok := commands[cmd]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wvr.Usage)
 		os.Exit(2)
 	}
-	os.Exit(rc)
+	e := wvr.Load()
+	if c.session && e.Session == "" {
+		exit(errNoSession)
+	}
+	exit(c.run(e, args))
 }
 
-// run runs cmd; ok false when there is no such command.
-func run(e *wvr.Env, cmd string, args []string) (int, bool) {
-	needSession := func() bool {
-		if e.Session == "" {
-			fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `wvr`)")
-			return false
+// exit ends wvr as err says: nothing, the usage, or what went wrong (said
+// once, here, unless the command has said it already).
+func exit(err error) {
+	var x *wvr.Exit
+	switch {
+	case err == nil:
+		os.Exit(0)
+	case errors.Is(err, wvr.ErrHelp):
+		fmt.Print(wvr.Usage)
+		os.Exit(0)
+	case errors.As(err, &x):
+		if x.Err != nil {
+			fmt.Fprintln(os.Stderr, "weaver: "+x.Err.Error())
 		}
-		return true
+		os.Exit(x.Code)
 	}
-	switch cmd {
-	case "hook":
-		e.HookMain(args[1:])
-	case "event", "adapt":
-		bell, adapter := false, ""
-		rest := args[1:]
-		if cmd == "adapt" {
-			if len(rest) == 0 || rest[0] != "codex" {
-				fmt.Fprintln(os.Stderr, "weaver: usage: wvr adapt codex [--bell]")
-				return 1, true
-			}
-			adapter, rest = "codex", rest[1:]
+	fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+	os.Exit(1)
+}
+
+var errNoSession = errors.New("not inside a tmux session (start one with `wvr`)")
+
+// command is one of wvr's commands: whether it runs only inside a weaver
+// tmux session, and what it does with its arguments.
+type command struct {
+	session bool
+	run     func(e *wvr.Env, args []string) error
+}
+
+// arg is argument i, or "".
+func arg(args []string, i int) string {
+	if i < len(args) {
+		return args[i]
+	}
+	return ""
+}
+
+// done is a command that cannot fail.
+func done(f func(e *wvr.Env, args []string)) func(*wvr.Env, []string) error {
+	return func(e *wvr.Env, args []string) error {
+		f(e, args)
+		return nil
+	}
+}
+
+// prints is a command that prints what f makes.
+func prints(f func(e *wvr.Env, args []string) string) func(*wvr.Env, []string) error {
+	return done(func(e *wvr.Env, args []string) { fmt.Print(f(e, args)) })
+}
+
+// helped is a command that shows the usage for -h or --help.
+func helped(f func(e *wvr.Env, args []string) error) func(*wvr.Env, []string) error {
+	return func(e *wvr.Env, args []string) error {
+		if slices.Contains(args, "-h") || slices.Contains(args, "--help") {
+			return wvr.ErrHelp
 		}
-		for _, a := range rest {
-			if a == "--bell" {
-				bell = true
-			}
+		return f(e, args)
+	}
+}
+
+// The commands (wvr help, and the ones tmux, fzf, nvim and the hooks run,
+// named with a leading _).
+var commands = map[string]command{
+	// Outside a session it starts (or attaches to) one; inside, the board.
+	"": {run: start}, "start": {run: start},
+	"ls":   {session: true, run: func(e *wvr.Env, _ []string) error { return e.Ls() }},
+	"home": {session: true, run: func(e *wvr.Env, _ []string) error { return e.Home() }},
+
+	"new":    {run: (*wvr.Env).New},
+	"edit":   {session: true, run: (*wvr.Env).Edit},
+	"nvim":   {session: true, run: (*wvr.Env).Nvim},
+	"close":  {session: true, run: (*wvr.Env).Close},
+	"send":   {session: true, run: (*wvr.Env).Send},
+	"view":   {session: true, run: (*wvr.Env).View},
+	"resume": {run: helped((*wvr.Env).Resume)},
+	"quit":   {run: helped((*wvr.Env).Quit)},
+	"next":   {session: true, run: done(func(e *wvr.Env, _ []string) { e.Next() })},
+	"go": {run: func(e *wvr.Env, args []string) error {
+		if arg(args, 0) != "home" {
+			return errors.New("usage: wvr go home")
 		}
-		return e.Event(adapter, bell), true
-	case "snapshot":
-		c, msg := wvr.Snapshot(args[1:])
-		if msg != "" {
-			fmt.Fprintln(os.Stderr, "weaver: "+msg)
-			return 1, true
-		}
-		fmt.Println(c)
-	case "_preview":
-		if !needSession() {
-			return 1, true
-		}
-		fmt.Print(e.Preview(args[1:]))
-	case "_view":
-		w := ""
-		if len(args) > 1 {
-			w = args[1]
-		}
-		fmt.Print(wvr.View(w))
-	case "_goto":
-		if !needSession() {
-			return 1, true
-		}
-		p, t := "", ""
-		if len(args) > 1 {
-			p = args[1]
-		}
-		if len(args) > 2 {
-			t = args[2]
-		}
-		e.Goto(p, t)
-	case "go":
-		if len(args) < 2 || args[1] != "home" {
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr go home")
-			return 1, true
-		}
-		if !needSession() {
-			return 1, true
+		if e.Session == "" {
+			return errNoSession
 		}
 		e.GoHome()
-	case "view":
-		if !needSession() {
-			return 1, true
-		}
-		return e.View(args[1:]), true
-	case "_from":
-		if !needSession() {
-			return 1, true
-		}
-		return e.From(args[1:]), true
-	case "next":
-		if !needSession() {
-			return 1, true
-		}
-		e.Next()
-	case "_seen", "_fit":
-		if !needSession() {
-			return 1, true
-		}
-		w := ""
-		if len(args) > 1 {
-			w = args[1]
-		}
-		if cmd == "_seen" {
-			e.Seen(w)
-		} else {
-			e.Fit(w)
-		}
-	case "_boot":
-		if !needSession() {
-			return 1, true
-		}
-		sock := ""
-		if len(args) > 1 {
-			sock = args[1]
-		}
-		e.Boot(sock)
-	case "status":
-		if !needSession() {
-			return 1, true
-		}
-		if len(args) > 1 && args[1] == "--push" {
+		return nil
+	}},
+	"status": {session: true, run: done(func(e *wvr.Env, args []string) {
+		if arg(args, 0) == "--push" {
 			e.PushStatus()
 		} else {
 			fmt.Println(e.StatusText())
 		}
-	case "gc":
-		e.GC()
-	case "new":
-		return e.New(args[1:])
-	case "_form":
-		if len(args) < 3 {
-			return 1, true
+	})},
+	"gc": {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
+
+	// The agents' hooks, and other agents' events.
+	"hook":  {run: done((*wvr.Env).HookMain)},
+	"event": {run: func(e *wvr.Env, args []string) error { return e.Event("", slices.Contains(args, "--bell")) }},
+	"adapt": {run: func(e *wvr.Env, args []string) error {
+		if arg(args, 0) != "codex" {
+			return errors.New("usage: wvr adapt codex [--bell]")
 		}
-		q := ""
-		if len(args) > 3 {
-			q = args[3]
+		return e.Event("codex", slices.Contains(args[1:], "--bell"))
+	}},
+	"snapshot": {run: func(_ *wvr.Env, args []string) error {
+		c, msg := wvr.Snapshot(args)
+		if msg != "" {
+			return errors.New(msg)
 		}
-		e.Form(args[1], args[2], q)
-	case "_fetch":
-		if len(args) < 4 {
-			return 1, true
-		}
-		sf := ""
-		if len(args) > 4 {
-			sf = args[4]
-		}
-		e.Fetch(args[1], args[2], args[3], sf)
-	case "", "start":
-		if e.Session != "" {
-			return e.Ls(), true
-		}
-		n := ""
-		if cmd == "start" && len(args) > 1 {
-			n = args[1]
-		}
-		return e.Start(n), true
-	case "edit":
-		if !needSession() {
-			return 1, true
-		}
-		return e.Edit(args[1:]), true
-	case "nvim":
-		if !needSession() {
-			return 1, true
-		}
-		return e.Nvim(args[1:]), true
-	case "_agent":
-		if !needSession() {
-			return 1, true
-		}
-		tok, kind := "", ""
-		if len(args) > 1 {
-			tok = args[1]
-		}
-		if len(args) > 2 {
-			kind = args[2]
-		}
-		return e.AgentPane(tok, kind), true
-	case "resume":
-		for _, a := range args[1:] {
-			if a == "-h" || a == "--help" {
-				fmt.Print(wvr.Usage)
-				return 0, true
-			}
-		}
-		return e.Resume(args[1:]), true
-	case "_resume":
-		if !needSession() {
-			return 1, true
-		}
-		e.ResumeSession()
-	case "close":
-		if !needSession() {
-			return 1, true
-		}
-		return e.Close(args[1:]), true
-	case "_close":
-		if !needSession() {
-			return 1, true
-		}
-		return e.CloseTail(args[1:]), true
-	case "send":
-		if !needSession() {
-			return 1, true
-		}
-		return e.Send(args[1:]), true
-	case "quit":
-		for _, a := range args[1:] {
-			if a == "-h" || a == "--help" {
-				fmt.Print(wvr.Usage)
-				return 0, true
-			}
-		}
-		return e.Quit(args[1:]), true
-	case "_rows":
-		if !needSession() {
-			return 1, true
-		}
+		fmt.Println(c)
+		return nil
+	}},
+
+	// The board's fzf, its preview and views.
+	"_rows": {session: true, run: prints(func(e *wvr.Env, _ []string) string {
 		if os.Getenv("LS_MODE") == "plain" {
-			fmt.Print(e.PlainRows())
-		} else {
-			fmt.Print(e.Rows())
+			return e.PlainRows()
 		}
-	case "_title":
-		fmt.Print(wvr.Title())
-	case "_footer":
-		fmt.Print(wvr.Footer())
-	case "_hf":
-		fmt.Println(wvr.HF())
-	case "_chrome":
-		fmt.Print(e.Chrome())
-	case "ls":
-		if !needSession() {
-			return 1, true
+		return e.Rows()
+	})},
+	"_preview": {session: true, run: prints((*wvr.Env).Preview)},
+	"_view":    {run: prints(func(_ *wvr.Env, args []string) string { return wvr.View(arg(args, 0)) })},
+	"_title":   {run: prints(func(*wvr.Env, []string) string { return wvr.Title() })},
+	"_footer":  {run: prints(func(*wvr.Env, []string) string { return wvr.Footer() })},
+	"_hf":      {run: prints(func(*wvr.Env, []string) string { return wvr.HF() + "\n" })},
+	"_chrome":  {run: prints(func(e *wvr.Env, _ []string) string { return e.Chrome() })},
+	"_goto":    {session: true, run: done(func(e *wvr.Env, args []string) { e.Goto(arg(args, 0), arg(args, 1)) })},
+
+	// tmux's hooks.
+	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},
+	"_fit":  {session: true, run: done(func(e *wvr.Env, args []string) { e.Fit(arg(args, 0)) })},
+	"_boot": {session: true, run: done(func(e *wvr.Env, args []string) { e.Boot(arg(args, 0)) })},
+
+	// The new-thread form, and the threads it opens.
+	"_from": {session: true, run: (*wvr.Env).From},
+	"_form": {run: func(e *wvr.Env, args []string) error {
+		if len(args) < 2 {
+			return &wvr.Exit{Code: 1}
 		}
-		return e.Ls(), true
-	case "home":
-		if !needSession() {
-			return 1, true
+		e.Form(args[0], args[1], arg(args, 2))
+		return nil
+	}},
+	"_fetch": {run: func(e *wvr.Env, args []string) error {
+		if len(args) < 3 {
+			return &wvr.Exit{Code: 1}
 		}
-		return e.Home(), true
-	default:
-		return 0, false
+		e.Fetch(args[0], args[1], args[2], arg(args, 3))
+		return nil
+	}},
+	"_agent":  {session: true, run: func(e *wvr.Env, args []string) error { return e.AgentPane(arg(args, 0), arg(args, 1)) }},
+	"_resume": {session: true, run: done(func(e *wvr.Env, _ []string) { e.ResumeSession() })},
+	"_close":  {session: true, run: (*wvr.Env).CloseTail},
+}
+
+// start starts (or attaches to) a weaver session, named as given; inside
+// one, the board.
+func start(e *wvr.Env, args []string) error {
+	if e.Session != "" {
+		return e.Ls()
 	}
-	return 0, true
+	return e.Start(arg(args, 0))
 }
 
 // version is set at build time by a package (-ldflags "-X main.version=1.2.3").

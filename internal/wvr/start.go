@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +15,7 @@ import (
 // with home in window 0. Its panes know their session
 // ($WEAVER_TMUX_SESSION); an outer tmux's or zellij's variables stay out
 // of it.
-func (e *Env) Start(name string) int {
+func (e *Env) Start(name string) error {
 	if name == "" {
 		name = os.Getenv("WEAVER_SESSION")
 	}
@@ -23,19 +24,16 @@ func (e *Env) Start(name string) int {
 	}
 	tmux, err := exec.LookPath("tmux")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: tmux is not installed")
-		return 1
+		return errors.New("tmux is not installed")
 	}
 	e.SelfSetup()
 	dir, err := Runtime()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-		return 1
+		return err
 	}
 	conf := dir + "/config/tmux.conf"
 	if !exists(conf) {
-		fmt.Fprintln(os.Stderr, "weaver: missing "+conf)
-		return 1
+		return errors.New("missing " + conf)
 	}
 	var env []string
 	for _, v := range os.Environ() {
@@ -50,8 +48,7 @@ func (e *Env) Start(name string) int {
 	has := exec.Command(base[0], append(append([]string{}, base[1:]...), "has-session", "-t", "="+name)...)
 	has.Env = env
 	if has.Run() == nil {
-		syscall.Exec(tmux, append(base, "source-file", conf, ";", "attach-session", "-t", "="+name), env)
-		return 1
+		return fmt.Errorf("tmux: %w", syscall.Exec(tmux, append(base, "source-file", conf, ";", "attach-session", "-t", "="+name), env))
 	}
 	skey := "tmux-" + strings.ReplaceAll(name, "/", "_")
 	os.MkdirAll(e.StateDir, 0o755)
@@ -61,10 +58,8 @@ func (e *Env) Start(name string) int {
 	// weaver close may remove under it (its new panes would die at once).
 	here, _ := os.Getwd()
 	if os.Chdir("/") != nil {
-		fmt.Fprintln(os.Stderr, "weaver: cannot cd /")
-		return 1
+		return errors.New("cannot cd /")
 	}
-	syscall.Exec(tmux, append(base, "new-session", "-s", name, "-n", "home", "-c", here, "-e", "WEAVER_TMUX_SESSION="+name,
-		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env)
-	return 1
+	return fmt.Errorf("tmux: %w", syscall.Exec(tmux, append(base, "new-session", "-s", name, "-n", "home", "-c", here, "-e", "WEAVER_TMUX_SESSION="+name,
+		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
 }

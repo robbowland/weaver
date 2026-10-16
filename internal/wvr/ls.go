@@ -39,7 +39,7 @@ func isTTY(fd int) bool {
 // for good. What the session needs as it starts (old states swept, lost
 // threads back, the status line's counts and the tabs' labels) runs behind
 // it (`wvr _boot`), and reloads it when done.
-func (e *Env) Home() int {
+func (e *Env) Home() error {
 	if e.WeaverSession() {
 		os.MkdirAll(e.StateDir, 0o755)
 		sock := e.SockDir + "/" + e.SKey + ".fzf." + strconv.Itoa(os.Getpid()) + ".sock"
@@ -60,11 +60,11 @@ func (e *Env) Home() int {
 // hooks reload through its socket as they change. Without fzf or a terminal,
 // the board as text. The home board ($LS_HOME) stays: its keys act and it
 // carries on; any other ends with a key, and acts.
-func (e *Env) Ls() int {
+func (e *Env) Ls() error {
 	home := os.Getenv("LS_HOME") != ""
 	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(1) {
 		fmt.Print(e.PlainRows())
-		return 0
+		return nil
 	}
 	q := Quote(e.Self)
 	sh := "/bin/sh"
@@ -195,11 +195,11 @@ func (e *Env) Ls() int {
 			// The home board does not end: ctrl-c starts it again. Not
 			// without its terminal (the pane or the session closed).
 			if rc == 2 {
-				return 0
+				return nil
 			}
 			t, err := os.Open("/dev/tty")
 			if err != nil {
-				return 0
+				return nil
 			}
 			t.Close()
 			// A newer weaver is installed (_chrome ended the board for it):
@@ -212,7 +212,7 @@ func (e *Env) Ls() int {
 			continue
 		}
 		if out == "" {
-			return 0
+			return nil
 		}
 		// A key fzf printed (print), then the item; the key alone on an
 		// empty board; a bare item when fzf accepted on its own.
@@ -240,7 +240,7 @@ func (e *Env) Ls() int {
 			if pane != "" {
 				exec.Command(e.Self, "resume", pane).Run()
 			}
-			return 0
+			return nil
 		case "new":
 			a := []string{"new"}
 			if pane != "" {
@@ -254,7 +254,7 @@ func (e *Env) Ls() int {
 				rc = x.ExitCode()
 			}
 			if rc == 0 {
-				return 0
+				return nil
 			}
 			if rc != 130 {
 				time.Sleep(1500 * time.Millisecond)
@@ -262,12 +262,12 @@ func (e *Env) Ls() int {
 			continue
 		}
 		if pane == "" {
-			return 0
+			return nil
 		}
 		exec.Command(e.Self, "_goto", pane, tab).Run()
 		if key == "ctrl-e" {
 			syscall.Exec(e.Self, []string{e.Self, "edit", pane}, os.Environ())
 		}
-		return 0
+		return nil
 	}
 }

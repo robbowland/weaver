@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"regexp"
@@ -231,21 +232,20 @@ func codex(c codexInput) normEvent {
 }
 
 // Event is `wvr event [--bell]` and `wvr adapt codex [--bell]`.
-func (e *Env) Event(adapter string, bell bool) int {
+func (e *Env) Event(adapter string, bell bool) error {
 	if isTTY(0) {
-		os.Stderr.WriteString("weaver: usage: wvr event [--bell] < event.json\n")
-		return 1
+		return errors.New("usage: wvr event [--bell] < event.json")
 	}
 	in, _ := io.ReadAll(os.Stdin)
 	var n normEvent
 	if adapter == "codex" {
 		var c codexInput
 		if decodeRecord(firstJSON(in), &c) != nil {
-			return 0
+			return nil
 		}
 		n = codex(c)
 	} else if decodeRecord(firstJSON(in), &n) != nil {
-		return 0
+		return nil
 	}
 	strip := func(t jsonText) string {
 		return strings.Map(func(r rune) rune {
@@ -258,7 +258,7 @@ func (e *Env) Event(adapter string, bell bool) int {
 	agent, pid, pane := strip(n.Agent), strip(n.Pid), strip(n.Pane)
 	// An agent's name goes into the state file and nvim's events as it is.
 	if agent == "" || agent[0] < 'a' || agent[0] > 'z' || strings.Trim(agent, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
-		return 0
+		return nil
 	}
 	// tmux's %3 and zellij's terminal_3 are pane 3.
 	if p, ok := parsePane(pane); ok {
@@ -273,11 +273,11 @@ func (e *Env) Event(adapter string, bell bool) int {
 		pane = string(e.MyPane)
 	}
 	if pane == "" || e.Session == "" {
-		return 0
+		return nil
 	}
 	h := hookOf(n)
 	if h.Event == "" {
-		return 0
+		return nil
 	}
 	mode := "sync"
 	if h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent") {
@@ -304,7 +304,7 @@ func (e *Env) Event(adapter string, bell bool) int {
 			}
 		}
 	}
-	return 0
+	return nil
 }
 
 // agentAncestor is the nearest ancestor of this process that is not a shell.

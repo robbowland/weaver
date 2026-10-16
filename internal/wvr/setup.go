@@ -3,6 +3,7 @@ package wvr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,7 +25,7 @@ var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 // exists), run by this binary's path (or PATH), each file backed up before
 // it changes; its files unpacked and its Neovim plugins fetched. `wvr`
 // does the same as it starts (SelfSetup); this shows the changes.
-func Setup(args []string, self string, out io.Writer) int {
+func Setup(args []string, self string, out io.Writer) error {
 	dry, codex, bin := false, true, self
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -34,25 +35,23 @@ func Setup(args []string, self string, out io.Writer) int {
 			codex = false
 		case "--bin":
 			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "weaver: --bin needs a path")
-				return 2
+				return &Exit{Code: 2, Err: errors.New("--bin needs a path")}
 			}
 			i++
 			bin = args[i]
 		default:
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")
-			return 2
+			return &Exit{Code: 2, Err: errors.New("usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")}
 		}
 	}
 	if !dry {
 		if _, err := Runtime(); err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			return 1
+			return err
 		}
 	}
 	warnZellij(os.Getenv("HOME"))
 	ts := timestamp()
-	rc := 0
+	// Each configuration's problem is said as it comes; the others go on.
+	var failed error
 	codexDone := false
 	for _, c := range hookConfigs() {
 		if c.label == "codex" && !codex {
@@ -62,7 +61,7 @@ func Setup(args []string, self string, out io.Writer) int {
 		ch, err := planHooks(c, bin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			rc = 1
+			failed = errSaid
 			continue
 		}
 		ch.show(out)
@@ -72,20 +71,20 @@ func Setup(args []string, self string, out io.Writer) int {
 		backup, err := ch.apply(ts)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			rc = 1
+			failed = errSaid
 			continue
 		}
 		if backup != "" {
 			fmt.Fprintf(out, "backed up to %s\n", backup)
 		}
 	}
-	if !dry && rc == 0 {
+	if !dry && failed == nil {
 		if err := Plugins(); err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
 		}
 	}
-	if dry || rc != 0 {
-		return rc
+	if dry || failed != nil {
+		return failed
 	}
 	fmt.Fprint(out, `
 Done. To pick it up:
@@ -98,7 +97,7 @@ Done. To pick it up:
     restart running Codex sessions
 `)
 	}
-	return 0
+	return nil
 }
 
 // warnZellij: weaver ran on zellij too, once; a zellij config that still has

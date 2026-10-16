@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -584,7 +585,7 @@ func checkThread(task string, fm form) string {
 
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
-func (e *Env) New(args []string) (int, bool) {
+func (e *Env) New(args []string) error {
 	var repoArg, branch, base, agent, itemArg string
 	var from PaneID
 	var where Where
@@ -592,16 +593,12 @@ func (e *Env) New(args []string) (int, bool) {
 	var task []string
 	nofocus, edit := false, false
 	mode := ModeWork
-	die := func(m string) (int, bool) {
-		fmt.Fprintln(os.Stderr, "weaver: "+m)
-		return 1, true
-	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
 		case "--repo", "--from", "--branch", "-b", "--base", "--agent", "--pr", "--issue":
 			if i+1 >= len(args) {
-				return die(a + " needs a value")
+				return errors.New(a + " needs a value")
 			}
 			v := args[i+1]
 			switch a {
@@ -633,20 +630,20 @@ func (e *Env) New(args []string) (int, bool) {
 			task = append(task, args[i+1:]...)
 			i = len(args)
 		case "-h", "--help":
-			return 0, false
+			return ErrHelp
 		default:
 			if strings.HasPrefix(a, "-") {
-				return die("unknown option: " + a + " (see wvr help)")
+				return errors.New("unknown option: " + a + " (see wvr help)")
 			}
 			task = append(task, a)
 		}
 	}
 	if e.Session == "" {
-		return die("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
+		return errors.New("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
 	}
 	kind, ok := parseAgentKind(agent)
 	if !ok {
-		return die("unknown agent: " + agent + " (claude or codex)")
+		return errors.New("unknown agent: " + agent + " (claude or codex)")
 	}
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()
@@ -654,7 +651,7 @@ func (e *Env) New(args []string) (int, bool) {
 	case repoArg != "":
 		start = repoArg
 		if st, err := os.Stat(start); err != nil || !st.IsDir() {
-			return die("no such directory: " + repoArg)
+			return errors.New("no such directory: " + repoArg)
 		}
 	case from != "":
 		f := ""
@@ -683,7 +680,7 @@ func (e *Env) New(args []string) (int, bool) {
 		fm.Repo, fm.Here = r, c
 	} else {
 		if repoArg != "" {
-			return die("not a git repository: " + repoArg)
+			return errors.New("not a git repository: " + repoArg)
 		}
 		if d, err := filepath.EvalSymlinks(start); err == nil {
 			fm.Here = d
@@ -706,13 +703,13 @@ func (e *Env) New(args []string) (int, bool) {
 	if itemArg != "" {
 		// In a popup (Alt N in a view), what went wrong stays on screen
 		// until a key: the popup would close with it.
-		dieItem := func(m string) (int, bool) {
+		dieItem := func(m string) error {
 			if isTTY(0) && isTTY(2) && t == "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n\n%spress a key%s", CRed, m, COff, CGrey, COff)
 				readKey()
-				return 1, true
+				return errSaid
 			}
-			return die(m)
+			return errors.New(m)
 		}
 		ref, err := parseItemRef(itemKind, itemArg)
 		if err != nil {
@@ -753,14 +750,14 @@ func (e *Env) New(args []string) (int, bool) {
 				e.focus(a)
 				e.MarkSeen(a)
 				fmt.Printf("weaver: %s already has a thread (%s): went to it\n", x.Ref(), fm.Branch)
-				return 0, true
+				return nil
 			}
 		}
 	}
 	if edit {
 		f, err := os.CreateTemp("", "weaver-task.")
 		if err != nil {
-			return die("cannot make a temporary file")
+			return errors.New("cannot make a temporary file")
 		}
 		if t != "" {
 			f.WriteString(t + "\n")
@@ -784,29 +781,26 @@ func (e *Env) New(args []string) (int, bool) {
 		c.Run()
 		b, _ := readTrim(f.Name())
 		if strings.TrimSpace(b) == "" {
-			return 130, true
+			return errCancelled
 		}
 		t = b
 	}
 	if t != "" {
 		if repoErr != "" {
-			return die(repoErr + " (or --repo DIR)")
+			return errors.New(repoErr + " (or --repo DIR)")
 		}
 		if m := checkThread(t, fm); m != "" {
-			return die(m)
+			return errors.New(m)
 		}
-		if !e.threadCreate(t, fm, nofocus) {
-			return 1, true
-		}
-		return 0, true
+		return e.threadCreate(t, fm, nofocus)
 	}
 	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(0) || !isTTY(1) {
-		return die(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
+		return errors.New(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
 	}
 	os.MkdirAll(e.StateDir, 0o755)
 	tf, err := os.CreateTemp(e.StateDir, "form.")
 	if err != nil {
-		return die("cannot make the form's file")
+		return errors.New("cannot make the form's file")
 	}
 	sf := tf.Name()
 	tf.Close()
@@ -820,21 +814,25 @@ func (e *Env) New(args []string) (int, bool) {
 		query = fm.Item.it.defaultTask(mode)
 	}
 	for {
-		t, rc := e.newForm(sf, query, repoErr)
-		if rc != 0 {
-			return rc, true
+		t, err := e.newForm(sf, query, repoErr)
+		if err != nil {
+			return err
 		}
 		query, repoErr = t, ""
 		if i := strings.IndexByte(query, '\n'); i >= 0 {
 			query = query[:i]
 		}
-		if e.threadCreate(t, loadForm(sf), nofocus) {
-			return 0, true
+		err = e.threadCreate(t, loadForm(sf), nofocus)
+		if err == nil {
+			return nil
 		}
-		// The worktree could not be made: its message is on screen.
+		// The thread could not be made: say why, unless that is on screen.
+		if !errors.Is(err, errSaid) {
+			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+		}
 		fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s enter: back to the form   esc: cancel ", CRed, COff)
 		if readKey() == 0x1b {
-			return 130, true
+			return errCancelled
 		}
 	}
 }
@@ -864,7 +862,7 @@ func readKey() byte {
 
 // newForm is the form until you start a thread it can start: the task, or
 // 130 when you cancel.
-func (e *Env) newForm(sf, query, errs string) (string, int) {
+func (e *Env) newForm(sf, query, errs string) (string, error) {
 	q := Quote(e.Self)
 	qs := Quote(sf)
 	hd := q + " _form header " + qs + " {q}"
@@ -905,11 +903,10 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 			rc = x.ExitCode()
 		}
 		if rc == 130 {
-			return "", 130
+			return "", errCancelled
 		}
 		if rc > 1 {
-			fmt.Fprintln(os.Stderr, "weaver: fzf failed (the form needs fzf 0.62 or newer)")
-			return "", 1
+			return "", errors.New("fzf failed (the form needs fzf 0.62 or newer)")
 		}
 		query = strings.TrimRight(string(out), "\n")
 		if i := strings.IndexByte(query, '\n'); i >= 0 {
@@ -922,7 +919,7 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 			}
 		}
 		if errs = checkThread(task, loadForm(sf)); errs == "" {
-			return task, 0
+			return task, nil
 		}
 	}
 }

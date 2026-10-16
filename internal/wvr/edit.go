@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -86,15 +87,14 @@ func (e *Env) focusedPane() PaneID {
 
 // Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
-func (e *Env) Edit(args []string) int {
+func (e *Env) Edit(args []string) error {
 	full, target := false, PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--full":
 			full = true
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr edit [--full] [pane-id]")
-			return 1
+			return errors.New("usage: wvr edit [--full] [pane-id]")
 		default:
 			target, _ = parsePane(a)
 		}
@@ -103,13 +103,11 @@ func (e *Env) Edit(args []string) int {
 	defer release()
 	panes, ok := e.Panes()
 	if !ok {
-		fmt.Fprintln(os.Stderr, "weaver: tmux would not list the panes")
-		return 1
+		return errors.New("tmux would not list the panes")
 	}
 	if target == "" {
 		if target = e.focusedPane(); target == "" {
-			fmt.Fprintln(os.Stderr, "weaver: cannot find the focused pane")
-			return 1
+			return errors.New("cannot find the focused pane")
 		}
 	}
 	paneOf := func(ps []Pane, p PaneID) *Pane {
@@ -132,8 +130,7 @@ func (e *Env) Edit(args []string) int {
 		}
 		var err error
 		if newPane, err = e.openLeftOf(target, cwd, "nvim: "+filepath.Base(cwd), "nvim"); err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-			return 1
+			return err
 		}
 	} else {
 		e.MarkSeen(agent)
@@ -190,8 +187,7 @@ func (e *Env) Edit(args []string) int {
 			var err error
 			if newPane, err = e.openLeftOf(agent, root, "nvim: "+filepath.Base(root), argv...); err != nil {
 				unlock()
-				fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-				return 1
+				return err
 			}
 			// A thread's window gets its split back.
 			if exists(e.paneFile(agent, "thread")) {
@@ -231,17 +227,16 @@ func (e *Env) Edit(args []string) int {
 		}
 		e.Tmux("resize-pane", "-Z", "-t", p.target())
 	}
-	return 0
+	return nil
 }
 
 // Nvim is `wvr nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,
 // on the agent's socket. --fresh: the agent was just made (a thread's), so
 // an nvim on its socket belongs to a session of the same name that went
 // (pane ids start again with each server).
-func (e *Env) Nvim(args []string) int {
+func (e *Env) Nvim(args []string) error {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim <agent-pane-id> [file]")
-		return 1
+		return errors.New("usage: wvr nvim <agent-pane-id> [file]")
 	}
 	agent, _ := parsePane(args[0])
 	file, fresh := "", false
@@ -250,8 +245,7 @@ func (e *Env) Nvim(args []string) int {
 	}
 	if args[0] == "--fresh" {
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim [--fresh] <agent-pane-id> [file]")
-			return 1
+			return errors.New("usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 		}
 		agent, _ = parsePane(args[1])
 		file, fresh = "", true
@@ -260,12 +254,10 @@ func (e *Env) Nvim(args []string) int {
 		}
 	}
 	if err := os.MkdirAll(e.SockDir, 0o700); err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: cannot create "+e.SockDir)
-		return 1
+		return errors.New("cannot create " + e.SockDir)
 	}
 	if st, err := os.Stat(e.SockDir); err != nil || st.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
-		fmt.Fprintln(os.Stderr, "weaver: "+e.SockDir+" is not owned by you")
-		return 1
+		return errors.New(e.SockDir + " is not owned by you")
 	}
 	os.Chmod(e.SockDir, 0o700)
 	sock := e.nvimSock(agent)
@@ -276,7 +268,7 @@ func (e *Env) Nvim(args []string) int {
 			if nv := readNvimPane(e, agent); nv != "" && nv != e.MyPane {
 				e.focus(nv)
 			}
-			return 0
+			return nil
 		}
 	}
 	os.Remove(sock)
@@ -299,13 +291,11 @@ func (e *Env) Nvim(args []string) int {
 	}
 	dir, err := Runtime()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-		return 1
+		return err
 	}
 	nvim, err := exec.LookPath("nvim")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "weaver: nvim is not installed")
-		return 1
+		return errors.New("nvim is not installed")
 	}
 	env := append(os.Environ(), "WEAVER_PANE="+string(agent), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
 	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
@@ -318,6 +308,5 @@ func (e *Env) Nvim(args []string) int {
 	if file != "" {
 		argv = append(argv, file)
 	}
-	syscall.Exec(nvim, argv, env)
-	return 1
+	return fmt.Errorf("nvim: %w", syscall.Exec(nvim, argv, env))
 }
