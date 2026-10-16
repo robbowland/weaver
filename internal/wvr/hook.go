@@ -65,6 +65,15 @@ type hk struct {
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
 func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
+	var ev hookInput
+	if decodeRecord(firstJSON(in), &ev) != nil {
+		return 0
+	}
+	return e.hook(ev, mode, pane, agent, me)
+}
+
+// hook folds event ev into the state of the agent in pane.
+func (e *Env) hook(ev hookInput, mode, pane, agent, me string) int {
 	h := &hk{Pane: pane, AgentKind: agent, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
@@ -91,10 +100,6 @@ func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 			}
 			pk = peek(h.sf)
 		}
-	}
-	var ev hookInput
-	if decodeRecord(firstJSON(in), &ev) != nil {
-		return 0
 	}
 	if mode == "async" && !asyncGate(ev, pk.state) {
 		return 0

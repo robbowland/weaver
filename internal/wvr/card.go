@@ -23,7 +23,7 @@ func cardAge(s int64) string { return age(s) }
 // cardOne: runs of tabs, newlines and returns as one space.
 var reTNR = regexp.MustCompile(`[\t\n\r]+`)
 
-func cardOne(v any) string { return reTNR.ReplaceAllString(tostring(v), " ") }
+func cardOne(s string) string { return reTNR.ReplaceAllString(s, " ") }
 
 // wrap: words into lines of at most n characters (a longer word is cut).
 func wrap(t string, n int) []string {
@@ -46,7 +46,7 @@ func wrap(t string, n int) []string {
 
 // field is a card's field: its label, then the value wrapped under itself,
 // at most lines lines, in w columns.
-func field(w int, label string, text any, color string, lines int) []string {
+func field(w int, label, text, color string, lines int) []string {
 	t := cardOne(text)
 	if t == "" {
 		return nil

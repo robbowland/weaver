@@ -224,8 +224,7 @@ func joinRaw(a []json.RawMessage) string {
 
 // one is jq's one($n): runs of white space and control characters as one
 // space, trimmed, the first n characters.
-func one(v any, n int) string {
-	s := tostring(v)
+func one(s string, n int) string {
 	var b strings.Builder
 	sp := false
 	for _, r := range s {
@@ -253,8 +252,7 @@ func runeSlice(s string, n int) string {
 }
 
 // line is jq's line: runs of control characters (and DEL) as one space.
-func line(v any) string {
-	s := tostring(v)
+func line(s string) string {
 	var b strings.Builder
 	c := false
 	for _, r := range s {

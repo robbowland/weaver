@@ -1,7 +1,6 @@
 package wvr
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -17,108 +16,178 @@ import (
 // machine understands; `wvr adapt codex` translates Codex's own hook
 // input into such an event first.
 
-func s(v any) string { return tostring(v) }
+// normEvent is one event of any agent, normalized (docs/design.md, Events
+// from other agents). Its text members may come as any JSON: a pid or a
+// pane as a number.
+type normEvent struct {
+	Agent      jsonText `json:"agent"`
+	Event      string   `json:"event"`
+	Session    jsonText `json:"session"`
+	Pid        jsonText `json:"pid"`
+	Pane       jsonText `json:"pane"`
+	Cwd        jsonText `json:"cwd"`
+	Transcript jsonText `json:"transcript"`
+	PromptID   jsonText `json:"prompt_id"`
+	Title      jsonText `json:"title"`
+	Source     jsonText `json:"source"` // session_start
+	// prompt: the text, and false for a machine-injected one.
+	Prompt  jsonText `json:"prompt"`
+	User    *bool    `json:"user"`
+	Waiting jsonText `json:"waiting"` // needs_you
+	// tool_done: an edit's file, else its command and the paths it touched.
+	Tool    jsonText   `json:"tool"`
+	File    jsonText   `json:"file"`
+	Command jsonText   `json:"command"`
+	Paths   []jsonText `json:"paths"`
+	Error   jsonText   `json:"error"`   // tool_failed, error
+	Message jsonText   `json:"message"` // stop
+	// subagent_start, subagent_stop.
+	Subagent     jsonText `json:"subagent"`
+	SubagentType jsonText `json:"subagent_type"`
+}
 
-// normalized turns a normalized event into Claude Code hook input.
-func normalized(n obj) map[string]any {
-	h := map[string]any{
-		"session_id": s(n.get("session", "")), "transcript_path": s(n.get("transcript", "")), "cwd": s(n.get("cwd", "")),
-		"prompt_id": s(n.get("prompt_id", "")), "session_title": s(n.get("title", "")),
+// hookOf is the Claude Code hook input event n stands for; its Event is ""
+// for none.
+func hookOf(n normEvent) hookInput {
+	h := hookInput{SessionID: string(n.Session), Transcript: string(n.Transcript), Cwd: string(n.Cwd),
+		PromptID: string(n.PromptID), Title: string(n.Title)}
+	tool := func(name string, input map[string]string) {
+		h.ToolName = name
+		h.ToolInput, _ = json.Marshal(input)
 	}
-	set := func(kv ...any) {
-		for i := 0; i+1 < len(kv); i += 2 {
-			h[kv[i].(string)] = kv[i+1]
-		}
-	}
-	switch n["event"] {
+	switch n.Event {
 	case "session_start":
-		set("hook_event_name", "SessionStart", "source", n.get("source", "startup"))
+		h.Event, h.Source = "SessionStart", string(n.Source)
+		if h.Source == "" {
+			h.Source = "startup"
+		}
 	case "compact":
-		set("hook_event_name", "SessionStart", "source", "compact")
+		h.Event, h.Source = "SessionStart", "compact"
 	case "prompt":
-		src := "user"
-		if n["user"] == false {
-			src = "system"
+		h.Event, h.Prompt, h.Source = "UserPromptSubmit", string(n.Prompt), "user"
+		if n.User != nil && !*n.User {
+			h.Source = "system"
 		}
-		set("hook_event_name", "UserPromptSubmit", "prompt", s(n.get("prompt", "")), "source", src)
 	case "needs_you":
-		set("hook_event_name", "Notification", "notification_type", "permission_prompt", "message", s(n.get("waiting", "")))
+		h.Event, h.Ntype, h.Message = "Notification", "permission_prompt", string(n.Waiting)
 	case "answered":
-		set("hook_event_name", "Notification", "notification_type", "elicitation_response", "message", "")
+		h.Event, h.Ntype = "Notification", "elicitation_response"
 	case "tool_done":
-		if f := n.get("file", ""); f != "" {
-			set("hook_event_name", "PostToolUse", "tool_name", "Edit", "tool_input", map[string]any{"file_path": s(f)})
-		} else {
-			var ps []string
-			if a, ok := n.get("paths", []any{}).([]any); ok {
-				for _, p := range a {
-					ps = append(ps, s(p))
-				}
-			}
-			c := firstOf(n.get("command", nil), n.get("tool", nil), "")
-			set("hook_event_name", "PostToolUse", "tool_name", "Bash", "tool_input", map[string]any{"command": s(c) + " " + strings.Join(ps, " ")})
+		h.Event = "PostToolUse"
+		if n.File != "" {
+			tool("Edit", map[string]string{"file_path": string(n.File)})
+			break
 		}
+		c := n.Command
+		if c == "" {
+			c = n.Tool
+		}
+		ps := make([]string, len(n.Paths))
+		for i, p := range n.Paths {
+			ps[i] = string(p)
+		}
+		tool("Bash", map[string]string{"command": string(c) + " " + strings.Join(ps, " ")})
 	case "tool_failed":
-		set("hook_event_name", "PostToolUseFailure", "tool_name", s(n.get("tool", "")), "tool_input", map[string]any{}, "error", s(n.get("error", "")))
+		h.Event, h.Error = "PostToolUseFailure", n.Error
+		tool(string(n.Tool), map[string]string{})
 	case "interrupt":
-		set("hook_event_name", "PostToolUseFailure", "tool_name", s(n.get("tool", "")), "tool_input", map[string]any{}, "is_interrupt", true)
+		h.Event, h.Interrupt = "PostToolUseFailure", true
+		tool(string(n.Tool), map[string]string{})
 	case "stop":
-		set("hook_event_name", "Stop", "last_assistant_message", s(n.get("message", "")))
+		h.Event, h.LastMessage = "Stop", string(n.Message)
 	case "error":
-		set("hook_event_name", "StopFailure", "error", s(n.get("error", "")))
+		h.Event, h.Error = "StopFailure", n.Error
 	case "session_end":
-		set("hook_event_name", "SessionEnd")
+		h.Event = "SessionEnd"
 	case "subagent_start":
-		set("hook_event_name", "SubagentStart", "agent_id", s(n.get("subagent", "")), "agent_type", s(n.get("subagent_type", "")))
+		h.Event, h.AgentID, h.AgentType = "SubagentStart", string(n.Subagent), string(n.SubagentType)
 	case "subagent_stop":
-		set("hook_event_name", "SubagentStop", "agent_id", s(n.get("subagent", "")), "agent_type", s(n.get("subagent_type", "")))
+		h.Event, h.AgentID, h.AgentType = "SubagentStop", string(n.Subagent), string(n.SubagentType)
 	}
 	return h
 }
 
 var rePatchFile = regexp.MustCompile(`\*\*\* (?:Update|Add) File: ([^\n]+)`)
 
-// codex turns Codex's hook input into a normalized event. Its hooks mirror Claude Code's, without Notification; tool
-// names differ, so any tool may have changed files.
-func codex(c obj) obj {
-	n := obj{"agent": "codex", "session": s(c.get("session_id", "")), "cwd": s(c.get("cwd", "")),
-		"transcript": c.get("transcript_path", ""), "prompt_id": c.get("turn_id", "")}
-	ti, _ := c["tool_input"].(map[string]any)
-	cmdOf := func() string {
-		v := firstOf(obj(ti).get("command", nil), obj(ti).get("cmd", nil), "")
-		if a, ok := v.([]any); ok {
-			var p []string
-			for _, x := range a {
-				p = append(p, s(x))
-			}
-			return strings.Join(p, " ")
+// codexInput is Codex's hook input: Claude Code's, with a turn_id, its own
+// tools, and no Notification.
+type codexInput struct {
+	Event       string          `json:"hook_event_name"`
+	SessionID   jsonText        `json:"session_id"`
+	TurnID      jsonText        `json:"turn_id"`
+	Cwd         jsonText        `json:"cwd"`
+	Transcript  jsonText        `json:"transcript_path"`
+	Source      jsonText        `json:"source"`
+	Prompt      jsonText        `json:"prompt"`
+	ToolName    jsonText        `json:"tool_name"`
+	ToolInput   json.RawMessage `json:"tool_input"`
+	LastMessage jsonText        `json:"last_assistant_message"`
+	AgentID     jsonText        `json:"agent_id"`
+	AgentType   jsonText        `json:"agent_type"`
+}
+
+// codexTool is what weaver reads of a Codex tool call's input.
+type codexTool struct {
+	Command  jsonArgs `json:"command"`
+	Cmd      jsonArgs `json:"cmd"`
+	FilePath jsonText `json:"file_path"`
+	Path     jsonText `json:"path"`
+}
+
+// jsonArgs is a command, as text or as its argv (joined by spaces).
+type jsonArgs string
+
+func (a *jsonArgs) UnmarshalJSON(b []byte) error {
+	var argv []jsonText
+	if json.Unmarshal(b, &argv) == nil {
+		ps := make([]string, len(argv))
+		for i, x := range argv {
+			ps[i] = string(x)
 		}
-		return s(v)
+		*a = jsonArgs(strings.Join(ps, " "))
+		return nil
 	}
-	switch c["hook_event_name"] {
+	var t jsonText
+	bestEffort(t.UnmarshalJSON(b))
+	*a = jsonArgs(t)
+	return nil
+}
+
+// codex is the normalized event Codex's hook input stands for. Its tool
+// names differ from Claude Code's, so any tool may have changed files.
+func codex(c codexInput) normEvent {
+	n := normEvent{Agent: "codex", Session: c.SessionID, Cwd: c.Cwd, Transcript: c.Transcript, PromptID: c.TurnID}
+	var t codexTool
+	bestEffort(decodeRecord(c.ToolInput, &t))
+	cmd := t.Command
+	if cmd == "" {
+		cmd = t.Cmd
+	}
+	switch c.Event {
 	case "SessionStart":
-		n["event"], n["source"] = "session_start", c.get("source", "startup")
+		n.Event, n.Source = "session_start", c.Source
 	case "UserPromptSubmit":
-		n["event"], n["prompt"] = "prompt", c.get("prompt", "")
+		n.Event, n.Prompt = "prompt", c.Prompt
 	case "PermissionRequest":
-		v := firstOf(obj(ti).get("command", nil), obj(ti).get("cmd", nil), obj(ti).get("file_path", nil), obj(ti).get("path", nil), "")
-		w := s(v)
-		if a, ok := v.([]any); ok {
-			var p []string
-			for _, x := range a {
-				p = append(p, s(x))
+		w := string(cmd)
+		for _, x := range []jsonText{t.FilePath, t.Path} {
+			if w == "" {
+				w = string(x)
 			}
-			w = strings.Join(p, " ")
 		}
-		n["event"], n["waiting"] = "needs_you", s(c.get("tool_name", ""))+": "+w
+		n.Event, n.Waiting = "needs_you", c.ToolName+": "+jsonText(w)
 	case "PostToolUse":
-		f := firstOf(obj(ti).get("file_path", nil), obj(ti).get("path", nil))
-		if f == nil {
+		f := string(t.FilePath)
+		if f == "" {
+			f = string(t.Path)
+		}
+		if f == "" {
+			// apply_patch: the first file its patch names.
 			var walk func(v any)
 			walk = func(v any) {
 				switch x := v.(type) {
 				case string:
-					if f == nil {
+					if f == "" {
 						if m := rePatchFile.FindStringSubmatch(x); m != nil {
 							f = m[1]
 						}
@@ -133,33 +202,30 @@ func codex(c obj) obj {
 					}
 				}
 			}
-			walk(c["tool_input"])
-		}
-		if f == nil {
-			f = ""
+			var v any
+			bestEffort(json.Unmarshal(c.ToolInput, &v))
+			walk(v)
 		}
 		file := ""
-		switch fs := s(f); {
-		case strings.HasPrefix(fs, "/"):
-			file = fs
-		case fs != "":
-			file = s(c.get("cwd", "")) + "/" + fs
+		switch {
+		case strings.HasPrefix(f, "/"):
+			file = f
+		case f != "":
+			file = string(c.Cwd) + "/" + f
 		}
-		n["event"], n["tool"], n["file"], n["command"] = "tool_done", c.get("tool_name", ""), file, cmdOf()
+		n.Event, n.Tool, n.File, n.Command = "tool_done", c.ToolName, jsonText(file), jsonText(cmd)
 	case "Interrupt":
-		n["event"] = "interrupt"
+		n.Event = "interrupt"
 	case "Stop":
-		n["event"], n["message"] = "stop", c.get("last_assistant_message", "")
+		n.Event, n.Message = "stop", c.LastMessage
 	case "SessionEnd":
-		n["event"] = "session_end"
+		n.Event = "session_end"
 	case "SubagentStart":
-		n["event"], n["subagent"], n["subagent_type"] = "subagent_start", c.get("agent_id", ""), c.get("agent_type", "")
+		n.Event, n.Subagent, n.SubagentType = "subagent_start", c.AgentID, c.AgentType
 	case "SubagentStop":
-		n["event"], n["subagent"], n["subagent_type"] = "subagent_stop", c.get("agent_id", ""), c.get("agent_type", "")
+		n.Event, n.Subagent, n.SubagentType = "subagent_stop", c.AgentID, c.AgentType
 	case "PreCompact", "PostCompact":
-		n["event"] = "compact"
-	default:
-		n["event"] = "none"
+		n.Event = "compact"
 	}
 	return n
 }
@@ -171,29 +237,25 @@ func (e *Env) Event(adapter string, bell bool) int {
 		return 1
 	}
 	in, _ := io.ReadAll(os.Stdin)
-	d := json.NewDecoder(bytes.NewReader(in))
-	d.UseNumber()
-	var v any
-	if d.Decode(&v) != nil {
-		return 0
-	}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return 0
-	}
-	n := obj(m)
+	var n normEvent
 	if adapter == "codex" {
-		n = codex(n)
+		var c codexInput
+		if decodeRecord(firstJSON(in), &c) != nil {
+			return 0
+		}
+		n = codex(c)
+	} else if decodeRecord(firstJSON(in), &n) != nil {
+		return 0
 	}
-	strip := func(x any) string {
+	strip := func(t jsonText) string {
 		return strings.Map(func(r rune) rune {
 			if r < 0x20 {
 				return -1
 			}
 			return r
-		}, tostring(x))
+		}, string(t))
 	}
-	agent, pid, pane := strip(n.get("agent", "")), strip(n.get("pid", "")), strip(n.get("pane", ""))
+	agent, pid, pane := strip(n.Agent), strip(n.Pid), strip(n.Pane)
 	// An agent's name goes into the state file and nvim's events as it is.
 	if agent == "" || agent[0] < 'a' || agent[0] > 'z' || strings.Trim(agent, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
 		return 0
@@ -212,12 +274,12 @@ func (e *Env) Event(adapter string, bell bool) int {
 	if pane == "" || e.Session == "" {
 		return 0
 	}
-	h := normalized(n)
-	if _, ok := h["hook_event_name"]; !ok {
+	h := hookOf(n)
+	if h.Event == "" {
 		return 0
 	}
 	mode := "sync"
-	if ev := tostring(h["hook_event_name"]); ev == "PostToolUse" || strings.HasPrefix(ev, "Subagent") {
+	if h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent") {
 		mode = "async"
 	}
 	if pid == "" {
@@ -225,11 +287,10 @@ func (e *Env) Event(adapter string, bell bool) int {
 	}
 	// The agent process, once per session: the nearest ancestor that is
 	// not a shell (an agent may run its hooks through one).
-	if pid == "" && adapter != "" && h["hook_event_name"] == "SessionStart" {
+	if pid == "" && adapter != "" && h.Event == "SessionStart" {
 		pid = agentAncestor()
 	}
-	b, _ := json.Marshal(h)
-	rc := e.Hook(b, mode, pane, agent, pid)
+	rc := e.hook(h, mode, pane, agent, pid)
 	if bell {
 		bl := os.Getenv("WEAVER_BELL")
 		if bl == "" {

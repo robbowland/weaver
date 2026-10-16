@@ -80,59 +80,6 @@ type Row struct {
 	Doing                                                                              string // the command it runs now
 }
 
-// obj is a JSON object read with its numbers as they were written.
-type obj map[string]any
-
-func readObj(b []byte) (obj, bool) {
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.UseNumber()
-	var v any
-	if d.Decode(&v) != nil {
-		return nil, false
-	}
-	o, ok := v.(map[string]any)
-	return obj(o), ok
-}
-
-// get is jq's .k // d: the value unless it is missing, null or false.
-func (o obj) get(k string, d any) any {
-	if o == nil {
-		return d
-	}
-	v, ok := o[k]
-	if !ok || v == nil || v == false {
-		return d
-	}
-	return v
-}
-
-// str is jq's tostring with control characters made spaces, as the rows'
-// fields are printed.
-func str(v any) string { return clean(tostring(v)) }
-
-func tostring(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return "null"
-	case string:
-		return x
-	case json.Number:
-		return x.String()
-	case bool:
-		if x {
-			return "true"
-		}
-		return "false"
-	case float64:
-		return strconv.FormatFloat(x, 'f', -1, 64)
-	case int:
-		return strconv.Itoa(x)
-	default:
-		b, _ := json.Marshal(x)
-		return string(b)
-	}
-}
-
 // clean makes each run of control characters one space (jq's
 // gsub("[\u0000-\u001f]+"; " ")).
 func clean(s string) string {
@@ -171,20 +118,6 @@ func numberOr(n json.Number, d float64) float64 {
 		return f
 	}
 	return d
-}
-
-// num is a JSON value as a number (jq's arithmetic); ok false when it is not one.
-func num(v any) (float64, bool) {
-	switch x := v.(type) {
-	case json.Number:
-		f, err := x.Float64()
-		return f, err == nil
-	case float64:
-		return x, true
-	case int:
-		return float64(x), true
-	}
-	return 0, false
 }
 
 // AgentRows are the session's agents: from their
@@ -245,15 +178,13 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		// Claude Code's own session file says more than the hooks can:
 		// a long tool you approved is work, an unreported dialog needs
 		// you, quiet after Esc is interrupted.
-		var c obj
-		if c0, ok := live[string(s.Pid)]; ok && tostring(c0.get("sessionId", "")) == s.SessionID {
-			c = c0
+		var c *claudeSession
+		if c0, ok := live[string(s.Pid)]; ok && c0.SessionID == s.SessionID {
+			c = &c0
 		}
-		cu := 0.0
+		cu, cst, cwait := 0.0, "", ""
 		if c != nil {
-			if v, ok := num(c.get("statusUpdatedAt", 0)); ok {
-				cu = math.Floor(v / 1000)
-			}
+			cu, cst, cwait = math.Floor(c.StatusUpdatedAt/1000), c.Status, c.WaitingFor
 		}
 		st0 := s.State
 		if st0 == "" {
@@ -261,10 +192,6 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		st := st0
 		changed := false
-		cst := ""
-		if c != nil {
-			cst = tostring(c.get("status", nil))
-		}
 		since := numberOr(s.Since, 0)
 		switch {
 		case c == nil:
@@ -291,7 +218,10 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Seen = strconv.FormatBool(s.Seen)
 		r.Prompt = clean(s.Prompt)
 		if st == StateNeedsYou && st0 != StateNeedsYou {
-			r.Waiting = str(c.get("waitingFor", "input"))
+			r.Waiting = "input"
+			if cwait != "" {
+				r.Waiting = clean(cwait)
+			}
 		} else {
 			r.Waiting = clean(s.Waiting)
 		}
@@ -377,20 +307,21 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	return out, now
 }
 
-// firstOf is jq's a // b // d over values already defaulted by get.
-func firstOf(vs ...any) any {
-	for _, v := range vs {
-		if v != nil && v != false {
-			return v
-		}
-	}
-	return nil
+// claudeSession is Claude Code's own record of a session it runs
+// (~/.claude/sessions/<pid>.json): its status, which the hooks cannot
+// report.
+type claudeSession struct {
+	Pid             jsonText `json:"pid"`
+	SessionID       string   `json:"sessionId"`
+	Status          string   `json:"status"`          // busy, waiting, idle
+	StatusUpdatedAt float64  `json:"statusUpdatedAt"` // epoch ms
+	WaitingFor      string   `json:"waitingFor"`
 }
 
 // claudeLive are the Claude Code sessions running on this machine, from
 // their ~/.claude/sessions/<pid>.json files (each one line), by pid.
-func (e *Env) claudeLive() map[string]obj {
-	m := map[string]obj{}
+func (e *Env) claudeLive() map[string]claudeSession {
+	m := map[string]claudeSession{}
 	ents, err := os.ReadDir(e.ClaudeDir + "/sessions")
 	if err != nil {
 		return m
@@ -403,11 +334,11 @@ func (e *Env) claudeLive() map[string]obj {
 		if err != nil {
 			continue
 		}
-		o, ok := readObj([]byte(l))
-		if !ok {
+		var c claudeSession
+		if decodeRecord([]byte(l), &c) != nil || c.Pid == "" {
 			continue
 		}
-		m[tostring(o["pid"])] = o
+		m[string(c.Pid)] = c
 	}
 	return m
 }
