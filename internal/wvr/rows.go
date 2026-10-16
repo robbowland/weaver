@@ -13,62 +13,17 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
-// Pane is one pane of the session.
-type Pane struct {
-	ID       PaneID
-	Tab      WindowID
-	TabName  string
-	TabIndex int
-	Exited   bool
-	Cmd      string
-	W, H     int
-	X, Y     int
-	Title    string
-	Cwd      string
-	Focused  bool
-}
-
 // Panes lists the session's panes (tmux list-panes -s), retried twice: an
 // empty answer is no answer.
-func (e *Env) Panes() ([]Pane, bool) {
-	const us = "\x1f"
-	f := strings.Join([]string{"#{pane_id}", "#{window_id}", "#{window_name}", "#{window_index}", "#{pane_dead}",
-		"#{pane_start_command}", "#{pane_width}", "#{pane_height}", "#{pane_left}", "#{pane_top}", "#{pane_title}",
-		"#{pane_current_path}", "#{pane_active}"}, us)
+func (e *Env) Panes() ([]tmux.Pane, bool) {
 	for i := 0; i < 3; i++ {
-		out, err := e.Tmux("list-panes", "-s", "-t", "="+e.Session, "-F", f)
-		if err == nil {
-			var ps []Pane
-			for _, l := range strings.Split(string(out), "\n") {
-				x := strings.Split(l, us)
-				if len(x) != 13 {
-					continue
-				}
-				p := Pane{TabName: x[2], Exited: x[4] == "1", Cmd: x[5], Title: x[10], Cwd: x[11], Focused: x[12] == "1"}
-				var okp, okw bool
-				p.ID, okp = parsePane(x[0])
-				p.Tab, okw = parseWindow(x[1])
-				n := []*int{&p.TabIndex, &p.W, &p.H, &p.X, &p.Y}
-				s := []string{x[3], x[6], x[7], x[8], x[9]}
-				ok := okp && okw
-				for j := range n {
-					v, err := strconv.Atoi(s[j])
-					if err != nil || !digits(s[j]) {
-						ok = false
-						break
-					}
-					*n[j] = v
-				}
-				if ok {
-					ps = append(ps, p)
-				}
-			}
-			if len(ps) > 0 {
-				return ps, true
-			}
+		out, err := e.Tmux("list-panes", "-s", "-t", "="+e.Session, "-F", tmux.PanesFormat)
+		if ps := tmux.ParsePanes(out); err == nil && len(ps) > 0 {
+			return ps, true
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -79,8 +34,8 @@ func (e *Env) Panes() ([]Pane, bool) {
 // navigation show it: its text with control characters made spaces.
 type Row struct {
 	State                                                             agent.State
-	Pane                                                              PaneID
-	Tab                                                               WindowID
+	Pane                                                              tmux.PaneID
+	Tab                                                               tmux.WindowID
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
 	Tabname, Agent, Bgtasks, Ttask, Tname                             string
 	Since                                                             int64 // epoch s
@@ -148,7 +103,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	if !ok {
 		return nil, now
 	}
-	byID := map[PaneID]*Pane{}
+	byID := map[tmux.PaneID]*tmux.Pane{}
 	trusted := e.MyPane == ""
 	for i := range panes {
 		id := panes[i].ID

@@ -15,6 +15,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
@@ -30,7 +31,7 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 // hk is one hook run: the event's fields, the stored state's (o*), and what
 // it makes of them. Exported fields go to the background run.
 type hk struct {
-	Pane            PaneID
+	Pane            tmux.PaneID
 	AgentKind, SKey string
 	Mode            string `json:"-"`
 	sf              string
@@ -58,7 +59,7 @@ type hk struct {
 	TurnRoots                                                             string
 	Moved                                                                 bool
 	SnapPrev, SnapStart, SnapEnd, FirstTouch, PrevPrompt, TurnPrompt      string
-	NV                                                                    PaneID
+	NV                                                                    tmux.PaneID
 	// What it is running now (a Bash command, from the async PreToolUse
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
@@ -68,7 +69,7 @@ type hk struct {
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
-func (e *Env) Hook(in []byte, mode string, pane PaneID, agent, me string) int {
+func (e *Env) Hook(in []byte, mode string, pane tmux.PaneID, agent, me string) int {
 	var ev hookInput
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
 		return 0
@@ -77,7 +78,7 @@ func (e *Env) Hook(in []byte, mode string, pane PaneID, agent, me string) int {
 }
 
 // hook folds event ev into the state of the agent in pane.
-func (e *Env) hook(ev hookInput, mode string, pane PaneID, agentName, me string) int {
+func (e *Env) hook(ev hookInput, mode string, pane tmux.PaneID, agentName, me string) int {
 	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
@@ -451,7 +452,7 @@ func (h *hk) sess() agent.Record {
 }
 
 // readNvimPane is the agent's nvim pane, when that nvim still runs.
-func readNvimPane(e *Env, pane PaneID) PaneID {
+func readNvimPane(e *Env, pane tmux.PaneID) tmux.PaneID {
 	b, err := os.ReadFile(e.paneFile(pane, "nvim"))
 	if err != nil {
 		return ""
@@ -472,7 +473,7 @@ func readNvimPane(e *Env, pane PaneID) PaneID {
 			return ""
 		}
 	}
-	return PaneID(nv)
+	return tmux.PaneID(nv)
 }
 
 // writeState writes the state file from the hook's fields through its lock, which the rename releases.

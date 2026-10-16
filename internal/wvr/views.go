@@ -17,6 +17,7 @@ import (
 	"time"
 
 	weaver "github.com/robbowland/weaver"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Views: the weaver session's windows beside home that show work from
@@ -199,15 +200,15 @@ var (
 )
 
 // viewWindows are the session's view windows, by view name: window ids.
-func (e *Env) viewWindows() map[string]WindowID {
+func (e *Env) viewWindows() map[string]tmux.WindowID {
 	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id} #{@weaver-view}")
-	ws := map[string]WindowID{}
+	ws := map[string]tmux.WindowID{}
 	if err != nil {
 		return ws
 	}
 	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		id, v, _ := strings.Cut(l, " ")
-		if w, ok := parseWindow(id); ok && v != "" {
+		if w, ok := tmux.ParseWindow(id); ok && v != "" {
 			ws[v] = w
 		}
 	}
@@ -216,19 +217,19 @@ func (e *Env) viewWindows() map[string]WindowID {
 
 // OpenView shows view name, started first if it is not running. Its
 // window id.
-func (e *Env) OpenView(name string) (WindowID, error) {
+func (e *Env) OpenView(name string) (tmux.WindowID, error) {
 	return e.view(name, true)
 }
 
 // startView starts view name, if it is not running, without going there.
-func (e *Env) startView(name string) (WindowID, error) {
+func (e *Env) startView(name string) (tmux.WindowID, error) {
 	return e.view(name, false)
 }
 
-func (e *Env) view(name string, show bool) (WindowID, error) {
+func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
 	if id := e.viewWindows()[name]; id != "" {
 		if show {
-			e.Tmux("select-window", "-t", id.target())
+			e.Tmux("select-window", "-t", id.Target())
 		}
 		return id, nil
 	}
@@ -253,8 +254,8 @@ func (e *Env) view(name string, show bool) (WindowID, error) {
 	if err != nil {
 		return "", fmt.Errorf("tmux could not open the %s view", v.label)
 	}
-	id, _ := parseWindow(string(out))
-	e.Tmux("set-option", "-w", "-t", id.target(), "@weaver-view", name)
+	id, _ := tmux.ParseWindow(string(out))
+	e.Tmux("set-option", "-w", "-t", id.Target(), "@weaver-view", name)
 	// A session started before its views (or an older weaver) has no strip.
 	e.SetStrip()
 	return id, nil
@@ -324,7 +325,7 @@ func (e *Env) From(args []string) error {
 	case len(rest) >= 1 && rest[0] == "linear":
 		d := ""
 		if id := e.viewWindows()["linear"]; id != "" {
-			if out, err := e.Tmux("display-message", "-p", "-t", id.target(), "#{pane_current_path}"); err == nil {
+			if out, err := e.Tmux("display-message", "-p", "-t", id.Target(), "#{pane_current_path}"); err == nil {
 				d = strings.TrimSpace(string(out))
 			}
 		}

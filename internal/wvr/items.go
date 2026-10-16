@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Reading work items (workitem.go): finding a repository's checkout, and
@@ -282,8 +284,8 @@ func fetchLinear(r linearRef) (workItem, error) {
 
 // threadOnBranch is the agent pane of a running thread of this session on
 // branch of repo, or "".
-func (e *Env) threadOnBranch(repo, branch string) PaneID {
-	live := map[PaneID]bool{}
+func (e *Env) threadOnBranch(repo, branch string) tmux.PaneID {
+	live := map[tmux.PaneID]bool{}
 	ps, _ := e.Panes()
 	for _, p := range ps {
 		if !p.Exited {

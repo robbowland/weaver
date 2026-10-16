@@ -9,23 +9,24 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Moving between agents: the board's jumps, Alt y (go home), Alt 1 (next),
 // and tmux's hooks as you look (seen) or resize (fit).
 
 // focus moves your client to pane p (its window first).
-func (e *Env) focus(p PaneID) {
-	e.Tmux("select-window", "-t", p.target(), ";", "select-pane", "-t", p.target())
+func (e *Env) focus(p tmux.PaneID) {
+	e.Tmux("select-window", "-t", p.Target(), ";", "select-pane", "-t", p.Target())
 }
 
 // Goto is `wvr _goto PANE TAB`: jump to an agent from the home board
 // (which stays) and count it as seen; with no PANE, to the tab.
 func (e *Env) Goto(pane, tab string) {
-	p, ok := parsePane(pane)
+	p, ok := tmux.ParsePane(pane)
 	if !ok {
-		if w, ok := parseWindow(tab); ok {
-			e.Tmux("select-window", "-t", w.target())
+		if w, ok := tmux.ParseWindow(tab); ok {
+			e.Tmux("select-window", "-t", w.Target())
 		}
 		return
 	}
@@ -35,7 +36,7 @@ func (e *Env) Goto(pane, tab string) {
 }
 
 type tab struct {
-	id         WindowID
+	id         tmux.WindowID
 	name, view string
 	active     bool
 }
@@ -48,7 +49,7 @@ func (e *Env) tabs() []tab {
 	var ts []tab
 	for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
 		f := strings.Split(l, us)
-		if id, ok := parseWindow(f[0]); ok && len(f) == 4 {
+		if id, ok := tmux.ParseWindow(f[0]); ok && len(f) == 4 {
 			ts = append(ts, tab{id, f[1], f[3], f[2] == "1"})
 		}
 	}
@@ -61,7 +62,7 @@ func (e *Env) tabs() []tab {
 func (e *Env) GoHome() {
 	ts := e.tabs()
 	var cur tab
-	var home WindowID
+	var home tmux.WindowID
 	for _, t := range ts {
 		if t.active && cur.id == "" {
 			cur = t
@@ -74,16 +75,16 @@ func (e *Env) GoHome() {
 	// Back where you came from; when that is gone (or was nowhere), home.
 	back := func() {
 		if l, _ := firstLine(lf); l != "" {
-			last, _ := parseWindow(l)
+			last, _ := tmux.ParseWindow(l)
 			for _, t := range ts {
 				if t.id == last && t.view == "" && t.id != home {
-					e.Tmux("select-window", "-t", last.target())
+					e.Tmux("select-window", "-t", last.Target())
 					return
 				}
 			}
 		}
 		if home != "" && cur.id != home {
-			e.Tmux("select-window", "-t", home.target())
+			e.Tmux("select-window", "-t", home.Target())
 		}
 	}
 	views := e.viewNames()
@@ -114,7 +115,7 @@ func (e *Env) GoHome() {
 		}
 		return
 	}
-	e.Tmux("select-window", "-t", home.target())
+	e.Tmux("select-window", "-t", home.Target())
 }
 
 // uiLock is one `wvr edit` or `wvr next` per session at a time: it waits
@@ -176,8 +177,8 @@ func (e *Env) Next() {
 	type c struct {
 		class int
 		since int64
-		pane  PaneID
-		tab   WindowID
+		pane  tmux.PaneID
+		tab   tmux.WindowID
 		label string
 	}
 	var cs []c
@@ -258,7 +259,7 @@ func (e *Env) Next() {
 
 // agentOf is the agent of pane p: the pane itself when it is an agent (it
 // has state, a thread record or an nvim), or the agent whose nvim it is.
-func (e *Env) agentOf(p PaneID) PaneID {
+func (e *Env) agentOf(p tmux.PaneID) tmux.PaneID {
 	if !digits(string(p)) {
 		return ""
 	}
@@ -283,11 +284,11 @@ func doneUnseen(l string) bool {
 // focus a window flagged as holding an agent done and unseen): if you are
 // still on it, the agent you are looking at is seen.
 func (e *Env) Seen(window string) {
-	win, ok := parseWindow(window)
+	win, ok := tmux.ParseWindow(window)
 	if !ok {
 		return
 	}
-	out, err := e.Tmux("display-message", "-p", "-t", win.target(), "#{window_active}:#{session_attached}:#{pane_id}")
+	out, err := e.Tmux("display-message", "-p", "-t", win.Target(), "#{window_active}:#{session_attached}:#{pane_id}")
 	if err != nil {
 		return
 	}
@@ -296,7 +297,7 @@ func (e *Env) Seen(window string) {
 	if len(f) != 3 || f[0] != "1" || f[1] == "" || f[1] == "0" || !strings.HasPrefix(f[2], "%") {
 		return
 	}
-	p, _ := parsePane(f[2])
+	p, _ := tmux.ParsePane(f[2])
 	a := e.agentOf(p)
 	if a == "" {
 		return
@@ -305,16 +306,16 @@ func (e *Env) Seen(window string) {
 		e.MarkSeen(a)
 	}
 	left := false
-	if ps, err := e.Tmux("list-panes", "-t", win.target(), "-F", "#{pane_id}"); err == nil {
+	if ps, err := e.Tmux("list-panes", "-t", win.Target(), "-F", "#{pane_id}"); err == nil {
 		for _, id := range strings.Fields(string(ps)) {
-			p, _ := parsePane(id)
+			p, _ := tmux.ParsePane(id)
 			if l, _ := firstLine(e.StateFile(p)); doneUnseen(l) {
 				left = true
 			}
 		}
 	}
 	if !left {
-		e.Tmux("set-option", "-w", "-u", "-t", win.target(), "@weaver-unseen")
+		e.Tmux("set-option", "-w", "-u", "-t", win.Target(), "@weaver-unseen")
 	}
 	e.PushStatus()
 }
@@ -350,28 +351,28 @@ func agentCols(total int) int {
 // agent back to its width, since tmux takes a narrower window's columns from
 // the rightmost pane, the agent's.
 func (e *Env) Fit(window string) {
-	win, ok := parseWindow(window)
+	win, ok := tmux.ParseWindow(window)
 	if !ok {
 		return
 	}
-	out, err := e.Tmux("list-panes", "-t", win.target(), "-F", "#{pane_id}")
+	out, err := e.Tmux("list-panes", "-t", win.Target(), "-F", "#{pane_id}")
 	if err != nil {
 		return
 	}
 	ps := strings.Fields(string(out))
 	for _, id := range ps {
-		p, _ := parsePane(id)
+		p, _ := tmux.ParsePane(id)
 		if !exists(e.threadFile(p)) {
 			continue
 		}
 		if readNvimPane(e, p) == "" || len(ps) != 2 {
 			continue
 		}
-		t, err := e.Tmux("display-message", "-p", "-t", p.target(), "#{window_width}")
+		t, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{window_width}")
 		total, ok := atoi(strings.TrimSpace(string(t)))
 		if err != nil || !ok {
 			continue
 		}
-		e.Tmux("resize-pane", "-t", p.target(), "-x", strconv.Itoa(agentCols(total)))
+		e.Tmux("resize-pane", "-t", p.Target(), "-x", strconv.Itoa(agentCols(total)))
 	}
 }

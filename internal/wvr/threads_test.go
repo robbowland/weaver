@@ -5,13 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // A thread closed before its nvim is recorded as bound: its nvim is the
 // pane in the agent's window started for that agent (or, as before, for
 // the agent's token).
 func TestThreadNvimByToken(t *testing.T) {
-	panes := []Pane{
+	panes := []tmux.Pane{
 		{ID: "4", Tab: "2", Cmd: "/bin/weaver nvim --thread 123"},
 		{ID: "5", Tab: "3", Cmd: "/bin/weaver nvim --thread 456"},
 		{ID: "6", Tab: "3", Cmd: "/bin/weaver _agent 456 claude"},
@@ -27,10 +29,10 @@ func TestThreadNvimByToken(t *testing.T) {
 	}
 	// Another window's nvim is not its own, nor is any pane of an agent
 	// weaver did not start.
-	if nv, _ := threadNvim(panes, Pane{ID: "8", Tab: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, tmux.Pane{ID: "8", Tab: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
 		t.Errorf("another window's nvim: got %q", nv)
 	}
-	if nv, _ := threadNvim(panes, Pane{ID: "9", Tab: "3", Cmd: "claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, tmux.Pane{ID: "9", Tab: "3", Cmd: "claude"}); nv != "" {
 		t.Errorf("not a thread's agent: got %q", nv)
 	}
 }
@@ -60,21 +62,9 @@ func TestThreadNumSkipsLeftovers(t *testing.T) {
 	}
 }
 
-// Panes and windows as tmux, zellij and weaver's own files name them.
-func TestPaneIDs(t *testing.T) {
-	for _, c := range []struct {
-		in   string
-		want PaneID
-		ok   bool
-	}{{"%3", "3", true}, {"terminal_3", "3", true}, {" 12\n", "12", true}, {"", "", false}, {"@3", "@3", false}} {
-		if p, ok := parsePane(c.in); p != c.want || ok != c.ok {
-			t.Errorf("parsePane(%q) = %q %v, want %q %v", c.in, p, ok, c.want, c.ok)
-		}
-	}
-	if w, ok := parseWindow("@12\n"); w != "12" || !ok || w.target() != "@12" {
-		t.Errorf("parseWindow: %q %v", w, ok)
-	}
-	if p := paneOfFile("/s/tmux-w_1_42.thread"); p != "42" || p.target() != "%42" {
+// Weaver's per-agent files are named by their pane.
+func TestPaneOfFile(t *testing.T) {
+	if p := paneOfFile("/s/tmux-w_1_42.thread"); p != "42" || p.Target() != "%42" {
 		t.Errorf("paneOfFile: %q", p)
 	}
 }

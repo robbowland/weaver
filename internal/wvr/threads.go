@@ -18,6 +18,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -100,7 +101,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
 // nofocus), nvim with nvimEnv too. Its window id.
-func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (WindowID, bool) {
+func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (tmux.WindowID, bool) {
 	args := []string{"new-window"}
 	if nofocus {
 		args = append(args, "-d")
@@ -112,14 +113,14 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	if err != nil || len(f) < 3 {
 		return "", false
 	}
-	tab, _ := parseWindow(f[0])
-	agentPane, _ := parsePane(f[1])
+	tab, _ := tmux.ParseWindow(f[0])
+	agentPane, _ := tmux.ParsePane(f[1])
 	total, ok := atoi(f[2])
 	if !ok {
 		total = 200
 	}
 	nvCols := max(total-agentCols(total)-1, 1)
-	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.target(),
+	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.Target(),
 		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION=" + e.Session}
 	for _, v := range nvimEnv {
 		sw = append(sw, "-e", v)
@@ -127,18 +128,18 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	out, err = e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agentPane))...)
 	f = strings.Fields(string(out))
 	if err != nil || len(f) < 2 {
-		e.Tmux("kill-window", "-t", tab.target())
+		e.Tmux("kill-window", "-t", tab.Target())
 		return "", false
 	}
-	nv, _ := parsePane(f[0])
+	nv, _ := tmux.ParsePane(f[0])
 	e.bindNvim(agentPane, nv, f[1])
-	e.Tmux("select-pane", "-t", nv.target(), "-T", "nvim: "+filepath.Base(dir))
+	e.Tmux("select-pane", "-t", nv.Target(), "-T", "nvim: "+filepath.Base(dir))
 	return tab, true
 }
 
 // bindNvim records nvim pane nv (process pid) as agent's:
 // <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim.)
-func (e *Env) bindNvim(agent, nv PaneID, pid string) {
+func (e *Env) bindNvim(agent, nv tmux.PaneID, pid string) {
 	os.MkdirAll(e.StateDir, 0o755)
 	nf := e.paneFile(agent, "nvim")
 	tmp := nf + "." + strconv.Itoa(os.Getpid())
@@ -149,9 +150,9 @@ func (e *Env) bindNvim(agent, nv PaneID, pid string) {
 
 // threadPlace: in the weaver session a thread's window index is its number
 // (home is 0), when free.
-func (e *Env) threadPlace(tab WindowID, n int) {
+func (e *Env) threadPlace(tab tmux.WindowID, n int) {
 	if e.WeaverSession() {
-		e.Tmux("move-window", "-d", "-s", tab.target(), "-t", "="+e.Session+":"+strconv.Itoa(n))
+		e.Tmux("move-window", "-d", "-s", tab.Target(), "-t", "="+e.Session+":"+strconv.Itoa(n))
 	}
 }
 
@@ -930,7 +931,7 @@ func worktreeRemovable(dir string) string {
 // AGENT` (or, before that, `wvr nvim --thread TOK`); and TOK, from the
 // agent's own start command (`wvr _agent TOK`), whose record of the
 // thread being opened goes with it. "" when there is none.
-func threadNvim(panes []Pane, agent Pane) (PaneID, string) {
+func threadNvim(panes []tmux.Pane, agent tmux.Pane) (tmux.PaneID, string) {
 	f := strings.Fields(agent.Cmd)
 	tok := ""
 	for i := 0; i+1 < len(f); i++ {
@@ -955,7 +956,7 @@ func threadNvim(panes []Pane, agent Pane) (PaneID, string) {
 // agent (the focused one) with its nvim, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
 func (e *Env) Close(args []string) error {
-	yes, rmwt, target := false, false, PaneID("")
+	yes, rmwt, target := false, false, tmux.PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--yes" || a == "-y":
@@ -965,14 +966,14 @@ func (e *Env) Close(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr close [--yes] [--remove-worktree] [pane-id]")
 		default:
-			target, _ = parsePane(a)
+			target, _ = tmux.ParsePane(a)
 		}
 	}
 	panes, ok := e.Panes()
 	if !ok {
 		return errors.New("tmux would not list the panes")
 	}
-	byID := map[PaneID]Pane{}
+	byID := map[tmux.PaneID]tmux.Pane{}
 	for _, p := range panes {
 		byID[p.ID] = p
 	}
@@ -986,7 +987,7 @@ func (e *Env) Close(args []string) error {
 		if e.agentOf(target) == "" {
 			target = ""
 			if me, ok := byID[e.MyPane]; ok {
-				found, n := PaneID(""), 0
+				found, n := tmux.PaneID(""), 0
 				for _, p := range panes {
 					id := p.ID
 					if p.Tab == me.Tab && (exists(e.StateFile(id)) || exists(e.threadFile(id))) {
@@ -1060,7 +1061,7 @@ func (e *Env) Close(args []string) error {
 	if th.WorktreeCreated && !th.Here && th.Worktree != "" {
 		tilde = formPath(th.Worktree)
 		var users []string
-		skip := map[PaneID]bool{agentPane: true, nv: true, e.MyPane: true}
+		skip := map[tmux.PaneID]bool{agentPane: true, nv: true, e.MyPane: true}
 		for _, p := range panes {
 			id := p.ID
 			if skip[id] || p.Exited || strings.HasSuffix(p.Cmd, " sidebar") {
@@ -1167,12 +1168,12 @@ func (e *Env) CloseTail(a []string) error {
 	for len(a) < 8 {
 		a = append(a, "")
 	}
-	agent, _ := parsePane(a[0])
-	nv, _ := parsePane(a[1])
+	agent, _ := tmux.ParsePane(a[0])
+	nv, _ := tmux.ParsePane(a[1])
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
-	e.Tmux("kill-pane", "-t", agent.target())
+	e.Tmux("kill-pane", "-t", agent.Target())
 	if nv != "" {
-		e.Tmux("kill-pane", "-t", nv.target())
+		e.Tmux("kill-pane", "-t", nv.Target())
 	}
 	if digits(tok) {
 		os.RemoveAll(e.threadsNew() + "/" + e.SKey + "_" + tok)
@@ -1224,7 +1225,7 @@ func (e *Env) CloseTail(a []string) error {
 // prompt, as if you typed it (a bracketed paste, then enter), only while it
 // waits for you to say more (idle, done, interrupted) unless forced.
 func (e *Env) Send(args []string) error {
-	want, force := PaneID(""), false
+	want, force := tmux.PaneID(""), false
 	usage := "usage: wvr send [--force] PANE < TEXT"
 	for _, a := range args {
 		switch {
@@ -1233,7 +1234,7 @@ func (e *Env) Send(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New(usage)
 		default:
-			want, _ = parsePane(a)
+			want, _ = tmux.ParsePane(a)
 		}
 	}
 	if !digits(string(want)) || isTTY(0) {
@@ -1274,11 +1275,11 @@ func (e *Env) Send(args []string) error {
 	if c.Run() != nil {
 		return errors.New("tmux would not take the text")
 	}
-	if _, err := e.Tmux("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", want.target()); err != nil {
+	if _, err := e.Tmux("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", want.Target()); err != nil {
 		return errors.New("tmux would not paste into pane " + string(want))
 	}
 	time.Sleep(200 * time.Millisecond)
-	e.Tmux("send-keys", "-t", want.target(), "Enter")
+	e.Tmux("send-keys", "-t", want.Target(), "Enter")
 	return nil
 }
 

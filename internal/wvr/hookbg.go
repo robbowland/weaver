@@ -18,6 +18,7 @@ import (
 
 	"github.com/neovim/go-client/nvim"
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
@@ -46,9 +47,9 @@ func (e *Env) hookBg() {
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
 	if h.State != h.Old.State {
 		if h.State == agent.StateDone {
-			e.Tmux("set-option", "-w", "-t", h.Pane.target(), "@weaver-unseen", "1")
+			e.Tmux("set-option", "-w", "-t", h.Pane.Target(), "@weaver-unseen", "1")
 		} else if h.Old.State == agent.StateDone {
-			e.Tmux("set-option", "-w", "-u", "-t", h.Pane.target(), "@weaver-unseen")
+			e.Tmux("set-option", "-w", "-u", "-t", h.Pane.Target(), "@weaver-unseen")
 		}
 	}
 	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
@@ -86,10 +87,10 @@ func (e *Env) sameRoot(h *hk) bool {
 }
 
 // renamePane titles a pane (the nvim beside an agent), bounded.
-func (e *Env) renamePane(p PaneID, title string) {
+func (e *Env) renamePane(p tmux.PaneID, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	args := []string{"select-pane", "-t", p.target(), "-T", title}
+	args := []string{"select-pane", "-t", p.Target(), "-T", title}
 	if !e.InTmux {
 		args = append(append([]string{}, e.TSock...), args...)
 	}
@@ -229,7 +230,7 @@ func (e *Env) pushStatus(labels bool) {
 	}
 	rows, _ := e.AgentRows()
 	var need, done, work int
-	var seenNow []PaneID
+	var seenNow []tmux.PaneID
 	for _, r := range rows {
 		if r.Pane == "" {
 			continue
@@ -308,7 +309,7 @@ func fzfPost(s, actions string) bool {
 
 // MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands
 // out.
-func (e *Env) MarkSeen(p PaneID) {
+func (e *Env) MarkSeen(p tmux.PaneID) {
 	sf := e.StateFile(p)
 	if !exists(sf) {
 		return
@@ -341,7 +342,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if names[string(r.Tab)+"\t"+label] {
 			continue
 		}
-		e.Tmux("rename-window", "-t", r.Tab.target(), label)
+		e.Tmux("rename-window", "-t", r.Tab.Target(), label)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -262,7 +263,7 @@ func (e *Env) Event(adapter string, bell bool) error {
 		return nil
 	}
 	// tmux's %3 and zellij's terminal_3 are pane 3.
-	if p, ok := parsePane(pane); ok {
+	if p, ok := tmux.ParsePane(pane); ok {
 		pane = string(p)
 	} else {
 		pane = ""
@@ -292,7 +293,7 @@ func (e *Env) Event(adapter string, bell bool) error {
 	if pid == "" && adapter != "" && h.Event == "SessionStart" {
 		pid = agentAncestor()
 	}
-	rc := e.hook(h, mode, PaneID(pane), agent, pid)
+	rc := e.hook(h, mode, tmux.PaneID(pane), agent, pid)
 	if bell {
 		bl := os.Getenv("WEAVER_BELL")
 		if bl == "" {

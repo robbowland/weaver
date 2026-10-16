@@ -13,6 +13,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The dashboard's preview: an agent's resume card, its screen, the keys, or
@@ -149,7 +150,7 @@ func (e *Env) Preview(args []string) string {
 		}
 		return e.lostCard(pane, title)
 	}
-	p := PaneID(pane)
+	p := tmux.PaneID(pane)
 	switch view {
 	case "help":
 		return Help()
@@ -163,7 +164,7 @@ func (e *Env) Preview(args []string) string {
 		if n, ok := envInt("FZF_PREVIEW_LINES"); ok {
 			lines = n
 		}
-		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", p.target())
+		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", p.Target())
 		ls := strings.Split(strings.TrimSuffix(string(scr), "\n"), "\n")
 		last := 0
 		for i, l := range ls {

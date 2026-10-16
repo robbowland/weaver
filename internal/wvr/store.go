@@ -9,6 +9,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The records weaver keeps under $STATE_DIR (docs/design.md, Files), as
@@ -135,7 +136,7 @@ func writeAtomic(f string, b []byte) error {
 }
 
 // threadFile is the record of the thread whose agent is in pane p.
-func (e *Env) threadFile(p PaneID) string {
+func (e *Env) threadFile(p tmux.PaneID) string {
 	return e.paneFile(p, "thread")
 }
 

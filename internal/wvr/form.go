@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -588,7 +589,7 @@ func checkThread(task string, fm form) string {
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) error {
 	var repoArg, branch, base, agentArg, itemArg string
-	var from PaneID
+	var from tmux.PaneID
 	var where Where
 	var itemKind ghKind
 	var task []string
@@ -606,7 +607,7 @@ func (e *Env) New(args []string) error {
 			case "--repo":
 				repoArg = v
 			case "--from":
-				from, _ = parsePane(v)
+				from, _ = tmux.ParsePane(v)
 			case "--branch", "-b":
 				branch = v
 			case "--base":

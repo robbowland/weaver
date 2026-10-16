@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The agent's nvim: `wvr edit` (Alt v, e on the board) opens it beside the
@@ -20,12 +21,12 @@ import (
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
-func (e *Env) openLeftOf(target PaneID, cwd, name string, argv ...string) (PaneID, error) {
-	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.target(), "-c", cwd}, argv...)...)
+func (e *Env) openLeftOf(target tmux.PaneID, cwd, name string, argv ...string) (tmux.PaneID, error) {
+	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.Target(), "-c", cwd}, argv...)...)
 	if err != nil {
 		return "", fmt.Errorf("tmux split-window failed")
 	}
-	p, _ := parsePane(string(out))
+	p, _ := tmux.ParsePane(string(out))
 	e.renamePane(p, name)
 	return p, nil
 }
@@ -33,23 +34,23 @@ func (e *Env) openLeftOf(target PaneID, cwd, name string, argv ...string) (PaneI
 // threadWidth: back to a thread's split once its nvim reopens beside the
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
-func (e *Env) threadWidth(agent PaneID) {
-	out, err := e.Tmux("list-panes", "-t", agent.target())
+func (e *Env) threadWidth(agent tmux.PaneID) {
+	out, err := e.Tmux("list-panes", "-t", agent.Target())
 	if err != nil || strings.Count(strings.TrimRight(string(out), "\n"), "\n") != 1 {
 		return
 	}
-	t, err := e.Tmux("display-message", "-p", "-t", agent.target(), "#{window_width}")
+	t, err := e.Tmux("display-message", "-p", "-t", agent.Target(), "#{window_width}")
 	total, ok := atoi(strings.TrimSpace(string(t)))
 	if err != nil || !ok {
 		return
 	}
-	e.Tmux("resize-pane", "-t", agent.target(), "-x", strconv.Itoa(agentCols(total)))
+	e.Tmux("resize-pane", "-t", agent.Target(), "-x", strconv.Itoa(agentCols(total)))
 }
 
 // editLock is one `wvr edit` per agent at a time, so a second Alt v finds
 // the nvim the first is opening. A lock older than 5s was left by a killed
 // process.
-func (e *Env) editLock(agent PaneID) func() {
+func (e *Env) editLock(agent tmux.PaneID) func() {
 	d := e.paneFile(agent, "opening")
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; i < 60; i++ {
@@ -75,12 +76,12 @@ func (e *Env) editLock(agent PaneID) func() {
 
 // focusedPane is the pane you are on (a popup or run-shell is not a pane:
 // the session's active one).
-func (e *Env) focusedPane() PaneID {
+func (e *Env) focusedPane() tmux.PaneID {
 	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pane_id}")
 	if err != nil {
 		return ""
 	}
-	p, _ := parsePane(string(out))
+	p, _ := tmux.ParsePane(string(out))
 	if p == e.MyPane {
 		return ""
 	}
@@ -90,7 +91,7 @@ func (e *Env) focusedPane() PaneID {
 // Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
 func (e *Env) Edit(args []string) error {
-	full, target := false, PaneID("")
+	full, target := false, tmux.PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--full":
@@ -98,7 +99,7 @@ func (e *Env) Edit(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr edit [--full] [pane-id]")
 		default:
-			target, _ = parsePane(a)
+			target, _ = tmux.ParsePane(a)
 		}
 	}
 	release := e.uiLock()
@@ -112,7 +113,7 @@ func (e *Env) Edit(args []string) error {
 			return errors.New("cannot find the focused pane")
 		}
 	}
-	paneOf := func(ps []Pane, p PaneID) *Pane {
+	paneOf := func(ps []tmux.Pane, p tmux.PaneID) *tmux.Pane {
 		for i := range ps {
 			if ps[i].ID == p {
 				return &ps[i]
@@ -121,7 +122,7 @@ func (e *Env) Edit(args []string) error {
 		return nil
 	}
 	agentPane := e.agentOf(target)
-	var newPane, nv PaneID
+	var newPane, nv tmux.PaneID
 	if agentPane == "" {
 		cwd := ""
 		if p := paneOf(panes, target); p != nil {
@@ -227,7 +228,7 @@ func (e *Env) Edit(args []string) error {
 		} else if newPane != "" {
 			p = newPane
 		}
-		e.Tmux("resize-pane", "-Z", "-t", p.target())
+		e.Tmux("resize-pane", "-Z", "-t", p.Target())
 	}
 	return nil
 }
@@ -240,7 +241,7 @@ func (e *Env) Nvim(args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: wvr nvim <agent-pane-id> [file]")
 	}
-	agentPane, _ := parsePane(args[0])
+	agentPane, _ := tmux.ParsePane(args[0])
 	file, fresh := "", false
 	if len(args) > 1 {
 		file = args[1]
@@ -249,7 +250,7 @@ func (e *Env) Nvim(args []string) error {
 		if len(args) < 2 {
 			return errors.New("usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 		}
-		agentPane, _ = parsePane(args[1])
+		agentPane, _ = tmux.ParsePane(args[1])
 		file, fresh = "", true
 		if len(args) > 2 {
 			file = args[2]
