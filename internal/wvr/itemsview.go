@@ -355,9 +355,21 @@ func itemFooter(src itemSource) string {
 	return out
 }
 
-// itemChrome is the view's header and footer, for fzf's load and keys.
+// itemCardRoom is where a view's card goes, as the board's goes: beside the
+// list when there is room, else under it in what the list leaves.
+func itemCardRoom(rows int) string {
+	cols, lines := lsSize()
+	if cardRight(cols) {
+		return "right," + strconv.Itoa(cardW) + ",border-left,wrap"
+	}
+	// Less the borders, the header, the footer and the card's rule.
+	return "down," + strconv.Itoa(max(lines-rows-6, 8)) + ",border-top,wrap"
+}
+
+// itemChrome is the view's label, header, footer and card's room, for
+// fzf's load and keys.
 func (e *Env) itemChrome(src itemSource) string {
-	var acts []string
+	acts := []string{"change-preview-window(" + itemCardRoom(strings.Count(e.itemRows(src), "\n")) + ")"}
 	if a, ok := fzfAct("change-border-label", e.itemLabel(src)); ok {
 		acts = append(acts, a)
 	}
@@ -528,11 +540,7 @@ func (e *Env) itemsView(src itemSource) error {
 				break
 			}
 		}
-		// The card beside the list when there is room, as on the board.
-		pw := "down,55%,border-top,wrap"
-		if cols, _ := lsSize(); cardRight(cols) {
-			pw = "right," + strconv.Itoa(cardW) + ",border-left,wrap"
-		}
+		pw := itemCardRoom(strings.Count(rows, "\n"))
 		args := []string{"--listen", sock, "--with-shell", "/bin/sh -c",
 			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
 			"--delimiter", "\t", "--with-nth", "5..", "--tabstop", "1",

@@ -340,12 +340,13 @@ func (e *Env) rows(plain bool) string {
 		if digits(l.Lost) {
 			since, _ = strconv.ParseInt(l.Lost, 10, 64)
 		}
-		name := l.Name
+		// Named as a live thread is: its task.
+		name := oneline.Line(l.Task)
 		if name == "" {
 			name = l.Title
 		}
 		if name == "" {
-			name = l.Task
+			name = l.Name
 		}
 		fact := "its session went · ⏎ resumes"
 		w := git.WhereOf(l.Dir)
