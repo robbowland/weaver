@@ -32,6 +32,12 @@ func main() {
 		return
 	case "setup":
 		os.Exit(wv.Setup(args[1:], wv.Load().Self, os.Stdout))
+	case "_plugins":
+		if err := wv.Plugins(); err != nil {
+			fmt.Fprintf(os.Stderr, "weaver: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	case "_runtime":
 		// install.sh: unpack this build's files now, so Neovim configs find
 		// its plugin before weaver next runs.

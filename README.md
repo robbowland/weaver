@@ -18,38 +18,38 @@ any other agent can report through `wvr event`
 
 ## Install
 
-macOS, with tmux 3.3+, Neovim 0.10+, git and fzf (for the interactive
-dashboard); [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
-in your Neovim config for reviews, and [Worktrunk](https://worktrunk.dev) if
-you want it to make the worktrees. For the [views](#views-github-and-linear):
-[gh-dash](https://github.com/dlvhdr/gh-dash) (with `gh`, signed in) and
-[linear-tui](https://github.com/k1-c/linear-tui) (signed in), each one only
-if you want its view.
+macOS, with tmux 3.3+, Neovim 0.10+, git and fzf; [Worktrunk](https://worktrunk.dev)
+if you want it to make the worktrees; and for the
+[views](#views-github-and-linear), [gh-dash](https://github.com/dlvhdr/gh-dash)
+(with `gh`, signed in) and [linear-tui](https://github.com/k1-c/linear-tui)
+(signed in), each only if you want its view.
 
 ```sh
 brew install robbowland/kegs/weaver
-wvr setup
+wvr
 ```
 
-or, from a checkout, with Go:
+or, from a checkout, with Go, `./install.sh`, which builds it, one binary
+carrying everything it needs, into `~/.local/bin/wvr` (safe to rerun;
+`--dry-run` shows what it would do).
 
-```sh
-./install.sh --configure
-```
+Its command is `wvr`, and it sets itself up as it starts, when it is the
+`wvr` on your PATH: Claude Code's hooks (`~/.claude/settings.json`, backed
+up before it first changes; and Codex's, `~/.codex/hooks.json`, when you have
+Codex) run it, replacing any older weaver hooks and touching nobody else's,
+and [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim),
+which reviews are built on, is fetched for nvims whose config has no
+diffview of its own. It says one line when it changes a file.
+`wvr setup --dry-run` shows what it would change; `WEAVER_SELF_SETUP=0`
+turns it off. The hooks run the binary directly, without a shell; the ones
+nobody needs to wait for run in the background. Trust Codex's in its
+`/hooks` before they run.
 
-Its command is `wvr`. `install.sh` builds it, one binary carrying everything it needs, into
-`~/.local/bin/wvr` (safe to rerun; `--dry-run` shows what it would do).
-`wvr setup` adds weaver's hooks to `~/.claude/settings.json`, replacing
-any older weaver hooks and backing the file up first (`--dry-run` shows the
-diff). The hooks run the binary directly, without a shell; the ones nobody
-needs to wait for run in the background. When `~/.codex` exists, Codex's
-hooks (`~/.codex/hooks.json`) get weaver too (`--no-codex` to skip); trust
-them in Codex's `/hooks` before they run.
-
-Restart running Claude Code sessions afterwards: they read hooks at start.
-weaver's tmux needs no config of yours. After an upgrade, a running weaver
-session reads weaver's tmux config again the next time `wvr` attaches to
-it, and an open home board restarts in the new weaver at its next reload.
+Restart running Claude Code sessions when their hooks change: they read
+hooks at start. weaver's tmux needs no config of yours. After an upgrade, a
+running weaver session reads weaver's tmux config again the next time `wvr`
+attaches to it, and an open home board restarts in the new weaver at its
+next reload.
 
 wvr unpacks its files under `~/.local/share/weaver/runtime`, and keeps a
 copy of its Neovim plugin at `~/.local/share/weaver/nvim`. The nvims weaver
@@ -392,6 +392,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 | `WEAVER_VIEWS` | each installed | The views beside home: `github`, `linear`, both, or `none` |
+| `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves the hooks and plugins as they are as it starts (`wvr setup` still does it) |
 
 ## Development
 

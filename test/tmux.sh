@@ -21,6 +21,8 @@ export WEAVER_FOLLOW_IDLE_MS=300 WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTR
 export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim TERM=xterm-256color
 # No views (gh-dash, linear-tui) but where a test asks for them.
 export WEAVER_VIEWS=
+# wvr sets itself up as it starts: not here (it would fetch plugins).
+export WEAVER_SELF_SETUP=0
 [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 SD=$XDG_STATE_HOME/weaver
 mkdir -p "$AT/bin" "$SD" "$AT/claude/sessions"

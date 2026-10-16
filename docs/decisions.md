@@ -364,6 +364,13 @@ can supersede an earlier one, and says so.
   run their hooks by that path, and a home board open since runs its keys by
   it; it is never made anew.
 
+- 2026-10-16: `wvr` sets itself up as it starts (Rob: "configure things
+  itself when it runs"): the hooks merged as `wvr setup` merges them, silent
+  unless a file changes, and diffview-plus fetched in the background. Only
+  as the `wvr` on PATH, so a build run from a checkout never points the
+  hooks at itself, and only for an agent whose config directory exists.
+  `wvr setup` stays, for a dry run.
+
 ## History
 
 - weaver began as agentnav, a bash script for Claude Code agents in zellij

@@ -26,6 +26,7 @@ func (e *Env) Start(name string) int {
 		fmt.Fprintln(os.Stderr, "weaver: tmux is not installed")
 		return 1
 	}
+	e.SelfSetup()
 	dir, err := Runtime()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "weaver: "+err.Error())

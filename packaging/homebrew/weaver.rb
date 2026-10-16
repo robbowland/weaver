@@ -19,9 +19,9 @@ class Weaver < Formula
 
   def caveats
     <<~EOS
-      To have Claude Code (and Codex) report to weaver, add its hooks:
-        wvr setup
-      Then run `wvr` to start its tmux session.
+      Run `wvr` to start weaver's tmux session. It sets itself up as it
+      starts: Claude Code's (and Codex's) hooks run it, and the Neovim
+      plugin its reviews need is fetched; `wvr setup --dry-run` shows how.
     EOS
   end
 

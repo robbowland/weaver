@@ -308,7 +308,7 @@ func (e *Env) Nvim(args []string) int {
 		fmt.Fprintln(os.Stderr, "weaver: nvim is not installed")
 		return 1
 	}
-	env := append(os.Environ(), "WEAVER_PANE="+agent, "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self)
+	env := append(os.Environ(), "WEAVER_PANE="+agent, "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
 	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
 	// The ATTENTION dialog for a stale swap file would block this nvim and
 	// every remote call: open the startup file read-only instead (weaver.lua

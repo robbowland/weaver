@@ -561,6 +561,23 @@ else weaver's.
   setting may be read twice: array options take explicit indices
   (`terminal-features[90]`).
 
+## Setting itself up
+
+`wvr` outside tmux (`Start`), when `$WEAVER_SELF_SETUP` is not `0` and it is
+the `wvr` on PATH (`os.SameFile` with `exec.LookPath`; a build run from a
+checkout never takes the hooks), runs `SelfSetup` before tmux: for Claude
+Code (`$CLAUDE_CONFIG_DIR`, else `~/.claude`) and Codex (`$CODEX_HOME`, else
+`~/.codex`), when that directory exists, the hooks are merged as `wvr setup`
+merges them (`mergeHooks`, a backup first when the file was there), and one
+line on stderr says when a file changed. When
+`$XDG_DATA_HOME/weaver/plugins/diffview-plus.nvim/.weaver-rev` is not
+`diffviewRev`, a detached `wvr _plugins` fetches that commit (`git fetch
+--depth 1`) beside it and swaps it in. `wvr nvim` passes
+`WEAVER_PLUGINS=$XDG_DATA_HOME/weaver/plugins`; `weaver.lua` appends
+diffview-plus there to the runtimepath (and sources its `plugin/`) when no
+`lua/diffview/init.lua` is on it and lazy.nvim knows no `diffview*` plugin.
+diffview-plus is GPL-3.0, so weaver fetches it rather than carry it.
+
 ## Views
 
 Windows of the weaver session beside home, out of the thread numbering (index

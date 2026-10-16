@@ -43,7 +43,7 @@ mkdir -p "$AT/bin" "$AT/state" "$AT/claude/sessions"
 export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude WEAVER_FOLLOW_IDLE_MS=300
 export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 : >"$WORKTRUNK_CONFIG_PATH"
-export _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
+export WEAVER_SELF_SETUP=0 _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
 if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi

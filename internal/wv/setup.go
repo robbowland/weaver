@@ -22,7 +22,8 @@ var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 // Setup is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
 // hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
 // exists), run by this binary's path (or PATH), each file backed up before
-// it changes; its files unpacked.
+// it changes; its files unpacked and its Neovim plugins fetched. `wvr`
+// does the same as it starts (SelfSetup); this shows the changes.
 func Setup(args []string, self string, out io.Writer) int {
 	dry, codex, bin := false, true, self
 	for i := 0; i < len(args); i++ {
@@ -49,27 +50,23 @@ func Setup(args []string, self string, out io.Writer) int {
 			return 1
 		}
 	}
-	home := os.Getenv("HOME")
-	warnZellij(home)
-	claude := os.Getenv("CLAUDE_CONFIG_DIR")
-	if claude == "" {
-		claude = home + "/.claude"
-	}
-	ts := time.Now().Format("20060102-150405")
+	warnZellij(os.Getenv("HOME"))
+	ts := timestamp()
 	rc := 0
-	if !configureHooks(out, "claude", claude+"/settings.json", "config/claude-hooks.json", bin, dry, ts) {
-		rc = 1
-	}
 	codexDone := false
-	cdir := os.Getenv("CODEX_HOME")
-	if cdir == "" {
-		cdir = home + "/.codex"
-	}
-	if st, err := os.Stat(cdir); codex && err == nil && st.IsDir() {
-		if !configureHooks(out, "codex", cdir+"/hooks.json", "config/codex-hooks.json", bin, dry, ts) {
+	for _, c := range hookConfigs() {
+		if c.label == "codex" && !codex {
+			continue
+		}
+		if !configureHooks(out, c.label, c.file, c.hooks, bin, dry, ts) {
 			rc = 1
 		}
-		codexDone = true
+		codexDone = codexDone || c.label == "codex"
+	}
+	if !dry && rc == 0 {
+		if err := Plugins(); err != nil {
+			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+		}
 	}
 	if dry || rc != 0 {
 		return rc
@@ -160,6 +157,8 @@ func configureHooks(out io.Writer, label, f, hooks, bin string, dry bool, ts str
 	}
 	return true
 }
+
+func timestamp() string { return time.Now().Format("20060102-150405") }
 
 func copyFile(from, to string) error {
 	b, err := os.ReadFile(from)
