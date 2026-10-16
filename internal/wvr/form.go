@@ -26,18 +26,18 @@ import (
 // here), the agent (claude | codex), the base (empty: the default), Mode
 // (review: read-only; empty: work) and the work item it starts from.
 type form struct {
-	Repo   string   `json:"repo"`
-	Here   string   `json:"here"`
-	Branch string   `json:"branch"`
-	Where  string   `json:"where"`
-	Agent  string   `json:"agent"`
-	Base   string   `json:"base"`
-	Mode   Mode     `json:"mode,omitempty"`
-	Item   *itemBox `json:"item,omitempty"`
+	Repo   string    `json:"repo"`
+	Here   string    `json:"here"`
+	Branch string    `json:"branch"`
+	Where  Where     `json:"where"`
+	Agent  AgentKind `json:"agent"`
+	Base   string    `json:"base"`
+	Mode   Mode      `json:"mode,omitempty"`
+	Item   *itemBox  `json:"item,omitempty"`
 }
 
 func loadForm(f string) form {
-	fm := form{Where: "worktree", Agent: "claude"}
+	fm := form{Where: WhereWorktree, Agent: AgentClaude}
 	readRecord(f, &fm)
 	return fm
 }
@@ -254,14 +254,14 @@ func formPath(p string) string {
 	return t
 }
 
-func agentCmd(a string) string {
+func agentCmd(a AgentKind) string {
 	switch a {
-	case "claude":
+	case AgentClaude:
 		if c := os.Getenv("WEAVER_CLAUDE"); c != "" {
 			return c
 		}
 		return "claude"
-	case "codex":
+	case AgentCodex:
 		if c := os.Getenv("WEAVER_CODEX"); c != "" {
 			return c
 		}
@@ -270,7 +270,7 @@ func agentCmd(a string) string {
 	return ""
 }
 
-func agentInstalled(a string) bool {
+func agentInstalled(a AgentKind) bool {
 	c := agentCmd(a)
 	if c == "" {
 		return false
@@ -399,7 +399,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 	} else {
 		add("repo", "not in a git repository", CGrey+"not in a git repository"+COff, "^r")
 	}
-	if fm.Where == "here" {
+	if fm.Where == WhereHere {
 		cur, _ := git(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
 		w := "this checkout"
 		if cur != "" {
@@ -437,9 +437,9 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	if agentInstalled(fm.Agent) {
-		add("agent", fm.Agent, fm.Agent, "shift-tab")
+		add("agent", string(fm.Agent), string(fm.Agent), "shift-tab")
 	} else {
-		add("agent", fm.Agent+"  not installed", fm.Agent+"  "+CGrey+"not installed"+COff, "shift-tab")
+		add("agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff, "shift-tab")
 	}
 	// The keys in a column of their own at the right edge: fzf's width (its
 	// header's, less its border and margins).
@@ -553,9 +553,9 @@ func checkThread(task string, fm form) string {
 		return "say what the agent should do"
 	}
 	if !agentInstalled(fm.Agent) {
-		return fm.Agent + " is not installed"
+		return string(fm.Agent) + " is not installed"
 	}
-	if fm.Where == "here" {
+	if fm.Where == WhereHere {
 		if st, err := os.Stat(fm.Here); err != nil || !st.IsDir() {
 			return "no such directory: " + fm.Here
 		}
@@ -585,7 +585,8 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
-	var repoArg, from, branch, base, agent, where, itemArg string
+	var repoArg, from, branch, base, agent, itemArg string
+	var where Where
 	var itemKind ghKind
 	var task []string
 	nofocus, edit := false, false
@@ -620,9 +621,9 @@ func (e *Env) New(args []string) (int, bool) {
 		case "--review":
 			mode = ModeReview
 		case "--here":
-			where = "here"
+			where = WhereHere
 		case "--worktree":
-			where = "worktree"
+			where = WhereWorktree
 		case "--no-focus":
 			nofocus = true
 		case "--edit", "-e":
@@ -642,10 +643,8 @@ func (e *Env) New(args []string) (int, bool) {
 	if e.Session == "" {
 		return die("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
 	}
-	if agent == "" {
-		agent = "claude"
-	}
-	if agent != "claude" && agent != "codex" {
+	kind, ok := parseAgentKind(agent)
+	if !ok {
 		return die("unknown agent: " + agent + " (claude or codex)")
 	}
 	// Where it starts: --repo; the agent of --from's repository; else here.
@@ -674,9 +673,9 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 	}
 	if where == "" {
-		where = "worktree"
+		where = WhereWorktree
 	}
-	fm := form{Branch: branch, Where: where, Agent: agent, Base: base}
+	fm := form{Branch: branch, Where: where, Agent: kind, Base: base}
 	fm.Mode = mode
 	if r, c, ok := repoOf(start); ok {
 		fm.Repo, fm.Here = r, c
@@ -744,7 +743,7 @@ func (e *Env) New(args []string) (int, bool) {
 		if branch == "" {
 			fm.Branch = x.branchName()
 		}
-		fm.Where = "worktree"
+		fm.Where = WhereWorktree
 		fm.Item = &itemBox{x}
 		// Already a thread on its branch: go to it.
 		if fm.Repo != "" {
@@ -870,7 +869,7 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 	fm := loadForm(sf)
 	// The fetch for a new branch's base starts now, while you type (and
 	// while the header is made).
-	if fm.Where == "worktree" && fm.Base == "" {
+	if fm.Where == WhereWorktree && fm.Base == "" {
 		go e.fetchStart(fm.Repo, sf)
 	}
 	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
@@ -933,13 +932,13 @@ func (e *Env) Form(op, sf, q string) {
 	case "header":
 		fmt.Print(e.FormHeader(sf, q, ""))
 	case "where":
-		if fm.Where == "here" {
-			fm.Where = "worktree"
+		if fm.Where == WhereHere {
+			fm.Where = WhereWorktree
 		} else {
-			fm.Where = "here"
+			fm.Where = WhereHere
 		}
 		fm.save(sf)
-		if fm.Where == "worktree" && fm.Base == "" {
+		if fm.Where == WhereWorktree && fm.Base == "" {
 			e.fetchStart(fm.Repo, sf)
 		}
 	case "label":
@@ -952,16 +951,16 @@ func (e *Env) Form(op, sf, q string) {
 		}
 		fm.save(sf)
 	case "agent":
-		if fm.Agent == "claude" {
-			fm.Agent = "codex"
+		if fm.Agent == AgentClaude {
+			fm.Agent = AgentCodex
 		} else {
-			fm.Agent = "claude"
+			fm.Agent = AgentClaude
 		}
 		fm.save(sf)
 	case "base":
 		// A base means a new worktree.
-		if fm.Where == "here" {
-			fm.Where = "worktree"
+		if fm.Where == WhereHere {
+			fm.Where = WhereWorktree
 			fm.save(sf)
 		}
 		if fm.Repo == "" {
@@ -985,8 +984,8 @@ func (e *Env) Form(op, sf, q string) {
 		}
 	case "branch":
 		// A branch means a new worktree.
-		if fm.Where == "here" {
-			fm.Where = "worktree"
+		if fm.Where == WhereHere {
+			fm.Where = WhereWorktree
 			fm.save(sf)
 		}
 		br := fm.Branch
@@ -1040,7 +1039,7 @@ func (e *Env) Form(op, sf, q string) {
 		// Another repository's bases are its own.
 		fm.Base = ""
 		fm.save(sf)
-		if fm.Where == "worktree" {
+		if fm.Where == WhereWorktree {
 			e.fetchStart(fm.Repo, sf)
 		}
 	case "editor":

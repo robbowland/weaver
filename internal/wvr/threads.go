@@ -103,13 +103,13 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
 // nofocus), nvim with nvimEnv too. Its window id.
-func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool, nvimEnv ...string) (string, bool) {
+func (e *Env) threadTab(tok string, kind AgentKind, dir, name string, nofocus bool, nvimEnv ...string) (string, bool) {
 	args := []string{"new-window"}
 	if nofocus {
 		args = append(args, "-d")
 	}
 	args = append(args, "-P", "-F", "#{window_id} #{pane_id} #{window_width}", "-t", "="+e.Session+":", "-n", name, "-c", dir,
-		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, kind)
+		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, string(kind))
 	out, err := e.Tmux(args...)
 	f := strings.Fields(string(out))
 	if err != nil || len(f) < 3 {
@@ -346,7 +346,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	pr, isPR := it.(pullRequest)
 	var dir, name, branch, base string
 	created := false
-	if fm.Where == "here" {
+	if fm.Where == WhereHere {
 		dir = fm.Here
 		name = Slugify(task)
 		if name == "" {
@@ -422,14 +422,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
 	cmd := agentCmd(fm.Agent)
 	if review {
-		if fm.Agent == "codex" {
+		if fm.Agent == AgentCodex {
 			cmd += " --sandbox read-only"
 		} else {
 			cmd += " --permission-mode plan"
 		}
 	}
 	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
-		Here: fm.Where == "here", WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
+		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
 		rec.Item = &ThreadItem{Kind: it.kind(), Ref: it.Ref(), URL: it.text().URL, Title: it.text().Title}
 	}
@@ -474,12 +474,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
 // it where the agent is, and start the agent with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
-func (e *Env) AgentPane(tok, kind string) int {
-	if kind == "" {
-		kind = "claude"
-	}
-	if kind != "claude" && kind != "codex" {
-		fmt.Fprintln(os.Stderr, "weaver: unknown agent: "+kind)
+func (e *Env) AgentPane(tok, agent string) int {
+	kind, ok := parseAgentKind(agent)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "weaver: unknown agent: "+agent)
 		return 1
 	}
 	pane := e.MyPane
@@ -526,7 +524,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 		// so it can be resumed (never --continue).
 		var ident []string
 		sid := ""
-		if kind == "claude" {
+		if kind == AgentClaude {
 			sid = uuid()
 			if sid != "" {
 				ident = append(ident, "--session-id", sid)
@@ -575,7 +573,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 			put(sf, st.set("pane", paneJSON))
 		}
 		os.RemoveAll(d)
-		if kind == "claude" {
+		if kind == AgentClaude {
 			return run("--resume", sid)
 		}
 		return run("resume", sid)
@@ -600,9 +598,9 @@ func (e *Env) AgentPane(tok, kind string) int {
 		cmdOf(th)
 	}
 	switch {
-	case kind == "claude" && sid != "":
+	case kind == AgentClaude && sid != "":
 		return run("--resume", sid)
-	case kind == "claude":
+	case kind == AgentClaude:
 		return run("--continue")
 	case sid != "":
 		return run("resume", sid)
@@ -637,7 +635,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	sid := str(st.get("session_id", ""))
 	kind := th.Agent
 	if kind == "" {
-		kind = str(st.get("agent", "claude"))
+		kind = AgentKind(str(st.get("agent", "")))
 	}
 	dir := clean(lo.Dir())
 	nm := clean(th.Name)
@@ -652,8 +650,10 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	if nm == "" {
 		nm = "thread"
 	}
-	if kind != "claude" && kind != "codex" {
-		kind = "claude"
+	if k, ok := parseAgentKind(string(kind)); ok {
+		kind = k
+	} else {
+		kind = AgentClaude
 	}
 	if s, err := os.Stat(dir); sid == "" || err != nil || !s.IsDir() {
 		back()

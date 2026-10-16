@@ -389,7 +389,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: StateStarting,
 			Root: clean(t.Worktree), Since: strconv.FormatInt(since, 10),
 			Seen: "false", Prompt: clean(t.Task), Bg: "0", Nsub: "0", Sfile: f, Turn: "0", Tdone: "0", Ttotal: "0",
-			Tabname: clean(p.TabName), Agent: clean(t.Agent), Ttask: clean(t.Task),
+			Tabname: clean(p.TabName), Agent: clean(string(t.Agent)), Ttask: clean(t.Task),
 			Tname: clean(t.Name), Tnum: strconv.Itoa(t.Num)})
 	}
 	starts := procStarts(pids)

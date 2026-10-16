@@ -147,7 +147,7 @@ func (e *Env) Edit(args []string) int {
 			h.AgentKind = tostring(o.get("agent", "claude"))
 		} else if t, err := readThread(e.threadFile(agent)); err == nil {
 			root = t.Worktree
-			h.AgentKind = t.Agent
+			h.AgentKind = string(t.Agent)
 			if h.AgentKind == "" {
 				h.AgentKind = "claude"
 			}
