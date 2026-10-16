@@ -312,14 +312,15 @@ func (e *Env) Rows(plain bool) string {
 					fact = "no hooks: trust them in codex /hooks"
 				}
 			}
+		case StateIdle, StateEnded:
+			// Seen and quiet: as anything else, the idle cell.
+			fallthrough
 		default:
 			g = 3
 			glyph = paint(GIdle, dim, dim, off)
 			if a.Turn == "" || a.Turn == "0" {
 				fact = "no prompt yet"
 			}
-		case StateIdle, StateEnded:
-			// Seen and quiet: the row says nothing more.
 		}
 		w := whereOf(a.Root)
 		where := w.repo

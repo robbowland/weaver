@@ -85,4 +85,10 @@ sleep 0.3
 ok "...and gone with its pane" "$(LS_MODE=plain wvr _rows | grep -c 'flaky')" "0"
 rm -f "$SD/${SK}_$NP.thread"
 
+# An idle agent (seen, quiet) gets the idle cell; an ended one goes.
+put 2 '{state: "idle", since: ($now - 630), seen: true, title: "Refine the dashboard", turn: 4, root: "'"$T/dash"'"}'
+ok "an idle agent: the idle cell" "$(LS_MODE=plain wvr _rows | grep -c '^\[ \]  Refine the dashboard')" "1"
+put 2 '{state: "ended", since: ($now - 630), seen: true, title: "Refine the dashboard", turn: 4, root: "'"$T/dash"'"}'
+ok "...and an ended one is not listed" "$(LS_MODE=plain wvr _rows | grep -c 'Refine the dashboard')" "0"
+
 done_suite
