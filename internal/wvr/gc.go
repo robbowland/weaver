@@ -68,7 +68,7 @@ func (e *Env) GC() {
 	}
 	for _, f := range paneFiles(e.StateDir, "json") {
 		l, _ := firstLine(f)
-		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), sub1(reGcState, l)
+		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), State(sub1(reGcState, l))
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
 		if pid != "" {
 			if !agentAlive(pid, start, nil) {
@@ -82,7 +82,7 @@ func (e *Env) GC() {
 				continue
 			}
 		}
-		if st == "ended" && now-ts > 3600 {
+		if st == StateEnded && now-ts > 3600 {
 			e.forget(f, pid)
 		}
 	}

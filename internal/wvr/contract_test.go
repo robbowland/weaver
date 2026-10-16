@@ -44,6 +44,14 @@ func TestStateContract(t *testing.T) {
 	if strings.Join(lua, " ") != strings.Join(doc, " ") {
 		t.Errorf("Neovim's states %v are not the design doc's %v", lua, doc)
 	}
+	var goStates []string
+	for _, s := range agentStates {
+		goStates = append(goStates, string(s))
+	}
+	sort.Strings(goStates)
+	if strings.Join(goStates, " ") != strings.Join(doc, " ") {
+		t.Errorf("the Go half's states %v are not the design doc's %v", goStates, doc)
+	}
 
 	glyph := map[string]string{}
 	status := read("nvim/lua/weaver/status.lua")
@@ -57,11 +65,11 @@ func TestStateContract(t *testing.T) {
 		}
 	}
 	for _, s := range lua {
-		if c := stateCell(s); c[1:2] != glyph[s] {
+		if c := stateCell(State(s)); c[1:2] != glyph[s] {
 			t.Errorf("state %s: the Go half's cell %q, Neovim's mark %q", s, c, glyph[s])
 		}
 	}
-	if stateCell("starting") != GWork {
+	if stateCell(StateStarting) != GWork {
 		t.Errorf("a starting thread shows as %q, not working's %q", stateCell("starting"), GWork)
 	}
 }

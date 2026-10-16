@@ -38,12 +38,14 @@ type hk struct {
 	Source, Interrupt, TitleNew, PromptID, Transcript      string
 	NewCwd, Rejected, Err, Cmd, EndNew                     string
 
-	OCwd, ORoot, OFile, OPrompt, OState, OSid, OStart, OSince, OWaiting, OPending, OLast, OSeen string
-	OMarked, OMarker, OProj, OBg, OBgdesc, OPid, OProcstart, OTitle                             string
-	OTurn, OTurnEnded, OPromptID, OTranscript, OAgent, OEnd                                     string
-	FilesJSON, SubsJSON, TasksJSON, OTurnRoots, Paths                                           string
+	OState                                                                              State
+	OCwd, ORoot, OFile, OPrompt, OSid, OStart, OSince, OWaiting, OPending, OLast, OSeen string
+	OMarked, OMarker, OProj, OBg, OBgdesc, OPid, OProcstart, OTitle                     string
+	OTurn, OTurnEnded, OPromptID, OTranscript, OAgent, OEnd                             string
+	FilesJSON, SubsJSON, TasksJSON, OTurnRoots, Paths                                   string
 
-	Root, EvFile, Start, Proj, State, Since, Waiting, Pending, Last, Seen string
+	State                                                                 State
+	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
 	Marked, Marker, MarkDir, Bg, Bgdesc, Pid, ProcStart, Title, EndReason string
 	Turn, TurnEnded                                                       int
 	TurnRoots                                                             string
@@ -74,7 +76,7 @@ func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 	// ours.
 	if me != "" && pk.pid != "" && me != pk.pid {
 		if agentAlive(pk.pid, pk.start, nil) {
-			if pk.state != "ended" {
+			if pk.state != StateEnded {
 				return 0
 			}
 		} else {
@@ -118,7 +120,10 @@ func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 	return h.rc
 }
 
-type peeked struct{ state, pid, start string }
+type peeked struct {
+	state      State
+	pid, start string
+}
 
 var (
 	rePkState = regexp.MustCompile(`"state":"([a-z-]+)"`)
@@ -132,7 +137,7 @@ func peek(sf string) peeked {
 	l, _ := firstLine(sf)
 	var p peeked
 	if m := rePkState.FindStringSubmatch(l); m != nil {
-		p.state = m[1]
+		p.state = State(m[1])
 	}
 	if m := rePkPid.FindStringSubmatch(l); m != nil {
 		p.pid = m[1]
@@ -145,7 +150,7 @@ func peek(sf string) peeked {
 
 // asyncGate: the async hook runs after every tool call; most of them change
 // nothing.
-func asyncGate(ev obj, state string) bool {
+func asyncGate(ev obj, state State) bool {
 	switch ev["hook_event_name"] {
 	case "PostToolUse":
 		t := tostring(ev.get("tool_name", ""))
@@ -161,9 +166,9 @@ func asyncGate(ev obj, state string) bool {
 				}
 			}
 		}
-		return state != "working"
+		return state != StateWorking
 	case "PostToolBatch":
-		return state == "needs-you"
+		return state == StateNeedsYou
 	}
 	return true
 }
@@ -394,7 +399,7 @@ func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 		h.EndNew = ctl(one(ev.get("reason", ""), 40))
 	}
 	h.OCwd, h.ORoot, h.OFile, h.OPrompt = ctl(rawOr(s, "cwd", "")), ctl(rawOr(s, "root", "")), ctl(rawOr(s, "file", "")), ctl(rawOr(s, "prompt", ""))
-	h.OState, h.OSid, h.OStart, h.OSince = ctl(rawOr(s, "state", "")), ctl(rawOr(s, "session_id", "")), ctl(rawOr(s, "start_cwd", "")), ctl(rawOr(s, "since", ""))
+	h.OState, h.OSid, h.OStart, h.OSince = State(ctl(rawOr(s, "state", ""))), ctl(rawOr(s, "session_id", "")), ctl(rawOr(s, "start_cwd", "")), ctl(rawOr(s, "since", ""))
 	h.OWaiting, h.OPending, h.OLast = ctl(rawOr(s, "waiting", "")), ctl(rawOr(s, "pending", "")), ctl(rawOr(s, "last_message", ""))
 	h.OSeen = ctl(rawOr(s, "seen", "false"))
 	h.OMarked, h.OMarker, h.OProj = ctl(rawOr(s, "marked_root", "")), ctl(rawOr(s, "marker", "")), ctl(rawOr(s, "project_root", ""))
@@ -738,7 +743,7 @@ func (h *hk) run(e *Env, me string) {
 	h.Doing, h.DoingID, h.DoneIDs = h.ODoing, h.ODoingID, h.ODoneIDs
 	h.State = h.OState
 	if h.State == "" {
-		h.State = "working"
+		h.State = StateWorking
 	}
 	switch h.Event {
 	case "SessionStart":
@@ -746,55 +751,56 @@ func (h *hk) run(e *Env, me string) {
 		if h.Source == "compact" {
 			h.State = h.OState
 			if h.State == "" {
-				h.State = "idle"
+				h.State = StateIdle
 			}
 		} else {
-			h.State, h.Bg, h.Bgdesc = "idle", "", ""
+			h.State, h.Bg, h.Bgdesc = StateIdle, "", ""
 		}
 	case "UserPromptSubmit":
-		h.State, h.Bg, h.Bgdesc = "working", "", ""
+		h.State, h.Bg, h.Bgdesc = StateWorking, "", ""
 	case "PreToolUse":
 		if h.Mode == "async" {
 			// A command starting (the async PreToolUse on Bash): what the
 			// agent is doing, while its turn goes on, unless it has already
 			// finished.
-			if (h.OState == "working" || h.OState == "needs-you") && h.Cmd != "" &&
+			if (h.OState == StateWorking || h.OState == StateNeedsYou) && h.Cmd != "" &&
 				(h.ToolUseID == "" || !strings.Contains(" "+h.DoneIDs+" ", " "+h.ToolUseID+" ")) {
 				h.Doing, h.DoingID = h.Cmd, h.ToolUseID
 			}
 			break
 		}
 		// (PreToolUse on AskUserQuestion) a question.
-		h.State, h.Waiting, h.Pending = "needs-you", h.WaitingNew, h.Key
+		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, h.Key
 	case "PermissionRequest":
 		// A permission dialog.
-		h.State, h.Waiting, h.Pending = "needs-you", h.WaitingNew, h.Key
+		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, h.Key
 	case "Notification":
 		switch h.Ntype {
 		case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input",
 			"worker_permission_prompt", "quota_auto_resume_stale", "":
 			// A dialog: keep the more specific text of the request that opened it.
-			h.State = "needs-you"
-			if h.OState != "needs-you" || h.OWaiting == "" {
+			h.State = StateNeedsYou
+			if h.OState != StateNeedsYou || h.OWaiting == "" {
 				h.Waiting = h.WaitingNew
 			}
 		case "elicitation_complete", "elicitation_response":
-			if h.OState == "needs-you" {
-				h.State = "working"
+			if h.OState == StateNeedsYou {
+				h.State = StateWorking
 			}
 		case "quota_auto_resume_fired":
-			h.State = "working"
+			h.State = StateWorking
 		case "idle_prompt":
-			// The reminder 60s after the agent went quiet: still "working"
+			// The reminder 60s after the agent went quiet: still StateWorking
 			// means Esc stopped it (no Stop fires), unless background work is
 			// pending.
 			switch h.OState {
-			case "working":
+			case StateWorking:
 				if n, ok := atoi(h.OBg); !ok || n <= 0 {
-					h.State = "interrupted"
+					h.State = StateInterrupted
 				}
 			case "":
-				h.State = "done"
+				h.State = StateDone
+			case StateNeedsYou, StateDone, StateIdle, StateInterrupted, StateEnded, StateStarting:
 			}
 		}
 	case "PostToolUse", "PostToolUseFailure":
@@ -808,18 +814,18 @@ func (h *hk) run(e *Env, me string) {
 			}
 			h.DoneIDs = strings.Join(ids, " ")
 		}
-		h.State = "working"
+		h.State = StateWorking
 		if h.Event == "PostToolUseFailure" && h.Interrupt != "" {
-			h.State = "interrupted"
-		} else if h.OState == "needs-you" && h.OPending != "" && h.Key != h.OPending {
+			h.State = StateInterrupted
+		} else if h.OState == StateNeedsYou && h.OPending != "" && h.Key != h.OPending {
 			// Another tool finished while one still waits for you.
-			h.State = "needs-you"
+			h.State = StateNeedsYou
 		} else {
 			// A late async hook must not undo a Stop or an interrupt: one of
 			// the turn that ended (its prompt_id) never does; without a
 			// prompt_id, one within 3 s of it.
 			switch h.OState {
-			case "done", "idle", "interrupted":
+			case StateDone, StateIdle, StateInterrupted:
 				recent := false
 				if h.OSince == "" {
 					recent = h.Now < 3
@@ -829,36 +835,37 @@ func (h *hk) run(e *Env, me string) {
 				if h.PromptID != "" && h.PromptID == h.OPromptID || recent {
 					h.State = h.OState
 				}
-			case "ended":
-				h.State = "ended"
+			case StateEnded:
+				h.State = StateEnded
+			case StateWorking, StateNeedsYou, StateStarting:
 			}
 		}
 	case "PostToolBatch":
 		// Every call in the batch has resolved: the dialog has been answered.
-		if h.OState == "needs-you" {
+		if h.OState == StateNeedsYou {
 			if h.Rejected != "" {
-				h.State = "interrupted"
+				h.State = StateInterrupted
 			} else {
-				h.State = "working"
+				h.State = StateWorking
 			}
 		}
 	case "StopFailure":
-		h.State, h.Waiting, h.Pending = "needs-you", h.WaitingNew, ""
+		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, ""
 	case "Stop":
 		// Not done while background subagents work on: their reports wake it.
 		h.Bg, h.Bgdesc = h.BgNew, h.BgdescNew
-		h.State = "done"
+		h.State = StateDone
 		if n, ok := atoi(h.Bg); ok && n > 0 {
-			h.State = "working"
+			h.State = StateWorking
 		}
 	case "SessionEnd":
-		h.State, h.Bg, h.Bgdesc = "ended", "", ""
+		h.State, h.Bg, h.Bgdesc = StateEnded, "", ""
 	}
 	// A turn's commands end with it, or with the agent's work.
 	if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" && h.Source != "compact" {
 		h.Doing, h.DoingID, h.DoneIDs = "", "", ""
 	}
-	if h.State != "working" && h.State != "needs-you" {
+	if h.State != StateWorking && h.State != StateNeedsYou {
 		h.Doing, h.DoingID = "", ""
 	}
 	// Why the session ended: /exit, /clear or a logout ends it on purpose; a
@@ -867,15 +874,16 @@ func (h *hk) run(e *Env, me string) {
 	if h.Event == "SessionEnd" {
 		h.EndReason = h.EndNew
 	}
-	if h.State != "needs-you" {
+	if h.State != StateNeedsYou {
 		h.Waiting, h.Pending = "", ""
 	}
 	if h.State != h.OState {
 		switch h.State {
-		case "needs-you":
+		case StateNeedsYou:
 			h.rc = 10
-		case "done":
+		case StateDone:
 			h.rc = 11
+		case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
 		}
 	}
 	h.Since = h.OSince
@@ -908,7 +916,7 @@ func (h *hk) run(e *Env, me string) {
 	}
 	// Worktrunk branch markers, like its own Claude Code plugin sets for the
 	// session's start directory, but on the worktree the agent is really in.
-	if h.State != "ended" {
+	if h.State != StateEnded {
 		h.Marker = stateCell(h.State)
 	}
 	if os.Getenv("WEAVER_WT_MARKERS") != "0" && h.Marker != "" && h.Root != h.Proj && exists(h.Root+"/.git") {
@@ -919,18 +927,20 @@ func (h *hk) run(e *Env, me string) {
 }
 
 // stateCell is a state's glyph.
-func stateCell(s string) string {
+func stateCell(s State) string {
 	switch s {
-	case "needs-you":
+	case StateNeedsYou:
 		return GNeed
-	case "done":
+	case StateDone:
 		return GDone
-	case "working", "starting":
+	case StateWorking, StateStarting:
 		return GWork
-	case "interrupted":
+	case StateInterrupted:
 		return GInt
-	case "ended":
+	case StateEnded:
 		return GEnd
+	case StateIdle:
+		return GIdle
 	}
 	return GIdle
 }
@@ -972,7 +982,7 @@ func (e *Env) writeState(h *hk, lk string) {
 		since = "0"
 	}
 	b.WriteString(`{"pane":` + p + `,"agent":"` + h.AgentKind + `"`)
-	b.WriteString(`,"state":"` + h.State + `","ts":` + strconv.FormatInt(h.Now, 10) + `,"since":` + since)
+	b.WriteString(`,"state":"` + string(h.State) + `","ts":` + strconv.FormatInt(h.Now, 10) + `,"since":` + since)
 	if h.Seen == "true" {
 		b.WriteString(`,"seen":true`)
 	} else {
@@ -1114,10 +1124,10 @@ func (h *hk) hookLog(e *Env) {
 		h.logLine(e, "cwd", `,"cwd":`+jsonStr(h.Cwd)+`,"root":`+jsonStr(h.Root))
 	}
 	if h.State != h.OState {
-		if h.State == "needs-you" {
+		if h.State == StateNeedsYou {
 			h.logLine(e, "needs-you", `,"waiting":`+jsonStr(h.Waiting))
 		}
-		h.logLine(e, "state", `,"state":"`+h.State+`"`)
+		h.logLine(e, "state", `,"state":"`+string(h.State)+`"`)
 	}
 }
 

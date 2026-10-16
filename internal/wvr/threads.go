@@ -953,7 +953,6 @@ func worktreeRemovable(dir string) string {
 	return "its commits are neither merged nor pushed"
 }
 
-
 // threadNvim is the nvim pane of a thread's agent before it is recorded
 // as bound: the pane in the agent's window started as `wvr nvim --fresh
 // AGENT` (or, before that, `wvr nvim --thread TOK`); and TOK, from the
@@ -1044,10 +1043,11 @@ func (e *Env) Close(args []string) int {
 		nv, pending = threadNvim(panes, byID[agent])
 	}
 	th, _ := readThread(e.threadFile(agent))
-	var st, pid, start, title, kind string
+	var st State
+	var pid, start, title, kind string
 	if b, err := os.ReadFile(e.StateFile(agent)); err == nil {
 		if o, ok := readObj(b); ok {
-			st, pid, start = str(o.get("state", "")), str(o.get("pid", "")), str(o.get("proc_start", ""))
+			st, pid, start = State(str(o.get("state", ""))), str(o.get("pid", "")), str(o.get("proc_start", ""))
 			title, kind = str(o.get("title", "")), str(o.get("agent", ""))
 		}
 	}
@@ -1072,16 +1072,17 @@ func (e *Env) Close(args []string) int {
 		}
 		name = k + " in pane " + agent
 	}
-	what := CGrey + st + COff
+	what := CGrey + string(st) + COff
 	switch st {
-	case "needs-you":
+	case StateNeedsYou:
 		what = CRed + "needs you" + COff
-	case "done":
-		what = CGreen + "done" + COff
-	case "working":
-		what = "working"
+	case StateDone:
+		what = CGreen + string(StateDone) + COff
+	case StateWorking:
+		what = string(StateWorking)
 	case "":
-		what = CGrey + "starting" + COff
+		what = CGrey + string(StateStarting) + COff
+	case StateIdle, StateInterrupted, StateEnded, StateStarting:
 	}
 	n := 0
 	if nv != "" {
@@ -1279,7 +1280,7 @@ func (e *Env) Send(args []string) int {
 		return 1
 	}
 	rows, _ := e.AgentRows()
-	st := ""
+	var st State
 	for _, r := range rows {
 		if r.Pane == want {
 			st = r.State
@@ -1292,9 +1293,12 @@ func (e *Env) Send(args []string) int {
 	}
 	if !force {
 		switch st {
-		case "idle", "done", "interrupted":
-		case "needs-you":
+		case StateIdle, StateDone, StateInterrupted:
+		case StateNeedsYou:
 			fmt.Fprintln(os.Stderr, "weaver: the agent waits on a dialog: answer it first (or --force)")
+			return 1
+		case StateWorking, StateEnded, StateStarting:
+			fmt.Fprintf(os.Stderr, "weaver: the agent is %s: send when it waits for you (or --force)\n", st)
 			return 1
 		default:
 			fmt.Fprintf(os.Stderr, "weaver: the agent is %s: send when it waits for you (or --force)\n", st)

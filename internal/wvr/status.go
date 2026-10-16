@@ -64,14 +64,16 @@ func (e *Env) StatusText() string {
 			continue
 		}
 		switch r.State {
-		case "needs-you":
+		case StateNeedsYou:
 			n++
-		case "working", "starting":
+		case StateWorking, StateStarting:
 			w++
-		case "done":
+		case StateDone:
 			if r.Seen != "true" {
 				d++
 			}
+		case StateIdle, StateInterrupted, StateEnded:
+			// Not counted.
 		}
 	}
 	var out []string

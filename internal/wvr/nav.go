@@ -168,12 +168,14 @@ func (e *Env) Next() {
 		}
 		class := 0
 		switch r.State {
-		case "needs-you":
-		case "done":
+		case StateNeedsYou:
+		case StateDone:
 			if r.Seen == "true" {
 				continue
 			}
 			class = 1
+		case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
+			continue
 		default:
 			continue
 		}
@@ -195,7 +197,7 @@ func (e *Env) Next() {
 			n, _ := strconv.Atoi(r.Tnum)
 			l = fmt.Sprintf("%02d %s", n, l)
 		}
-		if r.State == "needs-you" {
+		if r.State == StateNeedsYou {
 			l += " · needs you"
 			if r.Waiting != "" {
 				l += " · " + runeSlice(r.Waiting, 50)

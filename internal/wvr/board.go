@@ -246,13 +246,13 @@ func (e *Env) Rows(plain bool) string {
 		var g int
 		var glyph, fact string
 		switch a.State {
-		case "needs-you":
+		case StateNeedsYou:
 			g, fact = 0, a.Waiting
 			if fact == "" {
 				fact = "input"
 			}
 			glyph = paint(GNeed, red, dim, off)
-		case "working":
+		case StateWorking:
 			g = 2
 			glyph = paint(GWork, grey, dim, off)
 			switch {
@@ -270,7 +270,7 @@ func (e *Env) Rows(plain bool) string {
 			case a.File != "":
 				fact = "editing " + a.File
 			}
-		case "done":
+		case StateDone:
 			if a.Seen == "true" {
 				g, glyph = 3, paint(GSeen, dim, dim, off)
 			} else {
@@ -296,14 +296,14 @@ func (e *Env) Rows(plain bool) string {
 					fact += " · " + last
 				}
 			}
-		case "interrupted":
-			g, fact = 3, "interrupted"
+		case StateInterrupted:
+			g, fact = 3, string(StateInterrupted)
 			glyph = paint(GInt, grey, dim, off)
-		case "starting":
+		case StateStarting:
 			// Its agent reports within seconds, unless its hooks are not in
 			// place (Codex runs them only once trusted in /hooks).
 			if now-since < 120 {
-				g, fact = 2, "starting"
+				g, fact = 2, string(StateStarting)
 				glyph = paint(GWork, grey, dim, off)
 			} else {
 				g, fact = 3, "not reporting"
@@ -318,6 +318,8 @@ func (e *Env) Rows(plain bool) string {
 			if a.Turn == "" || a.Turn == "0" {
 				fact = "no prompt yet"
 			}
+		case StateIdle, StateEnded:
+			// Seen and quiet: the row says nothing more.
 		}
 		w := whereOf(a.Root)
 		where := w.repo

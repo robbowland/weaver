@@ -47,9 +47,9 @@ func (e *Env) hookBg() {
 	// tmux: the window of an agent that has just finished is flagged, for
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
 	if h.State != h.OState {
-		if h.State == "done" {
+		if h.State == StateDone {
 			e.Tmux("set-option", "-w", "-t", "%"+h.Pane, "@weaver-unseen", "1")
-		} else if h.OState == "done" {
+		} else if h.OState == StateDone {
 			e.Tmux("set-option", "-w", "-u", "-t", "%"+h.Pane, "@weaver-unseen")
 		}
 	}
@@ -125,7 +125,7 @@ func (e *Env) nvimEvent(h *hk, ev, extra, r, f string, hook bool) int {
 		}
 	}
 	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(h.Pane) + `,"agent":"` + h.AgentKind +
-		`","sid":` + jsonStr(h.Sid) + `,"turn":` + strconv.Itoa(h.Turn) + `,"state":"` + h.State + `"` + extra + "}"
+		`","sid":` + jsonStr(h.Sid) + `,"turn":` + strconv.Itoa(h.Turn) + `,"state":"` + string(h.State) + `"` + extra + "}"
 	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
 	compat := "0"
 	switch ev {
@@ -232,11 +232,11 @@ func (e *Env) PushStatus(labels bool) {
 			continue
 		}
 		switch r.State {
-		case "needs-you":
+		case StateNeedsYou:
 			need++
-		case "working", "starting":
+		case StateWorking, StateStarting:
 			work++
-		case "done":
+		case StateDone:
 			if r.Seen == "true" {
 				continue
 			}
@@ -245,6 +245,8 @@ func (e *Env) PushStatus(labels bool) {
 			} else {
 				done++
 			}
+		case StateIdle, StateInterrupted, StateEnded:
+			// Not counted.
 		}
 	}
 	for _, p := range seenNow {
@@ -301,7 +303,7 @@ func fzfPost(s, actions string) bool {
 	return true
 }
 
-// MarkSeen marks agent p seen (you looked at it): a "done" no longer stands
+// MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands
 // out.
 func (e *Env) MarkSeen(p string) {
 	sf := e.StateFile(p)

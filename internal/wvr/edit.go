@@ -142,7 +142,7 @@ func (e *Env) Edit(args []string) int {
 			o, _ := readObj(b)
 			root = tostring(firstOf(o.get("root", nil), o.get("cwd", nil), ""))
 			file = tostring(o.get("file", ""))
-			h.Sid, h.State = tostring(o.get("session_id", "")), tostring(o.get("state", ""))
+			h.Sid, h.State = tostring(o.get("session_id", "")), State(tostring(o.get("state", "")))
 			h.Turn, _ = atoi(tostring(o.get("turn", "0")))
 			h.AgentKind = tostring(o.get("agent", "claude"))
 		} else if t, err := readThread(e.threadFile(agent)); err == nil {

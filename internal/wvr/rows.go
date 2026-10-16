@@ -73,10 +73,11 @@ func (e *Env) Panes() ([]Pane, bool) {
 // Row is an agent of the session: each field as a string (numbers in
 // decimal, control characters made spaces).
 type Row struct {
-	Pane, Tab, State, Root, Since, Seen, Prompt, Waiting, Bg, Title, Nsub, Pid, Pstart, Sfile string
-	Turn, Last, Tdone, Ttotal, File, Sid, Tabname, Agent, Bgtasks, Ttask, Tname, Tnum         string
-	Troots                                                                                    []string
-	Doing                                                                                     string // the command it runs now
+	State                                                                              State
+	Pane, Tab, Root, Since, Seen, Prompt, Waiting, Bg, Title, Nsub, Pid, Pstart, Sfile string
+	Turn, Last, Tdone, Ttotal, File, Sid, Tabname, Agent, Bgtasks, Ttask, Tname, Tnum  string
+	Troots                                                                             []string
+	Doing                                                                              string // the command it runs now
 }
 
 // obj is a JSON object read with its numbers as they were written.
@@ -258,7 +259,10 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		have[f] = true
 	}
 	var rows []Row
-	type gone struct{ f, pid, start, st string }
+	type gone struct {
+		f, pid, start string
+		st            State
+	}
 	var gones []gone
 	var pids []int
 	for _, f := range jsons {
@@ -273,14 +277,14 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
 		p := byID[tostring(s["pane"])]
 		if p == nil {
-			g := gone{f, str(s.get("pid", "")), str(s.get("proc_start", "")), str(s.get("state", ""))}
+			g := gone{f, str(s.get("pid", "")), str(s.get("proc_start", "")), State(str(s.get("state", "")))}
 			gones = append(gones, g)
 			if n, err := strconv.Atoi(g.pid); err == nil {
 				pids = append(pids, n)
 			}
 			continue
 		}
-		if p.Exited || s["state"] == "ended" {
+		if p.Exited || State(tostring(s["state"])) == StateEnded {
 			continue
 		}
 		var c obj
@@ -293,8 +297,8 @@ func (e *Env) AgentRows() ([]Row, int64) {
 				cu = math.Floor(v / 1000)
 			}
 		}
-		st0 := s.get("state", "idle")
-		st := any(st0)
+		st0 := State(tostring(s.get("state", string(StateIdle))))
+		st := st0
 		changed := false
 		cst := ""
 		if c != nil {
@@ -303,15 +307,15 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		cuv := json.Number(strconv.FormatFloat(cu, 'f', -1, 64))
 		switch {
 		case c == nil:
-		case st0 == "needs-you" && cst == "busy" && jqGreater(cuv, s.get("since", json.Number("0"))):
-			st, changed = "working", true
-		case st0 != "needs-you" && cst == "waiting" && !jqGreater(s.get("ts", json.Number("0")), cuv):
-			st, changed = "needs-you", st0 != "needs-you"
-		case st0 == "working" && cst == "idle" && jqCmp(s.get("background", json.Number("0")), json.Number("0")) == 0 &&
+		case st0 == StateNeedsYou && cst == "busy" && jqGreater(cuv, s.get("since", json.Number("0"))):
+			st, changed = StateWorking, true
+		case st0 != StateNeedsYou && cst == "waiting" && !jqGreater(s.get("ts", json.Number("0")), cuv):
+			st, changed = StateNeedsYou, st0 != StateNeedsYou
+		case st0 == StateWorking && cst == "idle" && jqCmp(s.get("background", json.Number("0")), json.Number("0")) == 0 &&
 			jqGreater(cuv, s.get("ts", json.Number("0"))) && float64(now)-cu > 3:
-			st, changed = "interrupted", true
+			st, changed = StateInterrupted, true
 		}
-		r := Row{Pane: str(s["pane"]), Tab: strconv.Itoa(p.Tab), State: str(st)}
+		r := Row{Pane: str(s["pane"]), Tab: strconv.Itoa(p.Tab), State: State(clean(string(st)))}
 		r.Root = str(firstOf(s.get("root", nil), s.get("cwd", nil), ""))
 		if !changed {
 			r.Since = str(firstOf(s.get("since", nil), s.get("ts", nil), json.Number("0")))
@@ -320,7 +324,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		r.Seen = str(s.get("seen", false))
 		r.Prompt = str(s.get("prompt", ""))
-		if st == "needs-you" && st0 != "needs-you" {
+		if st == StateNeedsYou && st0 != StateNeedsYou {
 			r.Waiting = str(c.get("waitingFor", "input"))
 		} else {
 			r.Waiting = str(s.get("waiting", ""))
@@ -382,7 +386,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if since == 0 {
 			since = now
 		}
-		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: "starting",
+		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: StateStarting,
 			Root: clean(t.Worktree), Since: strconv.FormatInt(since, 10),
 			Seen: "false", Prompt: clean(t.Task), Bg: "0", Nsub: "0", Sfile: f, Turn: "0", Tdone: "0", Ttotal: "0",
 			Tabname: clean(p.TabName), Agent: clean(t.Agent), Ttask: clean(t.Task),
@@ -393,7 +397,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if !trusted {
 			continue
 		}
-		if agentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != "ended" {
+		if agentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != StateEnded {
 			continue
 		}
 		e.retire(g.f, g.pid)

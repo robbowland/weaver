@@ -265,22 +265,24 @@ func itemLine(t Thread) string {
 func card(s obj, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
 	if _, ok := s["state"]; !ok {
-		s = obj{"state": "starting", "since": s["created"], "prompt": s["task"], "agent": s["agent"], "from": s["from"]}
+		s = obj{"state": string(StateStarting), "since": s["created"], "prompt": s["task"], "agent": s["agent"], "from": s["from"]}
 	}
-	st := tostring(s.get("state", "idle"))
+	st := State(tostring(s.get("state", string(StateIdle))))
 	seen := s.get("seen", false) == true
 	since := now
 	if v, ok := num(firstOf(s.get("since", nil), s.get("ts", nil))); ok {
 		since = int64(v)
 	}
-	word := st
+	word := string(st)
 	switch st {
-	case "needs-you":
+	case StateNeedsYou:
 		word = CRed + "needs you" + COff
-	case "done":
+	case StateDone:
 		if !seen {
-			word = CGreen + "done" + COff
+			word = CGreen + string(StateDone) + COff
 		}
+	case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
+		// The state's own word.
 	}
 	first := word + CDim + " · " + COff + cardAge(now-since)
 	if ag := tostring(s.get("agent", "claude")); ag != "claude" {
@@ -292,16 +294,16 @@ func card(s obj, w int, head, ab string, changed, nw, shared int) string {
 		add(field(w, "from", f, "", 1))
 	}
 	add(field(w, "asked", s.get("prompt", ""), "", 4))
-	if st == "needs-you" {
+	if st == StateNeedsYou {
 		add(field(w, "waits", s.get("waiting", "you"), "", 3))
 	}
-	if d := s.get("doing", ""); d != "" && st == "working" {
+	if d := s.get("doing", ""); d != "" && st == StateWorking {
 		add(field(w, "runs", d, "", 3))
 	}
 	if n, ok := num(s.get("background", json.Number("0"))); ok && n > 0 {
 		add(field(w, "background", s.get("background_tasks", ""), "", 2))
 	}
-	if l := s.get("last_message", ""); l != "" && st != "working" {
+	if l := s.get("last_message", ""); l != "" && st != StateWorking {
 		add(field(w, "said", l, CGrey, 6))
 	}
 	if ts, ok := s.get("tasks", []any{}).([]any); ok && len(ts) > 0 {
