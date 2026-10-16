@@ -470,16 +470,16 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("tmux could not open the tab for %s (its new worktree stays: %s)", name, dir)
+			return fmt.Errorf("tmux could not open the window for %s (its new worktree stays: %s)", name, dir)
 		}
-		return fmt.Errorf("tmux could not open the tab for %s", name)
+		return fmt.Errorf("tmux could not open the window for %s", name)
 	}
 	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
 	// The boards and the GITHUB view show it now, not at its agent's first
 	// hook.
 	e.PushStatus()
-	fmt.Printf("weaver: thread %s in %s (tab %s)\n", name, tildify(dir), tab)
+	fmt.Printf("weaver: thread %s in %s (window %s)\n", name, tildify(dir), tab)
 	return nil
 }
 
@@ -695,7 +695,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	}
 	os.Remove(d + "/lost.json")
 	e.threadPlace(tab, n)
-	return fmt.Sprintf("weaver: resumed %s in %s (tab %s)", nm, tildify(dir), tab), nil
+	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
 }
 
 // ResumeSession brings every thread this session lost back, in their
@@ -1117,7 +1117,7 @@ func (e *Env) Close(args []string) error {
 		if nv != "" {
 			goes += ", its nvim"
 		}
-		goes += " and the tab"
+		goes += " and its window"
 	}
 	pad := "  "
 	if tty != nil {
@@ -1127,8 +1127,19 @@ func (e *Env) Close(args []string) error {
 	if k == "" {
 		k = "claude"
 	}
-	fmt.Fprint(out, cardRow(pad, "close", CBold+name+COff))
-	fmt.Fprint(out, cardRow(pad, "", what+" "+CDim+"·"+COff+" "+CGrey+k+COff))
+	// Named as the board names it: its number and task, then where.
+	head, sub := CBold+name+COff, ""
+	if t := oneline.Line(th.Task); t != "" {
+		head = CBold + oneline.Cut(t, 56) + COff
+		if th.Num > 0 {
+			head = CDim + fmt.Sprintf("%02d", th.Num) + COff + " " + head
+		}
+		if name != t {
+			sub = " " + CDim + "·" + COff + " " + CGrey + name + COff
+		}
+	}
+	fmt.Fprint(out, cardRow(pad, "close", head))
+	fmt.Fprint(out, cardRow(pad, "", what+" "+CDim+"·"+COff+" "+CGrey+k+COff+sub))
 	fmt.Fprint(out, cardRow(pad, "goes", goes))
 	if n > 0 {
 		fmt.Fprint(out, cardRow(pad, "", CRed+"its nvim has "+strconv.Itoa(n)+" unsaved buffer"+plural(n)+COff))

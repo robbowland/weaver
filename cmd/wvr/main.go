@@ -31,7 +31,7 @@ func main() {
 	}
 	switch cmd {
 	case "help", "-h", "--help":
-		fmt.Print(wvr.Usage)
+		fmt.Print(wvr.UsageHelp())
 		return
 	case "version", "--version":
 		fmt.Println("weaver " + buildVersion())
@@ -66,7 +66,7 @@ func exit(err error) {
 	case err == nil:
 		os.Exit(0)
 	case errors.Is(err, cli.ErrHelp):
-		fmt.Print(wvr.Usage)
+		fmt.Print(wvr.UsageHelp())
 		os.Exit(0)
 	case errors.As(err, &x):
 		if x.Err != nil {

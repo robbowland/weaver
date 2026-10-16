@@ -1,5 +1,39 @@
 package wvr
 
+import (
+	"strings"
+
+	"github.com/robbowland/weaver/internal/cli"
+)
+
+// usageCol is where Usage's descriptions start.
+const usageCol = 31
+
+// UsageHelp is Usage, in weaver's palette at a terminal: commands in ink, what
+// they do in grey, the internal ones faint.
+func UsageHelp() string {
+	if !cli.IsTTY(1) {
+		return Usage
+	}
+	var b strings.Builder
+	for _, l := range strings.Split(strings.TrimSuffix(Usage, "\n"), "\n") {
+		switch {
+		case strings.HasPrefix(l, "usage:"):
+			b.WriteString(CBold + l + COff)
+		case len(l) > usageCol && strings.TrimSpace(l[:usageCol]) == "":
+			b.WriteString(strings.Repeat(" ", usageCol) + CGrey + l[usageCol:] + COff)
+		case len(l) > usageCol && strings.HasPrefix(l[usageCol:], "internal:"):
+			b.WriteString(CDim + l + COff)
+		case len(l) > usageCol && l[usageCol-1] == ' ' && l[usageCol-2] == ' ':
+			b.WriteString(CInk + l[:usageCol] + COff + CGrey + l[usageCol:] + COff)
+		default:
+			b.WriteString(CInk + l + COff)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // Usage is `wvr help`.
 const Usage = `usage: wvr [command]
   (none)                       outside tmux: attach to, or start, the session "weaver"

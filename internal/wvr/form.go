@@ -365,7 +365,7 @@ func formLabel(where, what string) string {
 		" " + CDim + "]" + COff + " "
 }
 
-var formFzf = []string{"--border", "sharp", "--border-label-pos", "2", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
+var formFzf = []string{"--border", "sharp", "--border-label-pos", "3", "--footer-border", "none", "--pointer", " ", "--marker", " ", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
 
 const pickFooter = CGrey + "⏎" + COff + " " + CDim + "PICK" + COff + "   " + CGrey + "esc" + COff + " " + CDim + "BACK" + COff
 

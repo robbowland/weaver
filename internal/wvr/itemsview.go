@@ -309,24 +309,31 @@ func (e *Env) itemRows(src itemSource) string {
 	return b.String()
 }
 
-// itemTitle is the view's header: what it shows, how many, and how fresh.
-func (e *Env) itemTitle(src itemSource) string {
-	d := src.read(e)
+// itemLabel is the view's border label, as the board's: what it shows and
+// how many.
+func (e *Env) itemLabel(src itemSource) string {
 	kind := e.itemKind(src)
 	n := 0
-	for _, s := range d.sections[kind] {
+	for _, s := range src.read(e).sections[kind] {
 		n += len(s.items)
 	}
-	t := CBold + "[ WEAVER :: " + src.label(kind) + " ]" + COff + " " + strconv.Itoa(n)
+	return strings.TrimSuffix(formLabel("WEAVER", src.label(kind)), " ") + " " + CGrey + strconv.Itoa(n) + COff + " "
+}
+
+// asking is the view's header while it asks again.
+const asking = CDim + "asking…" + COff
+
+// itemFresh is the view's header: how fresh what it shows is, or what went
+// wrong asking.
+func (e *Env) itemFresh(src itemSource) string {
+	d := src.read(e)
 	switch {
 	case d.fetched.IsZero() && d.err == "":
-		t += "   " + CDim + "asking…" + COff
+		return asking
 	case d.err != "":
-		t += "   " + CRed + oneline.Cut(d.err, 60) + COff
-	default:
-		t += "   " + CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
+		return CRed + oneline.Cut(d.err, 80) + COff
 	}
-	return t
+	return CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
 }
 
 // itemFooter is the view's keys: browsing, or searching.
@@ -351,7 +358,10 @@ func itemFooter(src itemSource) string {
 // itemChrome is the view's header and footer, for fzf's load and keys.
 func (e *Env) itemChrome(src itemSource) string {
 	var acts []string
-	if a, ok := fzfAct("change-header", e.itemTitle(src)); ok {
+	if a, ok := fzfAct("change-border-label", e.itemLabel(src)); ok {
+		acts = append(acts, a)
+	}
+	if a, ok := fzfAct("change-header", e.itemFresh(src)); ok {
 		acts = append(acts, a)
 	}
 	if a, ok := fzfAct("change-footer", itemFooter(src)); ok {
@@ -527,8 +537,8 @@ func (e *Env) itemsView(src itemSource) error {
 			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
 			"--delimiter", "\t", "--with-nth", "5..", "--tabstop", "1",
 			"--no-sort", "--ansi", "--layout", "reverse", "--no-input",
-			"--header", e.itemTitle(src), "--header-first", "--footer", itemFooter(src), "--footer-border", "none",
-			"--border", "sharp", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
+			"--header", e.itemFresh(src), "--header-first", "--footer", itemFooter(src), "--footer-border", "none",
+			"--border", "sharp", "--border-label", e.itemLabel(src), "--border-label-pos", "3", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
 			"--no-scrollbar", "--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
 			"--preview", me + " card {2}", "--preview-window", pw,
@@ -538,7 +548,7 @@ func (e *Env) itemsView(src itemSource) error {
 			"--bind", "enter,double-click,alt-N,alt-n:" + act("from"),
 			"--bind", "alt-R,alt-r:transform:case {1} in i*) echo 'execute-silent(" + me + " from {2} --review)' ;; esac",
 			"--bind", "o:" + act("open"),
-			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + strings.ReplaceAll(e.itemTitle(src), ")", "") + "   …)",
+			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			"--bind", "esc:clear-query+hide-input+rebind(" + itemKeys + ")+transform(" + me + " chrome)",
 			"--bind", "q:ignore",

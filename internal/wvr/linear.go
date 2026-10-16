@@ -132,34 +132,41 @@ func linItem(it linear.Issue) viewItem {
 	return v
 }
 
-// LinearLogin is `wvr linear login`: a personal API key, asked for (it
-// does not show as you paste it) until Linear takes one or you give none,
-// and kept in the macOS Keychain.
-func (e *Env) LinearLogin() error {
-	fmt.Println("weaver reads Linear with a personal API key: make one at")
-	fmt.Println(CGrey + "  https://linear.app/settings/account/security" + COff)
-	fmt.Println("(read access is enough), and paste it here. " + CDim + "Nothing cancels." + COff)
-	in := bufio.NewReader(os.Stdin)
+// LinearLogin is `wvr linear login`: a personal API key, asked for at the
+// terminal (a dot a character) until Linear takes one or you go back, and
+// kept in the macOS Keychain. In a view's window (card) it is laid out as
+// the view's setup card is.
+func (e *Env) LinearLogin(card bool) error {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return errors.New("wvr linear login needs a terminal")
+	}
+	defer func() { _ = tty.Close() }()
+	said := ""
 	for {
-		fmt.Print("\nkey: ")
-		var key string
-		if fd := int(os.Stdin.Fd()); term.IsTerminal(fd) {
-			b, err := term.ReadPassword(fd)
-			fmt.Println()
-			if err != nil {
-				return err
-			}
-			key = string(b)
-		} else {
-			key, _ = in.ReadString('\n')
+		pad := ""
+		if card {
+			pad = placeCard(tty, 8)
 		}
+		fmt.Fprint(tty, cardRow(pad, "view", CBold+"LINEAR"+COff+" "+CDim+"·"+COff+" "+CGrey+"sign in with a personal API key"+COff))
+		fmt.Fprint(tty, cardRow(pad, "make", "https://linear.app/settings/account/security"))
+		fmt.Fprint(tty, cardRow(pad, "", CDim+"read access is enough; weaver keeps it in the Keychain"+COff))
+		if said != "" {
+			fmt.Fprint(tty, cardRow(pad, "", CRed+said+COff))
+		}
+		fmt.Fprint(tty, "\n"+cardKeys(pad, "⏎", "sign in", "esc", "back")+"\n")
+		fmt.Fprint(tty, strings.TrimSuffix(cardRow(pad, "key", ""), "\n"))
+		key, ok := readSecret(tty)
 		key = strings.TrimSpace(key)
-		if key == "" {
+		if !ok || key == "" {
 			return cli.ErrCancelled
 		}
 		name, org, err := linear.Viewer(key)
 		if err != nil {
-			fmt.Println(CRed + "that key did not sign in: " + strings.TrimPrefix(err.Error(), "linear: ") + COff)
+			said = "that key did not sign in: " + strings.TrimPrefix(err.Error(), "linear: ")
+			if !card {
+				fmt.Fprintln(tty)
+			}
 			continue
 		}
 		if err := linear.SaveKey(key); err != nil {
@@ -167,15 +174,55 @@ func (e *Env) LinearLogin() error {
 		}
 		os.Remove(e.authFile("linear"))
 		os.Remove(linCacheFile(e))
-		fmt.Printf("signed in to %s as %s\n", org, name)
+		if !card {
+			fmt.Fprintf(tty, "signed in to %s as %s\n", org, name)
+		}
 		return nil
+	}
+}
+
+// readSecret is a line typed at tty, not shown (a dot a character): enter
+// ends it; esc or ^c goes back (false).
+func readSecret(t *os.File) (string, bool) {
+	fd := int(t.Fd())
+	old, err := term.MakeRaw(fd)
+	if err != nil {
+		l, err := bufio.NewReader(t).ReadString('\n')
+		return l, err == nil || l != ""
+	}
+	defer func() { _ = term.Restore(fd, old) }()
+	var b []rune
+	buf := make([]byte, 256)
+	for {
+		n, err := t.Read(buf)
+		if err != nil || n == 0 {
+			return "", false
+		}
+		for _, c := range string(buf[:n]) {
+			switch {
+			case c == '\r' || c == '\n':
+				fmt.Fprint(t, "\r\n")
+				return string(b), true
+			case c == 0x1b || c == 0x03:
+				fmt.Fprint(t, "\r\n")
+				return "", false
+			case c == 0x7f || c == 0x08:
+				if len(b) > 0 {
+					b = b[:len(b)-1]
+					fmt.Fprint(t, "\b \b")
+				}
+			case c >= 0x20:
+				b = append(b, c)
+				fmt.Fprint(t, "•")
+			}
+		}
 	}
 }
 
 // Linear is `wvr linear login`.
 func (e *Env) Linear(args []string) error {
 	if firstArg(args) == "login" {
-		return e.LinearLogin()
+		return e.LinearLogin(false)
 	}
 	return errors.New("usage: wvr linear login")
 }

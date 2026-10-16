@@ -317,9 +317,9 @@ ok "restart: the thread comes back by itself, resumed, and you stay home" \
 
 # --- the board's x closes it (y to confirm); Ctrl q quits
 waitfor '[ "$(board_rows)" = 1 ]'
-n=$(grep -c 'the agent, its nvim and the tab' "$AT/screen.log")
+n=$(grep -c 'the agent, its nvim and its window' "$AT/screen.log")
 key 78 # x
-waitfor '[ "$(grep -c "the agent, its nvim and the tab" "$AT/screen.log")" -gt "$n" ]'
+waitfor '[ "$(grep -c "the agent, its nvim and its window" "$AT/screen.log")" -gt "$n" ]'
 key 79 # y
 waitfor '[ "$(windows)" = "0 " ]'
 ok "board: x closes the thread, its window and its files" "$(windows)|$(ls "$SD" | grep -c "^tmux-${S}_$AG\.")" "0 |0"
@@ -499,7 +499,7 @@ waitfor 'tx capture-pane -p -t "=$S:901" 2>/dev/null | grep -q "wvr linear login
 ok "a view not signed in: a dot in the strip, and its window says what it needs" \
 	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*no Linear API key')" "1|1"
 tx send-keys -t "=$S:901" Enter
-waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "key:"'
+waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "personal API key"'
 tx send-keys -t "=$S:901" -l lin_wrong
 tx send-keys -t "=$S:901" Enter
 waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "did not sign in"'

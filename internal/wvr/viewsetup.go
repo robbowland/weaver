@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+
+	"github.com/robbowland/weaver/internal/cli"
 )
 
 // viewAbout is what a view shows, for its setup screen.
@@ -23,7 +25,10 @@ func (e *Env) ViewSetup(name string) error {
 	if err != nil {
 		return errors.New("the view's setup needs a terminal")
 	}
-	defer func() { _ = tty.Close() }()
+	defer func() {
+		fmt.Fprint(tty, "\033[?25h")
+		_ = tty.Close()
+	}()
 	said := ""
 	for {
 		need := e.viewNeeds(name)
@@ -48,16 +53,19 @@ func (e *Env) ViewSetup(name string) error {
 			fmt.Fprint(tty, cardRow(pad, "", CRed+said+COff))
 		}
 		keys = append(keys, "h", "hide this view", "esc", "home")
-		fmt.Fprint(tty, "\n"+cardKeys(pad, keys...))
+		fmt.Fprint(tty, "\n"+cardKeys(pad, keys...)+"\033[?25l")
 		said = ""
 		switch k := readKey(); {
 		case (k == '\r' || k == '\n') && need.fix != nil:
-			fmt.Fprint(tty, "\033[H\033[2J")
-			argv := append([]string{}, need.fix...)
-			if argv[0] == "wvr" {
-				argv[0] = e.Self
+			fmt.Fprint(tty, "\033[H\033[2J\033[?25h")
+			if name == "linear" {
+				// Its sign-in is weaver's own: a card like this one.
+				if err := e.LinearLogin(true); err != nil && !errors.Is(err, cli.ErrCancelled) {
+					said = err.Error()
+				}
+				break
 			}
-			c := exec.Command(argv[0], argv[1:]...)
+			c := exec.Command(need.fix[0], need.fix[1:]...)
 			c.Stdin, c.Stdout, c.Stderr = tty, tty, tty
 			if err := c.Run(); err != nil {
 				said = strings.Join(need.fix, " ") + ": " + err.Error()

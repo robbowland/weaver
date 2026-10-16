@@ -86,10 +86,15 @@ func previewCols() int {
 	return 80
 }
 
-// titleLine is the card's title: its first part (to " · ") bold, the rest dim.
+// titleLine is the card's title: its first part (to " · ") bold, the rest
+// dim on the line under it, as the views' cards have it.
 func titleLine(t string) string {
-	head, _, _ := strings.Cut(t, " · ")
-	return CBold + head + COff + CDim + t[len(head):] + COff + "\n"
+	head, rest, _ := strings.Cut(t, " · ")
+	out := CBold + head + COff + "\n"
+	if rest != "" {
+		out += CDim + rest + COff + "\n"
+	}
+	return out
 }
 
 // Help is the keys and glyphs, for the dashboard's ? view.
@@ -126,7 +131,7 @@ func Help() string {
 func Intro() string {
 	d, g, o := CDim, CGrey, COff
 	return "No agents in this session yet.\n\n" +
-		g + "n" + o + "       start a thread: a task, its worktree, and a tab with\n" +
+		g + "n" + o + "       start a thread: a task, its worktree, and a window with\n" +
 		"        nvim and the agent " + d + "(wvr new)" + o + "\n" +
 		g + "Alt N" + o + "   the same from anywhere in the session\n" +
 		g + "Alt y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +

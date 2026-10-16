@@ -250,6 +250,9 @@ func (e *Env) rows(plain bool) string {
 				fact = strconv.Itoa(a.Tdone) + "/" + strconv.Itoa(a.Ttotal) + " tasks"
 			case a.File != "":
 				fact = "editing " + a.File
+			default:
+				// Nothing it runs or edits yet: the model at work.
+				fact = "thinking"
 			}
 		case agent.StateDone:
 			if a.Seen {
