@@ -5,6 +5,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/robbowland/weaver/internal/wv"
 )
@@ -24,6 +26,9 @@ func main() {
 	switch cmd {
 	case "help", "-h", "--help":
 		fmt.Print(wv.Usage)
+		return
+	case "version", "--version":
+		fmt.Println("weaver " + buildVersion())
 		return
 	case "setup":
 		os.Exit(wv.Setup(args[1:], wv.Load().Self, os.Stdout))
@@ -264,4 +269,20 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		return 0, false
 	}
 	return 0, true
+}
+
+// version is set at build time by a package (-ldflags "-X main.version=1.2.3").
+var version string
+
+// buildVersion is the version weaver was built as: the one a package set,
+// else the module's (a tag, or go's pseudo-version from the commit, +dirty
+// with changes), else "dev".
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return strings.TrimPrefix(bi.Main.Version, "v")
+	}
+	return "dev"
 }

@@ -6,7 +6,7 @@ const Usage = `usage: weaver [command]
                                ($WEAVER_SESSION) on weaver's own tmux server; inside
                                tmux: the dashboard
   start [session]              the same, for another session
-  new [task...]                start a thread: a new tab with nvim and an agent, in a new
+  new [task...]                start a thread: a new window with nvim and an agent, in a new
                                worktree whose branch starts from the remote's default
                                branch, fetched; with no task, a form. Options: --repo DIR,
                                --branch NAME, --base REF (@: this checkout's HEAD),
@@ -15,11 +15,11 @@ const Usage = `usage: weaver [command]
                                --from PANE (that agent's repository), --no-focus
   close [--yes] [--remove-worktree] [pane-id]
                                close an agent (the focused one) with its nvim, and its
-                               thread's tab; offers to remove a thread's worktree when it
+                               thread's window; offers to remove a thread's worktree when it
                                is clean and merged or pushed
   resume [--all] [which]       threads lost when their session went (a crash, or quit):
                                alone, list them; with a name, number or session id, bring
-                               that one back in a new tab resuming its conversation;
+                               that one back in a new window resuming its conversation;
                                --all, every one. --forget [--yes] which: drop one
   send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
                                it waits for you to say more; --force, even while it works
@@ -39,5 +39,6 @@ const Usage = `usage: weaver [command]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file
                                it changes; --dry-run shows the changes only
+  version                      weaver's version
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

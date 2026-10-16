@@ -1,7 +1,5 @@
-# weaver's Homebrew formula, for a tap (robbowland/homebrew-kegs, beside
-# gh-dash, gitui and serie). Bump `revision` (and `version`) to release.
-# Built and tested from a local tap on 2026-10-15; brew clones without your
-# git credentials, so the repository must be public for a tap to fetch it.
+# weaver's Homebrew formula, for a tap. Bump `revision` (and `version`) to
+# release.
 class Weaver < Formula
   desc "Coding agents side by side in tmux: pick up whichever thread needs you"
   homepage "https://github.com/robbowland/weaver"
@@ -16,7 +14,7 @@ class Weaver < Formula
   depends_on "tmux"
 
   def install
-    system "go", "build", *std_go_args(ldflags: "-s -w"), "./cmd/weaver"
+    system "go", "build", *std_go_args(ldflags: "-s -w -X main.version=#{version}"), "./cmd/weaver"
   end
 
   def caveats
@@ -28,6 +26,6 @@ class Weaver < Formula
   end
 
   test do
-    assert_match "usage: weaver", shell_output("#{bin}/weaver help")
+    assert_match version.to_s, shell_output("#{bin}/weaver version")
   end
 end
