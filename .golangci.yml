@@ -35,7 +35,7 @@ linters:
       default-signifies-exhaustive: false
     # A ceiling that comes down as the big functions split.
     gocyclo:
-      min-complexity: 130
+      min-complexity: 115
     revive:
       rules:
         - name: blank-imports
