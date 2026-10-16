@@ -58,16 +58,16 @@ type AgentState struct {
 
 // Task is one of an agent's tasks (TaskCreated, TaskCompleted).
 type Task struct {
-	ID      json.RawMessage `json:"id"`
-	Subject string          `json:"subject"`
-	Done    bool            `json:"done"`
+	ID      string `json:"id"`
+	Subject string `json:"subject"`
+	Done    bool   `json:"done"`
 }
 
 // Subagent is a subagent an agent runs now.
 type Subagent struct {
-	ID    json.RawMessage `json:"id"`
-	Type  string          `json:"type"`
-	Since json.Number     `json:"since"`
+	ID    string      `json:"id"`
+	Type  string      `json:"type"`
+	Since json.Number `json:"since"`
 }
 
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr

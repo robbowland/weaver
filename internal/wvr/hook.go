@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,9 +39,13 @@ type hk struct {
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
-	Old                                               AgentState
-	Same                                              bool
-	FilesJSON, SubsJSON, TasksJSON, OTurnRoots, Paths string
+	Old               AgentState
+	Same              bool
+	OTurnRoots, Paths string
+	// The lists after the event, written in the foreground only.
+	Files     []string   `json:"-"`
+	Subagents []Subagent `json:"-"`
+	Tasks     []Task     `json:"-"`
 
 	State                                                                 State
 	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
@@ -89,28 +92,16 @@ func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 			pk = peek(h.sf)
 		}
 	}
-	var ev obj
-	var raw map[string]json.RawMessage
-	{
-		d := json.NewDecoder(bytes.NewReader(in))
-		d.UseNumber()
-		var v any
-		if d.Decode(&v) != nil {
-			return 0
-		}
-		m, ok := v.(map[string]any)
-		if !ok {
-			return 0
-		}
-		ev = obj(m)
-		json.Unmarshal(in, &raw)
+	var ev hookInput
+	if decodeRecord(firstJSON(in), &ev) != nil {
+		return 0
 	}
 	if mode == "async" && !asyncGate(ev, pk.state) {
 		return 0
 	}
 	lk := lock(h.sf)
 	st, _ := os.ReadFile(h.sf)
-	if !h.parse(ev, raw, st) {
+	if !h.parse(ev, st) {
 		os.Remove(lk)
 		return 0
 	}
@@ -148,400 +139,86 @@ func peek(sf string) peeked {
 	return p
 }
 
-// asyncGate: the async hook runs after every tool call; most of them change
-// nothing.
-func asyncGate(ev obj, state State) bool {
-	switch ev["hook_event_name"] {
-	case "PostToolUse":
-		t := tostring(ev.get("tool_name", ""))
-		switch t {
-		case "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "EnterWorktree", "ExitWorktree":
-			return true
-		}
-		if strings.HasPrefix(t, "mcp__") {
-			// *[Ww]rite*, *[Ee]dit*, ...: the word, its first letter either case.
-			for _, w := range []string{"Write", "Edit", "Replace", "Insert", "Create", "Patch", "Apply", "Rename", "Move", "Delete"} {
-				if strings.Contains(t, w) || strings.Contains(t, strings.ToLower(w[:1])+w[1:]) {
-					return true
-				}
-			}
-		}
-		return state != StateWorking
-	case "PostToolBatch":
-		return state == StateNeedsYou
-	}
-	return true
-}
-
-var (
-	reCmdPath  = regexp.MustCompile("(?:^|[\\s=;&|(\"':])(/[^\\s\"';&|()<>`$*?:]+)")
-	reYours    = regexp.MustCompile(`^\s*(<agent-message|<task-notification|<teammate-message|<channel|Another Claude session sent a message)`)
-	reRejected = regexp.MustCompile(`doesn.t want to proceed with this tool use`)
-)
-
-// editFile is the file an edit tool wrote (absolute), else "".
-func editFile(ev obj) string {
-	t := ev.get("tool_name", "")
-	if ev["hook_event_name"] != "PostToolUse" || t != "Edit" && t != "Write" && t != "MultiEdit" && t != "NotebookEdit" {
-		return ""
-	}
-	var f any = ""
-	if ti, ok := ev["tool_input"].(map[string]any); ok {
-		f = firstOf(obj(ti).get("file_path", nil), obj(ti).get("notebook_path", nil), "")
-	}
-	s := line(f)
-	if s == "" || strings.HasPrefix(s, "/") {
-		return s
-	}
-	return tostring(ev.get("cwd", "")) + "/" + s
-}
-
-// commandPaths are the absolute paths a Bash command names (cd targets,
-// VAR=/path, arguments), or an MCP tool's input holds: where to look for
-// what it changed. At most 8, sorted, RS-separated.
-func commandPaths(ev obj) string {
-	t := tostring(ev.get("tool_name", ""))
-	var ps []string
-	switch {
-	case strings.HasPrefix(t, "mcp__"):
-		var walk func(v any)
-		walk = func(v any) {
-			switch x := v.(type) {
-			case string:
-				if strings.HasPrefix(x, "/") {
-					ps = append(ps, line(x))
-				}
-			case []any:
-				for _, y := range x {
-					walk(y)
-				}
-			case map[string]any:
-				for _, y := range x {
-					walk(y)
-				}
-			}
-		}
-		walk(ev["tool_input"])
-	case ev["tool_name"] == "Bash":
-		c := ""
-		if ti, ok := ev["tool_input"].(map[string]any); ok {
-			c = tostring(obj(ti).get("command", ""))
-		}
-		for _, m := range reCmdPath.FindAllStringSubmatch(c, -1) {
-			ps = append(ps, line(m[1]))
-		}
-	default:
-		return ""
-	}
-	sort.Strings(ps)
-	var u []string
-	for i, p := range ps {
-		if i == 0 || p != ps[i-1] {
-			u = append(u, p)
-		}
-	}
-	if len(u) > 8 {
-		u = u[:8]
-	}
-	return strings.Join(u, rs)
-}
-
-// summary is what a permission dialog asks about.
-func summary(ev obj) string {
-	i := obj{}
-	if ti, ok := ev["tool_input"].(map[string]any); ok {
-		i = obj(ti)
-	}
-	fp := firstOf(i.get("file_path", nil), i.get("notebook_path", nil))
-	tn := tostring(ev.get("tool_name", ""))
-	switch {
-	case ev["tool_name"] == "Bash":
-		return "Bash: " + tostring(i.get("command", ""))
-	case ev["tool_name"] == "AskUserQuestion":
-		q := ""
-		if qs, ok := i.get("questions", []any{}).([]any); ok && len(qs) > 0 {
-			if q0, ok := qs[0].(map[string]any); ok {
-				q = tostring(obj(q0).get("question", ""))
-			}
-		}
-		return "question: " + q
-	case fp != nil:
-		p := strings.Split(tostring(fp), "/")
-		return tn + ": " + p[len(p)-1]
-	}
-	return tn
-}
-
-func yours(ev obj) bool {
-	if src := ev.get("source", "user"); src != "user" {
-		return false
-	}
-	return !reYours.MatchString(tostring(ev.get("prompt", "")))
-}
-
-// background are the background subagents and workflows still running when
-// the agent stops: it wakes when they report back.
-func background(ev obj) []obj {
-	var out []obj
-	bs, _ := ev.get("background_tasks", []any{}).([]any)
-	for _, b := range bs {
-		if m, ok := b.(map[string]any); ok && (m["type"] == "subagent" || m["type"] == "workflow") {
-			out = append(out, obj(m))
-		}
-	}
-	return out
-}
-
-func rejected(ev obj) bool {
-	if ev["hook_event_name"] != "PostToolBatch" {
-		return false
-	}
-	cs, _ := ev.get("tool_calls", []any{}).([]any)
-	for _, c := range cs {
-		m, ok := c.(map[string]any)
-		if !ok {
-			continue
-		}
-		r := tostring(obj(m).get("tool_response", ""))
-		if reRejected.MatchString(r) && !strings.Contains(r, "the user said:") {
-			return true
-		}
-	}
-	return false
-}
-
-// rawOr is a stored state's member as jq's tostring of `.k // d`.
-func rawOr(s obj, k, d string) string {
-	v := s.get(k, nil)
-	if v == nil {
-		return d
-	}
-	return tostring(v)
-}
-
-// parse reads the event and the stored state: false
-// when there is no event to fold in.
-func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
-	var s obj
-	if o, ok := readObj(st); ok {
-		s = o
-	} else {
-		s = obj{}
-	}
-	h.Sid = ctl(tostring(ev.get("session_id", "")))
-	o := obj{}
-	if v, ok := s.get("session_id", "").(string); ok && v == tostring(ev.get("session_id", "")) {
-		o = s
-	}
-	h.Aid = ctl(tostring(ev.get("agent_id", "")))
+// parse reads the event and the stored state: false when there is no
+// event to fold in.
+func (h *hk) parse(in hookInput, st []byte) bool {
+	h.Sid = ctl(in.SessionID)
+	h.Aid = ctl(in.AgentID)
 	now := time.Now()
 	h.Now = now.Unix()
 	h.NowMs = now.UnixMilli()
-	evn := ev.get("hook_event_name", "")
-	h.Event = ctl(tostring(evn))
-	h.Cwd = ctl(tostring(ev.get("cwd", "")))
-	h.File = ctl(editFile(ev))
-	if evn == "UserPromptSubmit" && yours(ev) {
-		h.Prompt = ctl(one(ev.get("prompt", ""), 120))
-		h.PromptLong = ctl(one(ev.get("prompt", ""), 2000))
+	h.Event = ctl(in.Event)
+	h.Cwd = ctl(in.Cwd)
+	h.File = ctl(editFile(in))
+	if in.Event == "UserPromptSubmit" && yours(in) {
+		h.Prompt = ctl(one(in.Prompt, 120))
+		h.PromptLong = ctl(one(in.Prompt, 2000))
 	}
-	h.Tool = ctl(tostring(ev.get("tool_name", "")))
-	h.Ntype = ctl(tostring(ev.get("notification_type", "")))
+	h.Tool = ctl(in.ToolName)
+	h.Ntype = ctl(in.Ntype)
 	w := ""
-	switch evn {
+	switch in.Event {
 	case "PermissionRequest", "PreToolUse":
-		w = summary(ev)
+		w = summary(in)
 	case "Notification":
-		w = tostring(ev.get("message", ""))
+		w = in.Message
 	case "StopFailure":
-		w = "error: " + tostring(ev.get("error", ""))
+		w = "error: " + string(in.Error)
 	}
 	h.WaitingNew = ctl(one(w, 100))
-	if tn := ev.get("tool_name", nil); tn != nil {
+	if in.ToolName != "" {
 		ti := "null"
-		if r, ok := raw["tool_input"]; ok {
-			ti = canon(r)
+		if len(in.ToolInput) > 0 {
+			ti = canon(in.ToolInput)
 		}
-		h.Key = ctl(tostring(tn) + ":" + runeSlice(ti, 300))
+		h.Key = ctl(in.ToolName + ":" + runeSlice(ti, 300))
 	}
-	h.LastNew = ctl(one(ev.get("last_assistant_message", ""), 400))
-	h.Atype = ctl(one(ev.get("agent_type", ""), 40))
-	if evn == "Stop" {
-		bg := background(ev)
+	h.LastNew = ctl(one(in.LastMessage, 400))
+	h.Atype = ctl(one(in.AgentType, 40))
+	if in.Event == "Stop" {
+		bg := background(in)
 		h.BgNew = strconv.Itoa(len(bg))
 		var ds []string
-		for _, b := range bg {
-			ds = append(ds, one(b.get("description", ""), 80))
+		for _, d := range bg {
+			ds = append(ds, one(d, 80))
 		}
 		h.BgdescNew = ctl(one(strings.Join(ds, "; "), 240))
 	}
-	h.Source = ctl(tostring(ev.get("source", "")))
-	if ev["is_interrupt"] == true {
+	h.Source = ctl(in.Source)
+	if in.Interrupt {
 		h.Interrupt = "1"
 	}
-	h.TitleNew = ctl(one(ev.get("session_title", ""), 80))
-	h.PromptID = ctl(tostring(ev.get("prompt_id", "")))
-	h.Transcript = ctl(tostring(ev.get("transcript_path", "")))
-	h.NewCwd = ctl(tostring(ev.get("new_cwd", "")))
-	if rejected(ev) {
+	h.TitleNew = ctl(one(in.Title, 80))
+	h.PromptID = ctl(in.PromptID)
+	h.Transcript = ctl(in.Transcript)
+	h.NewCwd = ctl(in.NewCwd)
+	if rejected(in) {
 		h.Rejected = "1"
 	}
-	h.Err = ctl(one(tostring(ev.get("error", "")), 100))
-	h.ToolUseID = ctl(one(ev.get("tool_use_id", ""), 80))
-	if ev["tool_name"] == "Bash" {
-		c := any("")
-		if ti, ok := ev["tool_input"].(map[string]any); ok {
-			c = obj(ti).get("command", "")
-		}
-		h.Cmd = ctl(one(c, 200))
+	h.Err = ctl(one(string(in.Error), 100))
+	h.ToolUseID = ctl(one(in.ToolUseID, 80))
+	if in.ToolName == "Bash" {
+		h.Cmd = ctl(one(in.input().Command, 200))
 	}
-	if evn == "SessionEnd" {
-		h.EndNew = ctl(one(ev.get("reason", ""), 40))
+	if in.Event == "SessionEnd" {
+		h.EndNew = ctl(one(in.Reason, 40))
 	}
 	// The stored state, typed; whether it is this session's.
-	if decodeRecord(firstJSON(st), &h.Old) != nil {
+	known := decodeRecord(firstJSON(st), &h.Old) == nil
+	if !known {
 		h.Old = AgentState{}
 	}
-	h.Same = len(o) > 0
-	h.FilesJSON = filesNew(st, o, h.File)
-	h.SubsJSON = subsNew(st, o, ev, h.Aid, h.Now)
-	h.TasksJSON = tasksNew(st, o, ev)
+	h.Same = known && h.Old.SessionID == in.SessionID
+	h.Files = filesNew(h.sess().Files, h.File)
+	h.Subagents = subsNew(h.sess().Subagents, in, h.Aid, h.Now)
+	h.Tasks = tasksNew(h.sess().Tasks, in)
 	var tr []string
-	if a, ok := o.get("turn_roots", []any{}).([]any); ok {
-		for _, x := range a {
-			tr = append(tr, line(x))
-		}
+	for _, r := range h.sess().TurnRoots {
+		tr = append(tr, line(r))
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
-	h.Paths = commandPaths(ev)
+	h.Paths = commandPaths(in)
 	return h.Event != ""
-}
-
-// stored is the raw array member k of the stored state when it belongs to
-// this session (o is the state, or empty).
-func stored(st []byte, o obj, k string) []json.RawMessage {
-	if len(o) == 0 {
-		return nil
-	}
-	so, ok := parseOobj(st)
-	if !ok {
-		return nil
-	}
-	r, ok := so.get(k)
-	if !ok {
-		return nil
-	}
-	a, _ := rawArray(r)
-	return a
-}
-
-func filesNew(st []byte, o obj, file string) string {
-	fs := stored(st, o, "files")
-	if file == "" {
-		return joinRaw(fs)
-	}
-	var out []json.RawMessage
-	for _, f := range fs {
-		var s string
-		if json.Unmarshal(f, &s) == nil && s == file {
-			continue
-		}
-		out = append(out, f)
-	}
-	out = append(out, json.RawMessage(jqStr(file)))
-	if len(out) > 200 {
-		out = out[len(out)-200:]
-	}
-	return joinRaw(out)
-}
-
-// idOf is an array element's id member, decoded (nil without one).
-func idOf(e json.RawMessage) any {
-	var m map[string]any
-	d := json.NewDecoder(bytes.NewReader(e))
-	d.UseNumber()
-	if d.Decode(&m) != nil {
-		return nil
-	}
-	return m["id"]
-}
-
-func subsNew(st []byte, o obj, ev obj, aid string, now int64) string {
-	subs := stored(st, o, "subagents")
-	without := func() []json.RawMessage {
-		var out []json.RawMessage
-		for _, s := range subs {
-			if id, ok := idOf(s).(string); ok && id == aid {
-				continue
-			}
-			out = append(out, s)
-		}
-		return out
-	}
-	switch ev["hook_event_name"] {
-	case "SubagentStart":
-		if aid != "" {
-			n := `{"id":` + jqStr(aid) + `,"type":` + jqStr(one(ev.get("agent_type", ""), 40)) + `,"since":` + strconv.FormatInt(now, 10) + "}"
-			return joinRaw(append(without(), json.RawMessage(n)))
-		}
-	case "SubagentStop":
-		return joinRaw(without())
-	case "Stop":
-		if len(background(ev)) == 0 {
-			return "[]"
-		}
-	case "SessionStart":
-		if ev["source"] != "compact" {
-			return "[]"
-		}
-	}
-	return joinRaw(subs)
-}
-
-func tasksNew(st []byte, o obj, ev obj) string {
-	tasks := stored(st, o, "tasks")
-	tid := tostring(ev.get("task_id", ""))
-	tsub := one(ev.get("task_subject", ""), 80)
-	last30 := func(a []json.RawMessage) []json.RawMessage {
-		if len(a) > 30 {
-			return a[len(a)-30:]
-		}
-		return a
-	}
-	is := func(e json.RawMessage) bool { id, ok := idOf(e).(string); return ok && id == tid }
-	switch ev["hook_event_name"] {
-	case "TaskCreated":
-		var out []json.RawMessage
-		for _, t := range tasks {
-			if !is(t) {
-				out = append(out, t)
-			}
-		}
-		out = append(out, json.RawMessage(`{"id":`+jqStr(tid)+`,"subject":`+jqStr(tsub)+`,"done":false}`))
-		return joinRaw(last30(out))
-	case "TaskCompleted":
-		found := false
-		var out []json.RawMessage
-		for _, t := range tasks {
-			if is(t) {
-				found = true
-				if oo, ok := parseOobj(t); ok {
-					t = json.RawMessage(oo.set("done", "true").String())
-				}
-			}
-			out = append(out, t)
-		}
-		if found {
-			return joinRaw(out)
-		}
-		out = append(out, json.RawMessage(`{"id":`+jqStr(tid)+`,"subject":`+jqStr(tsub)+`,"done":true}`))
-		return joinRaw(last30(out))
-	case "SessionStart":
-		if ev["source"] != "compact" && ev["source"] != "resume" {
-			return "[]"
-		}
-	}
-	return joinRaw(tasks)
 }
 
 func atoi(s string) (int, bool) {
@@ -698,8 +375,7 @@ func (h *hk) run(e *Env, me string) {
 	}
 	// Turns: each prompt of yours starts one; it ends at Stop, StopFailure
 	// or an interrupt. The roots it touches are snapshotted at its end.
-	h.Turn, _ = atoi(h.oTurn())
-	h.TurnEnded, _ = atoi(h.oTurnEnded())
+	h.Turn, h.TurnEnded = h.sess().Turn, h.sess().TurnEnded
 	h.TurnRoots = h.OTurnRoots
 	if h.Event == "UserPromptSubmit" && h.Prompt != "" {
 		// Esc while the model was writing fires nothing: the previous turn
@@ -755,13 +431,7 @@ func (h *hk) run(e *Env, me string) {
 	h.NV = readNvimPane(e, h.Pane)
 }
 
-// The stored state's members as the hook's text fields hold them.
-func (h *hk) oSince() string     { return h.Old.Since.String() }
-func (h *hk) oSeen() string      { return strconv.FormatBool(h.Old.Seen) }
-func (h *hk) oBg() string        { return strconv.Itoa(h.Old.Background) }
-func (h *hk) oPid() string       { return string(h.Old.Pid) }
-func (h *hk) oTurn() string      { return strconv.Itoa(h.sess().Turn) }
-func (h *hk) oTurnEnded() string { return strconv.Itoa(h.sess().TurnEnded) }
+func (h *hk) oPid() string { return string(h.Old.Pid) }
 
 // sess is the stored state when it is this session's, else none.
 func (h *hk) sess() AgentState {
@@ -827,16 +497,8 @@ func (e *Env) writeState(h *hk, lk string) {
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
 		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
-		Subagents: []Subagent{}, Tasks: []Task{}, Files: []string{}, TurnRoots: []string{}}
-	// The lists, kept as JSON text while the hook merges them.
-	for _, l := range []struct {
-		text string
-		v    any
-	}{{h.FilesJSON, &st.Files}, {h.SubsJSON, &st.Subagents}, {h.TasksJSON, &st.Tasks}} {
-		if l.text != "" {
-			bestEffort(json.Unmarshal([]byte(l.text), l.v))
-		}
-	}
+		TurnRoots: []string{}}
+	st.Files, st.Subagents, st.Tasks = orEmpty(h.Files), orEmpty(h.Subagents), orEmpty(h.Tasks)
 	if digits(h.Pid) {
 		st.Pid = json.Number(h.Pid)
 	}

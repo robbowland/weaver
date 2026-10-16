@@ -187,55 +187,6 @@ func num(v any) (float64, bool) {
 	return 0, false
 }
 
-// jqLess is jq's ordering for the comparisons the rows make: numbers by
-// value, and any number below any string or other value (null < false <
-// true < numbers < strings < arrays < objects).
-func jqGreater(a, b any) bool { return jqCmp(a, b) > 0 }
-
-func jqCmp(a, b any) int {
-	ra, rb := jqRank(a), jqRank(b)
-	if ra != rb {
-		if ra < rb {
-			return -1
-		}
-		return 1
-	}
-	switch ra {
-	case 3:
-		x, _ := num(a)
-		y, _ := num(b)
-		switch {
-		case x < y:
-			return -1
-		case x > y:
-			return 1
-		}
-		return 0
-	case 4:
-		return strings.Compare(a.(string), b.(string))
-	}
-	return 0
-}
-
-func jqRank(v any) int {
-	switch x := v.(type) {
-	case nil:
-		return 0
-	case bool:
-		if x {
-			return 2
-		}
-		return 1
-	case json.Number, float64, int:
-		return 3
-	case string:
-		return 4
-	case []any:
-		return 5
-	}
-	return 6
-}
-
 // AgentRows are the session's agents: from their
 // state files, refined by Claude Code's own session files, and the threads
 // whose agent has not reported yet. Agents gone (their pane closed, or their
@@ -436,26 +387,6 @@ func firstOf(vs ...any) any {
 	return nil
 }
 
-// jqLength is jq's length: of an array, object or string, or a number's
-// absolute value; null's is 0.
-func jqLength(v any) int {
-	switch x := v.(type) {
-	case []any:
-		return len(x)
-	case map[string]any:
-		return len(x)
-	case string:
-		return len([]rune(x))
-	case json.Number:
-		f, _ := x.Float64()
-		if f < 0 {
-			f = -f
-		}
-		return int(f)
-	}
-	return 0
-}
-
 // claudeLive are the Claude Code sessions running on this machine, from
 // their ~/.claude/sessions/<pid>.json files (each one line), by pid.
 func (e *Env) claudeLive() map[string]obj {
@@ -569,8 +500,6 @@ func (e *Env) LostRows() []LostRow {
 	})
 	return rs
 }
-
-func present(v any) bool { return v != nil && v != "" }
 
 // retire: the agent of state file f (pid) is gone: its thread lost with its
 // session is kept, anything else forgotten.

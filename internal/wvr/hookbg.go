@@ -37,11 +37,7 @@ func (e *Env) hookBg() {
 			e.nvimEvent(h, "root", `,"root":`+jsonStr(h.Root), h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
-		ot := h.oTurn()
-		if ot == "" {
-			ot = "0"
-		}
-		if h.State != h.Old.State || strconv.Itoa(h.Turn) != ot || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
+		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
 			e.nvimStateEvent(h)
 		}
 	}
