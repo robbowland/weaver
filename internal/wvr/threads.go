@@ -239,7 +239,7 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 	if fm.Base != "" {
 		return fm.Base, ""
 	}
-	wait := envSeconds("WEAVER_FETCH_TIMEOUT", 10*time.Second)
+	wait := cli.EnvSeconds("WEAVER_FETCH_TIMEOUT", 10*time.Second)
 	ld := git.LocalDefault(repo)
 	from := "the local default branch"
 	if ld != "" {
@@ -553,9 +553,9 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		// first: kept as lost when they are, else forgotten.
 		sf := e.StateFile(pane)
 		if files.Exists(sf) {
-			pk := peek(sf)
-			if pk.pid == "" || !session.AgentAlive(pk.pid, pk.start, nil) {
-				e.Retire(sf, pk.pid)
+			pk := session.Peek(sf)
+			if pk.Pid == "" || !session.AgentAlive(pk.Pid, pk.Start, nil) {
+				e.Retire(sf, pk.Pid)
 			}
 		}
 		if therr == nil {
@@ -1017,7 +1017,7 @@ func (e *Env) Close(args []string) error {
 		}
 		return errors.New("no agent in pane " + t)
 	}
-	nv, pending := readNvimPane(e, agentPane), ""
+	nv, pending := e.NvimPane(agentPane), ""
 	if nv == "" {
 		nv, pending = threadNvim(panes, byID[agentPane])
 	}
@@ -1246,7 +1246,7 @@ func (e *Env) Send(args []string) error {
 			want, _ = tmux.ParsePane(a)
 		}
 	}
-	if !digits(string(want)) || isTTY(0) {
+	if !digits(string(want)) || cli.IsTTY(0) {
 		return errors.New(usage)
 	}
 	text, _ := io.ReadAll(os.Stdin)

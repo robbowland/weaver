@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -20,7 +21,7 @@ import (
 
 // Event is `wvr event [--bell]` and `wvr adapt codex [--bell]`.
 func (e *Env) Event(adapter string, bell bool) error {
-	if isTTY(0) {
+	if cli.IsTTY(0) {
 		return errors.New("usage: wvr event [--bell] < event.json")
 	}
 	in, _ := io.ReadAll(os.Stdin)

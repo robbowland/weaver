@@ -266,7 +266,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 	}
 	// The keys in a column of their own at the right edge: fzf's width (its
 	// header's, less its border and margins).
-	w, ok := envInt("FZF_COLUMNS")
+	w, ok := cli.EnvInt("FZF_COLUMNS")
 	if !ok {
 		if _, c, ok2 := ttySize(); ok2 {
 			w = c
@@ -526,7 +526,7 @@ func (e *Env) New(args []string) error {
 		// In a popup (Alt N in a view), what went wrong stays on screen
 		// until a key: the popup would close with it.
 		dieItem := func(m string) error {
-			if isTTY(0) && isTTY(2) && t == "" {
+			if cli.IsTTY(0) && cli.IsTTY(2) && t == "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n\n%spress a key%s", CRed, m, COff, CGrey, COff)
 				readKey()
 				return cli.ErrSaid
@@ -551,11 +551,11 @@ func (e *Env) New(args []string) error {
 				}
 			}
 		}
-		if isTTY(2) {
+		if cli.IsTTY(2) {
 			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, items.RefName(ref), COff)
 		}
 		x, err := items.Fetch(ref, start)
-		if isTTY(2) {
+		if cli.IsTTY(2) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
 		if err != nil {
@@ -616,7 +616,7 @@ func (e *Env) New(args []string) error {
 		}
 		return e.threadCreate(t, fm, nofocus)
 	}
-	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(0) || !isTTY(1) {
+	if _, err := exec.LookPath("fzf"); err != nil || !cli.IsTTY(0) || !cli.IsTTY(1) {
 		return errors.New(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
 	}
 	os.MkdirAll(e.StateDir, 0o755)

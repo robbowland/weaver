@@ -31,7 +31,7 @@ func (e *Env) openLeftOf(target tmux.PaneID, cwd, name string, argv ...string) (
 		return "", fmt.Errorf("tmux split-window failed")
 	}
 	p, _ := tmux.ParsePane(string(out))
-	e.renamePane(p, name)
+	e.RenamePane(p, name)
 	return p, nil
 }
 
@@ -177,7 +177,7 @@ func (e *Env) Edit(args []string) error {
 		unlock := e.editLock(agentPane)
 		// Fresh, now that no other press is opening an nvim for this agent.
 		panes, _ = e.Panes()
-		nv = readNvimPane(e, agentPane)
+		nv = e.NvimPane(agentPane)
 		// Reuse the agent's nvim while its pane is alive, even when nvim does
 		// not answer: never a second one.
 		if p := paneOf(panes, nv); nv != "" && p != nil && !p.Exited {
@@ -205,12 +205,12 @@ func (e *Env) Edit(args []string) error {
 			// Only if it is slow, record its pane ourselves, without the pid
 			// (never over its own record).
 			for i := 0; i < 15; i++ {
-				if readNvimPane(e, agentPane) == newPane {
+				if e.NvimPane(agentPane) == newPane {
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			if readNvimPane(e, agentPane) != newPane {
+			if e.NvimPane(agentPane) != newPane {
 				nf := e.PaneFile(agentPane, "nvim")
 				if f, err := os.OpenFile(nf, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
 					_, err := f.WriteString(string(newPane) + "\n\n")
@@ -224,7 +224,7 @@ func (e *Env) Edit(args []string) error {
 	if full {
 		p := target
 		if agentPane != "" {
-			if v := readNvimPane(e, agentPane); v != "" {
+			if v := e.NvimPane(agentPane); v != "" {
 				p = v
 			} else if newPane != "" {
 				p = newPane
@@ -272,7 +272,7 @@ func (e *Env) Nvim(args []string) error {
 	// or alive but busy): go to it instead, and let this pane close.
 	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
 		if nvim.Eval(sock, "1", 2*time.Second) != nvim.Absent {
-			if nv := readNvimPane(e, agentPane); nv != "" && nv != e.MyPane {
+			if nv := e.NvimPane(agentPane); nv != "" && nv != e.MyPane {
 				e.focus(nv)
 			}
 			return nil

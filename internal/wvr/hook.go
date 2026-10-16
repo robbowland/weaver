@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/hooks"
@@ -94,13 +95,13 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 		return 0
 	}
 	h.sf = e.StateFile(pane)
-	pk := peek(h.sf)
+	pk := session.Peek(h.sf)
 	// A session nested in this pane's agent (claude -p, an SDK script)
 	// inherits its pane: while the pane's own agent runs, its events are not
 	// ours.
-	if me != "" && pk.pid != "" && me != pk.pid {
-		if session.AgentAlive(pk.pid, pk.start, nil) {
-			if pk.state != agent.StateEnded {
+	if me != "" && pk.Pid != "" && me != pk.Pid {
+		if session.AgentAlive(pk.Pid, pk.Start, nil) {
+			if pk.State != agent.StateEnded {
 				return 0
 			}
 		} else {
@@ -108,12 +109,12 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 			// this one gave its pane to a new agent: keep the old one's
 			// thread as lost before this state replaces it.
 			if e.LostCheck(h.sf) {
-				e.Lose(h.sf, pk.pid)
+				e.Lose(h.sf, pk.Pid)
 			}
-			pk = peek(h.sf)
+			pk = session.Peek(h.sf)
 		}
 	}
-	if mode == "async" && !hooks.AsyncGate(ev, pk.state) {
+	if mode == "async" && !hooks.AsyncGate(ev, pk.State) {
 		return 0
 	}
 	lk := store.Lock(h.sf)
@@ -126,34 +127,6 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 	e.writeState(h, lk)
 	e.afterWrite(h)
 	return h.rc
-}
-
-type peeked struct {
-	state      agent.State
-	pid, start string
-}
-
-var (
-	rePkState = regexp.MustCompile(`"state":"([a-z-]+)"`)
-	rePkPid   = regexp.MustCompile(`"pid":([0-9]+)`)
-	rePkStart = regexp.MustCompile(`"proc_start":"([^"]*)"`)
-)
-
-// peek is the stored state's state, pid and start, read from its first
-// line without parsing it.
-func peek(sf string) peeked {
-	l, _ := files.FirstLine(sf)
-	var p peeked
-	if m := rePkState.FindStringSubmatch(l); m != nil {
-		p.state = agent.State(m[1])
-	}
-	if m := rePkPid.FindStringSubmatch(l); m != nil {
-		p.pid = m[1]
-	}
-	if m := rePkStart.FindStringSubmatch(l); m != nil {
-		p.start = m[1]
-	}
-	return p
 }
 
 // parse reads the event and the stored state: false when there is no
@@ -397,7 +370,7 @@ func (h *hk) run(e *Env, me string) {
 		h.MarkDir = h.Root
 	}
 	h.Marked = h.MarkDir
-	h.NV = readNvimPane(e, h.Pane)
+	h.NV = e.NvimPane(h.Pane)
 }
 
 func (h *hk) oPid() string { return string(h.Old.Pid) }
@@ -408,31 +381,6 @@ func (h *hk) sess() agent.Record {
 		return h.Old
 	}
 	return agent.Record{}
-}
-
-// readNvimPane is the agent's nvim pane, when that nvim still runs.
-func readNvimPane(e *Env, pane tmux.PaneID) tmux.PaneID {
-	b, err := os.ReadFile(e.PaneFile(pane, "nvim"))
-	if err != nil {
-		return ""
-	}
-	ls := strings.SplitN(string(b), "\n", 3)
-	nv, pid := ls[0], ""
-	if len(ls) > 1 {
-		pid = ls[1]
-	}
-	if !digits(nv) && nv != "" {
-		return ""
-	}
-	if pid != "" && !digits(pid) {
-		pid = ""
-	}
-	if pid != "" {
-		if n, _ := strconv.Atoi(pid); syscall.Kill(n, 0) != nil {
-			return ""
-		}
-	}
-	return tmux.PaneID(nv)
 }
 
 // writeState writes the state file from the hook's fields through its lock, which the rename releases.
@@ -604,7 +552,7 @@ func (e *Env) HookMain(args []string) {
 			return
 		}
 	}
-	if e.MyPane == "" || e.Session == "" || isTTY(0) {
+	if e.MyPane == "" || e.Session == "" || cli.IsTTY(0) {
 		return
 	}
 	in, _ := io.ReadAll(os.Stdin)

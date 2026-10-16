@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -79,7 +80,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		// Untracked files over WEAVER_SNAPSHOT_MAX_KB (5 MB) stay out: a
 		// download or a build artefact must not bloat the object store.
 		maxKB := int64(5120)
-		if v, ok := envInt("WEAVER_SNAPSHOT_MAX_KB"); ok {
+		if v, ok := cli.EnvInt("WEAVER_SNAPSHOT_MAX_KB"); ok {
 			maxKB = int64(v)
 		}
 		env := []string{"GIT_INDEX_FILE=" + idx}

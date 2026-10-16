@@ -1,7 +1,6 @@
 package wvr
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -18,7 +17,6 @@ import (
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
@@ -62,7 +60,7 @@ func (e *Env) hookBg() {
 		}
 	}
 	if h.NV != "" && h.Root != h.Old.Root && e.sameRoot(h) {
-		e.renamePane(h.NV, "nvim: "+filepath.Base(h.Root))
+		e.RenamePane(h.NV, "nvim: "+filepath.Base(h.Root))
 	}
 	if h.MarkDir != h.Old.MarkedRoot || h.MarkDir != "" && h.Marker != h.Old.Marker {
 		if h.Old.MarkedRoot != "" && h.Old.MarkedRoot != h.MarkDir {
@@ -84,17 +82,6 @@ func (e *Env) sameRoot(h *hk) bool {
 	l, _ := files.FirstLine(h.sf)
 	m := regexp.MustCompile(`"root":"([^"]*)"`).FindStringSubmatch(l)
 	return m == nil || m[1] == h.Root
-}
-
-// renamePane titles a pane (the nvim beside an agent), bounded.
-func (e *Env) renamePane(p tmux.PaneID, title string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	args := []string{"select-pane", "-t", p.Target(), "-T", title}
-	if !e.InTmux {
-		args = append(append([]string{}, e.TSock...), args...)
-	}
-	exec.CommandContext(ctx, "tmux", args...).Run()
 }
 
 // wtMarker sets or clears a Worktrunk branch marker in dir.
@@ -276,7 +263,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 	}
 	e.nvimEditEvent(h, "edit", r, newest, h.Tool)
 	if r != h.Old.Root {
-		e.renamePane(h.NV, "nvim: "+filepath.Base(r))
+		e.RenamePane(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true
 }

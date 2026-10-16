@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/session"
-	"golang.org/x/sys/unix"
 )
 
 // FzfColors are the dashboards' fzf colours.
@@ -23,11 +23,6 @@ const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
 const lsKeys = "j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
-
-func isTTY(fd int) bool {
-	_, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
-	return err == nil
-}
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
@@ -56,7 +51,7 @@ func (e *Env) Home() error {
 // carries on; any other ends with a key, and acts.
 func (e *Env) Ls() error {
 	home := os.Getenv("LS_HOME") != ""
-	if _, err := exec.LookPath("fzf"); err != nil || !isTTY(1) {
+	if _, err := exec.LookPath("fzf"); err != nil || !cli.IsTTY(1) {
 		fmt.Print(e.PlainRows())
 		return nil
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
@@ -230,7 +231,7 @@ func (e *Env) Next() {
 		cs = append(cs, c{class, r.Since, r.Pane, r.Tab, l})
 	}
 	if len(cs) == 0 {
-		if isTTY(1) {
+		if cli.IsTTY(1) {
 			fmt.Println("weaver: no agent needs you")
 			time.Sleep(time.Second)
 		} else {
@@ -337,7 +338,7 @@ func agentCols(total int) int {
 		return n
 	}
 	least := 44
-	if n, ok := envInt("WEAVER_AGENT_MIN_COLS"); ok {
+	if n, ok := cli.EnvInt("WEAVER_AGENT_MIN_COLS"); ok {
 		least = n
 	}
 	c := total * pct / 100
@@ -368,7 +369,7 @@ func (e *Env) Fit(window string) {
 		if !files.Exists(e.ThreadFile(p)) {
 			continue
 		}
-		if readNvimPane(e, p) == "" || len(ps) != 2 {
+		if e.NvimPane(p) == "" || len(ps) != 2 {
 			continue
 		}
 		t, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{window_width}")

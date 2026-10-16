@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -78,29 +78,12 @@ func ttySize() (int, int, bool) {
 	return int(ws.Row), int(ws.Col), true
 }
 
-func envInt(k string) (int, bool) {
-	v := os.Getenv(k)
-	if !digits(v) {
-		return 0, false
-	}
-	n, err := strconv.Atoi(v)
-	return n, err == nil
-}
-
-// envSeconds is $k as a whole number of seconds, else d.
-func envSeconds(k string, d time.Duration) time.Duration {
-	if n, ok := envInt(k); ok {
-		return time.Duration(n) * time.Second
-	}
-	return d
-}
-
 // lsSize is the dashboard's size, columns and lines:
 // fzf's, which inside its border (border=true) is 4 columns and 2 lines
 // short of the pane; else the terminal's.
 func lsSize() (int, int) {
-	c, ok1 := envInt("FZF_COLUMNS")
-	l, ok2 := envInt("FZF_LINES")
+	c, ok1 := cli.EnvInt("FZF_COLUMNS")
+	l, ok2 := cli.EnvInt("FZF_LINES")
 	if !ok1 || !ok2 {
 		c, l = 0, 0
 	}
@@ -112,10 +95,10 @@ func lsSize() (int, int) {
 			l, c = r, k
 		} else {
 			c, l = 100, 40
-			if n, ok := envInt("COLUMNS"); ok {
+			if n, ok := cli.EnvInt("COLUMNS"); ok {
 				c = n
 			}
-			if n, ok := envInt("LINES"); ok {
+			if n, ok := cli.EnvInt("LINES"); ok {
 				l = n
 			}
 		}
@@ -204,7 +187,7 @@ func (e *Env) rows(plain bool) string {
 		red, green, grey, dim, bold, off = CRed, CGreen, CGrey, CDim, CBold, COff
 	}
 	width := 100
-	if n, ok := envInt("COLUMNS"); ok {
+	if n, ok := cli.EnvInt("COLUMNS"); ok {
 		width = n
 	}
 	if width < 40 {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -79,7 +80,7 @@ func field(w int, label, text, color string, lines int) []string {
 }
 
 func previewCols() int {
-	if n, ok := envInt("FZF_PREVIEW_COLUMNS"); ok {
+	if n, ok := cli.EnvInt("FZF_PREVIEW_COLUMNS"); ok {
 		return n
 	}
 	return 80
@@ -165,7 +166,7 @@ func (e *Env) Preview(args []string) string {
 		head, _, _ := strings.Cut(title, " · ")
 		out := fmt.Sprintf("%sscreen · %s%s%s%s%s\n", CDim, COff+CBold, head, COff, CDim+title[len(head):], COff)
 		lines := 40
-		if n, ok := envInt("FZF_PREVIEW_LINES"); ok {
+		if n, ok := cli.EnvInt("FZF_PREVIEW_LINES"); ok {
 			lines = n
 		}
 		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", p.Target())
