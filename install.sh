@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Install weaver from this checkout: weaver itself (one binary, wvr) into
-# ~/.local/bin/wvr, then what it works with (`wvr doctor --fix`: Homebrew
-# installs what is missing, and the sign-ins are offered).
+# For working on weaver: this checkout's build, as ~/.local/bin/wvr (ahead
+# of Homebrew's on PATH), unreleased. To install weaver, use Homebrew:
+# `brew install robbowland/kegs/weaver` (or --HEAD, for what is on main).
 #
-#   ./install.sh                  build wvr, install what is missing, and say what is left
-#     --no-deps                   install nothing else (`wvr doctor` only says what is missing)
+#   ./install.sh                  build wvr into ~/.local/bin, and say what is left (wvr doctor)
 #     --configure                 also add the Claude Code (and Codex) hooks now
 #                                 (`wvr setup`; wvr does it itself as it starts)
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
@@ -24,16 +23,15 @@ die() {
 	exit 1
 }
 
-configure=0 dry=0 codex=1 deps=1
+configure=0 dry=0 codex=1
 while [ $# -gt 0 ]; do
 	case $1 in
 	--configure) configure=1 ;;
-	--no-deps) deps=0 ;;
 	--dry-run) dry=1 ;;
 	--no-codex) codex=0 ;;
 	--zellij-config) die "weaver runs on tmux only now: --zellij-config is gone (remove weaver's keybindings from your zellij config)" ;;
 	-h | --help)
-		sed -n '2,12p' "$0"
+		sed -n '2,11p' "$0"
 		exit 0
 		;;
 	*) die "unknown option: $1 (see --help)" ;;
@@ -41,17 +39,10 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-# check_deps: Go, to build weaver (from Homebrew when it is missing).
-# What weaver itself works with is `wvr doctor --fix`'s.
+# check_deps: Go, to build weaver. What weaver works with is wvr's to say
+# (and `wvr doctor --fix`'s to install).
 check_deps() {
-	command -v go >/dev/null 2>&1 && return 0
-	command -v brew >/dev/null 2>&1 || die "Go is needed to build weaver: https://go.dev/dl (or Homebrew: https://brew.sh)"
-	if [ $dry = 1 ]; then
-		say "would install Go with Homebrew, to build weaver"
-		return
-	fi
-	say "installing Go with Homebrew, to build weaver"
-	brew install go || die "brew install go failed"
+	command -v go >/dev/null 2>&1 || die "Go is needed to build weaver: brew install go"
 }
 
 # ours FILE: is FILE a weaver binary?
@@ -149,15 +140,8 @@ if [ $configure = 1 ]; then
 		"$BIN/wvr" setup "$@"
 	fi
 fi
-# What weaver works with: installed (Homebrew), its hooks and plugin, the
-# sign-ins offered; then what is left.
+# What is left (wvr doctor --fix does what it can of it).
 if [ $dry = 0 ]; then
 	echo
-	if [ $deps = 1 ]; then
-		"$BIN/wvr" doctor --fix || true
-	else
-		"$BIN/wvr" doctor || true
-	fi
-	echo
-	say "start weaver with: wvr"
+	"$BIN/wvr" doctor || true
 fi

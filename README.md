@@ -40,10 +40,8 @@ fixes each; `wvr doctor --fix` does what it can: Homebrew installs what is
 missing or too old, weaver sets up its hooks and fetches its plugin, and
 each sign-in is offered.
 
-From a checkout, `./install.sh` builds weaver, one binary carrying
-everything it needs, into `~/.local/bin/wvr` (installing Go first if it has
-to), then runs `wvr doctor --fix` (`--no-deps`: only `wvr doctor`; safe to
-rerun, `--dry-run` shows what it would do).
+`brew upgrade` keeps it current; `brew install --HEAD
+robbowland/kegs/weaver` installs what is on main, unreleased.
 
 Its command is `wvr`, and it sets itself up as it starts, when it is the
 `wvr` on your PATH: Claude Code's hooks (`~/.claude/settings.json`, backed
@@ -418,6 +416,10 @@ and [docs/decisions.md](docs/decisions.md) says why things are as they are.
 ```sh
 test/run.sh
 ```
+
+To run a checkout's build, `./install.sh` builds it into `~/.local/bin/wvr`,
+ahead of Homebrew's on PATH (it needs Go; safe to rerun, `--dry-run` shows
+what it would do); remove that file to go back to Homebrew's.
 
 runs, in a few minutes, each with its own state and nothing of yours
 touched (they need jq and python3 as well as weaver's own dependencies):

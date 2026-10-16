@@ -17,7 +17,7 @@ printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/install.sh"
 echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
 inst() {
 	env -u ZELLIJ_CONFIG_FILE HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
-		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:${BREW:+$BREW:}$PATH" "$ROOT/install.sh" ${DEPS---no-deps} "$@" 2>&1
+		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:$PATH" "$ROOT/install.sh" "$@" 2>&1
 }
 
 out=$(inst)

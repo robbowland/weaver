@@ -378,9 +378,12 @@ can supersede an earlier one, and says so.
   view not ready yet shows its need and runs the fix on one key. What
   weaver works with is known to wvr alone: `wvr doctor` names what is
   missing and the fix for each, and `wvr doctor --fix` does those it can
-  (Homebrew installs, the hooks, the plugin, the sign-ins offered); from a
-  checkout, `install.sh` builds wvr (Go first, if need be) and runs it, no
+  (Homebrew installs, the hooks, the plugin, the sign-ins offered), no
   Brewfile beside it (Rob: "Can't that just be made into a wvr command?").
+  Homebrew is the installer (Rob: "Isn't brew the installer so I shouldn't
+  have to call install.sh by itself?"): the formula's `head` gives what is
+  on main, and `install.sh` is for working on weaver only, a checkout's
+  build ahead of Homebrew's on PATH.
   Every view is in the session, ready or not, so you see what you could
   have; `h` hides one you do not use.
 
