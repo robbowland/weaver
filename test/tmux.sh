@@ -379,10 +379,12 @@ run() {
 	sh -c "\$c"
 }
 stty -echo -icanon
+# Keys named as gh-dash on Charm v2 names them: alt+shift+n, enter.
 while IFS= read -rsn1 ch; do
+	[ -z "\$ch" ] && { run enter; continue; }
 	[ "\$ch" = \$'\e' ] || continue
 	IFS= read -rsn1 -t 1 d
-	case \$d in N) run alt+N ;; R) run alt+R ;; esac
+	case \$d in N) run alt+shift+n ;; R) run alt+shift+r ;; esac
 done
 GHD
 # Signed in unless $AT/linear-signedout is there; auth login signs it in.
@@ -407,7 +409,7 @@ waitfor '[ "$(windows)" = "0 900 901 " ]'
 ok "views: GITHUB and LINEAR beside home, out of the thread numbers" \
 	"$(tx list-windows -t "=$S" -F '#{window_index}:#{window_name}:#{@weaver-view}' | tr '\n' ' ')" "0:home: 900:GITHUB:github 901:LINEAR:linear "
 GHC=$SD/gh-dash/gh-dash/config.yml
-ok "...gh-dash's own config, weaver's: its keys and colours" "$(grep -c '_from github' "$GHC")|$(grep -c '#39d97a' "$GHC")" "7|1"
+ok "...gh-dash's own config, weaver's: its keys and colours" "$(grep -c '_from github' "$GHC")|$(grep -c '#39d97a' "$GHC")" "13|1"
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
 	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
 
@@ -462,6 +464,12 @@ key 1b4e # Alt N
 waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
 ok "GITHUB: Alt N runs weaver's command for the row, and goes to its thread" \
 	"$(tail -n 1 "$AT/ghdash.ran" 2>/dev/null | sed 's/^.* _from/_from/')|$(where | cut -d ' ' -f 1)" "_from github pr o/r 45|1"
+tx select-window -t "=$S:900"
+waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'
+key 0d # enter
+waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
+ok "...and enter the same: a pull request there is for starting a thread" \
+	"$(grep -c '_from github pr o/r 45$' "$AT/ghdash.ran")|$(where | cut -d ' ' -f 1)" "2|1"
 
 # linear-tui's Alt N: the form, for the issue under its cursor.
 tx select-window -t "=$S:901"

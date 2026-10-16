@@ -244,7 +244,7 @@ func (e *Env) ghDashConfig(argv []string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	t, err := template.New("gh-dash").Parse(string(src))
+	t, err := template.New("gh-dash").Funcs(template.FuncMap{"list": func(xs ...string) []string { return xs }}).Parse(string(src))
 	if err != nil {
 		return nil, err
 	}

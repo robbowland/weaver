@@ -4,10 +4,13 @@
 # binary, .Fork whether gh-dash is the fork with weaver's extras (its
 # version says -rb).
 #
-# What weaver does itself is not offered twice: C (checkout) starts a weaver
-# thread in a worktree of its own and d (diff) a read-only weaver review,
-# as Alt N and Alt R do; only PRs and issues are shown, not the
-# notifications or a repository's branches.
+# The view is for starting threads: enter on a pull request or an issue
+# opens weaver's new-thread form for it, as Alt N does; Alt R a read-only
+# review. What weaver does itself is not offered twice: C (checkout) is a
+# weaver thread too, and d (diff) a weaver review; only PRs and issues are
+# shown, not the notifications or a repository's branches. Alt N and Alt R
+# are named both ways: gh-dash on Charm v2 (4.26 and on) says alt+shift+n,
+# older ones alt+N.
 prSections:
   - title: Queue
     filters: is:open review-requested:@me draft:false sort:updated-desc
@@ -66,9 +69,6 @@ defaults:
         hidden: true
 keybindings:
   universal:
-    - key: enter
-      builtin: togglePreview
-      name: preview
     - key: tab
       builtin: nextSection
       name: next section
@@ -84,18 +84,16 @@ keybindings:
       name: preview up
 {{- end}}
   prs:
-    - key: C
+{{- range list "enter" "C" "alt+shift+n" "alt+N"}}
+    - key: {{.}}
       name: weaver thread
-      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}}
-    - key: alt+N
-      name: weaver thread
-      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}}
-    - key: d
+      command: {{$.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}}
+{{- end}}
+{{- range list "d" "alt+shift+r" "alt+R"}}
+    - key: {{.}}
       name: weaver review (read-only)
-      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}} --review
-    - key: alt+R
-      name: weaver review (read-only)
-      command: {{.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}} --review
+      command: {{$.Wvr}} _from github pr {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.PrNumber{{"}}"}} --review
+{{- end}}
     - key: ctrl+l
       builtin: nextSidebarTab
       name: next preview tab
@@ -103,15 +101,16 @@ keybindings:
       builtin: prevSidebarTab
       name: previous preview tab
   issues:
-    - key: C
+{{- range list "enter" "C" "alt+shift+n" "alt+N"}}
+    - key: {{.}}
       name: weaver thread
-      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}}
-    - key: alt+N
-      name: weaver thread
-      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}}
-    - key: alt+R
+      command: {{$.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}}
+{{- end}}
+{{- range list "alt+shift+r" "alt+R"}}
+    - key: {{.}}
       name: weaver investigate (read-only)
-      command: {{.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}} --review
+      command: {{$.Wvr}} _from github issue {{"{{"}}.RepoName{{"}}"}} {{"{{"}}.IssueNumber{{"}}"}} --review
+{{- end}}
 # Ink and greys, red and green for signals, as the rest of weaver.
 theme:
   ui:
