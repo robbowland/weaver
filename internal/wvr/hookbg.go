@@ -45,9 +45,9 @@ func (e *Env) hookBg() {
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
 	if h.State != h.Old.State {
 		if h.State == StateDone {
-			e.Tmux("set-option", "-w", "-t", "%"+h.Pane, "@weaver-unseen", "1")
+			e.Tmux("set-option", "-w", "-t", h.Pane.target(), "@weaver-unseen", "1")
 		} else if h.Old.State == StateDone {
-			e.Tmux("set-option", "-w", "-u", "-t", "%"+h.Pane, "@weaver-unseen")
+			e.Tmux("set-option", "-w", "-u", "-t", h.Pane.target(), "@weaver-unseen")
 		}
 	}
 	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
@@ -85,10 +85,10 @@ func (e *Env) sameRoot(h *hk) bool {
 }
 
 // renamePane titles a pane (the nvim beside an agent), bounded.
-func (e *Env) renamePane(p, title string) {
+func (e *Env) renamePane(p PaneID, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	args := []string{"select-pane", "-t", "%" + p, "-T", title}
+	args := []string{"select-pane", "-t", p.target(), "-T", title}
 	if !e.InTmux {
 		args = append(append([]string{}, e.TSock...), args...)
 	}
@@ -113,7 +113,7 @@ func wtMarker(dir, m string) {
 // when nvim did not answer in time, 1 when nothing listens. In a hook, a
 // timeout is remembered: calls are skipped for 15s.
 func (e *Env) nvimEvent(h *hk, ev, extra, r, f string) int {
-	sock := e.SockDir + "/" + e.SKey + "_" + h.Pane + ".sock"
+	sock := e.nvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return 1
 	}
@@ -123,7 +123,7 @@ func (e *Env) nvimEvent(h *hk, ev, extra, r, f string) int {
 			return 128
 		}
 	}
-	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(h.Pane) + `,"agent":"` + h.AgentKind +
+	j := `{"ev":"` + ev + `","seq":` + strconv.FormatInt(h.NowMs, 10) + `,"pane":` + jsonStr(string(h.Pane)) + `,"agent":"` + h.AgentKind +
 		`","sid":` + jsonStr(h.Sid) + `,"turn":` + strconv.Itoa(h.Turn) + `,"state":"` + string(h.State) + `"` + extra + "}"
 	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
 	compat := "0"
@@ -228,7 +228,7 @@ func (e *Env) pushStatus(labels bool) {
 	}
 	rows, _ := e.AgentRows()
 	var need, done, work int
-	var seenNow []string
+	var seenNow []PaneID
 	for _, r := range rows {
 		if r.Pane == "" {
 			continue
@@ -242,7 +242,7 @@ func (e *Env) pushStatus(labels bool) {
 			if r.Seen {
 				continue
 			}
-			if strings.Contains(clients, " "+r.Pane+" ") {
+			if strings.Contains(clients, " "+string(r.Pane)+" ") {
 				seenNow = append(seenNow, r.Pane)
 			} else {
 				done++
@@ -307,7 +307,7 @@ func fzfPost(s, actions string) bool {
 
 // MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands
 // out.
-func (e *Env) MarkSeen(p string) {
+func (e *Env) MarkSeen(p PaneID) {
 	sf := e.StateFile(p)
 	if !exists(sf) {
 		return
@@ -323,7 +323,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 	names := map[string]bool{}
 	for _, p := range panes {
 		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.TabName)
-		names[strconv.Itoa(p.Tab)+"\t"+n] = true
+		names[string(p.Tab)+"\t"+n] = true
 	}
 	for _, r := range rows {
 		if r.Pane == "" || r.Tnum == 0 {
@@ -337,10 +337,10 @@ func (e *Env) threadTabLabels(rows []Row) {
 			l = r.Prompt
 		}
 		label := threadLabel(r.Tnum, l, r.Root)
-		if names[r.Tab+"\t"+label] {
+		if names[string(r.Tab)+"\t"+label] {
 			continue
 		}
-		e.Tmux("rename-window", "-t", "@"+r.Tab, label)
+		e.Tmux("rename-window", "-t", r.Tab.target(), label)
 	}
 }
 
@@ -372,7 +372,7 @@ func padNum(n int) string {
 // as changed since the previous such call; the newest is followed. False
 // when nothing changed.
 func (e *Env) followBashEdits(h *hk) bool {
-	stamp := e.StateDir + "/" + e.SKey + "_" + h.Pane + ".bash"
+	stamp := e.paneFile(h.Pane, "bash")
 	nw := stamp + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(nw, nil, 0o644) != nil {
 		return false

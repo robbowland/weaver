@@ -284,12 +284,12 @@ func fetchLinear(r linearRef) (workItem, error) {
 
 // threadOnBranch is the agent pane of a running thread of this session on
 // branch of repo, or "".
-func (e *Env) threadOnBranch(repo, branch string) string {
-	live := map[string]bool{}
+func (e *Env) threadOnBranch(repo, branch string) PaneID {
+	live := map[PaneID]bool{}
 	ps, _ := e.Panes()
 	for _, p := range ps {
 		if !p.Exited {
-			live[strconv.Itoa(p.ID)] = true
+			live[p.ID] = true
 		}
 	}
 	for _, f := range e.SessionFiles("thread") {
@@ -297,8 +297,7 @@ func (e *Env) threadOnBranch(repo, branch string) string {
 		if err != nil || t.Repo != repo || t.Branch != branch {
 			continue
 		}
-		base := strings.TrimSuffix(f, ".thread")
-		if p := base[strings.LastIndexByte(base, '_')+1:]; live[p] {
+		if p := paneOfFile(f); live[p] {
 			return p
 		}
 	}

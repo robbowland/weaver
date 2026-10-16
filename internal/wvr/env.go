@@ -15,7 +15,7 @@ import (
 type Env struct {
 	Session   string // the tmux session's name; empty outside one
 	SKey      string // the session's key in file names: tmux-<name> for tmux
-	MyPane    string // the pane weaver runs in (its number); empty in a popup
+	MyPane    PaneID // the pane weaver runs in; empty in a popup
 	InTmux    bool   // inside a tmux client's pane ($TMUX)
 	StateDir  string
 	LogDir    string
@@ -53,7 +53,7 @@ func Load() *Env {
 		e.TSock = []string{"-L", "weaver"}
 	}
 	e.Self = self()
-	e.MyPane = strings.TrimPrefix(os.Getenv("TMUX_PANE"), "%")
+	e.MyPane, _ = parsePane(os.Getenv("TMUX_PANE"))
 	e.InTmux = os.Getenv("TMUX") != ""
 	if e.InTmux {
 		// weaver's tmux sessions set it for their panes; anywhere else, ask.
@@ -100,7 +100,16 @@ func (e *Env) Tmux(args ...string) ([]byte, error) {
 func runTmux(args ...string) ([]byte, error) { return exec.Command("tmux", args...).Output() }
 
 // StateFile is the state file of the agent in pane p of this session.
-func (e *Env) StateFile(p string) string { return e.StateDir + "/" + e.SKey + "_" + p + ".json" }
+func (e *Env) StateFile(p PaneID) string { return e.paneFile(p, "json") }
+
+// nvimSock is the socket of the nvim of the agent in pane p.
+func (e *Env) nvimSock(p PaneID) string { return e.SockDir + "/" + e.SKey + "_" + string(p) + ".sock" }
+
+// paneFile is the file of kind ext weaver keeps for the agent in pane p:
+// json its state, thread its thread, nvim its nvim, ...
+func (e *Env) paneFile(p PaneID, ext string) string {
+	return e.StateDir + "/" + e.SKey + "_" + string(p) + "." + ext
+}
 
 // SessionFiles are this session's per-pane files with extension ext:
 // <skey>_<digits>.<ext> only, so session "a" never claims session "a_b"'s.

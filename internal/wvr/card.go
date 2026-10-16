@@ -146,6 +146,7 @@ func (e *Env) Preview(args []string) string {
 		}
 		return e.lostCard(pane, title)
 	}
+	p := PaneID(pane)
 	switch view {
 	case "help":
 		return Help()
@@ -159,7 +160,7 @@ func (e *Env) Preview(args []string) string {
 		if n, ok := envInt("FZF_PREVIEW_LINES"); ok {
 			lines = n
 		}
-		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", "%"+pane)
+		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", p.target())
 		ls := strings.Split(strings.TrimSuffix(string(scr), "\n"), "\n")
 		last := 0
 		for i, l := range ls {
@@ -176,11 +177,11 @@ func (e *Env) Preview(args []string) string {
 	if pane == "" {
 		return Intro()
 	}
-	sf := e.StateFile(pane)
+	sf := e.StateFile(p)
 	re := reRoot
 	if !exists(sf) {
 		// A thread whose agent has not reported yet: its record.
-		sf, re = e.StateDir+"/"+e.SKey+"_"+pane+".thread", reWorktree
+		sf, re = e.threadFile(p), reWorktree
 		if !exists(sf) {
 			return ""
 		}
@@ -228,12 +229,12 @@ func (e *Env) Preview(args []string) string {
 	}
 	// The work item its thread started from.
 	from := ""
-	t, terr := readThread(e.threadFile(pane))
+	t, terr := readThread(e.threadFile(p))
 	if terr == nil {
 		from = itemLine(t)
 	}
 	s, err := readState(sf)
-	if sf == e.threadFile(pane) {
+	if sf == e.threadFile(p) {
 		// Its agent has not reported: the thread as it starts.
 		if terr != nil {
 			return out

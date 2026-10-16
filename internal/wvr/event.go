@@ -269,7 +269,7 @@ func (e *Env) Event(adapter string, bell bool) int {
 		pid = ""
 	}
 	if pane == "" {
-		pane = e.MyPane
+		pane = string(e.MyPane)
 	}
 	if pane == "" || e.Session == "" {
 		return 0
@@ -290,7 +290,7 @@ func (e *Env) Event(adapter string, bell bool) int {
 	if pid == "" && adapter != "" && h.Event == "SessionStart" {
 		pid = agentAncestor()
 	}
-	rc := e.hook(h, mode, pane, agent, pid)
+	rc := e.hook(h, mode, PaneID(pane), agent, pid)
 	if bell {
 		bl := os.Getenv("WEAVER_BELL")
 		if bl == "" {

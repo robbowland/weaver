@@ -27,9 +27,10 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 // hk is one hook run: the event's fields, the stored state's (o*), and what
 // it makes of them. Exported fields go to the background run.
 type hk struct {
-	Pane, AgentKind, SKey string
-	Mode                  string `json:"-"`
-	sf                    string
+	Pane            PaneID
+	AgentKind, SKey string
+	Mode            string `json:"-"`
+	sf              string
 
 	Event, Cwd, Sid, File, Prompt, PromptLong, Tool, Ntype string
 	Now, NowMs                                             int64
@@ -54,7 +55,7 @@ type hk struct {
 	TurnRoots                                                             string
 	Moved                                                                 bool
 	SnapPrev, SnapStart, SnapEnd, FirstTouch, PrevPrompt, TurnPrompt      string
-	NV                                                                    string
+	NV                                                                    PaneID
 	// What it is running now (a Bash command, from the async PreToolUse
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
@@ -64,7 +65,7 @@ type hk struct {
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
-func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
+func (e *Env) Hook(in []byte, mode string, pane PaneID, agent, me string) int {
 	var ev hookInput
 	if decodeRecord(firstJSON(in), &ev) != nil {
 		return 0
@@ -73,7 +74,7 @@ func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 }
 
 // hook folds event ev into the state of the agent in pane.
-func (e *Env) hook(ev hookInput, mode, pane, agent, me string) int {
+func (e *Env) hook(ev hookInput, mode string, pane PaneID, agent, me string) int {
 	h := &hk{Pane: pane, AgentKind: agent, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
@@ -466,8 +467,8 @@ func stateCell(s State) string {
 }
 
 // readNvimPane is the agent's nvim pane, when that nvim still runs.
-func readNvimPane(e *Env, pane string) string {
-	b, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + pane + ".nvim")
+func readNvimPane(e *Env, pane PaneID) PaneID {
+	b, err := os.ReadFile(e.paneFile(pane, "nvim"))
 	if err != nil {
 		return ""
 	}
@@ -487,12 +488,12 @@ func readNvimPane(e *Env, pane string) string {
 			return ""
 		}
 	}
-	return nv
+	return PaneID(nv)
 }
 
 // writeState writes the state file from the hook's fields through its lock, which the rename releases.
 func (e *Env) writeState(h *hk, lk string) {
-	pane, _ := atoi(h.Pane)
+	pane, _ := atoi(string(h.Pane))
 	since := h.Since
 	if since == "" {
 		since = "0"
@@ -556,8 +557,9 @@ func (h *hk) logLine(e *Env, ev, members string) {
 	if err != nil {
 		return
 	}
-	f.WriteString(`{"t":` + strconv.FormatInt(h.Now, 10) + `,"pane":` + jsonStr(h.Pane) + `,"turn":` + strconv.Itoa(h.Turn) +
+	_, err = f.WriteString(`{"t":` + strconv.FormatInt(h.Now, 10) + `,"pane":` + jsonStr(string(h.Pane)) + `,"turn":` + strconv.Itoa(h.Turn) +
 		`,"ev":"` + ev + `"` + members + "}\n")
+	bestEffort(err)
 	f.Close()
 }
 
@@ -617,7 +619,7 @@ func (e *Env) afterWrite(h *hk) {
 	if h.Sid != "" {
 		os.MkdirAll(e.LogDir, 0o755)
 	}
-	pf := e.StateDir + "/" + e.SKey + "_" + h.Pane + ".prompt"
+	pf := e.paneFile(h.Pane, "prompt")
 	if h.SnapPrev+h.SnapEnd != "" && exists(pf) {
 		h.TurnPrompt, _ = firstLine(pf)
 		h.PrevPrompt = h.TurnPrompt

@@ -221,8 +221,8 @@ func writeAtomic(f string, b []byte) error {
 }
 
 // threadFile is the record of the thread whose agent is in pane p.
-func (e *Env) threadFile(p string) string {
-	return e.StateDir + "/" + e.SKey + "_" + p + ".thread"
+func (e *Env) threadFile(p PaneID) string {
+	return e.paneFile(p, "thread")
 }
 
 // bestEffort marks an error left unhandled on purpose: what failed (a

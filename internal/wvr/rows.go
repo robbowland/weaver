@@ -17,7 +17,8 @@ import (
 
 // Pane is one pane of the session.
 type Pane struct {
-	ID, Tab  int
+	ID       PaneID
+	Tab      WindowID
 	TabName  string
 	TabIndex int
 	Exited   bool
@@ -46,9 +47,12 @@ func (e *Env) Panes() ([]Pane, bool) {
 					continue
 				}
 				p := Pane{TabName: x[2], Exited: x[4] == "1", Cmd: x[5], Title: x[10], Cwd: x[11], Focused: x[12] == "1"}
-				n := []*int{&p.ID, &p.Tab, &p.TabIndex, &p.W, &p.H, &p.X, &p.Y}
-				s := []string{strings.TrimPrefix(x[0], "%"), strings.TrimPrefix(x[1], "@"), x[3], x[6], x[7], x[8], x[9]}
-				ok := true
+				var okp, okw bool
+				p.ID, okp = parsePane(x[0])
+				p.Tab, okw = parseWindow(x[1])
+				n := []*int{&p.TabIndex, &p.W, &p.H, &p.X, &p.Y}
+				s := []string{x[3], x[6], x[7], x[8], x[9]}
+				ok := okp && okw
 				for j := range n {
 					v, err := strconv.Atoi(s[j])
 					if err != nil || !digits(s[j]) {
@@ -74,7 +78,8 @@ func (e *Env) Panes() ([]Pane, bool) {
 // navigation show it: its text with control characters made spaces.
 type Row struct {
 	State                                                             State
-	Pane, Tab                                                         string
+	Pane                                                              PaneID
+	Tab                                                               WindowID
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
 	Tabname, Agent, Bgtasks, Ttask, Tname                             string
 	Since                                                             int64 // epoch s
@@ -142,10 +147,10 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	if !ok {
 		return nil, now
 	}
-	byID := map[string]*Pane{}
+	byID := map[PaneID]*Pane{}
 	trusted := e.MyPane == ""
 	for i := range panes {
-		id := strconv.Itoa(panes[i].ID)
+		id := panes[i].ID
 		byID[id] = &panes[i]
 		if id == e.MyPane {
 			trusted = true
@@ -169,7 +174,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			continue // gone, or corrupt
 		}
 		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
-		p := byID[strconv.Itoa(int(s.Pane))]
+		p := byID[s.Pane.pane()]
 		if p == nil {
 			g := gone{f, clean(string(s.Pid)), clean(s.ProcStart), s.State}
 			gones = append(gones, g)
@@ -208,7 +213,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case st0 == StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = StateInterrupted, true
 		}
-		r := Row{Pane: strconv.Itoa(int(s.Pane)), Tab: strconv.Itoa(p.Tab), State: State(clean(string(st)))}
+		r := Row{Pane: s.Pane.pane(), Tab: p.Tab, State: State(clean(string(st)))}
 		r.Root = clean(s.Root)
 		if r.Root == "" {
 			r.Root = clean(s.Cwd)
@@ -275,7 +280,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if err != nil || t.Pane == nil {
 			continue
 		}
-		pane := strconv.Itoa(int(*t.Pane))
+		pane := t.Pane.pane()
 		p := byID[pane]
 		if p == nil || p.Exited {
 			continue
@@ -284,7 +289,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if since == 0 {
 			since = now
 		}
-		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: StateStarting,
+		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: StateStarting,
 			Root: clean(t.Worktree), Since: since, Prompt: clean(t.Task), Sfile: f,
 			Tabname: clean(p.TabName), Agent: clean(string(t.Agent)), Ttask: clean(t.Task),
 			Tname: clean(t.Name), Tnum: t.Num})

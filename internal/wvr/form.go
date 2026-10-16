@@ -585,7 +585,8 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
-	var repoArg, from, branch, base, agent, itemArg string
+	var repoArg, branch, base, agent, itemArg string
+	var from PaneID
 	var where Where
 	var itemKind ghKind
 	var task []string
@@ -607,7 +608,7 @@ func (e *Env) New(args []string) (int, bool) {
 			case "--repo":
 				repoArg = v
 			case "--from":
-				from = strings.TrimPrefix(v, "terminal_")
+				from, _ = parsePane(v)
 			case "--branch", "-b":
 				branch = v
 			case "--base":

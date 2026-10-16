@@ -329,8 +329,8 @@ func (e *Env) rows(plain bool) string {
 		if g == 3 {
 			k = 10000000000 - since
 		}
-		pn, _ := strconv.Atoi(a.Pane)
-		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, k, pn), pane: a.Pane, tab: a.Tab, glyph: glyph,
+		pn, _ := strconv.Atoi(string(a.Pane))
+		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, k, pn), pane: string(a.Pane), tab: string(a.Tab), glyph: glyph,
 			name: name, fact: fact, where: where, age: age(now - since), root: a.Root}
 		r.label = name + " · " + where + " · turn " + strconv.Itoa(a.Turn)
 		if a.Tnum > 0 {

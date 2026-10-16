@@ -17,12 +17,12 @@ import (
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
-func (e *Env) openLeftOf(target, cwd, name string, argv ...string) (string, error) {
-	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", "%" + target, "-c", cwd}, argv...)...)
+func (e *Env) openLeftOf(target PaneID, cwd, name string, argv ...string) (PaneID, error) {
+	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.target(), "-c", cwd}, argv...)...)
 	if err != nil {
 		return "", fmt.Errorf("tmux split-window failed")
 	}
-	p := strings.TrimPrefix(strings.TrimSpace(string(out)), "%")
+	p, _ := parsePane(string(out))
 	e.renamePane(p, name)
 	return p, nil
 }
@@ -30,24 +30,24 @@ func (e *Env) openLeftOf(target, cwd, name string, argv ...string) (string, erro
 // threadWidth: back to a thread's split once its nvim reopens beside the
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
-func (e *Env) threadWidth(agent string) {
-	out, err := e.Tmux("list-panes", "-t", "%"+agent)
+func (e *Env) threadWidth(agent PaneID) {
+	out, err := e.Tmux("list-panes", "-t", agent.target())
 	if err != nil || strings.Count(strings.TrimRight(string(out), "\n"), "\n") != 1 {
 		return
 	}
-	t, err := e.Tmux("display-message", "-p", "-t", "%"+agent, "#{window_width}")
+	t, err := e.Tmux("display-message", "-p", "-t", agent.target(), "#{window_width}")
 	total, ok := atoi(strings.TrimSpace(string(t)))
 	if err != nil || !ok {
 		return
 	}
-	e.Tmux("resize-pane", "-t", "%"+agent, "-x", strconv.Itoa(agentCols(total)))
+	e.Tmux("resize-pane", "-t", agent.target(), "-x", strconv.Itoa(agentCols(total)))
 }
 
 // editLock is one `wvr edit` per agent at a time, so a second Alt v finds
 // the nvim the first is opening. A lock older than 5s was left by a killed
 // process.
-func (e *Env) editLock(agent string) func() {
-	d := e.StateDir + "/" + e.SKey + "_" + agent + ".opening"
+func (e *Env) editLock(agent PaneID) func() {
+	d := e.paneFile(agent, "opening")
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; i < 60; i++ {
 		if os.Mkdir(d, 0o755) == nil {
@@ -72,12 +72,12 @@ func (e *Env) editLock(agent string) func() {
 
 // focusedPane is the pane you are on (a popup or run-shell is not a pane:
 // the session's active one).
-func (e *Env) focusedPane() string {
+func (e *Env) focusedPane() PaneID {
 	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pane_id}")
 	if err != nil {
 		return ""
 	}
-	p := strings.TrimPrefix(strings.TrimSpace(string(out)), "%")
+	p, _ := parsePane(string(out))
 	if p == e.MyPane {
 		return ""
 	}
@@ -87,7 +87,7 @@ func (e *Env) focusedPane() string {
 // Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
 func (e *Env) Edit(args []string) int {
-	full, target := false, ""
+	full, target := false, PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--full":
@@ -96,7 +96,7 @@ func (e *Env) Edit(args []string) int {
 			fmt.Fprintln(os.Stderr, "weaver: usage: wvr edit [--full] [pane-id]")
 			return 1
 		default:
-			target = strings.TrimPrefix(strings.TrimPrefix(a, "terminal_"), "%")
+			target, _ = parsePane(a)
 		}
 	}
 	release := e.uiLock()
@@ -112,16 +112,16 @@ func (e *Env) Edit(args []string) int {
 			return 1
 		}
 	}
-	paneOf := func(ps []Pane, p string) *Pane {
+	paneOf := func(ps []Pane, p PaneID) *Pane {
 		for i := range ps {
-			if strconv.Itoa(ps[i].ID) == p {
+			if ps[i].ID == p {
 				return &ps[i]
 			}
 		}
 		return nil
 	}
 	agent := e.agentOf(target)
-	newPane, nv := "", ""
+	var newPane, nv PaneID
 	if agent == "" {
 		cwd := ""
 		if p := paneOf(panes, target); p != nil {
@@ -183,7 +183,7 @@ func (e *Env) Edit(args []string) int {
 			e.nvimEditEvent(h, "focus", root, file, "")
 			e.focus(nv)
 		} else {
-			argv := []string{e.Self, "nvim", agent}
+			argv := []string{e.Self, "nvim", string(agent)}
 			if file != "" {
 				argv = append(argv, file)
 			}
@@ -194,7 +194,7 @@ func (e *Env) Edit(args []string) int {
 				return 1
 			}
 			// A thread's window gets its split back.
-			if exists(e.StateDir + "/" + e.SKey + "_" + agent + ".thread") {
+			if exists(e.paneFile(agent, "thread")) {
 				e.threadWidth(agent)
 			}
 			// The new nvim records itself (pane and pid) as it starts; give it
@@ -208,9 +208,10 @@ func (e *Env) Edit(args []string) int {
 				time.Sleep(100 * time.Millisecond)
 			}
 			if readNvimPane(e, agent) != newPane {
-				nf := e.StateDir + "/" + e.SKey + "_" + agent + ".nvim"
+				nf := e.paneFile(agent, "nvim")
 				if f, err := os.OpenFile(nf, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
-					f.WriteString(newPane + "\n\n")
+					_, err := f.WriteString(string(newPane) + "\n\n")
+					bestEffort(err)
 					f.Close()
 				}
 			}
@@ -228,7 +229,7 @@ func (e *Env) Edit(args []string) int {
 		} else if newPane != "" {
 			p = newPane
 		}
-		e.Tmux("resize-pane", "-Z", "-t", "%"+p)
+		e.Tmux("resize-pane", "-Z", "-t", p.target())
 	}
 	return 0
 }
@@ -242,7 +243,8 @@ func (e *Env) Nvim(args []string) int {
 		fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim <agent-pane-id> [file]")
 		return 1
 	}
-	agent, file, fresh := strings.TrimPrefix(args[0], "terminal_"), "", false
+	agent, _ := parsePane(args[0])
+	file, fresh := "", false
 	if len(args) > 1 {
 		file = args[1]
 	}
@@ -251,7 +253,8 @@ func (e *Env) Nvim(args []string) int {
 			fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 			return 1
 		}
-		agent, file, fresh = strings.TrimPrefix(args[1], "terminal_"), "", true
+		agent, _ = parsePane(args[1])
+		file, fresh = "", true
 		if len(args) > 2 {
 			file = args[2]
 		}
@@ -265,7 +268,7 @@ func (e *Env) Nvim(args []string) int {
 		return 1
 	}
 	os.Chmod(e.SockDir, 0o700)
-	sock := e.SockDir + "/" + e.SKey + "_" + agent + ".sock"
+	sock := e.nvimSock(agent)
 	// Never take the socket of an nvim still serving this agent (answering,
 	// or alive but busy): go to it instead, and let this pane close.
 	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
@@ -281,13 +284,13 @@ func (e *Env) Nvim(args []string) int {
 	sf := e.StateFile(agent)
 	if e.MyPane != "" {
 		os.MkdirAll(e.StateDir, 0o755)
-		nf := e.StateDir + "/" + e.SKey + "_" + agent + ".nvim"
+		nf := e.paneFile(agent, "nvim")
 		tmp := nf + "." + strconv.Itoa(os.Getpid())
 		// exec keeps this pid for nvim.
-		if os.WriteFile(tmp, []byte(e.MyPane+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
+		if os.WriteFile(tmp, []byte(string(e.MyPane)+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
 			os.Rename(tmp, nf)
 		}
-		if exists(sf) && digits(e.MyPane) {
+		if exists(sf) && digits(string(e.MyPane)) {
 			updateState(sf, func(st *AgentState) {
 				nv := json.Number(e.MyPane)
 				st.NvimPane = &nv
@@ -304,7 +307,7 @@ func (e *Env) Nvim(args []string) int {
 		fmt.Fprintln(os.Stderr, "weaver: nvim is not installed")
 		return 1
 	}
-	env := append(os.Environ(), "WEAVER_PANE="+agent, "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
+	env := append(os.Environ(), "WEAVER_PANE="+string(agent), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
 	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
 	// The ATTENTION dialog for a stale swap file would block this nvim and
 	// every remote call: open the startup file read-only instead (weaver.lua

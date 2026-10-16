@@ -218,7 +218,7 @@ func (e *Env) snapRoots(h *hk, point string, turn int, roots, prompt, promptID s
 			continue
 		}
 		seen[r] = true
-		c, made, ok := snapshot(r, ref, point, turn, h.Sid, snapMsg{h.Sid, h.Pane, prompt, promptID, h.Transcript})
+		c, made, ok := snapshot(r, ref, point, turn, h.Sid, snapMsg{h.Sid, string(h.Pane), prompt, promptID, h.Transcript})
 		if !ok || !made {
 			continue
 		}
