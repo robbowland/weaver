@@ -1,6 +1,7 @@
 package wv
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"text/template"
+	"time"
 
 	weaver "github.com/robbowland/weaver"
 )
@@ -50,8 +52,9 @@ func ghDash() []string {
 }
 
 // viewNames are the session's views, in order: $WEAVER_VIEWS (none, or
-// names), else every one whose tool is installed.
-func viewNames() []string {
+// names), else every one whose tool is installed and ready (linear-tui
+// signed in).
+func (e *Env) viewNames() []string {
 	all := []string{"github", "linear"}
 	want, set := os.LookupEnv("WEAVER_VIEWS")
 	if set {
@@ -69,10 +72,46 @@ func viewNames() []string {
 	if ghDash() != nil {
 		ns = append(ns, "github")
 	}
-	if _, err := exec.LookPath("linear-tui"); err == nil {
+	if e.linearReady() {
 		ns = append(ns, "linear")
 	}
 	return ns
+}
+
+// linearReady: is linear-tui installed and signed in? Asked of linear-tui
+// (`auth status`) at most once a minute, the answer kept in
+// $STATE_DIR/linear-auth: Alt y asks every press.
+func (e *Env) linearReady() bool {
+	p, err := exec.LookPath("linear-tui")
+	if err != nil {
+		return false
+	}
+	f := e.StateDir + "/linear-auth"
+	if st, err := os.Stat(f); err == nil && time.Since(st.ModTime()) < time.Minute {
+		b, _ := os.ReadFile(f)
+		return strings.TrimSpace(string(b)) == "yes"
+	}
+	c := exec.Command(p, "auth", "status")
+	var out bytes.Buffer
+	c.Stdout = &out
+	ok := false
+	if c.Start() == nil {
+		done := make(chan error, 1)
+		go func() { done <- c.Wait() }()
+		select {
+		case err := <-done:
+			ok = err == nil && !strings.Contains(out.String(), "Not authenticated")
+		case <-time.After(3 * time.Second):
+			c.Process.Kill()
+		}
+	}
+	ans := "no"
+	if ok {
+		ans = "yes"
+	}
+	os.MkdirAll(e.StateDir, 0o755)
+	os.WriteFile(f, []byte(ans+"\n"), 0o644)
+	return ok
 }
 
 // viewOf is view name as it runs in this session.
@@ -193,11 +232,10 @@ func (e *Env) OpenView(name string, quiet bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Each view has its own index, shown or not: GITHUB 900, LINEAR 901.
 	idx := viewBase
-	for i, n := range viewNames() {
-		if n == name {
-			idx = viewBase + i
-		}
+	if name == "linear" {
+		idx++
 	}
 	args := []string{"new-window", "-P", "-F", "#{window_id}"}
 	if quiet {
@@ -222,7 +260,7 @@ func (e *Env) OpenView(name string, quiet bool) (string, error) {
 // and in a view: THREADS and each view, the one you are on in ink.
 func (e *Env) SetStrip() {
 	strip := "#{?#{==:#{window_index},0},#[fg=#ffffff],#[fg=#616161]}THREADS"
-	for _, n := range viewNames() {
+	for _, n := range e.viewNames() {
 		strip += "   #{?#{==:#{@weaver-view}," + n + "},#[fg=#ffffff],#[fg=#616161]}" + strings.ToUpper(n)
 	}
 	e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-strip", strip)
@@ -231,14 +269,14 @@ func (e *Env) SetStrip() {
 // StartViews starts the session's views in the background, so the first
 // Alt y to one finds it ready.
 func (e *Env) StartViews() {
-	for _, n := range viewNames() {
+	for _, n := range e.viewNames() {
 		e.OpenView(n, true)
 	}
 }
 
 // View is `wvr view [NAME]`: go to view NAME (the first, without one).
 func (e *Env) View(args []string) int {
-	ns := viewNames()
+	ns := e.viewNames()
 	name := ""
 	if len(args) > 0 {
 		name = args[0]

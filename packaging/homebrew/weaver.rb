@@ -10,8 +10,12 @@ class Weaver < Formula
 
   depends_on "go" => :build
   depends_on "fzf"
+  depends_on "gh"
   depends_on "neovim"
+  depends_on "robbowland/kegs/gh-dash"
+  depends_on "robbowland/kegs/linear-tui"
   depends_on "tmux"
+  depends_on "worktrunk"
 
   def install
     system "go", "build", *std_go_args(output: bin/"wvr", ldflags: "-s -w -X main.version=#{version}"), "./cmd/wvr"
@@ -22,6 +26,8 @@ class Weaver < Formula
       Run `wvr` to start weaver's tmux session. It sets itself up as it
       starts: Claude Code's (and Codex's) hooks run it, and the Neovim
       plugin its reviews need is fetched; `wvr setup --dry-run` shows how.
+      For the GITHUB view, sign gh in (`gh auth login`); for LINEAR,
+      linear-tui (`linear-tui auth login`).
     EOS
   end
 

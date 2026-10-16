@@ -18,11 +18,12 @@ any other agent can report through `wvr event`
 
 ## Install
 
-macOS, with tmux 3.3+, Neovim 0.10+, git and fzf; [Worktrunk](https://worktrunk.dev)
-if you want it to make the worktrees; and for the
-[views](#views-github-and-linear), [gh-dash](https://github.com/dlvhdr/gh-dash)
-(with `gh`, signed in) and [linear-tui](https://github.com/k1-c/linear-tui)
-(signed in), each only if you want its view.
+macOS. Homebrew brings what weaver works with: tmux, Neovim, fzf,
+[Worktrunk](https://worktrunk.dev) for the worktrees, and for the
+[views](#views-github-and-linear) `gh` with gh-dash (a fork with weaver's
+extras) and [linear-tui](https://github.com/k1-c/linear-tui). Sign gh in for
+the GITHUB view (`gh auth login`) and linear-tui for LINEAR (`linear-tui auth
+login`); LINEAR shows once linear-tui is signed in.
 
 ```sh
 brew install robbowland/kegs/weaver
@@ -31,7 +32,9 @@ wvr
 
 or, from a checkout, with Go, `./install.sh`, which builds it, one binary
 carrying everything it needs, into `~/.local/bin/wvr` (safe to rerun;
-`--dry-run` shows what it would do).
+`--dry-run` shows what it would do); install what it works with yourself
+(`brew install tmux neovim fzf gh worktrunk robbowland/kegs/gh-dash
+robbowland/kegs/linear-tui`).
 
 Its command is `wvr`, and it sets itself up as it starts, when it is the
 `wvr` on your PATH: Claude Code's hooks (`~/.claude/settings.json`, backed

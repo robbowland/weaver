@@ -79,7 +79,7 @@ func (e *Env) GoHome() {
 			e.Tmux("select-window", "-t", "@"+home)
 		}
 	}
-	views := viewNames()
+	views := e.viewNames()
 	at := -1
 	if cur.view != "" {
 		for i, v := range views {

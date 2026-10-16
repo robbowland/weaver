@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -159,5 +160,31 @@ func TestLinearSelected(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s: got %q (%v) want %q", c.json, got, err, c.want)
 		}
+	}
+}
+
+// LINEAR shows once linear-tui is signed in, asked at most once a minute.
+func TestLinearReady(t *testing.T) {
+	bin := t.TempDir()
+	out := filepath.Join(bin, "status")
+	os.WriteFile(filepath.Join(bin, "linear-tui"), []byte("#!/bin/sh\ncat '"+out+"'\n"), 0o755)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	e := &Env{StateDir: t.TempDir()}
+	os.WriteFile(out, []byte("OAuth token  none\n\nNot authenticated. Run `linear-tui auth login` to sign in.\n"), 0o644)
+	if e.linearReady() {
+		t.Error("signed out: ready")
+	}
+	os.WriteFile(out, []byte("OAuth token  acme (rob)\n"), 0o644)
+	if e.linearReady() {
+		t.Error("asked again within the minute")
+	}
+	old := time.Now().Add(-2 * time.Minute)
+	os.Chtimes(e.StateDir+"/linear-auth", old, old)
+	if !e.linearReady() {
+		t.Error("signed in: not ready")
+	}
+	t.Setenv("PATH", "/usr/bin:/bin")
+	if e.linearReady() {
+		t.Error("not installed: ready")
 	}
 }
