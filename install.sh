@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Install weaver; with --configure, also wire it into Claude Code (and Codex).
+# Install weaver from this checkout: what it works with (Homebrew, from the
+# Brewfile), then weaver itself (one binary, wvr) into ~/.local/bin/wvr.
 #
-#   ./install.sh                  build weaver (one binary, wvr) into ~/.local/bin/wvr
-#   ./install.sh --configure      also add the Claude Code (and Codex) hooks (`wvr setup`)
+#   ./install.sh                  install what is missing, build wvr, and say what is left
+#     --no-deps                   install no dependencies
+#     --configure                 also add the Claude Code (and Codex) hooks now
+#                                 (`wvr setup`; wvr does it itself as it starts)
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
-# Idempotent: rerunning refreshes the installed copy and skips config already present.
+# Idempotent: rerunning refreshes the installed copy and skips what is there.
 set -eu
 
 SRC=$(cd "$(dirname "$0")" && pwd -P)
@@ -20,21 +23,41 @@ die() {
 	exit 1
 }
 
-configure=0 dry=0 codex=1
+configure=0 dry=0 codex=1 deps=1
 while [ $# -gt 0 ]; do
 	case $1 in
 	--configure) configure=1 ;;
+	--no-deps) deps=0 ;;
 	--dry-run) dry=1 ;;
 	--no-codex) codex=0 ;;
 	--zellij-config) die "weaver runs on tmux only now: --zellij-config is gone (remove weaver's keybindings from your zellij config)" ;;
 	-h | --help)
-		sed -n '2,9p' "$0"
+		sed -n '2,12p' "$0"
 		exit 0
 		;;
 	*) die "unknown option: $1 (see --help)" ;;
 	esac
 	shift
 done
+
+# install_deps: what the Brewfile names and is missing, with Homebrew.
+install_deps() {
+	[ $deps = 1 ] || return 0
+	if ! command -v brew >/dev/null 2>&1; then
+		warn "no Homebrew (https://brew.sh): install what weaver works with yourself (see the Brewfile)"
+		return 0
+	fi
+	if brew bundle check --file="$SRC/Brewfile" >/dev/null 2>&1; then
+		return 0
+	fi
+	if [ $dry = 1 ]; then
+		say "would install with Homebrew:"
+		brew bundle check --file="$SRC/Brewfile" --verbose 2>/dev/null | sed -n 's/^→ /  /p'
+		return
+	fi
+	say "installing what weaver works with (Homebrew, from the Brewfile)"
+	brew bundle install --file="$SRC/Brewfile" --no-upgrade || die "brew bundle failed"
+}
 
 check_deps() {
 	local c missing="" v major minor rest
@@ -131,6 +154,7 @@ remove_agentnav() {
 	fi
 }
 
+install_deps
 check_deps
 install_files
 remove_old_copies
@@ -148,4 +172,11 @@ if [ $configure = 1 ]; then
 	else
 		"$BIN/wvr" setup "$@"
 	fi
+fi
+# What is left: sign-ins, an agent, anything Homebrew could not do.
+if [ $dry = 0 ]; then
+	echo
+	"$BIN/wvr" doctor || true
+	echo
+	say "start weaver with: wvr"
 fi

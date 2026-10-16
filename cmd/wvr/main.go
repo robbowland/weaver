@@ -152,7 +152,8 @@ var commands = map[string]command{
 			fmt.Println(e.StatusText())
 		}
 	})},
-	"gc": {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
+	"gc":     {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
+	"doctor": {run: func(e *wvr.Env, _ []string) error { return e.Doctor(os.Stdout) }},
 
 	// The agents' hooks, and other agents' events.
 	"hook":  {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
@@ -208,9 +209,10 @@ var commands = map[string]command{
 		e.Fetch(args[0], args[1], args[2], arg(args, 3))
 		return nil
 	}},
-	"_agent":  {session: true, run: func(e *wvr.Env, args []string) error { return e.AgentPane(arg(args, 0), arg(args, 1)) }},
-	"_resume": {session: true, run: done(func(e *wvr.Env, _ []string) { e.ResumeSession() })},
-	"_close":  {session: true, run: (*wvr.Env).CloseTail},
+	"_agent":     {session: true, run: func(e *wvr.Env, args []string) error { return e.AgentPane(arg(args, 0), arg(args, 1)) }},
+	"_resume":    {session: true, run: done(func(e *wvr.Env, _ []string) { e.ResumeSession() })},
+	"_viewsetup": {session: true, run: func(e *wvr.Env, args []string) error { return e.ViewSetup(arg(args, 0)) }},
+	"_close":     {session: true, run: (*wvr.Env).CloseTail},
 }
 
 // start starts (or attaches to) a weaver session, named as given; inside

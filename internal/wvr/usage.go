@@ -35,7 +35,8 @@ const Usage = `usage: wvr [command]
   edit [--full] [pane-id]      open or jump to the nvim for the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
-  view [github|linear]         go to a view: gh-dash or linear-tui beside home
+  view [github|linear]         go to a view: gh-dash or linear-tui beside home (one
+                               not set up shows how; one you hid shows again)
   status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
   gc                           forget agents that are gone, in every session
@@ -43,6 +44,8 @@ const Usage = `usage: wvr [command]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file
                                it changes; --dry-run shows the changes only
+  doctor                       what weaver works with: there, set up, and how to fix
+                               what is not
   version                      weaver's version
   nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

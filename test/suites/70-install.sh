@@ -17,7 +17,7 @@ printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/install.sh"
 echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
 inst() {
 	env -u ZELLIJ_CONFIG_FILE HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
-		PATH="$H/.local/bin:$PATH" "$ROOT/install.sh" "$@" 2>&1
+		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:${BREW:+$BREW:}$PATH" "$ROOT/install.sh" ${DEPS---no-deps} "$@" 2>&1
 }
 
 out=$(inst)
@@ -103,4 +103,21 @@ ok "the old name, weaver: kept as this build, and said" \
 rm -f "$H/.local/bin/weaver" "$H/.local/bin/old"
 inst >/dev/null
 ok "...and not made where there was none" "$([ -e "$H/.local/bin/weaver" ] && echo made || echo none)" "none"
+# What weaver works with: Homebrew installs what the Brewfile names and is
+# missing (a fake brew here, which finds it all missing).
+BREW=$AT/fakebrew
+mkdir -p "$BREW"
+cat >"$BREW/brew" <<FB
+#!/bin/bash
+echo "\$*" >>"$AT/brew.log"
+[ "\$1 \$2" = "bundle check" ] && exit 1
+exit 0
+FB
+chmod +x "$BREW/brew"
+rm -f "$AT/brew.log"
+BREW=$BREW DEPS= inst >/dev/null
+ok "install installs what weaver works with, with Homebrew, from the Brewfile" \
+	"$(sed "s|$ROOT|ROOT|" "$AT/brew.log" | tr '\n' ' ')" \
+	"bundle check --file=ROOT/Brewfile bundle install --file=ROOT/Brewfile --no-upgrade "
+unset BREW
 done_suite

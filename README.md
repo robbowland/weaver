@@ -18,23 +18,29 @@ any other agent can report through `wvr event`
 
 ## Install
 
-macOS. Homebrew brings what weaver works with: tmux, Neovim, fzf,
-[Worktrunk](https://worktrunk.dev) for the worktrees, and for the
-[views](#views-github-and-linear) `gh` with gh-dash (a fork with weaver's
-extras) and [linear-tui](https://github.com/k1-c/linear-tui). Sign gh in for
-the GITHUB view (`gh auth login`) and linear-tui for LINEAR (`linear-tui auth
-login`); LINEAR shows once linear-tui is signed in.
+macOS, with [Homebrew](https://brew.sh). One command installs weaver and
+everything it works with: tmux, Neovim, fzf, [Worktrunk](https://worktrunk.dev)
+for the worktrees, and for the [views](#views-github-and-linear) gh with
+gh-dash (a fork with weaver's extras) and
+[linear-tui](https://github.com/k1-c/linear-tui). Then start it:
 
 ```sh
 brew install robbowland/kegs/weaver
 wvr
 ```
 
-or, from a checkout, with Go, `./install.sh`, which builds it, one binary
-carrying everything it needs, into `~/.local/bin/wvr` (safe to rerun;
-`--dry-run` shows what it would do); install what it works with yourself
-(`brew install tmux neovim fzf gh worktrunk robbowland/kegs/gh-dash
-robbowland/kegs/linear-tui`).
+Bring your own agent: [Claude Code](https://github.com/anthropics/claude-code)
+or [Codex](https://github.com/openai/codex). Signing in to GitHub and Linear
+is done in place: a view not set up yet has a dot in the status line, and
+going there offers the one key that signs it in (`gh auth login`,
+`linear-tui auth login`); `h` there hides a view you do not use.
+`wvr doctor` says what is there and what is not, with the command that
+fixes each.
+
+From a checkout, `./install.sh` does the same: it installs what is missing
+with Homebrew (from the `Brewfile`; `--no-deps` skips that), builds weaver,
+one binary carrying everything it needs, into `~/.local/bin/wvr`, and ends
+with `wvr doctor` (safe to rerun; `--dry-run` shows what it would do).
 
 Its command is `wvr`, and it sets itself up as it starts, when it is the
 `wvr` on your PATH: Claude Code's hooks (`~/.claude/settings.json`, backed
@@ -160,10 +166,13 @@ When the agent exits its pane stays; enter there resumes its conversation
 
 ### Views: GitHub and Linear
 
-Beside home are a view for each tool you have: **GITHUB**, gh-dash with your
-own sections, and **LINEAR**, linear-tui. `Alt y` steps from a thread to
-home, on through them, and back; on home and in a view the status line shows
-the strip of them (`THREADS   GITHUB   LINEAR`).
+Beside home are two views: **GITHUB**, gh-dash with your own sections, and
+**LINEAR**, linear-tui. `Alt y` steps from a thread to home, on through them,
+and back; on home and in a view the status line shows the strip of them
+(`THREADS   GITHUB   LINEAR`). A view not set up yet has a dot
+(`LINEAR ·`): its window says what it needs, its tool installed or signed
+in, and enter does that, after which it is the view. `h` there hides it
+(`wvr view linear` shows it again; `$WEAVER_VIEWS` picks them outright).
 
 On a pull request or an issue there, `Alt N` opens the new-thread form
 filled in for it: the task (`Address the review on #45`, `Implement #12`),
