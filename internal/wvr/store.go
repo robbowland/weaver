@@ -12,6 +12,49 @@ import (
 // The records weaver keeps under $STATE_DIR (docs/design.md, Files), as
 // types: read whole, written whole, atomically.
 
+// AgentState is an agent's state file (docs/design.md, State file), as the
+// hook writes it, in this order.
+type AgentState struct {
+	Pane            jsonInt         `json:"pane"`
+	Agent           string          `json:"agent"`
+	State           State           `json:"state"`
+	TS              int64           `json:"ts"`
+	Since           json.Number     `json:"since"`
+	Seen            bool            `json:"seen"`
+	SessionID       string          `json:"session_id"`
+	Pid             json.Number     `json:"pid,omitempty"`
+	ProcStart       string          `json:"proc_start"`
+	Title           string          `json:"title"`
+	Turn            int             `json:"turn"`
+	TurnEnded       int             `json:"turn_ended"`
+	PromptID        string          `json:"prompt_id"`
+	Transcript      string          `json:"transcript"`
+	Cwd             string          `json:"cwd"`
+	Root            string          `json:"root"`
+	StartCwd        string          `json:"start_cwd"`
+	ProjectRoot     string          `json:"project_root"`
+	File            string          `json:"file"`
+	Prompt          string          `json:"prompt"`
+	Waiting         string          `json:"waiting"`
+	Pending         string          `json:"pending"`
+	LastMessage     string          `json:"last_message"`
+	MarkedRoot      string          `json:"marked_root"`
+	Marker          string          `json:"marker"`
+	Background      int             `json:"background"`
+	BackgroundTasks string          `json:"background_tasks"`
+	Doing           string          `json:"doing,omitempty"`
+	DoingID         string          `json:"doing_id,omitempty"`
+	DoneIDs         string          `json:"done_ids,omitempty"`
+	NvimPane        *json.Number    `json:"nvim_pane"`
+	Server          int             `json:"server,omitempty"`
+	EndReason       string          `json:"end_reason,omitempty"`
+	Log             string          `json:"log,omitempty"`
+	Subagents       json.RawMessage `json:"subagents"`
+	Tasks           json.RawMessage `json:"tasks"`
+	TurnRoots       []string        `json:"turn_roots"`
+	Files           json.RawMessage `json:"files"`
+}
+
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
 // new` made, and where; its agent's pane and conversation once it has them.
 type Thread struct {

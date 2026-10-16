@@ -972,58 +972,30 @@ func readNvimPane(e *Env, pane string) string {
 
 // writeState writes the state file from the hook's fields through its lock, which the rename releases.
 func (e *Env) writeState(h *hk, lk string) {
-	var b strings.Builder
-	p := jsonStr(h.Pane)
-	if digits(h.Pane) {
-		p = h.Pane
-	}
+	pane, _ := atoi(h.Pane)
 	since := h.Since
 	if since == "" {
 		since = "0"
 	}
-	b.WriteString(`{"pane":` + p + `,"agent":"` + h.AgentKind + `"`)
-	b.WriteString(`,"state":"` + string(h.State) + `","ts":` + strconv.FormatInt(h.Now, 10) + `,"since":` + since)
-	if h.Seen == "true" {
-		b.WriteString(`,"seen":true`)
-	} else {
-		b.WriteString(`,"seen":false`)
-	}
-	b.WriteString(`,"session_id":` + jsonStr(h.Sid))
+	st := AgentState{Pane: jsonInt(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
+		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn, TurnEnded: h.TurnEnded,
+		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
+		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
+		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
+		Subagents: rawOrEmpty(h.SubsJSON), Tasks: rawOrEmpty(h.TasksJSON), Files: rawOrEmpty(h.FilesJSON), TurnRoots: []string{}}
 	if digits(h.Pid) {
-		b.WriteString(`,"pid":` + h.Pid)
+		st.Pid = json.Number(h.Pid)
 	}
-	b.WriteString(`,"proc_start":` + jsonStr(h.ProcStart))
-	b.WriteString(`,"title":` + jsonStr(h.Title))
-	b.WriteString(`,"turn":` + strconv.Itoa(h.Turn) + `,"turn_ended":` + strconv.Itoa(h.TurnEnded))
-	b.WriteString(`,"prompt_id":` + jsonStr(h.PromptID))
-	b.WriteString(`,"transcript":` + jsonStr(h.Transcript))
-	b.WriteString(`,"cwd":` + jsonStr(h.Cwd))
-	b.WriteString(`,"root":` + jsonStr(h.Root))
-	b.WriteString(`,"start_cwd":` + jsonStr(h.Start))
-	b.WriteString(`,"project_root":` + jsonStr(h.Proj))
-	b.WriteString(`,"file":` + jsonStr(h.File))
-	b.WriteString(`,"prompt":` + jsonStr(h.Prompt))
-	b.WriteString(`,"waiting":` + jsonStr(h.Waiting))
-	b.WriteString(`,"pending":` + jsonStr(h.Pending))
-	b.WriteString(`,"last_message":` + jsonStr(h.Last))
-	b.WriteString(`,"marked_root":` + jsonStr(h.Marked))
-	b.WriteString(`,"marker":` + jsonStr(h.Marker))
-	bg := h.Bg
-	if !digits(bg) {
-		bg = "0"
+	if digits(h.Bg) {
+		st.Background, _ = atoi(h.Bg)
 	}
-	b.WriteString(`,"background":` + bg + `,"background_tasks":` + jsonStr(h.Bgdesc))
 	if h.Doing != "" {
-		b.WriteString(`,"doing":` + jsonStr(h.Doing) + `,"doing_id":` + jsonStr(h.DoingID))
+		st.Doing, st.DoingID = h.Doing, h.DoingID
 	}
-	if h.DoneIDs != "" {
-		b.WriteString(`,"done_ids":` + jsonStr(h.DoneIDs))
-	}
-	nv := "null"
 	if h.NV != "" {
-		nv = h.NV
+		nv := json.Number(h.NV)
+		st.NvimPane = &nv
 	}
-	b.WriteString(`,"nvim_pane":` + nv)
 	// The tmux server it runs on ($TMUX is "socket,pid,session"): a server
 	// started again is another, however soon (serverLost).
 	if t := os.Getenv("TMUX"); strings.IndexByte(t, ',') >= 0 {
@@ -1031,39 +1003,34 @@ func (e *Env) writeState(h *hk, lk string) {
 		if j := strings.IndexByte(srv, ','); j >= 0 {
 			srv = srv[:j]
 		}
-		if digits(srv) && srv != "0" {
-			b.WriteString(`,"server":` + srv)
+		if n, ok := atoi(srv); ok && n != 0 {
+			st.Server = n
 		}
-	}
-	if h.EndReason != "" {
-		b.WriteString(`,"end_reason":` + jsonStr(h.EndReason))
 	}
 	if h.Sid != "" {
-		b.WriteString(`,"log":` + jsonStr(e.LogDir+"/"+h.Sid+".jsonl"))
+		st.Log = e.LogDir + "/" + h.Sid + ".jsonl"
 	}
-	subs, tasks, files := h.SubsJSON, h.TasksJSON, h.FilesJSON
-	if subs == "" {
-		subs = "[]"
-	}
-	if tasks == "" {
-		tasks = "[]"
-	}
-	if files == "" {
-		files = "[]"
-	}
-	b.WriteString(`,"subagents":` + subs + `,"tasks":` + tasks)
-	var rl []string
 	for _, r := range strings.Split(h.TurnRoots, rs) {
 		if r != "" {
-			rl = append(rl, jsonStr(r))
+			st.TurnRoots = append(st.TurnRoots, r)
 		}
 	}
-	b.WriteString(`,"turn_roots":[` + strings.Join(rl, ",") + `],"files":` + files + "}\n")
-	if os.WriteFile(lk, []byte(b.String()), 0o644) == nil {
-		os.Rename(lk, h.sf)
-	} else {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if enc.Encode(st) != nil || os.WriteFile(lk, b.Bytes(), 0o644) != nil {
 		os.Remove(lk)
+		return
 	}
+	bestEffort(os.Rename(lk, h.sf))
+}
+
+// rawOrEmpty is a JSON array kept as text, or an empty one.
+func rawOrEmpty(s string) json.RawMessage {
+	if s == "" {
+		return json.RawMessage("[]")
+	}
+	return json.RawMessage(s)
 }
 
 // logLine appends one line to the agent session's activity log: members
