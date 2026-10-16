@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // The dashboard's preview: an agent's resume card, its screen, the keys, or
@@ -400,7 +402,7 @@ func (e *Env) lostCard(sid, title string) string {
 		return out
 	}
 	var lo Lost
-	if json.Unmarshal(firstJSON(b), &lo) != nil {
+	if json.Unmarshal(jsonx.First(b), &lo) != nil {
 		return out
 	}
 	st := lo.State

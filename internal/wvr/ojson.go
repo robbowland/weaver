@@ -3,125 +3,13 @@ package wvr
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
-
-// jqStr is s as a JSON string, escaped as jq's tojson escapes it: \" \\ and
-// \b \f \n \r \t by name, other control characters and DEL as \u00XX, and
-// everything else as it is (no HTML escaping).
-func jqStr(s string) string {
-	var b strings.Builder
-	b.Grow(len(s) + 2)
-	b.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '"':
-			b.WriteString(`\"`)
-		case '\\':
-			b.WriteString(`\\`)
-		case '\b':
-			b.WriteString(`\b`)
-		case '\f':
-			b.WriteString(`\f`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		default:
-			if r < 0x20 || r == 0x7f {
-				fmt.Fprintf(&b, `\u%04x`, r)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
-}
-
-// canon is raw JSON as jq's tojson prints it: compact, keys in their order,
-// numbers as written. "" when raw is not JSON.
-func canon(raw []byte) string {
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return ""
-	}
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	var b strings.Builder
-	if canonValue(d, &b) != nil {
-		return ""
-	}
-	return b.String()
-}
-
-func canonValue(d *json.Decoder, b *strings.Builder) error {
-	t, err := d.Token()
-	if err != nil {
-		return err
-	}
-	switch x := t.(type) {
-	case json.Delim:
-		switch x {
-		case '{':
-			b.WriteByte('{')
-			first := true
-			for d.More() {
-				k, err := d.Token()
-				if err != nil {
-					return err
-				}
-				if !first {
-					b.WriteByte(',')
-				}
-				first = false
-				b.WriteString(jqStr(k.(string)))
-				b.WriteByte(':')
-				if err := canonValue(d, b); err != nil {
-					return err
-				}
-			}
-			if _, err := d.Token(); err != nil {
-				return err
-			}
-			b.WriteByte('}')
-		case '[':
-			b.WriteByte('[')
-			first := true
-			for d.More() {
-				if !first {
-					b.WriteByte(',')
-				}
-				first = false
-				if err := canonValue(d, b); err != nil {
-					return err
-				}
-			}
-			if _, err := d.Token(); err != nil {
-				return err
-			}
-			b.WriteByte(']')
-		}
-	case string:
-		b.WriteString(jqStr(x))
-	case json.Number:
-		b.WriteString(x.String())
-	case bool:
-		if x {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
-	case nil:
-		b.WriteString("null")
-	}
-	return nil
-}
 
 // kv is one member of a JSON object read in order.
 type kv struct {
@@ -187,7 +75,7 @@ func (o oobj) String() string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(jqStr(m.k))
+		b.WriteString(jsonx.Quote(m.k))
 		b.WriteByte(':')
 		var c bytes.Buffer
 		if json.Compact(&c, m.v) == nil {

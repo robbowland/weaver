@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // PaneID is a tmux pane by its number, as weaver's file names and records
@@ -19,8 +21,8 @@ func (p PaneID) target() string { return "%" + string(p) }
 // target is the window as tmux names it.
 func (w WindowID) target() string { return "@" + string(w) }
 
-// pane is the pane a record keeps as a number.
-func (n jsonInt) pane() PaneID { return PaneID(strconv.Itoa(int(n))) }
+// paneOfNum is the pane a record keeps as a number.
+func paneOfNum(n jsonx.Int) PaneID { return PaneID(strconv.Itoa(int(n))) }
 
 // paneOfFile is the pane of one of weaver's per-agent files
 // ($STATE_DIR/<skey>_<pane>.<ext>).

@@ -1,11 +1,15 @@
 package wvr
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/robbowland/weaver/internal/jsonx"
+)
 
 // What the hook reads of its input.
 func TestHookInput(t *testing.T) {
 	var in hookInput
-	if err := decodeRecord([]byte(`{"hook_event_name":"PostToolUse","cwd":"/r","tool_name":"Edit",
+	if err := jsonx.Decode([]byte(`{"hook_event_name":"PostToolUse","cwd":"/r","tool_name":"Edit",
 		"tool_input":{"file_path":"a/b.go"},"error":{"code":1},"task_id":7,"is_interrupt":"yes"}`), &in); err != nil {
 		t.Fatal(err)
 	}
@@ -22,13 +26,13 @@ func TestHookInput(t *testing.T) {
 		{`{"tool_name":"WebFetch","tool_input":{"url":"u"}}`, "WebFetch"},
 	} {
 		var in hookInput
-		bestEffort(decodeRecord([]byte(c.json), &in))
+		bestEffort(jsonx.Decode([]byte(c.json), &in))
 		if got := summary(in); got != c.want {
 			t.Errorf("summary %s: %q, want %q", c.json, got, c.want)
 		}
 	}
 	var batch hookInput
-	bestEffort(decodeRecord([]byte(`{"hook_event_name":"PostToolBatch","tool_calls":[{"tool_response":{"text":"The user doesn't want to proceed with this tool use."}}]}`), &batch))
+	bestEffort(jsonx.Decode([]byte(`{"hook_event_name":"PostToolBatch","tool_calls":[{"tool_response":{"text":"The user doesn't want to proceed with this tool use."}}]}`), &batch))
 	if !rejected(batch) {
 		t.Error("a rejected call in the batch")
 	}
@@ -38,7 +42,7 @@ func TestHookInput(t *testing.T) {
 func TestHookLists(t *testing.T) {
 	ev := func(name, extra string) hookInput {
 		var in hookInput
-		bestEffort(decodeRecord([]byte(`{"hook_event_name":"`+name+`"`+extra+`}`), &in))
+		bestEffort(jsonx.Decode([]byte(`{"hook_event_name":"`+name+`"`+extra+`}`), &in))
 		return in
 	}
 	ts := tasksNew(nil, ev("TaskCreated", `,"task_id":"1","task_subject":"one"`))

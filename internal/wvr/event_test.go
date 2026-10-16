@@ -1,11 +1,15 @@
 package wvr
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/robbowland/weaver/internal/jsonx"
+)
 
 // Normalized events as hook input; Codex's as normalized events.
 func TestEventMapping(t *testing.T) {
 	var n normEvent
-	bestEffort(decodeRecord([]byte(`{"agent":"pi","event":"tool_done","pid":123,"pane":"%4","command":"make","paths":["/a","/b"]}`), &n))
+	bestEffort(jsonx.Decode([]byte(`{"agent":"pi","event":"tool_done","pid":123,"pane":"%4","command":"make","paths":["/a","/b"]}`), &n))
 	if n.Pid != "123" || n.Pane != "%4" {
 		t.Errorf("pid %q pane %q", n.Pid, n.Pane)
 	}
@@ -13,7 +17,7 @@ func TestEventMapping(t *testing.T) {
 	if h.Event != "PostToolUse" || h.ToolName != "Bash" || h.input().Command != "make /a /b" {
 		t.Errorf("tool_done: %+v %s", h, h.ToolInput)
 	}
-	bestEffort(decodeRecord([]byte(`{"agent":"pi","event":"prompt","prompt":"hi","user":false}`), &n))
+	bestEffort(jsonx.Decode([]byte(`{"agent":"pi","event":"prompt","prompt":"hi","user":false}`), &n))
 	if h := hookOf(n); h.Event != "UserPromptSubmit" || yours(h) {
 		t.Errorf("a machine's prompt is not yours: %+v", h)
 	}
@@ -26,7 +30,7 @@ func TestEventMapping(t *testing.T) {
 		{`{"hook_event_name":"Notification"}`, "", "", ""},
 	} {
 		var in codexInput
-		bestEffort(decodeRecord([]byte(c.json), &in))
+		bestEffort(jsonx.Decode([]byte(c.json), &in))
 		n := codex(in)
 		if n.Event != c.event || string(n.File) != c.file || string(n.Waiting) != c.waiting || n.Agent != "codex" {
 			t.Errorf("%s: %+v", c.json, n)

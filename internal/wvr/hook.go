@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
@@ -67,7 +69,7 @@ type hk struct {
 // returns the bell to ring (10 needs you, 11 done; 0 none).
 func (e *Env) Hook(in []byte, mode string, pane PaneID, agent, me string) int {
 	var ev hookInput
-	if decodeRecord(firstJSON(in), &ev) != nil {
+	if jsonx.Decode(jsonx.First(in), &ev) != nil {
 		return 0
 	}
 	return e.hook(ev, mode, pane, agent, me)
@@ -175,7 +177,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	if in.ToolName != "" {
 		ti := "null"
 		if len(in.ToolInput) > 0 {
-			ti = canon(in.ToolInput)
+			ti = jsonx.Canon(in.ToolInput)
 		}
 		h.Key = ctl(in.ToolName + ":" + runeSlice(ti, 300))
 	}
@@ -210,7 +212,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 		h.EndNew = ctl(one(in.Reason, 40))
 	}
 	// The stored state, typed; whether it is this session's.
-	known := decodeRecord(firstJSON(st), &h.Old) == nil
+	known := jsonx.Decode(jsonx.First(st), &h.Old) == nil
 	if !known {
 		h.Old = AgentState{}
 	}
@@ -498,7 +500,7 @@ func (e *Env) writeState(h *hk, lk string) {
 	if since == "" {
 		since = "0"
 	}
-	st := AgentState{Pane: jsonInt(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
+	st := AgentState{Pane: jsonx.Int(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
 		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn, TurnEnded: h.TurnEnded,
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,

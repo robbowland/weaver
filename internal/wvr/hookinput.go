@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // Claude Code's hook input (and what `wvr event` makes of another agent's
@@ -33,7 +35,7 @@ type hookInput struct {
 	Interrupt bool            `json:"is_interrupt"` // PostToolUseFailure
 	// PostToolBatch's calls.
 	ToolCalls []struct {
-		Response jsonText `json:"tool_response"`
+		Response jsonx.Text `json:"tool_response"`
 	} `json:"tool_calls"`
 	// Notification's.
 	Ntype   string `json:"notification_type"`
@@ -45,11 +47,11 @@ type hookInput struct {
 		Type        string `json:"type"`
 		Description string `json:"description"`
 	} `json:"background_tasks"`
-	Error  jsonText `json:"error"`
-	Reason string   `json:"reason"`
+	Error  jsonx.Text `json:"error"`
+	Reason string     `json:"reason"`
 	// TaskCreated's, TaskCompleted's.
-	TaskID      jsonText `json:"task_id"`
-	TaskSubject string   `json:"task_subject"`
+	TaskID      jsonx.Text `json:"task_id"`
+	TaskSubject string     `json:"task_subject"`
 }
 
 // toolInput is what weaver reads of a tool call's input.
@@ -62,26 +64,9 @@ type toolInput struct {
 	} `json:"questions"` // AskUserQuestion
 }
 
-// jsonText is a member that is text, or another JSON value as its JSON
-// (jq's tostring); null or false is none.
-type jsonText string
-
-func (t *jsonText) UnmarshalJSON(b []byte) error {
-	var s string
-	switch v := strings.TrimSpace(string(b)); {
-	case json.Unmarshal(b, &s) == nil:
-		*t = jsonText(s)
-	case v == "null" || v == "false":
-		*t = ""
-	default:
-		*t = jsonText(canon(b))
-	}
-	return nil
-}
-
 func (in hookInput) input() toolInput {
 	var t toolInput
-	bestEffort(decodeRecord(in.ToolInput, &t))
+	bestEffort(jsonx.Decode(in.ToolInput, &t))
 	return t
 }
 

@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/jsonx"
 	"golang.org/x/sys/unix"
 )
 
@@ -488,7 +489,7 @@ func (e *Env) AgentPane(tok, agent string) error {
 		}
 	}
 	paneNum, _ := atoi(string(pane))
-	pn := jsonInt(paneNum)
+	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])

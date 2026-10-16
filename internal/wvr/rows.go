@@ -1,7 +1,6 @@
 package wvr
 
 import (
-	"bytes"
 	"encoding/json"
 	"math"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/jsonx"
 	"golang.org/x/sys/unix"
 )
 
@@ -174,7 +174,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			continue // gone, or corrupt
 		}
 		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
-		p := byID[s.Pane.pane()]
+		p := byID[paneOfNum(s.Pane)]
 		if p == nil {
 			g := gone{f, clean(string(s.Pid)), clean(s.ProcStart), s.State}
 			gones = append(gones, g)
@@ -213,7 +213,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case st0 == StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = StateInterrupted, true
 		}
-		r := Row{Pane: s.Pane.pane(), Tab: p.Tab, State: State(clean(string(st)))}
+		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: State(clean(string(st)))}
 		r.Root = clean(s.Root)
 		if r.Root == "" {
 			r.Root = clean(s.Cwd)
@@ -280,7 +280,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if err != nil || t.Pane == nil {
 			continue
 		}
-		pane := t.Pane.pane()
+		pane := paneOfNum(*t.Pane)
 		p := byID[pane]
 		if p == nil || p.Exited {
 			continue
@@ -321,11 +321,11 @@ func (e *Env) AgentRows() ([]Row, int64) {
 // (~/.claude/sessions/<pid>.json): its status, which the hooks cannot
 // report.
 type claudeSession struct {
-	Pid             jsonText `json:"pid"`
-	SessionID       string   `json:"sessionId"`
-	Status          string   `json:"status"`          // busy, waiting, idle
-	StatusUpdatedAt float64  `json:"statusUpdatedAt"` // epoch ms
-	WaitingFor      string   `json:"waitingFor"`
+	Pid             jsonx.Text `json:"pid"`
+	SessionID       string     `json:"sessionId"`
+	Status          string     `json:"status"`          // busy, waiting, idle
+	StatusUpdatedAt float64    `json:"statusUpdatedAt"` // epoch ms
+	WaitingFor      string     `json:"waitingFor"`
 }
 
 // claudeLive are the Claude Code sessions running on this machine, from
@@ -345,7 +345,7 @@ func (e *Env) claudeLive() map[string]claudeSession {
 			continue
 		}
 		var c claudeSession
-		if decodeRecord([]byte(l), &c) != nil || c.Pid == "" {
+		if jsonx.Decode([]byte(l), &c) != nil || c.Pid == "" {
 			continue
 		}
 		m[string(c.Pid)] = c
@@ -415,7 +415,7 @@ func (e *Env) LostRows() []LostRow {
 			continue
 		}
 		var lo Lost
-		if json.Unmarshal(firstJSON(b), &lo) != nil {
+		if json.Unmarshal(jsonx.First(b), &lo) != nil {
 			continue
 		}
 		st := lo.State
@@ -569,7 +569,7 @@ func (e *Env) lose(f, pid string) bool {
 	}
 	base := filepath.Base(b)
 	skey := base[:strings.LastIndexByte(base, '_')]
-	rec := Lost{Lost: jsonInt(time.Now().Unix()), SKey: skey, State: st, Thread: th}
+	rec := Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
 	if writeRecord(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
 		return false
 	}
@@ -578,16 +578,6 @@ func (e *Env) lose(f, pid string) bool {
 	}
 	os.RemoveAll(b + ".opening")
 	return true
-}
-
-// firstJSON is the first JSON value of a file (jq --slurpfile's [0]).
-func firstJSON(b []byte) []byte {
-	d := json.NewDecoder(bytes.NewReader(b))
-	var raw json.RawMessage
-	if d.Decode(&raw) != nil {
-		return nil
-	}
-	return raw
 }
 
 // forget removes the files of the agent whose state file is f (its activity

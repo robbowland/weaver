@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/jsonx"
 	"golang.org/x/sys/unix"
 )
 
@@ -21,30 +22,30 @@ import (
 // from other agents). Its text members may come as any JSON: a pid or a
 // pane as a number.
 type normEvent struct {
-	Agent      jsonText `json:"agent"`
-	Event      string   `json:"event"`
-	Session    jsonText `json:"session"`
-	Pid        jsonText `json:"pid"`
-	Pane       jsonText `json:"pane"`
-	Cwd        jsonText `json:"cwd"`
-	Transcript jsonText `json:"transcript"`
-	PromptID   jsonText `json:"prompt_id"`
-	Title      jsonText `json:"title"`
-	Source     jsonText `json:"source"` // session_start
+	Agent      jsonx.Text `json:"agent"`
+	Event      string     `json:"event"`
+	Session    jsonx.Text `json:"session"`
+	Pid        jsonx.Text `json:"pid"`
+	Pane       jsonx.Text `json:"pane"`
+	Cwd        jsonx.Text `json:"cwd"`
+	Transcript jsonx.Text `json:"transcript"`
+	PromptID   jsonx.Text `json:"prompt_id"`
+	Title      jsonx.Text `json:"title"`
+	Source     jsonx.Text `json:"source"` // session_start
 	// prompt: the text, and false for a machine-injected one.
-	Prompt  jsonText `json:"prompt"`
-	User    *bool    `json:"user"`
-	Waiting jsonText `json:"waiting"` // needs_you
+	Prompt  jsonx.Text `json:"prompt"`
+	User    *bool      `json:"user"`
+	Waiting jsonx.Text `json:"waiting"` // needs_you
 	// tool_done: an edit's file, else its command and the paths it touched.
-	Tool    jsonText   `json:"tool"`
-	File    jsonText   `json:"file"`
-	Command jsonText   `json:"command"`
-	Paths   []jsonText `json:"paths"`
-	Error   jsonText   `json:"error"`   // tool_failed, error
-	Message jsonText   `json:"message"` // stop
+	Tool    jsonx.Text   `json:"tool"`
+	File    jsonx.Text   `json:"file"`
+	Command jsonx.Text   `json:"command"`
+	Paths   []jsonx.Text `json:"paths"`
+	Error   jsonx.Text   `json:"error"`   // tool_failed, error
+	Message jsonx.Text   `json:"message"` // stop
 	// subagent_start, subagent_stop.
-	Subagent     jsonText `json:"subagent"`
-	SubagentType jsonText `json:"subagent_type"`
+	Subagent     jsonx.Text `json:"subagent"`
+	SubagentType jsonx.Text `json:"subagent_type"`
 }
 
 // hookOf is the Claude Code hook input event n stands for; its Event is ""
@@ -114,32 +115,32 @@ var rePatchFile = regexp.MustCompile(`\*\*\* (?:Update|Add) File: ([^\n]+)`)
 // tools, and no Notification.
 type codexInput struct {
 	Event       string          `json:"hook_event_name"`
-	SessionID   jsonText        `json:"session_id"`
-	TurnID      jsonText        `json:"turn_id"`
-	Cwd         jsonText        `json:"cwd"`
-	Transcript  jsonText        `json:"transcript_path"`
-	Source      jsonText        `json:"source"`
-	Prompt      jsonText        `json:"prompt"`
-	ToolName    jsonText        `json:"tool_name"`
+	SessionID   jsonx.Text      `json:"session_id"`
+	TurnID      jsonx.Text      `json:"turn_id"`
+	Cwd         jsonx.Text      `json:"cwd"`
+	Transcript  jsonx.Text      `json:"transcript_path"`
+	Source      jsonx.Text      `json:"source"`
+	Prompt      jsonx.Text      `json:"prompt"`
+	ToolName    jsonx.Text      `json:"tool_name"`
 	ToolInput   json.RawMessage `json:"tool_input"`
-	LastMessage jsonText        `json:"last_assistant_message"`
-	AgentID     jsonText        `json:"agent_id"`
-	AgentType   jsonText        `json:"agent_type"`
+	LastMessage jsonx.Text      `json:"last_assistant_message"`
+	AgentID     jsonx.Text      `json:"agent_id"`
+	AgentType   jsonx.Text      `json:"agent_type"`
 }
 
 // codexTool is what weaver reads of a Codex tool call's input.
 type codexTool struct {
-	Command  jsonArgs `json:"command"`
-	Cmd      jsonArgs `json:"cmd"`
-	FilePath jsonText `json:"file_path"`
-	Path     jsonText `json:"path"`
+	Command  jsonArgs   `json:"command"`
+	Cmd      jsonArgs   `json:"cmd"`
+	FilePath jsonx.Text `json:"file_path"`
+	Path     jsonx.Text `json:"path"`
 }
 
 // jsonArgs is a command, as text or as its argv (joined by spaces).
 type jsonArgs string
 
 func (a *jsonArgs) UnmarshalJSON(b []byte) error {
-	var argv []jsonText
+	var argv []jsonx.Text
 	if json.Unmarshal(b, &argv) == nil {
 		ps := make([]string, len(argv))
 		for i, x := range argv {
@@ -148,7 +149,7 @@ func (a *jsonArgs) UnmarshalJSON(b []byte) error {
 		*a = jsonArgs(strings.Join(ps, " "))
 		return nil
 	}
-	var t jsonText
+	var t jsonx.Text
 	bestEffort(t.UnmarshalJSON(b))
 	*a = jsonArgs(t)
 	return nil
@@ -159,7 +160,7 @@ func (a *jsonArgs) UnmarshalJSON(b []byte) error {
 func codex(c codexInput) normEvent {
 	n := normEvent{Agent: "codex", Session: c.SessionID, Cwd: c.Cwd, Transcript: c.Transcript, PromptID: c.TurnID}
 	var t codexTool
-	bestEffort(decodeRecord(c.ToolInput, &t))
+	bestEffort(jsonx.Decode(c.ToolInput, &t))
 	cmd := t.Command
 	if cmd == "" {
 		cmd = t.Cmd
@@ -171,12 +172,12 @@ func codex(c codexInput) normEvent {
 		n.Event, n.Prompt = "prompt", c.Prompt
 	case "PermissionRequest":
 		w := string(cmd)
-		for _, x := range []jsonText{t.FilePath, t.Path} {
+		for _, x := range []jsonx.Text{t.FilePath, t.Path} {
 			if w == "" {
 				w = string(x)
 			}
 		}
-		n.Event, n.Waiting = "needs_you", c.ToolName+": "+jsonText(w)
+		n.Event, n.Waiting = "needs_you", c.ToolName+": "+jsonx.Text(w)
 	case "PostToolUse":
 		f := string(t.FilePath)
 		if f == "" {
@@ -214,7 +215,7 @@ func codex(c codexInput) normEvent {
 		case f != "":
 			file = string(c.Cwd) + "/" + f
 		}
-		n.Event, n.Tool, n.File, n.Command = "tool_done", c.ToolName, jsonText(file), jsonText(cmd)
+		n.Event, n.Tool, n.File, n.Command = "tool_done", c.ToolName, jsonx.Text(file), jsonx.Text(cmd)
 	case "Interrupt":
 		n.Event = "interrupt"
 	case "Stop":
@@ -240,14 +241,14 @@ func (e *Env) Event(adapter string, bell bool) error {
 	var n normEvent
 	if adapter == "codex" {
 		var c codexInput
-		if decodeRecord(firstJSON(in), &c) != nil {
+		if jsonx.Decode(jsonx.First(in), &c) != nil {
 			return nil
 		}
 		n = codex(c)
-	} else if decodeRecord(firstJSON(in), &n) != nil {
+	} else if jsonx.Decode(jsonx.First(in), &n) != nil {
 		return nil
 	}
-	strip := func(t jsonText) string {
+	strip := func(t jsonx.Text) string {
 		return strings.Map(func(r rune) rune {
 			if r < 0x20 {
 				return -1

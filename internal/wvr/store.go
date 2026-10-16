@@ -3,11 +3,11 @@ package wvr
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
+
+	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // The records weaver keeps under $STATE_DIR (docs/design.md, Files), as
@@ -16,7 +16,7 @@ import (
 // AgentState is an agent's state file (docs/design.md, State file), as the
 // hook writes it, in this order.
 type AgentState struct {
-	Pane            jsonInt      `json:"pane"`
+	Pane            jsonx.Int    `json:"pane"`
 	Agent           string       `json:"agent"`
 	State           State        `json:"state"`
 	TS              int64        `json:"ts"`
@@ -87,7 +87,7 @@ type Thread struct {
 	Base            string      `json:"base"`
 	Item            *ThreadItem `json:"item,omitempty"`
 	Mode            string      `json:"mode,omitempty"`
-	Pane            *jsonInt    `json:"pane,omitempty"`
+	Pane            *jsonx.Int  `json:"pane,omitempty"`
 	SessionID       string      `json:"session_id,omitempty"`
 }
 
@@ -103,7 +103,7 @@ type ThreadItem struct {
 // when, which session, and its agent's state and thread record as they
 // were.
 type Lost struct {
-	Lost   jsonInt    `json:"lost"`
+	Lost   jsonx.Int  `json:"lost"`
 	SKey   string     `json:"skey"`
 	State  AgentState `json:"state"`
 	Thread Thread     `json:"thread"`
@@ -144,43 +144,13 @@ func readLost(f string) (Lost, error) {
 	return l, err
 }
 
-// jsonInt is a number that older files may hold as a string ("12"), or
-// not at all; anything else (a zellij pane's "terminal_3") reads as 0.
-type jsonInt int
-
-func (n *jsonInt) UnmarshalJSON(b []byte) error {
-	s := strings.Trim(string(b), `"`)
-	if s == "" || s == "null" {
-		*n = 0
-		return nil
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		f = 0
-	}
-	*n = jsonInt(f)
-	return nil
-}
-
 // readRecord reads the record in file f into v.
 func readRecord(f string, v any) error {
 	b, err := os.ReadFile(f)
 	if err != nil {
 		return err
 	}
-	return decodeRecord(firstJSON(b), v)
-}
-
-// decodeRecord decodes the JSON object b into v. A member of another type
-// than v gives it (an older or newer weaver's) reads as its zero value, and
-// the rest still reads; b not an object is an error.
-func decodeRecord(b []byte, v any) error {
-	err := json.Unmarshal(b, v)
-	var te *json.UnmarshalTypeError
-	if errors.As(err, &te) && te.Field != "" {
-		return nil
-	}
-	return err
+	return jsonx.Decode(jsonx.First(b), v)
 }
 
 // readThread is the thread record in file f.
