@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # weaver is macOS only (sysctl, termios).
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: brew install tmux neovim fzf jq
+      - name: The Neovim plugins weaver works with, for its specs
+        run: |
+          d=$RUNNER_TEMP/plugins
+          while read -r repo rev; do
+            p=$d/${repo#*/}
+            git init -q "$p"
+            git -C "$p" fetch -q --depth 1 "https://github.com/$repo" "$rev"
+            git -C "$p" checkout -q FETCH_HEAD
+          done <<'PLUGINS'
+          dlyongemallo/diffview-plus.nvim 2a2d89a07f5d5d3cef7f542b99c3e28050ca205c
+          lewis6991/gitsigns.nvim fd780920613e541cbdfac41bf711583ed49f9249
+          folke/snacks.nvim 882c996cf28183f4d63640de0b4c02ec886d01f2
+          PLUGINS
+          echo "WEAVER_TEST_PLUGINS=$d" >> "$GITHUB_ENV"
+      - run: |
+          git config --global user.name weaver-ci
+          git config --global user.email weaver-ci@example.com
+      - run: test/run.sh
