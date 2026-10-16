@@ -222,16 +222,9 @@ func (e *Env) rows(plain bool) string {
 		if a.Pane == "" {
 			continue
 		}
-		bg, nsub := a.Bg, a.Nsub
-		if !digits(bg) {
-			bg = "0"
-		}
-		if !digits(nsub) {
-			nsub = "0"
-		}
 		since := now
-		if digits(a.Since) {
-			since, _ = strconv.ParseInt(a.Since, 10, 64)
+		if a.Since > 0 {
+			since = a.Since
 		}
 		name := a.Title
 		if name == "" {
@@ -262,20 +255,20 @@ func (e *Env) rows(plain bool) string {
 			switch {
 			case a.Doing != "":
 				fact = "running " + a.Doing
-			case bg != "0":
-				fact = bg + " in background"
-			case nsub != "0":
-				fact = nsub + " subagent"
-				if nsub != "1" {
+			case a.Bg > 0:
+				fact = strconv.Itoa(a.Bg) + " in background"
+			case a.Nsub > 0:
+				fact = strconv.Itoa(a.Nsub) + " subagent"
+				if a.Nsub != 1 {
 					fact += "s"
 				}
-			case a.Ttotal != "" && a.Ttotal != "0":
-				fact = a.Tdone + "/" + a.Ttotal + " tasks"
+			case a.Ttotal > 0:
+				fact = strconv.Itoa(a.Tdone) + "/" + strconv.Itoa(a.Ttotal) + " tasks"
 			case a.File != "":
 				fact = "editing " + a.File
 			}
 		case StateDone:
-			if a.Seen == "true" {
+			if a.Seen {
 				g, glyph = 3, paint(GSeen, dim, dim, off)
 			} else {
 				g, glyph = 1, paint(GDone, green, dim, off)
@@ -284,7 +277,7 @@ func (e *Env) rows(plain bool) string {
 			if len(roots) == 0 {
 				roots = []string{a.Root}
 			}
-			tf := e.turnFiles(a.Sid, a.Turn, roots)
+			tf := e.turnFiles(a.Sid, strconv.Itoa(a.Turn), roots)
 			last := a.Last
 			switch tf {
 			case "", "0":
@@ -322,7 +315,7 @@ func (e *Env) rows(plain bool) string {
 		default:
 			g = 3
 			glyph = paint(GIdle, dim, dim, off)
-			if a.Turn == "" || a.Turn == "0" {
+			if a.Turn == 0 {
 				fact = "no prompt yet"
 			}
 		}
@@ -339,15 +332,12 @@ func (e *Env) rows(plain bool) string {
 		pn, _ := strconv.Atoi(a.Pane)
 		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, k, pn), pane: a.Pane, tab: a.Tab, glyph: glyph,
 			name: name, fact: fact, where: where, age: age(now - since), root: a.Root}
-		r.label = name + " · " + where
-		if a.Turn != "" {
-			r.label += " · turn " + a.Turn
-		}
-		if digits(a.Tnum) {
-			r.num = a.Tnum
+		r.label = name + " · " + where + " · turn " + strconv.Itoa(a.Turn)
+		if a.Tnum > 0 {
+			r.num = strconv.Itoa(a.Tnum)
 			nums = true
-			if len(a.Tnum) > numw {
-				numw = len(a.Tnum)
+			if len(r.num) > numw {
+				numw = len(r.num)
 			}
 		}
 		counts[g]++

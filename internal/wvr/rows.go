@@ -70,14 +70,20 @@ func (e *Env) Panes() ([]Pane, bool) {
 	return nil, false
 }
 
-// Row is an agent of the session: each field as a string (numbers in
-// decimal, control characters made spaces).
+// Row is an agent of the session as the board, the status line and the
+// navigation show it: its text with control characters made spaces.
 type Row struct {
-	State                                                                              State
-	Pane, Tab, Root, Since, Seen, Prompt, Waiting, Bg, Title, Nsub, Pid, Pstart, Sfile string
-	Turn, Last, Tdone, Ttotal, File, Sid, Tabname, Agent, Bgtasks, Ttask, Tname, Tnum  string
-	Troots                                                                             []string
-	Doing                                                                              string // the command it runs now
+	State                                                             State
+	Pane, Tab                                                         string
+	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
+	Tabname, Agent, Bgtasks, Ttask, Tname                             string
+	Since                                                             int64 // epoch s
+	Seen                                                              bool
+	Bg, Nsub, Turn                                                    int // background tasks, subagents
+	Tdone, Ttotal                                                     int // its tasks
+	Tnum                                                              int // its thread's number; 0 for none
+	Troots                                                            []string
+	Doing                                                             string // the command it runs now
 }
 
 // clean makes each run of control characters one space (jq's
@@ -209,13 +215,13 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		switch {
 		case changed:
-			r.Since = strconv.FormatFloat(cu, 'f', -1, 64)
+			r.Since = int64(cu)
 		case s.Since != "":
-			r.Since = s.Since.String()
+			r.Since = int64(numberOr(s.Since, 0))
 		default:
-			r.Since = strconv.FormatInt(s.TS, 10)
+			r.Since = s.TS
 		}
-		r.Seen = strconv.FormatBool(s.Seen)
+		r.Seen = s.Seen
 		r.Prompt = clean(s.Prompt)
 		if st == StateNeedsYou && st0 != StateNeedsYou {
 			r.Waiting = "input"
@@ -225,13 +231,13 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		} else {
 			r.Waiting = clean(s.Waiting)
 		}
-		r.Bg = strconv.Itoa(s.Background)
+		r.Bg = s.Background
 		r.Title = clean(s.Title)
-		r.Nsub = strconv.Itoa(len(s.Subagents))
+		r.Nsub = len(s.Subagents)
 		r.Pid = clean(string(s.Pid))
 		r.Pstart = clean(s.ProcStart)
 		r.Sfile = f
-		r.Turn = strconv.Itoa(s.Turn)
+		r.Turn = s.Turn
 		r.Last = clean(s.LastMessage)
 		d := 0
 		for _, x := range s.Tasks {
@@ -239,7 +245,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 				d++
 			}
 		}
-		r.Tdone, r.Ttotal = strconv.Itoa(d), strconv.Itoa(len(s.Tasks))
+		r.Tdone, r.Ttotal = d, len(s.Tasks)
 		r.File = clean(filepath.Base(s.File))
 		if s.File == "" {
 			r.File = ""
@@ -250,7 +256,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Bgtasks = clean(s.BackgroundTasks)
 		r.Doing = clean(s.Doing)
 		if terr == nil {
-			r.Ttask, r.Tname, r.Tnum = clean(t.Task), clean(t.Name), strconv.Itoa(t.Num)
+			r.Ttask, r.Tname, r.Tnum = clean(t.Task), clean(t.Name), t.Num
 		}
 		for _, x := range s.TurnRoots {
 			r.Troots = append(r.Troots, clean(x))
@@ -279,10 +285,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			since = now
 		}
 		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: StateStarting,
-			Root: clean(t.Worktree), Since: strconv.FormatInt(since, 10),
-			Seen: "false", Prompt: clean(t.Task), Bg: "0", Nsub: "0", Sfile: f, Turn: "0", Tdone: "0", Ttotal: "0",
+			Root: clean(t.Worktree), Since: since, Prompt: clean(t.Task), Sfile: f,
 			Tabname: clean(p.TabName), Agent: clean(string(t.Agent)), Ttask: clean(t.Task),
-			Tname: clean(t.Name), Tnum: strconv.Itoa(t.Num)})
+			Tname: clean(t.Name), Tnum: t.Num})
 	}
 	starts := procStarts(pids)
 	for _, g := range gones {

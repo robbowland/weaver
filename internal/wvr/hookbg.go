@@ -239,7 +239,7 @@ func (e *Env) pushStatus(labels bool) {
 		case StateWorking, StateStarting:
 			work++
 		case StateDone:
-			if r.Seen == "true" {
+			if r.Seen {
 				continue
 			}
 			if strings.Contains(clients, " "+r.Pane+" ") {
@@ -326,7 +326,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 		names[strconv.Itoa(p.Tab)+"\t"+n] = true
 	}
 	for _, r := range rows {
-		if r.Pane == "" || r.Tnum == "" {
+		if r.Pane == "" || r.Tnum == 0 {
 			continue
 		}
 		l := r.Title
@@ -336,8 +336,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if l == "" {
 			l = r.Prompt
 		}
-		n, _ := strconv.Atoi(r.Tnum)
-		label := threadLabel(n, l, r.Root)
+		label := threadLabel(r.Tnum, l, r.Root)
 		if names[r.Tab+"\t"+label] {
 			continue
 		}

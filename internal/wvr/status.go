@@ -69,7 +69,7 @@ func (e *Env) StatusText() string {
 		case StateWorking, StateStarting:
 			w++
 		case StateDone:
-			if r.Seen != "true" {
+			if !r.Seen {
 				d++
 			}
 		case StateIdle, StateInterrupted, StateEnded:

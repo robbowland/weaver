@@ -181,7 +181,7 @@ func (e *Env) Next() {
 		switch r.State {
 		case StateNeedsYou:
 		case StateDone:
-			if r.Seen == "true" {
+			if r.Seen {
 				continue
 			}
 			class = 1
@@ -204,9 +204,8 @@ func (e *Env) Next() {
 		if rlen(l) > 40 {
 			l = runeSlice(l, 39) + "…"
 		}
-		if r.Tnum != "" {
-			n, _ := strconv.Atoi(r.Tnum)
-			l = fmt.Sprintf("%02d %s", n, l)
+		if r.Tnum > 0 {
+			l = fmt.Sprintf("%02d %s", r.Tnum, l)
 		}
 		if r.State == StateNeedsYou {
 			l += " · needs you"
@@ -216,8 +215,7 @@ func (e *Env) Next() {
 		} else {
 			l += " · done"
 		}
-		sn, _ := strconv.ParseInt(r.Since, 10, 64)
-		cs = append(cs, c{class, sn, r.Pane, r.Tab, l})
+		cs = append(cs, c{class, r.Since, r.Pane, r.Tab, l})
 	}
 	if len(cs) == 0 {
 		if isTTY(1) {
