@@ -11,6 +11,47 @@ weaver drives Claude Code through its hooks, and Codex through an adapter;
 any other agent can report through `weaver event`
 ([docs/design.md](docs/design.md#events-from-other-agents)).
 
+## Install
+
+macOS, with tmux 3.3+, Neovim 0.10+, git and fzf (for the interactive
+dashboard); [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
+in your Neovim config for reviews, and [Worktrunk](https://worktrunk.dev) if
+you want it to make the worktrees.
+
+```sh
+brew install robbowland/kegs/weaver
+weaver setup
+```
+
+or, from a checkout, with Go:
+
+```sh
+./install.sh --configure
+```
+
+`install.sh` builds weaver, one binary carrying everything it needs, into
+`~/.local/bin/weaver` (safe to rerun; `--dry-run` shows what it would do).
+`weaver setup` adds weaver's hooks to `~/.claude/settings.json`, replacing
+any older weaver hooks and backing the file up first (`--dry-run` shows the
+diff). The hooks run the binary directly, without a shell; the ones nobody
+needs to wait for run in the background. When `~/.codex` exists, Codex's
+hooks (`~/.codex/hooks.json`) get weaver too (`--no-codex` to skip); trust
+them in Codex's `/hooks` before they run.
+
+Restart running Claude Code sessions afterwards: they read hooks at start.
+weaver's tmux needs no config of yours. After an upgrade, a running weaver
+session reads weaver's tmux config again the next time `weaver` attaches to
+it, and an open home board restarts in the new weaver at its next reload.
+
+weaver unpacks its files under `~/.local/share/weaver/runtime`, and keeps a
+copy of its Neovim plugin at `~/.local/share/weaver/nvim`. The nvims weaver
+opens load it themselves; to use its review or statusline in your other
+nvims ([Neovim](#neovim)), add it to your config, with lazy.nvim:
+
+```lua
+{ dir = (vim.env.XDG_DATA_HOME or vim.env.HOME .. '/.local/share') .. '/weaver/nvim', name = 'weaver', lazy = false }
+```
+
 ## Start
 
 ```sh
@@ -85,8 +126,8 @@ task in `$EDITOR`) or `--no-focus`.
 New worktrees come from [Worktrunk](https://worktrunk.dev) when it is
 installed (`wt switch --create`, so your `worktree-path` and hooks apply),
 else from `git worktree add` at `../<repo>.<branch>`. A new branch starts from
-the remote's default branch (`origin`, else the first remote) freshly fetched,
-as `wnew` does: the form starts the fetch as it opens and its `base` row says
+the remote's default branch (`origin`, else the first remote) freshly fetched:
+the form starts the fetch as it opens and its `base` row says
 how it is going, so enter rarely waits. Offline, slower than
 `WEAVER_FETCH_TIMEOUT`, or with no remote, it starts from the local default
 branch and says so. The nvim on the left is
@@ -179,7 +220,7 @@ come last, under LOST ([When the session goes](#when-the-session-goes)). Each ro
 (what it waits on, the command it runs, what its last turn changed and
 said, its subagents),
 repo/branch when there is room, and how long it has been in that state. The
-states are Micrographics task cells, which read without colour: `[!]` needs you,
+states are task cells, which read without colour: `[!]` needs you,
 `[x]` done, `[/]` working, `[ ]` idle, `[-]` interrupted. Titles are in ink only
 where a thread needs you. `×2` after a branch means two agents share the
 worktree, so their per-turn diffs mix.
@@ -209,7 +250,7 @@ the counts.
 ### Status bar
 
 `weaver status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
-unseen, working). weaver's tmux status line shows them in Micrographics signal
+unseen, working). weaver's tmux status line shows them in their signal
 colours, set by weaver as they change, so nothing polls.
 
 ### Turns and the activity log
@@ -292,36 +333,6 @@ Your own config can use the same one-view review:
 is the agent's state for a statusline, empty where the bar already shows it,
 and `User WeaverEvent` autocmds receive every event from the agent.
 
-## Install
-
-Needs Go to build, tmux 3.3+, neovim 0.10+ and git; fzf for the
-interactive dashboard, and diffview-plus.nvim in your nvim for reviews.
-
-```sh
-./install.sh --configure
-```
-
-This builds weaver, one binary carrying everything it needs, into
-`~/.local/bin/weaver` (it unpacks its Neovim plugin and configs under
-`~/.local/share/weaver/runtime`, and keeps a copy of its Neovim plugin at
-`~/.local/share/weaver/nvim` for your Neovim config to load), then runs
-`weaver setup`, which adds the hooks to `~/.claude/settings.json` (replacing
-any older weaver hooks), backing it up first. weaver's tmux needs no config
-of yours. The hooks run
-`~/.local/bin/weaver` directly, without a shell; the ones nobody needs to wait
-for run in the background. Pass `--dry-run` to see the diff first. It is safe
-to rerun, and it replaces an older install (from before weaver was one
-binary, or was called agentnav). A weaver installed some other way (a
-package) needs only `weaver setup`. `packaging/homebrew/weaver.rb` is a
-Homebrew formula for a tap (tmux, fzf and Neovim as its dependencies).
-
-Restart running Claude Code sessions afterwards: they read hooks at start.
-A running weaver tmux session reads weaver's tmux config again the next time
-`weaver` attaches to it, and an open home board starts again in the new
-weaver by itself, at its next reload.
-When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
-(`--no-codex` to skip); trust them in Codex's `/hooks` before they run.
-
 ## Settings
 
 | Variable | Default | Does |
@@ -340,16 +351,18 @@ When `~/.codex` exists, Codex's hooks (`~/.codex/hooks.json`) get weaver too
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 
-## Tests
+## Development
+
+The engine is Go (`cmd/weaver`, `internal/wv`), the Neovim side Lua
+(`nvim/`); they meet at the contracts in [docs/design.md](docs/design.md),
+and [docs/decisions.md](docs/decisions.md) says why things are as they are.
 
 ```sh
 test/run.sh
 ```
 
-(The tests need jq as well.)
-
 runs, in a few minutes, each with its own state and nothing of yours
-touched:
+touched (they need jq and python3 as well as weaver's own dependencies):
 
 - `go vet` and `go test`, which include the contracts between the Go half,
   its Neovim side and the design doc (the states and their cells);
@@ -369,3 +382,7 @@ touched:
 
 `test/soak/nvim-exit.sh` is a long run, by hand: nvims weaver starts, killed
 together round after round, none of which may hang.
+
+## Licence
+
+MIT: see [LICENSE](LICENSE).
