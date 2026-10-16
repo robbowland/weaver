@@ -510,6 +510,10 @@ func (e *Env) Rows(plain bool) string {
 			if n == 0 {
 				out = grey + "No threads yet." + off + " " + COff + "n" + grey + " starts one here, " + COff + "Alt N" + grey +
 					" from anywhere;" + off + "\n" + grey + "or start claude or codex in any pane." + off
+				if len(viewNames()) > 0 {
+					out += "\n" + COff + "Alt y" + grey + " shows your pull requests and issues: " + COff + "Alt N" + grey +
+						" on one starts its thread." + off
+				}
 			}
 			putFile(base+".title", out)
 			if n == 0 {

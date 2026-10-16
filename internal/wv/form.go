@@ -532,6 +532,14 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + CGrey + "^e" + COff + " " + CDim + "WRITE IT IN $EDITOR" + COff +
 	"   " + CGrey + "esc" + COff + " " + CDim + "CANCEL" + COff
 
+// newFormLabel is the new-thread form's label: a review says so.
+func newFormLabel(fm form) string {
+	if fm.mode == "review" {
+		return formLabel("WEAVER", "REVIEW")
+	}
+	return formLabel("WEAVER", "NEW THREAD")
+}
+
 // formLabel is a form's border label in the board's grammar:
 // [ WHERE :: WHAT ], the brackets and :: faint, where in ink, what grey.
 func formLabel(where, what string) string {
@@ -875,12 +883,12 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 		os.Remove(sock)
 		args := []string{"--listen", sock, "--disabled", "--reverse"}
 		args = append(args, formFzf...)
-		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD"), "--prompt", "      task  ", "--ghost", "what should the agent do?",
+		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "      task  ", "--ghost", "what should the agent do?",
 			"--query", query, "--header", h, "--footer", formFooter, "--color", FzfColors,
 			"--bind", "change:bg-cancel+bg-transform-header("+hd+")",
 			"--bind", "tab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
 			"--bind", "btab:execute-silent("+q+" _form agent "+qs+")+transform-header("+hd+")",
-			"--bind", "alt-r:execute-silent("+q+" _form mode "+qs+")+transform-header("+hd+")",
+			"--bind", "alt-r:execute-silent("+q+" _form mode "+qs+")+transform-header("+hd+")+transform-border-label("+q+" _form label "+qs+")",
 			"--bind", "alt-b:execute("+q+" _form branch "+qs+" {q})+transform-header("+hd+")",
 			"--bind", "alt-B:execute("+q+" _form base "+qs+")+transform-header("+hd+")",
 			"--bind", "ctrl-r:execute("+q+" _form repo "+qs+")+transform-header("+hd+")",
@@ -934,6 +942,8 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.where == "worktree" && fm.base == "" {
 			e.fetchStart(fm.repo, sf)
 		}
+	case "label":
+		fmt.Print(newFormLabel(fm))
 	case "mode":
 		if fm.mode == "review" {
 			fm.mode = ""
