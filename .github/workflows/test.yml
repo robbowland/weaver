@@ -15,6 +15,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+          # Old findings are being worked down; new code adds none.
+          only-new-issues: true
       - run: brew install tmux neovim fzf jq
       - name: The Neovim plugins weaver works with, for its specs
         run: |

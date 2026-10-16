@@ -112,7 +112,7 @@ func codex(c obj) obj {
 		}
 		n["event"], n["waiting"] = "needs_you", s(c.get("tool_name", ""))+": "+w
 	case "PostToolUse":
-		var f any = firstOf(obj(ti).get("file_path", nil), obj(ti).get("path", nil))
+		f := firstOf(obj(ti).get("file_path", nil), obj(ti).get("path", nil))
 		if f == nil {
 			var walk func(v any)
 			walk = func(v any) {

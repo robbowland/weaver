@@ -66,8 +66,8 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		tree = t
 	} else {
 		if !exists(idx) {
-			if real, err := gitOut(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
-				if b, err := os.ReadFile(real); err == nil {
+			if index, err := gitOut(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
+				if b, err := os.ReadFile(index); err == nil {
 					os.WriteFile(idx, b, 0o644)
 				}
 			}

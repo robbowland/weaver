@@ -177,7 +177,7 @@ var (
 // editFile is the file an edit tool wrote (absolute), else "".
 func editFile(ev obj) string {
 	t := ev.get("tool_name", "")
-	if ev["hook_event_name"] != "PostToolUse" || !(t == "Edit" || t == "Write" || t == "MultiEdit" || t == "NotebookEdit") {
+	if ev["hook_event_name"] != "PostToolUse" || t != "Edit" && t != "Write" && t != "MultiEdit" && t != "NotebookEdit" {
 		return ""
 	}
 	var f any = ""
@@ -775,7 +775,7 @@ func (h *hk) run(e *Env, me string) {
 			"worker_permission_prompt", "quota_auto_resume_stale", "":
 			// A dialog: keep the more specific text of the request that opened it.
 			h.State = "needs-you"
-			if !(h.OState == "needs-you" && h.OWaiting != "") {
+			if h.OState != "needs-you" || h.OWaiting == "" {
 				h.Waiting = h.WaitingNew
 			}
 		case "elicitation_complete", "elicitation_response":
@@ -790,7 +790,7 @@ func (h *hk) run(e *Env, me string) {
 			// pending.
 			switch h.OState {
 			case "working":
-				if n, ok := atoi(h.OBg); !(ok && n > 0) {
+				if n, ok := atoi(h.OBg); !ok || n <= 0 {
 					h.State = "interrupted"
 				}
 			case "":

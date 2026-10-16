@@ -315,16 +315,16 @@ func agentCols(total int) int {
 		n, _ := strconv.Atoi(w)
 		return n
 	}
-	min := 44
+	least := 44
 	if n, ok := atoi(os.Getenv("WEAVER_AGENT_MIN_COLS")); ok {
-		min = n
+		least = n
 	}
 	c := total * pct / 100
-	if min > total-60 {
-		min = total - 60
+	if least > total-60 {
+		least = total - 60
 	}
-	if c < min {
-		c = min
+	if c < least {
+		c = least
 	}
 	return c
 }

@@ -150,7 +150,7 @@ func ghRepo(dir string) string {
 		return ""
 	}
 	pref := preferredRemote(dir)
-	any := ""
+	first := ""
 	for _, l := range strings.Split(string(out), "\n") {
 		k, u, ok := strings.Cut(l, " ")
 		if !ok {
@@ -163,11 +163,11 @@ func ghRepo(dir string) string {
 		if strings.TrimSuffix(strings.TrimPrefix(k, "remote."), ".url") == pref {
 			return m[1]
 		}
-		if any == "" {
-			any = m[1]
+		if first == "" {
+			first = m[1]
 		}
 	}
-	return any
+	return first
 }
 
 // checkoutFor is the main checkout of GitHub repository owner/name, from

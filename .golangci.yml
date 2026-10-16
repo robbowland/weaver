@@ -1,0 +1,57 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - exhaustive
+    - gochecksumtype
+    - gocyclo
+    - govet
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    # Unchecked: output to the terminal, removing what may already be gone,
+    # and exec, which returns only when it failed. Everything else is
+    # checked or named as best-effort.
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.Remove
+        - os.RemoveAll
+        - syscall.Exec
+    # A switch over a closed set (a state, a kind of item) names every case:
+    # a new case breaks every switch that has not handled it.
+    exhaustive:
+      default-signifies-exhaustive: false
+    gochecksumtype:
+      default-signifies-exhaustive: false
+    # A ceiling that comes down as the big functions split.
+    gocyclo:
+      min-complexity: 130
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-naming
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: errorf
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: unused-parameter
+
+formatters:
+  enable:
+    - gofmt

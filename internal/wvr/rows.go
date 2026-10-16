@@ -297,7 +297,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			}
 		}
 		st0 := s.get("state", "idle")
-		var st any = st0
+		st := any(st0)
 		changed := false
 		cst := ""
 		if c != nil {

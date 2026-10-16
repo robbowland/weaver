@@ -717,7 +717,7 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 	if sid == "" || turn == "0" {
 		return ""
 	}
-	total, any := 0, false
+	total, counted := 0, false
 	for _, r := range roots {
 		if r == "" {
 			continue
@@ -749,9 +749,9 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 		}
 		c, _ := strconv.Atoi(f[2])
 		total += c
-		any = true
+		counted = true
 	}
-	if !any {
+	if !counted {
 		return ""
 	}
 	return strconv.Itoa(total)
