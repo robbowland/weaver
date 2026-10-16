@@ -18,7 +18,7 @@ import (
 	"github.com/neovim/go-client/nvim"
 )
 
-// hookBg is `weaver hook --bg`: everything a hook does besides writing the
+// hookBg is `wvr hook --bg`: everything a hook does besides writing the
 // state, after it, so the agent never waits on nvim,
 // tmux, git or Worktrunk.
 func (e *Env) hookBg() {

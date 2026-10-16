@@ -259,7 +259,7 @@ func (e *Env) hookSnapshots(h *hk) {
 	}
 }
 
-// Snapshot is `weaver snapshot --reviewed [dir]`: mark the worktree holding
+// Snapshot is `wvr snapshot --reviewed [dir]`: mark the worktree holding
 // dir reviewed; prints its commit.
 func Snapshot(args []string) (string, string) {
 	dir := ""
@@ -267,7 +267,7 @@ func Snapshot(args []string) (string, string) {
 		switch {
 		case a == "--reviewed":
 		case strings.HasPrefix(a, "-"):
-			return "", "usage: weaver snapshot --reviewed [dir]"
+			return "", "usage: wvr snapshot --reviewed [dir]"
 		default:
 			dir = a
 		}

@@ -282,7 +282,7 @@ func (e *Env) StartViews() {
 	}
 }
 
-// View is `weaver view [NAME]`: go to view NAME (the first, without one).
+// View is `wvr view [NAME]`: go to view NAME (the first, without one).
 func (e *Env) View(args []string) int {
 	ns := viewNames()
 	name := ""
@@ -303,8 +303,8 @@ func (e *Env) View(args []string) int {
 	return 0
 }
 
-// From is `weaver _from github pr|issue REPO NUM [--review]` (gh-dash's
-// Alt N and Alt R) and `weaver _from linear [--review]` (the LINEAR view's):
+// From is `wvr _from github pr|issue REPO NUM [--review]` (gh-dash's
+// Alt N and Alt R) and `wvr _from linear [--review]` (the LINEAR view's):
 // the new-thread form for that item, in a popup, while the view goes on.
 func (e *Env) From(args []string) int {
 	review := false
@@ -345,7 +345,7 @@ func (e *Env) From(args []string) int {
 			nw = append(nw, "--repo", d)
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "weaver: usage: weaver _from github pr|issue REPO NUM [--review] | linear [--review]")
+		fmt.Fprintln(os.Stderr, "weaver: usage: wvr _from github pr|issue REPO NUM [--review] | linear [--review]")
 		return 2
 	}
 	if review {

@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// The agent's nvim: `weaver edit` (Alt v, e on the board) opens it beside the
-// agent, or goes to it; `weaver nvim` is what runs in its pane.
+// The agent's nvim: `wvr edit` (Alt v, e on the board) opens it beside the
+// agent, or goes to it; `wvr nvim` is what runs in its pane.
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
@@ -42,7 +42,7 @@ func (e *Env) threadWidth(agent string) {
 	e.Tmux("resize-pane", "-t", "%"+agent, "-x", strconv.Itoa(agentCols(total)))
 }
 
-// editLock is one `weaver edit` per agent at a time, so a second Alt v finds
+// editLock is one `wvr edit` per agent at a time, so a second Alt v finds
 // the nvim the first is opening. A lock older than 5s was left by a killed
 // process.
 func (e *Env) editLock(agent string) func() {
@@ -83,7 +83,7 @@ func (e *Env) focusedPane() string {
 	return p
 }
 
-// Edit is `weaver edit [--full] [PANE]`: open or go to the nvim of the
+// Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
 func (e *Env) Edit(args []string) int {
 	full, target := false, ""
@@ -92,7 +92,7 @@ func (e *Env) Edit(args []string) int {
 		case a == "--full":
 			full = true
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver edit [--full] [pane-id]")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr edit [--full] [pane-id]")
 			return 1
 		default:
 			target = strings.TrimPrefix(strings.TrimPrefix(a, "terminal_"), "%")
@@ -226,13 +226,13 @@ func (e *Env) Edit(args []string) int {
 	return 0
 }
 
-// Nvim is `weaver nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,
+// Nvim is `wvr nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,
 // on the agent's socket. --fresh: the agent was just made (a thread's), so
 // an nvim on its socket belongs to a session of the same name that went
 // (pane ids start again with each server).
 func (e *Env) Nvim(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "weaver: usage: weaver nvim <agent-pane-id> [file]")
+		fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim <agent-pane-id> [file]")
 		return 1
 	}
 	agent, file, fresh := strings.TrimPrefix(args[0], "terminal_"), "", false
@@ -241,7 +241,7 @@ func (e *Env) Nvim(args []string) int {
 	}
 	if args[0] == "--fresh" {
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver nvim [--fresh] <agent-pane-id> [file]")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 			return 1
 		}
 		agent, file, fresh = strings.TrimPrefix(args[1], "terminal_"), "", true

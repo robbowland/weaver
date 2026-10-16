@@ -19,8 +19,8 @@ import (
 )
 
 // Threads: a task, its worktree and a window with nvim and the agent
-// (`weaver new`); brought back when lost (`weaver resume`); closed (`weaver
-// close`); told something (`weaver send`); and the session quit (`weaver
+// (`wvr new`); brought back when lost (`wvr resume`); closed (`weaver
+// close`); told something (`wvr send`); and the session quit (`weaver
 // quit`).
 
 func (e *Env) threadsNew() string { return e.StateDir + "/new" }
@@ -99,7 +99,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 }
 
 // threadTab opens a thread's window, named name, in dir: its agent first
-// (`weaver _agent tok kind`), then its nvim on the agent's left (`weaver nvim
+// (`wvr _agent tok kind`), then its nvim on the agent's left (`wvr nvim
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
 // nofocus), nvim with nvimEnv too. Its window id.
@@ -139,7 +139,7 @@ func (e *Env) threadTab(tok, kind, dir, name string, nofocus bool, nvimEnv ...st
 }
 
 // bindNvim records nvim pane nv (process pid) as agent's:
-// <skey>_<agent>.nvim. (`weaver nvim` keeps this pid when it becomes nvim.)
+// <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim.)
 func (e *Env) bindNvim(agent, nv, pid string) {
 	os.MkdirAll(e.StateDir, 0o755)
 	nf := e.StateDir + "/" + e.SKey + "_" + agent + ".nvim"
@@ -475,7 +475,7 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	return true
 }
 
-// AgentPane is `weaver _agent TOKEN AGENT`, the agent's pane of a new
+// AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
 // thread. First run: record the thread for this pane, tell the nvim beside
 // it where the agent is, and start the agent with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
@@ -622,7 +622,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 	return run("resume", "--last")
 }
 
-// threadRestore brings lost thread lf back: a window like `weaver new`
+// threadRestore brings lost thread lf back: a window like `wvr new`
 // makes, in the directory its agent started in, whose agent resumes its
 // conversation. It keeps its number when free; its state carries on.
 func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
@@ -758,10 +758,10 @@ func (e *Env) ResumeSession() {
 	}
 }
 
-// Resume is `weaver resume [--all | --forget [--yes]] [WHICH]`.
+// Resume is `wvr resume [--all | --forget [--yes]] [WHICH]`.
 func (e *Env) Resume(args []string) int {
 	all, drop, yes, which := false, false, false, ""
-	usage := "usage: weaver resume [--all | --forget [--yes]] [session-id | name | number]"
+	usage := "usage: wvr resume [--all | --forget [--yes]] [session-id | name | number]"
 	for _, a := range args {
 		switch a {
 		case "--all":
@@ -794,7 +794,7 @@ func (e *Env) Resume(args []string) int {
 			lost, _ := strconv.ParseInt(r.Lost, 10, 64)
 			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), runeSlice(r.Sid, 8))
 		}
-		fmt.Println("weaver resume NAME (a number, or a session id) brings one back; --all, every one")
+		fmt.Println("wvr resume NAME (a number, or a session id) brings one back; --all, every one")
 		return 0
 	}
 	var match []string
@@ -817,11 +817,11 @@ func (e *Env) Resume(args []string) int {
 		if which != "" {
 			n = "named " + which + " "
 		}
-		fmt.Fprintf(os.Stderr, "weaver: no lost thread %s(weaver resume lists them)\n", n)
+		fmt.Fprintf(os.Stderr, "weaver: no lost thread %s(wvr resume lists them)\n", n)
 		return 1
 	}
 	if !all && len(match) != 1 {
-		fmt.Fprintf(os.Stderr, "weaver: %s names %d lost threads: give its session id (weaver resume lists them)\n", which, len(match))
+		fmt.Fprintf(os.Stderr, "weaver: %s names %d lost threads: give its session id (wvr resume lists them)\n", which, len(match))
 		return 1
 	}
 	if drop {
@@ -859,7 +859,7 @@ func (e *Env) Resume(args []string) int {
 		return 0
 	}
 	if e.Session == "" {
-		fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `weaver`)")
+		fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `wvr`)")
 		return 1
 	}
 	failed := 0
@@ -996,9 +996,9 @@ func (e *Env) threadRead(agent string) threadRec {
 }
 
 // threadNvim is the nvim pane of a thread's agent before it is recorded
-// as bound: the pane in the agent's window started as `weaver nvim --fresh
-// AGENT` (or, before that, `weaver nvim --thread TOK`); and TOK, from the
-// agent's own start command (`weaver _agent TOK`), whose record of the
+// as bound: the pane in the agent's window started as `wvr nvim --fresh
+// AGENT` (or, before that, `wvr nvim --thread TOK`); and TOK, from the
+// agent's own start command (`wvr _agent TOK`), whose record of the
 // thread being opened goes with it. "" when there is none.
 func threadNvim(panes []Pane, agent Pane) (string, string) {
 	f := strings.Fields(agent.Cmd)
@@ -1021,7 +1021,7 @@ func threadNvim(panes []Pane, agent Pane) (string, string) {
 	return "", ""
 }
 
-// Close is `weaver close [--yes] [--remove-worktree] [PANE]`: close an
+// Close is `wvr close [--yes] [--remove-worktree] [PANE]`: close an
 // agent (the focused one) with its nvim, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
 func (e *Env) Close(args []string) int {
@@ -1033,7 +1033,7 @@ func (e *Env) Close(args []string) int {
 		case a == "--remove-worktree":
 			rmwt = true
 		case strings.HasPrefix(a, "-"):
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver close [--yes] [--remove-worktree] [pane-id]")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr close [--yes] [--remove-worktree] [pane-id]")
 			return 1
 		default:
 			target = strings.TrimPrefix(strings.TrimPrefix(a, "terminal_"), "%")
@@ -1232,7 +1232,7 @@ func (e *Env) Close(args []string) int {
 	return e.CloseTail(tail)
 }
 
-// CloseTail is the closing itself (`weaver _close AGENT NVIM PID START
+// CloseTail is the closing itself (`wvr _close AGENT NVIM PID START
 // REMOVE DIR REPO [TOK]`): close the agent's pane and its nvim's, wait for
 // the agent to exit, forget it, and remove its worktree if asked, checking
 // again first. TOK: the thread was still being opened (its nvim had not
@@ -1293,12 +1293,12 @@ func (e *Env) CloseTail(a []string) int {
 	return rc
 }
 
-// Send is `weaver send [--force] PANE < TEXT`: the text to agent PANE's
+// Send is `wvr send [--force] PANE < TEXT`: the text to agent PANE's
 // prompt, as if you typed it (a bracketed paste, then enter), only while it
 // waits for you to say more (idle, done, interrupted) unless forced.
 func (e *Env) Send(args []string) int {
 	want, force := "", false
-	usage := "weaver: usage: weaver send [--force] PANE < TEXT"
+	usage := "weaver: usage: wvr send [--force] PANE < TEXT"
 	for _, a := range args {
 		switch {
 		case a == "--force":
@@ -1361,7 +1361,7 @@ func (e *Env) Send(args []string) int {
 	return 0
 }
 
-// Quit is `weaver quit [--yes]`: quit the session (outside one, the weaver
+// Quit is `wvr quit [--yes]`: quit the session (outside one, the weaver
 // session) with every agent and nvim in it, after asking. Its threads are
 // kept: they come back as the weaver session starts again.
 func (e *Env) Quit(args []string) int {
@@ -1371,7 +1371,7 @@ func (e *Env) Quit(args []string) int {
 		case "--yes", "-y":
 			yes = true
 		default:
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver quit [--yes]")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr quit [--yes]")
 			return 1
 		}
 	}
@@ -1411,7 +1411,7 @@ func (e *Env) Quit(args []string) int {
 				bufs += n
 			}
 		}
-		back := "weaver resume brings them back"
+		back := "wvr resume brings them back"
 		if l, _ := firstLine(e.StateDir + "/" + skey + ".layout"); l == "weaver" {
 			back = "back when you start weaver"
 		}

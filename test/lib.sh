@@ -67,7 +67,7 @@ key() { printf '%s\n' "$1" >"$AT/keys.fifo"; }
 # client: the pane the client is on (as terminal_N).
 client() { printf 'terminal_%s\n' "$(tmux -S "$TSOCK" list-clients -F '#{pane_id}' | tail -n 1 | tr -d '%')"; }
 # status_line: the counts as the session's status line shows them.
-status_line() { weaver status --tmux "$SESSION"; }
+status_line() { wvr status --tmux "$SESSION"; }
 # ring PANE: the shell in agent pane PANE rings the bell; bell_mark TAB: is
 # tab (window) TAB marked for it ("true")?
 ring() { tmux -S "$TSOCK" send-keys -t "%$1" "printf '\\a'" Enter; }
@@ -92,13 +92,13 @@ hook() {
 		+ (if $e == "SessionStart" then {source:"startup"} else {} end)
 		+ (if $f != "" then {tool_name:"Edit", tool_input:{file_path:$f}, tool_response:{}} else {} end)
 		+ (if $p != "" then {prompt:$p} else {} end)' |
-		as_pane "$1" weaver hook $mode
+		as_pane "$1" wvr hook $mode
 }
 # hookj PANE JSON [ARGS]: fake a hook event from raw JSON (sync unless --async).
 hookj() {
 	local pane=$1 json=$2
 	shift 2
-	printf '%s' "$json" | as_pane "$pane" weaver hook "$@"
+	printf '%s' "$json" | as_pane "$pane" wvr hook "$@"
 }
 # hooka PANE JSON: the same through whichever hook Claude Code would use.
 hooka() {
@@ -111,7 +111,7 @@ settle() {
 	local i
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
 		# The hook's background work.
-		pgrep -f "$AT/.*weaver hook" >/dev/null 2>&1 || break
+		pgrep -f "$AT/.*wvr hook" >/dev/null 2>&1 || break
 		sleep 0.2
 	done
 	sleep 0.2

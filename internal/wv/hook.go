@@ -17,7 +17,7 @@ import (
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
 // agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, tmux, Worktrunk,
-// snapshots, the status line) runs after it in a detached `weaver hook --bg`.
+// snapshots, the status line) runs after it in a detached `wvr hook --bg`.
 
 const rs, us = "\x1e", "\x1f"
 
@@ -57,7 +57,7 @@ type hk struct {
 	rc                                                             int
 }
 
-// Hook is `weaver hook [--async]` (and, from Event, another agent's event):
+// Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
 func (e *Env) Hook(in []byte, mode, pane, agent, me string) int {
 	h := &hk{Pane: pane, AgentKind: agent, Mode: mode, SKey: e.SKey}
@@ -1156,7 +1156,7 @@ func (e *Env) afterWrite(h *hk) {
 	}
 }
 
-// spawnBg starts `weaver hook --bg`, detached, with this run in its
+// spawnBg starts `wvr hook --bg`, detached, with this run in its
 // environment.
 func (e *Env) spawnBg(h *hk) {
 	b, err := json.Marshal(h)
@@ -1174,7 +1174,7 @@ func (e *Env) spawnBg(h *hk) {
 	c.Start()
 }
 
-// HookMain is `weaver hook [--async|--bg]`.
+// HookMain is `wvr hook [--async|--bg]`.
 func (e *Env) HookMain(args []string) {
 	mode := "sync"
 	if len(args) > 0 {

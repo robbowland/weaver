@@ -1,13 +1,13 @@
 #!/bin/bash
-# Agents other than Claude Code: `weaver event` (normalized JSON) and the Codex
-# adapter (`weaver adapt codex`, Codex's own hook input).
+# Agents other than Claude Code: `wvr event` (normalized JSON) and the Codex
+# adapter (`wvr adapt codex`, Codex's own hook input).
 . "$(dirname "$0")/../lib.sh"
 fresh
 
-# --- weaver event: a made-up agent in pane 2
+# --- wvr event: a made-up agent in pane 2
 live_pid
 P=$LIVE_PID
-ev() { printf '%s' "$1" | as_pane 2 weaver event; }
+ev() { printf '%s' "$1" | as_pane 2 wvr event; }
 base='"agent":"pi","session":"pi-1","cwd":"'"$T/repo"'","pid":'"$P"
 ev "{$base,\"event\":\"session_start\",\"source\":\"startup\"}"
 ok "event: session start makes an idle agent of the given kind" "$(st 2 state)|$(st 2 agent)|$(st 2 pid)" "idle|pi|$P"
@@ -25,7 +25,7 @@ ev "{$base,\"event\":\"tool_done\",\"tool\":\"bash\",\"command\":\"echo by bash 
 ok "event: a tool without a file: its changes are found like a Bash edit's" "$(st 2 file)" "$T/repo-wt-b/src/app.txt"
 ev "{$base,\"event\":\"stop\",\"message\":\"Tidied.\"}"
 ok "event: stop is done, with the last reply" "$(st 2 state)|$(st 2 last_message)" "done|Tidied."
-ok "event: the dashboard lists it" "$(weaver ls | grep -c 'tidy the readme')" "1"
+ok "event: the dashboard lists it" "$(wvr ls | grep -c 'tidy the readme')" "1"
 ev "{$base,\"event\":\"prompt\",\"prompt\":\"more\"}"
 ev "{$base,\"event\":\"interrupt\"}"
 ok "event: interrupt" "$(st 2 state)" "interrupted"
@@ -44,7 +44,7 @@ kill "$P"
 fresh
 live_pid
 CX=$LIVE_PID
-cx() { printf '%s' "$1" | WEAVER_AGENT_PID=$CX as_pane 1 weaver adapt codex; }
+cx() { printf '%s' "$1" | WEAVER_AGENT_PID=$CX as_pane 1 wvr adapt codex; }
 cb='"session_id":"cx-1","transcript_path":null,"cwd":"'"$T/repo-wt-b"'","model":"gpt-5","permission_mode":"default"'
 cx "{$cb,\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}"
 ok "codex: session start" "$(st 1 state)|$(st 1 agent)" "idle|codex"

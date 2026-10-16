@@ -1,7 +1,7 @@
 No agents in this session yet.
 
 n       start a thread: a task, its worktree, and a tab with
-        nvim and the agent (weaver new)
+        nvim and the agent (wvr new)
 Alt N   the same from anywhere in the session
 
 Or start claude or codex in any pane: weaver follows it

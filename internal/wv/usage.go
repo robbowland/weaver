@@ -1,7 +1,7 @@
 package wv
 
-// Usage is `weaver help`.
-const Usage = `usage: weaver [command]
+// Usage is `wvr help`.
+const Usage = `usage: wvr [command]
   (none)                       outside tmux: attach to, or start, the session "weaver"
                                ($WEAVER_SESSION) on weaver's own tmux server; inside
                                tmux: the dashboard

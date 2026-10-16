@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-// Start is `weaver [start [session]]` outside a session: attach to the
+// Start is `wvr [start [session]]` outside a session: attach to the
 // weaver session on weaver's own tmux server (with config/tmux.conf, read
 // again each time, so an install reaches a running server), or start it
 // with home in window 0. Its panes know their session

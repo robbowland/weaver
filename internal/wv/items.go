@@ -13,7 +13,7 @@ import (
 )
 
 // Work items: a GitHub pull request or issue, or a Linear issue, that a
-// thread starts from (`weaver new --pr / --issue`). They are read through
+// thread starts from (`wvr new --pr / --issue`). They are read through
 // the tools that already speak to them, gh and linear-tui, never written
 // to: the branch is what ties a thread to its item.
 

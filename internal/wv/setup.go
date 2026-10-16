@@ -15,11 +15,11 @@ import (
 	weaver "github.com/robbowland/weaver"
 )
 
-// reOurs is a hook command of weaver's (or agentnav's, its old name): its
-// name alone, a path to it, either with arguments.
-var reOurs = regexp.MustCompile(`^(\S*/)?(weaver|agentnav)( |$)`)
+// reOurs is a hook command of weaver's (wvr, or weaver and agentnav, its
+// old names): its name alone, a path to it, either with arguments.
+var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 
-// Setup is `weaver setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
+// Setup is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
 // hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
 // exists), run by this binary's path (or PATH), each file backed up before
 // it changes; its files unpacked.
@@ -39,7 +39,7 @@ func Setup(args []string, self string, out io.Writer) int {
 			i++
 			bin = args[i]
 		default:
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver setup [--dry-run] [--no-codex] [--bin PATH]")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")
 			return 2
 		}
 	}
@@ -77,7 +77,7 @@ func Setup(args []string, self string, out io.Writer) int {
 	fmt.Fprint(out, `
 Done. To pick it up:
   - a running weaver tmux session reads weaver's tmux config again the next time
-    `+"`weaver`"+` attaches to it
+    `+"`wvr`"+` attaches to it
   - restart any Claude Code sessions that are already running: they read hooks at start
 `)
 	if codexDone {
@@ -175,7 +175,7 @@ func copyFile(from, to string) error {
 
 // mergeHooks is settings with every weaver hook (whatever its form: "weaver
 // hook", a path to weaver with args, or agentnav, its old name) removed and
-// add's hooks put in, their "weaver" run as bin: so a changed matcher or
+// add's hooks put in, their "wvr" run as bin: so a changed matcher or
 // event never leaves a stale entry behind. Hooks of anything else are never
 // touched; a matcher group left empty, or an event left with none, goes.
 // Members keep their order; new events go last. Two-space indented, as jq
@@ -248,10 +248,10 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 					var c string
 					if json.Unmarshal(r, &c) == nil {
 						switch {
-						case c == "weaver":
+						case c == "wvr":
 							c = bin
-						case strings.HasPrefix(c, "weaver "):
-							c = bin + c[6:]
+						case strings.HasPrefix(c, "wvr "):
+							c = bin + c[3:]
 						}
 						hs[i] = json.RawMessage(ho.set("command", jqStr(c)).String())
 					}

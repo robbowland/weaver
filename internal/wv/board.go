@@ -350,7 +350,7 @@ func (e *Env) Rows(plain bool) string {
 	}
 	live := len(rs)
 	// Threads lost with their session (a crash, or quit), last: enter
-	// resumes one in a new window (weaver resume).
+	// resumes one in a new window (wvr resume).
 	for _, l := range e.LostRows() {
 		since := now
 		if digits(l.Lost) {

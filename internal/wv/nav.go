@@ -17,7 +17,7 @@ func (e *Env) focus(p string) {
 	e.Tmux("select-window", "-t", "%"+p, ";", "select-pane", "-t", "%"+p)
 }
 
-// Goto is `weaver _goto PANE TAB`: jump to an agent from the home board
+// Goto is `wvr _goto PANE TAB`: jump to an agent from the home board
 // (which stays) and count it as seen; with no PANE, to the tab.
 func (e *Env) Goto(pane, tab string) {
 	if pane == "" {
@@ -49,7 +49,7 @@ func (e *Env) tabs() []tab {
 	return ts
 }
 
-// GoHome is `weaver go home` (Alt y): from a thread (or anywhere else) to
+// GoHome is `wvr go home` (Alt y): from a thread (or anywhere else) to
 // home, made again first if it was closed; from home on through the views
 // (THREADS, GITHUB, LINEAR), and from the last back to where you came from.
 func (e *Env) GoHome() {
@@ -110,7 +110,7 @@ func (e *Env) GoHome() {
 	e.Tmux("select-window", "-t", "@"+home)
 }
 
-// uiLock is one `weaver edit` or `weaver next` per session at a time; with
+// uiLock is one `wvr edit` or `wvr next` per session at a time; with
 // nowait a second press while the first is at work is dropped (false). A
 // lock older than 10s was left by a killed process. Its release.
 func (e *Env) uiLock(nowait bool) (func(), bool) {
@@ -143,7 +143,7 @@ func (e *Env) uiLock(nowait bool) (func(), bool) {
 	return func() { os.RemoveAll(d) }, true
 }
 
-// Next is `weaver next` (Alt 1): to the agent that has needed you longest;
+// Next is `wvr next` (Alt 1): to the agent that has needed you longest;
 // failing that, the one that finished longest ago and you haven't looked at
 // yet. Pressed again on one of those, on to the next, round and round.
 func (e *Env) Next() {
@@ -267,7 +267,7 @@ func doneUnseen(l string) bool {
 	return strings.Contains(l, `"state":"done"`) && !strings.Contains(l, `"seen":true`)
 }
 
-// Seen is `weaver _seen WINDOW` (tmux's pane-focus-in hook, 1.5 s after you
+// Seen is `wvr _seen WINDOW` (tmux's pane-focus-in hook, 1.5 s after you
 // focus a window flagged as holding an agent done and unseen): if you are
 // still on it, the agent you are looking at is seen.
 func (e *Env) Seen(win string) {
@@ -329,7 +329,7 @@ func agentCols(total int) int {
 	return c
 }
 
-// Fit is `weaver _fit WINDOW` (tmux's window-resized hook): its thread's
+// Fit is `wvr _fit WINDOW` (tmux's window-resized hook): its thread's
 // agent back to its width, since tmux takes a narrower window's columns from
 // the rightmost pane, the agent's.
 func (e *Env) Fit(win string) {

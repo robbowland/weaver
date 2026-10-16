@@ -48,7 +48,7 @@ if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
 	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 fi
 # weaver: the binary built from this checkout, its files unpacked here.
-(cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
+(cd "$ROOT" && go build -o "$AT/bin/wvr" ./cmd/wvr) || exit 1
 export XDG_DATA_HOME=$AT/data
 export PATH="$AT/bin:$PATH"
 

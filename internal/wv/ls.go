@@ -35,10 +35,10 @@ func isTTY(fd int) bool {
 	return err == nil
 }
 
-// Home is the home tab's board (`weaver home`): the dashboard, full-size and
+// Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
 // threads back, the status line's counts and the tabs' labels) runs behind
-// it (`weaver _boot`), and reloads it when done.
+// it (`wvr _boot`), and reloads it when done.
 func (e *Env) Home() int {
 	if e.WeaverSession() {
 		os.MkdirAll(e.StateDir, 0o755)
@@ -56,7 +56,7 @@ func (e *Env) Home() int {
 	return e.Ls()
 }
 
-// Ls is the dashboard (`weaver ls`): fzf over the session's agents, which
+// Ls is the dashboard (`wvr ls`): fzf over the session's agents, which
 // hooks reload through its socket as they change. Without fzf or a terminal,
 // the board as text. The home board ($LS_HOME) stays: its keys act and it
 // carries on; any other ends with a key, and acts.

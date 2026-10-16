@@ -22,7 +22,7 @@ func CountsFmt(n, d, w int) string {
 	return out
 }
 
-// StatusLine is `weaver status --tmux SESSION`: the counts PushStatus last
+// StatusLine is `wvr status --tmux SESSION`: the counts PushStatus last
 // wrote for the session, in the status line's colours.
 func StatusLine(args []string) string {
 	k := ""
@@ -53,7 +53,7 @@ func StatusLine(args []string) string {
 	return CountsFmt(c[0], c[1], c[2])
 }
 
-// StatusText is plain `weaver status`: the session's counts as cells,
+// StatusText is plain `wvr status`: the session's counts as cells,
 // `[!] 1  [x] 2  [/] 1`, each only when there are some (done counts the
 // ones not yet seen).
 func (e *Env) StatusText() string {

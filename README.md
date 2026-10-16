@@ -12,8 +12,8 @@ Beside the threads, the session shows your pull requests and issues in
 [linear-tui](https://github.com/k1-c/linear-tui), and a key on any of them
 starts a thread on it, or a read-only review.
 
-weaver drives Claude Code through its hooks, and Codex through an adapter;
-any other agent can report through `weaver event`
+wvr drives Claude Code through its hooks, and Codex through an adapter;
+any other agent can report through `wvr event`
 ([docs/design.md](docs/design.md#events-from-other-agents)).
 
 ## Install
@@ -28,7 +28,7 @@ if you want its view.
 
 ```sh
 brew install robbowland/kegs/weaver
-weaver setup
+wvr setup
 ```
 
 or, from a checkout, with Go:
@@ -37,9 +37,9 @@ or, from a checkout, with Go:
 ./install.sh --configure
 ```
 
-`install.sh` builds weaver, one binary carrying everything it needs, into
-`~/.local/bin/weaver` (safe to rerun; `--dry-run` shows what it would do).
-`weaver setup` adds weaver's hooks to `~/.claude/settings.json`, replacing
+Its command is `wvr`. `install.sh` builds it, one binary carrying everything it needs, into
+`~/.local/bin/wvr` (safe to rerun; `--dry-run` shows what it would do).
+`wvr setup` adds weaver's hooks to `~/.claude/settings.json`, replacing
 any older weaver hooks and backing the file up first (`--dry-run` shows the
 diff). The hooks run the binary directly, without a shell; the ones nobody
 needs to wait for run in the background. When `~/.codex` exists, Codex's
@@ -48,10 +48,10 @@ them in Codex's `/hooks` before they run.
 
 Restart running Claude Code sessions afterwards: they read hooks at start.
 weaver's tmux needs no config of yours. After an upgrade, a running weaver
-session reads weaver's tmux config again the next time `weaver` attaches to
+session reads weaver's tmux config again the next time `wvr` attaches to
 it, and an open home board restarts in the new weaver at its next reload.
 
-weaver unpacks its files under `~/.local/share/weaver/runtime`, and keeps a
+wvr unpacks its files under `~/.local/share/weaver/runtime`, and keeps a
 copy of its Neovim plugin at `~/.local/share/weaver/nvim`. The nvims weaver
 opens load it themselves; to use its review or statusline in your other
 nvims ([Neovim](#neovim)), add it to your config, with lazy.nvim:
@@ -63,15 +63,15 @@ nvims ([Neovim](#neovim)), add it to your config, with lazy.nvim:
 ## Start
 
 ```sh
-weaver
+wvr
 ```
 
-Outside tmux, `weaver` starts the tmux session `weaver`, or attaches to it
-(`WEAVER_SESSION`, or `weaver start NAME`, for another). Inside it opens the
+Outside tmux, `wvr` starts the tmux session `weaver`, or attaches to it
+(`WEAVER_SESSION`, or `wvr start NAME`, for another). Inside it opens the
 dashboard. The session runs on weaver's own tmux server (`tmux -L weaver`,
 configured by `config/tmux.conf`, then `~/.config/weaver/tmux.conf` when you
 have one), so it never touches a tmux of yours, and closing the terminal only
-detaches from it: `weaver` again picks up where you were.
+detaches from it: `wvr` again picks up where you were.
 
 The weaver session has no window list; weaver does the switching:
 
@@ -86,7 +86,7 @@ opens for that thread, with its nvim and the agent, started with your task as
 its first prompt, in a new worktree on a branch named after the task.
 
 Agents you start by hand in any tmux session report to weaver as well, and
-`weaver` inside such a session opens its dashboard.
+`wvr` inside such a session opens its dashboard.
 
 ## Keys
 
@@ -101,7 +101,7 @@ Agents you start by hand in any tmux session report to weaver as well, and
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
 | `Cmd D` / `Cmd Shift D` | Split the pane right / down (Ghostty sends them as `keybind = super+d=csi:100;9~` and `super+shift+d=csi:100;10~`) |
-| `Ctrl q` | Quit the session, every agent and nvim in it; the threads come back as `weaver` starts |
+| `Ctrl q` | Quit the session, every agent and nvim in it; the threads come back as `wvr` starts |
 
 tmux's own keys work behind its prefix, `Ctrl b` (`Ctrl b d` detaches, `Ctrl b
 [` scrolls back).
@@ -114,7 +114,7 @@ a worktree of its own or in the checkout you are in. The window is named after
 the thread (`01 Add a CLI flag · repo/add-a-cli-flag` once its agent reports),
 keeps your status bar, and you land on the agent.
 
-The form (`Alt N`, `weaver new`, or `n` in the dashboard) starts in the
+The form (`Alt N`, `wvr new`, or `n` in the dashboard) starts in the
 repository of the pane you were on (else the one you used last):
 
 | Key | Does |
@@ -128,7 +128,7 @@ repository of the pane you were on (else the one you used last):
 | `ctrl-e` | Write a long task in `$EDITOR` |
 | `esc` | Cancel |
 
-From a shell: `weaver new "fix the flaky test"`, with `--repo DIR`,
+From a shell: `wvr new "fix the flaky test"`, with `--repo DIR`,
 `--branch NAME`, `--base REF`, `--here`, `--agent codex`, `--edit` (write the
 task in `$EDITOR`) or `--no-focus`.
 
@@ -146,9 +146,9 @@ work from the first prompt.
 If you quit a thread's nvim, `Alt v` brings it back on the left with the
 agent at its width again (when nothing else is in the window).
 
-`weaver close` (`x` in the dashboard) closes an agent, its nvim and its
+`wvr close` (`x` in the dashboard) closes an agent, its nvim and its
 thread's window, after asking; panes you added to the window stay. For a worktree
-weaver made, and only when nothing would be lost (nothing uncommitted, and
+wvr made, and only when nothing would be lost (nothing uncommitted, and
 merged into the default branch or pushed), it then offers to remove it
 (`wt remove`, else `git worktree remove`); the branch always stays.
 
@@ -177,8 +177,8 @@ reviews without changing files (Claude Code in plan mode, Codex in a
 read-only sandbox); on an issue, an investigation that ends in a plan for you
 to approve. The form's `alt-r` switches between the two.
 
-From a shell, the same: `weaver new --pr 45` (or `owner/name#45`, or its URL),
-`weaver new --issue 12`, `weaver new --issue ENG-42`, each with `--review`.
+From a shell, the same: `wvr new --pr 45` (or `owner/name#45`, or its URL),
+`wvr new --issue 12`, `wvr new --issue ENG-42`, each with `--review`.
 
 gh-dash runs with a copy of your config to which weaver adds its two keys
 and its colours (`WEAVER_VIEW_THEME=0` keeps yours); your own file is not
@@ -191,12 +191,12 @@ A thread lasts until you close it. If the session's tmux server crashes, or
 you quit the session, while a thread's agent runs, the
 thread is kept as lost rather than forgotten:
 
-- `weaver` brings the `weaver` session back with its threads, each in its
+- `wvr` brings the `weaver` session back with its threads, each in its
   window, its number kept, its agent resuming its conversation beside a bound
   nvim (`WEAVER_RESTORE=0` lists them on home instead).
 - Anywhere else, lost threads are listed last on the dashboard, under `LOST`:
   enter resumes one in a new window, `x` forgets it (its worktree stays).
-- `weaver resume` lists them; `weaver resume NAME` (a number, or a session
+- `wvr resume` lists them; `wvr resume NAME` (a number, or a session
   id) brings one back, `--all` every one, `--forget NAME` drops one.
 
 An agent you ended yourself (`/exit`), or whose window you closed while the
@@ -204,8 +204,8 @@ session ran on, is not lost. Agents you started by hand, outside a thread, are n
 kept: `claude --resume` finds them.
 
 So quitting everything is safe: `Ctrl q` (from any pane) quits the session
-with every agent and nvim in it, and `weaver` brings its threads back next
-time. `weaver quit` does the same after asking, says what stops (turns under
+with every agent and nvim in it, and `wvr` brings its threads back next
+time. `wvr quit` does the same after asking, says what stops (turns under
 way, unsaved buffers in the agents' nvims), and from outside the session
 quits the `weaver` session left running behind a closed window.
 
@@ -267,7 +267,7 @@ worktree, so their per-turn diffs mix.
 The cursor never rests on a heading, and stays on its agent as the board
 reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 `j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
-(`weaver new`), `x` closes one (`weaver close`), `e` jumps and opens its nvim,
+(`wvr new`), `x` closes one (`wvr close`), `e` jumps and opens its nvim,
 `s` (or `tab`) swaps the resume card for the agent's screen, `?` lists them
 all, `q` or `esc` closes the dashboard, and `Ctrl q` quits the session. With no
 agents, it says how to start one.
@@ -276,7 +276,7 @@ The resume card says what the agent was asked, what it waits on or runs,
 what it last said, its tasks, subagents and files, and its worktree's git
 status in one line. The card sits beside the list when there is room for 150
 columns, else under it, and gives way to the list
-when space is short (`s` still shows it). `weaver ls | cat` prints the board
+when space is short (`s` still shows it). `wvr ls | cat` prints the board
 as text.
 
 ### Home
@@ -288,7 +288,7 @@ the counts.
 
 ### Status bar
 
-`weaver status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
+`wvr status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
 unseen, working). weaver's tmux status line shows them in their signal
 colours, set by weaver as they change, so nothing polls.
 
@@ -299,7 +299,7 @@ start and end of every turn into `refs/worktree/weaver/sessions/<session>`,
 through a private index (your staging area is never touched), so each turn's
 diff, and `git blame` back to the prompt that produced a line, are a git
 command away; edits you make between turns are their own commit.
-`weaver snapshot --reviewed` marks the worktree reviewed
+`wvr snapshot --reviewed` marks the worktree reviewed
 (`refs/worktree/weaver/reviewed`). Everything an agent does is also logged to
 `~/.local/state/weaver/log/<session>.jsonl`. The formats are in
 [docs/design.md](docs/design.md).
@@ -350,7 +350,7 @@ As you review, note what the agent should change: `<leader>an` on a line or
 a selection, in a review or in any file of its nvim, asks for the note and
 marks the line. `<leader>as` sends them all as one message, each with its
 file, lines and the code it is on, to the agent's prompt as if you typed it
-(`weaver send`), when it waits for you to say more; while it waits on a
+(`wvr send`), when it waits for you to say more; while it waits on a
 dialog or works, the notes stay for later. `:AgentNotes` lists them in
 quickfix, `:AgentNotesClear` drops them.
 
@@ -382,7 +382,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_WT_MARKERS` | `1` | `0` stops setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
 | `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
-| `WEAVER_SESSION` | `weaver` | The session `weaver` attaches to or starts |
+| `WEAVER_SESSION` | `weaver` | The session `wvr` attaches to or starts |
 | `WEAVER_RESTORE` | `1` | `0`: the weaver session, starting again after its server went, lists its lost threads on home instead of resuming them |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as nvim keeps 60 columns |
@@ -394,7 +394,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 
 ## Development
 
-The engine is Go (`cmd/weaver`, `internal/wv`), the Neovim side Lua
+The engine is Go (`cmd/wvr`, `internal/wv`), the Neovim side Lua
 (`nvim/`); they meet at the contracts in [docs/design.md](docs/design.md),
 and [docs/decisions.md](docs/decisions.md) says why things are as they are.
 
@@ -415,7 +415,7 @@ touched (they need jq and python3 as well as weaver's own dependencies):
   per-turn snapshots, other agents' events, the installer, the dashboard's
   renderings), on a throwaway tmux server with three fake agents and a client
   attached (`test/hooks.sh SUITE` runs one);
-- `test/tmux.sh`: weaver on tmux end to end. `weaver` starts its session on a
+- `test/tmux.sh`: weaver on tmux end to end. `wvr` starts its session on a
   throwaway tmux server in a pseudo-terminal and the tests press its keys
   there: threads, hooks and their late async events, Alt y, Alt v, Alt 1,
   Cmd+D, Alt N, the board, seen as you look, a narrower window, crashes and
@@ -427,7 +427,7 @@ together round after round, none of which may hang.
 
 ## AI use
 
-weaver is built with AI coding agents, Claude Code among them: they write
+wvr is built with AI coding agents, Claude Code among them: they write
 most of its code, tests and documentation. I direct the work, make the design
 decisions, review what lands and use weaver every day. Read the code with
 that in mind, and open an issue for anything that looks wrong.

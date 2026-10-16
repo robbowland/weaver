@@ -14,18 +14,18 @@ class Weaver < Formula
   depends_on "tmux"
 
   def install
-    system "go", "build", *std_go_args(ldflags: "-s -w -X main.version=#{version}"), "./cmd/weaver"
+    system "go", "build", *std_go_args(output: bin/"wvr", ldflags: "-s -w -X main.version=#{version}"), "./cmd/wvr"
   end
 
   def caveats
     <<~EOS
       To have Claude Code (and Codex) report to weaver, add its hooks:
-        weaver setup
-      Then run `weaver` to start its tmux session.
+        wvr setup
+      Then run `wvr` to start its tmux session.
     EOS
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/weaver version")
+    assert_match version.to_s, shell_output("#{bin}/wvr version")
   end
 end

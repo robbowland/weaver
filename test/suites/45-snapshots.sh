@@ -114,15 +114,15 @@ ok "...and out once it grows past the limit, not kept stale" "$(git -C "$R" cat-
 rm -f "$R/grows.bin"
 
 # Marking reviewed.
-c1=$(cd "$R" && weaver snapshot --reviewed)
+c1=$(cd "$R" && wvr snapshot --reviewed)
 ok "snapshot --reviewed prints the commit on the reviewed ref" \
 	"$(git -C "$R" rev-parse refs/worktree/weaver/reviewed)|$(trailer "$c1" Weaver-Point)" "$c1|reviewed"
-c2=$(weaver snapshot --reviewed "$R")
+c2=$(wvr snapshot --reviewed "$R")
 ok "...and the same commit again while nothing changed" "$c2" "$c1"
 printf 'later\n' >>"$R/a.txt"
-c3=$(weaver snapshot --reviewed "$R")
+c3=$(wvr snapshot --reviewed "$R")
 ok "...a new one on top when something did" "$(git -C "$R" rev-parse "$c3^")" "$c1"
-ok "outside a repository: an error" "$(weaver snapshot --reviewed / 2>&1 >/dev/null | grep -c 'not in a git repository')" "1"
+ok "outside a repository: an error" "$(wvr snapshot --reviewed / 2>&1 >/dev/null | grep -c 'not in a git repository')" "1"
 
 # WEAVER_SNAPSHOTS=0 turns them off.
 before=$(git -C "$R" rev-parse "$REF")

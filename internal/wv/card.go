@@ -91,7 +91,7 @@ func Help() string {
 		"  " + g + "⏎  1-9" + o + "      jump to the thread " + d + "(1-9: that row)" + o + "\n" +
 		"  " + g + "j k  g G" + o + "    move; first, last\n" +
 		"  " + g + "/" + o + "           search " + d + "(esc: back)" + o + "\n" +
-		"  " + g + "n" + o + "           new thread " + d + "(weaver new)" + o + "\n" +
+		"  " + g + "n" + o + "           new thread " + d + "(wvr new)" + o + "\n" +
 		"  " + g + "x" + o + "           close the thread, its nvim and its window\n" +
 		"              " + d + "(and offers to remove a merged worktree)" + o + "\n" +
 		"  " + g + "e  ^e" + o + "       jump and open its nvim\n" +
@@ -100,7 +100,7 @@ func Help() string {
 		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
 		"  " + g + "q  esc" + o + "      close the dashboard " + d + "(home: back to your thread)" + o + "\n" +
 		"  " + g + "^q" + o + "          quit the session, every agent and nvim " + d + "(the threads" + o + "\n" +
-		"              " + d + "come back as weaver starts; weaver quit asks first)" + o + "\n" +
+		"              " + d + "come back as wvr starts; wvr quit asks first)" + o + "\n" +
 		"\n" +
 		g + "THREADS" + o + "\n" +
 		"  " + p(GNeed, CRed) + "  needs you    " + p(GDone, CGreen) + "  done, not yet seen    " + p(GWork, g) + "  working\n" +
@@ -109,7 +109,7 @@ func Help() string {
 		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
-		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(weaver resume)" + o + "\n" +
+		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(wvr resume)" + o + "\n" +
 		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n"
 }
 
@@ -118,7 +118,7 @@ func Intro() string {
 	d, g, o := CDim, CGrey, COff
 	return "No agents in this session yet.\n\n" +
 		g + "n" + o + "       start a thread: a task, its worktree, and a tab with\n" +
-		"        nvim and the agent " + d + "(weaver new)" + o + "\n" +
+		"        nvim and the agent " + d + "(wvr new)" + o + "\n" +
 		g + "Alt N" + o + "   the same from anywhere in the session\n\n" +
 		d + "Or start claude or codex in any pane: weaver follows it\n" +
 		"through its hooks." + o + "\n"
@@ -127,7 +127,7 @@ func Intro() string {
 var reRoot = regexp.MustCompile(`"root":"([^"]*)"`)
 var reWorktree = regexp.MustCompile(`"worktree":"([^"]*)"`)
 
-// Preview is `weaver _preview PANE TITLE ID`.
+// Preview is `wvr _preview PANE TITLE ID`.
 func (e *Env) Preview(args []string) string {
 	for len(args) < 3 {
 		args = append(args, "")
@@ -431,8 +431,8 @@ func (e *Env) lostCard(sid, title string) string {
 	return out + strings.Join(ls, "\n") + "\n"
 }
 
-// View is the preview's next view, as fzf actions (`weaver _view screen`,
-// s or tab: card, screen, card; `weaver _view help`, ?: the keys, and back).
+// View is the preview's next view, as fzf actions (`wvr _view screen`,
+// s or tab: card, screen, card; `wvr _view help`, ?: the keys, and back).
 func View(what string) string {
 	base := sockBase()
 	if base == "" {

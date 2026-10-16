@@ -72,14 +72,14 @@ ev TaskCreated "$T/repo" ',"task_id":"1","task_subject":"Write the parser"'
 ev TaskCreated "$T/repo" ',"task_id":"2","task_subject":"Test it"'
 ev TaskCompleted "$T/repo" ',"task_id":"1","task_subject":"Write the parser"'
 ok "the task list" "$(st 0 'tasks | map((if .done then "x" else "o" end) + " " + .subject) | join(", ")')" "x Write the parser, o Test it"
-ok "the resume card shows it" "$(weaver _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^tasks  *\[x\] Write the parser  \[ \] Test it')" "1"
+ok "the resume card shows it" "$(wvr _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^tasks  *\[x\] Write the parser  \[ \] Test it')" "1"
 
 # --- waiting on background subagents is not done
 ev Stop "$T/repo" ',"background_tasks":[{"id":"x1","type":"subagent","status":"running","description":"Implement feature A"},{"id":"x2","type":"shell","status":"running","description":"npm run dev"}]'
 ok "Stop with a subagent in the background: still working" "$(st 0 state)|$(st 0 background)" "working|1"
 ok "...and the background subagent stays listed" "$(st 0 'subagents | map(.id) | join(",")')" "sub-a"
-ok "dashboard: says so" "$(weaver ls | grep -c 'implement both features  *1 in background')" "1"
-ok "resume card: what runs in the background" "$(weaver _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^background *Implement feature A')" "1"
+ok "dashboard: says so" "$(wvr ls | grep -c 'implement both features  *1 in background')" "1"
+ok "resume card: what runs in the background" "$(wvr _preview 0 | sed 's/\x1b\[[0-9;]*m//g' | grep -c '^background *Implement feature A')" "1"
 ev Notification "$T/repo" ',"notification_type":"idle_prompt","message":"Claude is waiting for your input"'
 ok "idle reminder meanwhile: still working" "$(st 0 state)" "working"
 ev UserPromptSubmit "$T/repo" ',"prompt":"<agent-message from=\"x1\"> [Subagent hand-back] done"'

@@ -12,9 +12,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// `weaver event` takes one event of any agent as normalized JSON (docs/
+// `wvr event` takes one event of any agent as normalized JSON (docs/
 // design.md, Events) and turns it into the Claude Code hook input the state
-// machine understands; `weaver adapt codex` translates Codex's own hook
+// machine understands; `wvr adapt codex` translates Codex's own hook
 // input into such an event first.
 
 func s(v any) string { return tostring(v) }
@@ -164,10 +164,10 @@ func codex(c obj) obj {
 	return n
 }
 
-// Event is `weaver event [--bell]` and `weaver adapt codex [--bell]`.
+// Event is `wvr event [--bell]` and `wvr adapt codex [--bell]`.
 func (e *Env) Event(adapter string, bell bool) int {
 	if isTTY(0) {
-		os.Stderr.WriteString("weaver: usage: weaver event [--bell] < event.json\n")
+		os.Stderr.WriteString("weaver: usage: wvr event [--bell] < event.json\n")
 		return 1
 	}
 	in, _ := io.ReadAll(os.Stdin)

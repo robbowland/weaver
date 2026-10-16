@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// The new-thread form (`weaver new`, n on the board, Alt N): fzf with the
+// The new-thread form (`wvr new`, n on the board, Alt N): fzf with the
 // task as its query and the thread's choices as its header. While it is
 // open its fields live in a file, one per line: repo (the main checkout;
 // empty: not in one), here (the checkout "this checkout" means), branch (as
@@ -327,7 +327,7 @@ func (e *Env) fetchStart(repo, sf string) {
 	}
 }
 
-// Fetch is `weaver _fetch REPO REMOTE FETCHF [FORM]`: the fetch itself.
+// Fetch is `wvr _fetch REPO REMOTE FETCHF [FORM]`: the fetch itself.
 func (e *Env) Fetch(repo, remote, f, sf string) {
 	c := exec.Command("git", "-C", repo, "fetch", "--prune", "--quiet", remote)
 	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
@@ -579,7 +579,7 @@ func checkThread(task string, fm form) string {
 	return ""
 }
 
-// New is `weaver new [options] [TASK]`: a thread for TASK (or, without
+// New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) (int, bool) {
 	var repoArg, from, branch, base, agent, where, itemArg, itemKind string
@@ -629,13 +629,13 @@ func (e *Env) New(args []string) (int, bool) {
 			return 0, false
 		default:
 			if strings.HasPrefix(a, "-") {
-				return die("unknown option: " + a + " (see weaver help)")
+				return die("unknown option: " + a + " (see wvr help)")
 			}
 			task = append(task, a)
 		}
 	}
 	if e.Session == "" {
-		return die("not inside tmux: start it with `weaver`, then Alt N (or weaver new) there")
+		return die("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
 	}
 	if agent == "" {
 		agent = "claude"
@@ -918,7 +918,7 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 	}
 }
 
-// Form is `weaver _form OP FILE [QUERY]`: what the form's keys do, run by fzf.
+// Form is `wvr _form OP FILE [QUERY]`: what the form's keys do, run by fzf.
 func (e *Env) Form(op, sf, q string) {
 	fm := loadForm(sf)
 	switch op {

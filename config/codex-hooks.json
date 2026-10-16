@@ -1,13 +1,13 @@
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }],
-    "Interrupt": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell", "timeout": 10 }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }],
+    "Interrupt": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell", "timeout": 10 }] }]
   }
 }

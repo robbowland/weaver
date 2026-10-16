@@ -153,7 +153,7 @@ func paneFiles(dir, ext string) []string {
 	return out
 }
 
-// Boot is `weaver _boot SOCKET`: what the weaver session needs as it starts,
+// Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
 // behind its home board (whose fzf listens on SOCKET): old states swept, the
 // threads it lost back (unless WEAVER_RESTORE=0), and the status line's
 // counts and the windows' labels, whose push reloads the board.

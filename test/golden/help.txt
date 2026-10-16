@@ -2,7 +2,7 @@ KEYS
   ⏎  1-9      jump to the thread (1-9: that row)
   j k  g G    move; first, last
   /           search (esc: back)
-  n           new thread (weaver new)
+  n           new thread (wvr new)
   x           close the thread, its nvim and its window
               (and offers to remove a merged worktree)
   e  ^e       jump and open its nvim
@@ -11,7 +11,7 @@ KEYS
   ?           this help (? again: back)
   q  esc      close the dashboard (home: back to your thread)
   ^q          quit the session, every agent and nvim (the threads
-              come back as weaver starts; weaver quit asks first)
+              come back as wvr starts; wvr quit asks first)
 
 THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working
@@ -20,5 +20,5 @@ THREADS
   ×2  two agents share the worktree: their turn diffs mix
 
 LOST (its session went: a crash, or quit)
-  ⏎           resume it in a new window (weaver resume)
+  ⏎           resume it in a new window (wvr resume)
   x           forget it (its worktree stays)

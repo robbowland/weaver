@@ -93,8 +93,8 @@ post() { hookj 1 "$(j PostToolUse ",\"tool_name\":\"Bash\",\"tool_input\":{\"com
 hookj 1 "$(j UserPromptSubmit ',"prompt":"run the tests"')" >/dev/null
 pre "npm test" tu-1
 ok "a command starting: working, and what it runs" "$(st 1 state)|$(st 1 doing)" "working|npm test"
-ok "...on the board" "$(weaver ls | grep -c 'running npm test')" "1"
-ok "...and its card" "$(weaver _preview 1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'runs  *npm test')" "1"
+ok "...on the board" "$(wvr ls | grep -c 'running npm test')" "1"
+ok "...and its card" "$(wvr _preview 1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'runs  *npm test')" "1"
 post "npm test" tu-1
 ok "...and when it is done, no longer" "$(st 1 doing)" "null"
 post "make lint" tu-2
@@ -126,21 +126,21 @@ ok "your prompt: turn 1, and the session title" "$(st 1 turn)|$(st 1 title)" "1|
 live_pid
 P1=$LIVE_PID
 pj() { printf '{"hook_event_name":"%s","cwd":"%s","session_id":"sid-live"%s}' "$1" "$T/repo-wt-b" "${2:-}"; }
-lhook() { printf '%s' "$1" | CLAUDE_PID=$P1 as_pane 1 weaver hook ${2:-} >/dev/null; }
+lhook() { printf '%s' "$1" | CLAUDE_PID=$P1 as_pane 1 wvr hook ${2:-} >/dev/null; }
 lhook "$(pj SessionStart ',"source":"startup"')"
 lhook "$(pj UserPromptSubmit ',"prompt":"run the slow tests"')"
 lhook "$(pj PermissionRequest "$bash_input")"
 sleep 1.1
 claude_session "$P1" sid-live busy
-ok "a long tool you approved: working, though no hook said so" "$(weaver ls | grep -c '^\[/\] .*run the slow tests')" "1"
+ok "a long tool you approved: working, though no hook said so" "$(wvr ls | grep -c '^\[/\] .*run the slow tests')" "1"
 lhook "$(pj PostToolUse "$bash_input")" --async
 ok "...and working once it finishes" "$(st 1 state)" "working"
 sleep 1.1
 claude_session "$P1" sid-live waiting "$(($(date +%s) * 1000))" "dialog open"
-ok "a dialog no hook reported: needs you" "$(weaver ls | grep -c '^\[!\] .*dialog open')" "1"
+ok "a dialog no hook reported: needs you" "$(wvr ls | grep -c '^\[!\] .*dialog open')" "1"
 jq -c '.ts -= 30' "$SD/${SK}_1.json" >"$AT/c.json" && mv "$AT/c.json" "$SD/${SK}_1.json"
 claude_session "$P1" sid-live idle $((($(date +%s) - 10) * 1000))
-ok "quiet, but Claude Code is idle: stopped with Esc" "$(weaver ls | grep -c '^\[-\] .*interrupted')" "1"
+ok "quiet, but Claude Code is idle: stopped with Esc" "$(wvr ls | grep -c '^\[-\] .*interrupted')" "1"
 kill "$P1"
 
 # --- the dashboard: what each agent waits on (looking at C: a done agent you
@@ -149,7 +149,7 @@ fresh
 focus 2
 feed >/dev/null
 out=$(hookj 1 "$(j PermissionRequest "$bash_input")")
-table=$(weaver ls)
+table=$(wvr ls)
 ok "dashboard: needs-you row shows what it waits on" "$(printf '%s\n' "$table" | grep -c '^\[!\] .*Bash: git push --force')" "1"
 hook 0 Stop "$T/repo" >/dev/null
 ok "Stop resets seen" "$(st 0 seen)" "false"
@@ -192,18 +192,18 @@ cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 # --- the status line: counts, pushed to tmux, and unread
 hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
-ok "status: needs you, done and unseen, working" "$(weaver status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
+ok "status: needs you, done and unseen, working" "$(wvr status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
 settle
 ok "status for the status line, kept by the hooks: Micrographics signal colours" "$(status_line)" \
 	"#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 focus 0
-weaver status --push
-ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(weaver status)" "true|$G_NEED 1  $G_WORK 1"
+wvr status --push
+ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(wvr status)" "true|$G_NEED 1  $G_WORK 1"
 ok "...in the status line too" "$(status_line)" "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 printf 'garbage\n' >"$SD/$SK.status"
 ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "
 rc=0"
-ok "...and for no session" "$(weaver status --tmux ''; echo "rc=$?")" "
+ok "...and for no session" "$(wvr status --tmux ''; echo "rc=$?")" "
 rc=0"
 
 # --- the multiplexer marks a tab whose pane rings the bell (what

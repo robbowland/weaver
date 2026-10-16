@@ -33,7 +33,7 @@ exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
 # weaver: the binary built from this checkout, its files unpacked here.
-(cd "$ROOT" && go build -o "$AT/bin/weaver" ./cmd/weaver) || exit 1
+(cd "$ROOT" && go build -o "$AT/bin/wvr" ./cmd/wvr) || exit 1
 export XDG_DATA_HOME=$AT/data
 export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
@@ -74,7 +74,7 @@ exec 3<>"$AT/keys"
 key() { printf '%s\n' "$1" >&3; }
 # `weaver` (with environment ARGS) in a 200 x 50 terminal: the session, attached.
 attach() {
-	python3 -I "$HERE/pty_drive.py" "$AT/keys" "$AT/screen.log" env "$@" weaver &
+	python3 -I "$HERE/pty_drive.py" "$AT/keys" "$AT/screen.log" env "$@" wvr &
 	driver=$!
 	waitfor "tx has-session -t =$S 2>/dev/null" 100
 	waitfor '[ -n "$(board)" ]' 100
@@ -88,7 +88,7 @@ pane_at() { panes "$1" | awk -v i="$2" '$1 == i { print substr($2, 2) }'; }
 # hookj PANE JSON [--async]: the agent in PANE reports, as Claude Code would.
 hookj() {
 	printf '%s' "$2" | CLAUDE_PID=$(tx display -p -t "%$1" '#{pane_pid}') TMUX="$(tx display -p '#{socket_path},#{pid}'),0" \
-		TMUX_PANE="%$1" WEAVER_TMUX_SESSION=$S weaver hook ${3:-} >/dev/null
+		TMUX_PANE="%$1" WEAVER_TMUX_SESSION=$S wvr hook ${3:-} >/dev/null
 }
 # A tmux server numbers its panes from 0 again: the agents' notes of the last one go.
 fresh_args() { rm -f "$AT"/args.*; }
@@ -119,8 +119,8 @@ ok "weaver: tmux by default, its own server, home in window 0 with the board" \
 ok "weaver: the server runs from /, never a worktree that may go" \
 	"$(lsof -a -p "$(tx display -p '#{pid}')" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')" "/"
 
-# --- a thread, as Alt N's form makes it (weaver new, here)
-tx run-shell -t "=$S:" "cd '$AT/repo' && weaver new --here 'say hello' >/dev/null 2>&1"
+# --- a thread, as Alt N's form makes it (wvr new, here)
+tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here 'say hello' >/dev/null 2>&1"
 waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 2 ]'
 NV=$(pane_at 1 0) AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ] && [ -f "$SD/tmux-${S}_$AG.nvim" ]'
@@ -149,8 +149,8 @@ hookj "$AG" "$(ev UserPromptSubmit ',"prompt_id":"p2","prompt":"go on"')"
 ok "...and the next prompt is working again" "$(jq -r .state "$SD/tmux-${S}_$AG.json")" "working"
 waitfor '[ "$(tx display -p -t "=$S:1" "#{window_name}")" = "01 say hello · repo/main" ]'
 ok "hook: the thread's window takes its label" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
-waitfor '[ -n "$(weaver status --tmux "$S")" ]'
-ok "status: the counts for tmux's status line" "$(weaver status --tmux "$S")" \
+waitfor '[ -n "$(wvr status --tmux "$S")" ]'
+ok "status: the counts for tmux's status line" "$(wvr status --tmux "$S")" \
 	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
 ok "...set on the session for its status line to show, nothing polled" \
 	"$(tx show -v -t "=$S:" @weaver-counts)|$(tx show -gv status-interval)" \
@@ -175,8 +175,8 @@ waitfor '[ "$(jq -r .seen "$SD/tmux-${S}_$AG.json")" = true ] && [ -z "$(tx show
 ok "...staying on it, it is seen and the flag goes" \
 	"$(jq -r .seen "$SD/tmux-${S}_$AG.json")|$(tx show -wv -t "=$S:1" @weaver-unseen 2>/dev/null)" "true|"
 
-# --- review notes from its nvim reach its prompt (weaver send), as typed
-tx run-shell -t "=$S:" "printf 'Review notes: look at line 3' | weaver send $AG >/dev/null 2>&1"
+# --- review notes from its nvim reach its prompt (wvr send), as typed
+tx run-shell -t "=$S:" "printf 'Review notes: look at line 3' | wvr send $AG >/dev/null 2>&1"
 waitfor '[ "$(tx capture-pane -p -t "%$AG" | grep -c "Review notes: look at line 3")" -gt 0 ]'
 ok "send: the notes at the agent's prompt, entered" \
 	"$([ "$(tx capture-pane -p -t "%$AG" | grep -c 'Review notes: look at line 3')" -gt 0 ] && echo there)" "there"
@@ -205,7 +205,7 @@ NV=$(pane_at 1 0)
 ok "Alt v: its nvim closed, back on the left, bound, the agent at its width" \
 	"$(panes 1 | awk '{ printf "%s:%s ", $1, $3 }')|$(head -n 1 "$SD/tmux-${S}_$AG.nvim")" "0:155 1:44 |$NV"
 hookj "$AG" "$(ev PermissionRequest ',"tool_name":"Bash","tool_input":{"command":"git push --force"}')"
-tx run-shell -t "=$S:" "printf 'a dialog answer' | weaver send $AG >$AT/send.out 2>&1; echo \$? >>$AT/send.out"
+tx run-shell -t "=$S:" "printf 'a dialog answer' | wvr send $AG >$AT/send.out 2>&1; echo \$? >>$AT/send.out"
 sleep 0.5
 ok "send: not while it waits on a dialog" \
 	"$(tr '\n' '|' <"$AT/send.out")|$(tx capture-pane -p -t "%$AG" | grep -c 'a dialog answer')" \
@@ -252,13 +252,13 @@ ok "Alt N: the new-thread form, in a popup" "$([ "$(grep -c 'what should the age
 FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
 ok "form: its fields, from the focused thread's checkout" "$(sed -n '1p;4p;5p' "$FORM" 2>/dev/null | tr '\n' ' ')" "$(cd "$AT/repo" && pwd -P) worktree claude "
-hdr=$(FZF_COLUMNS=96 weaver _form header "$FORM" "Fix the flaky test!" | sed 's/\x1b\[[0-9;]*m//g')
+hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" "Fix the flaky test!" | sed 's/\x1b\[[0-9;]*m//g')
 ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
 	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test ')" \
 	"repo where branch base agent |1"
 key 09 # tab: this checkout
 waitfor '[ "$(sed -n 4p "$FORM")" = here ]'
-ok "form: tab works in this checkout" "$(sed -n 4p "$FORM")|$(FZF_COLUMNS=96 weaver _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
+ok "form: tab works in this checkout" "$(sed -n 4p "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
 	"here|this checkout"
 key 1b # esc: the form goes, nothing made
 sleep 1
@@ -266,7 +266,7 @@ ok "...esc: nothing made" "$(windows)" "0 1 "
 
 # --- a thread in a worktree of its own (its branch from the task), then
 # closed with its worktree, which is clean and merged
-tx run-shell -t "=$S:" "cd '$AT/repo' && weaver new --no-focus 'Fix the flaky test' >'$AT/new2.out' 2>&1"
+tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --no-focus 'Fix the flaky test' >'$AT/new2.out' 2>&1"
 waitfor '[ "$(panes 2 2>/dev/null | wc -l | tr -d " ")" = 2 ]' 100
 AG2=$(pane_at 2 1)
 waitfor '[ -f "$SD/tmux-${S}_$AG2.thread" ]'
@@ -275,7 +275,7 @@ ok "new: a worktree for the task's branch, made by weaver, its window 2" \
 	"$(jq -r '"\(.branch) \(.worktree_created) \(.here) \(.num)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)|$(git -C "$WT2" symbolic-ref --short HEAD 2>/dev/null)|$(windows)" \
 	"fix-the-flaky-test true false 2|fix-the-flaky-test|0 1 2 " ||
 	sed 's/^/  new: /' "$AT/new2.out"
-tx run-shell -t "=$S:" "weaver close --yes --remove-worktree $AG2 >'$AT/close2.out' 2>&1"
+tx run-shell -t "=$S:" "wvr close --yes --remove-worktree $AG2 >'$AT/close2.out' 2>&1"
 waitfor '[ "$(windows)" = "0 1 " ] && [ ! -d "$WT2" ]' 100
 ok "close: its window, its files and its worktree go; its branch stays" \
 	"$(windows)|$(ls "$SD" | grep -c "^tmux-${S}_$AG2\.")|$([ -d "$WT2" ] && echo kept || echo gone)|$(git -C "$AT/repo" branch --list fix-the-flaky-test | tr -d ' *')" \
@@ -286,7 +286,7 @@ ok "close: its window, its files and its worktree go; its branch stays" \
 crash
 attach WEAVER_RESTORE=0
 ok "crash: the lost thread waits on the board (WEAVER_RESTORE=0)" "$(windows)|$(ls "$SD/lost")" "0 |tmux-${S}_sid-1.json"
-ok "...and the status line no longer counts what the session that went ran" "$(weaver status --tmux "$S")" ""
+ok "...and the status line no longer counts what the session that went ran" "$(wvr status --tmux "$S")" ""
 key 0d # enter, on the lost thread
 waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 2 ]'
 AG=$(pane_at 1 1)
@@ -402,7 +402,7 @@ ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:
 	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
 
 # A review of the pull request: on its head, read-only, its nvim on the review.
-tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
+tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
 waitfor '[ "$(windows)" = "0 1 900 901 " ]'
 AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ]'
@@ -417,12 +417,12 @@ ok "...its record and its base for reviews" "$(jq -r '"\(.item.ref) \(.mode)"' "
 NS=/tmp/weaver-$(id -u)/tmux-${S}_$AG.sock
 waitfor '[ "$(nvim --server "$NS" --remote-expr "tabpagenr(\"\$\")" 2>/dev/null)" = 2 ]' 100
 ok "...its nvim opens on the review" "$(nvim --server "$NS" --remote-expr 'tabpagenr("$")' 2>/dev/null)" "2"
-tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --pr 45 'again' >$AT/new.out 2>&1"
+tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --pr 45 'again' >$AT/new.out 2>&1"
 ok "pr: its branch already has a thread: to it" "$(cat "$AT/new.out")|$(windows)" \
 	"weaver: o/r#45 already has a thread (add-flag): went to it|0 1 900 901 "
 
 # An issue investigated: its own branch, plan mode.
-tx run-shell -t "=$S:" "cd '$AT/r' && weaver new --no-focus --review --issue o/r#12 'Look into #12' >$AT/new.out 2>&1"
+tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --issue o/r#12 'Look into #12' >$AT/new.out 2>&1"
 waitfor '[ "$(windows)" = "0 1 2 900 901 " ]'
 AG2=$(pane_at 2 1)
 waitfor '[ -f "$AT/args.$AG2" ]'
@@ -458,7 +458,7 @@ tx select-window -t "=$S:901"
 key 1b4e
 waitfor '[ -n "$(ls "$SD" | grep -E "^form\.[^.]+\.item$")" ]'
 FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
-hdr=$(FZF_COLUMNS=96 weaver _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
+hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
 ok "LINEAR: Alt N, the form for the issue under the cursor" \
 	"$(sed -n '1p;3p;8p' "$FORM" | tr '\n' ' ')|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
 	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "

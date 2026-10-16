@@ -5,7 +5,7 @@
 . "$(dirname "$0")/../lib.sh"
 fresh
 
-rows() { weaver ls | grep -c -E '^\[.\] '; }
+rows() { wvr ls | grep -c -E '^\[.\] '; }
 
 feed >/dev/null
 settle
@@ -30,7 +30,7 @@ sleep 0.2 &
 dead=$!
 wait $dead
 printf '%s\n' "$dead" >"$SF2.lock"
-t=$(ms /bin/bash -c "printf '%s' '{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-2\"}' | $(pane_env 2) weaver hook >/dev/null")
+t=$(ms /bin/bash -c "printf '%s' '{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-2\"}' | $(pane_env 2) wvr hook >/dev/null")
 ok "a lock left by a dead hook is taken over at once" "$([ "$t" -lt 1000 ] && echo y)|$(st 2 state)" "y|done"
 live_pid
 printf '%s\n' "$LIVE_PID" >"$SF2.lock"
@@ -57,7 +57,7 @@ ok "...and no lock or temp file left behind" "$(ls "$SD" | grep -c -E '\.lock$|\
 # ZELLIJ_PANE_ID, but must not take the pane over (defect 7)
 live_pid
 AGENT=$LIVE_PID
-nested() { printf '%s' "$2" | CLAUDE_PID=$1 as_pane 1 weaver hook >/dev/null; }
+nested() { printf '%s' "$2" | CLAUDE_PID=$1 as_pane 1 wvr hook >/dev/null; }
 nested "$AGENT" "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-real\"}"
 nested "$AGENT" "{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"the real work\",\"cwd\":\"$T/repo-wt-b\",\"session_id\":\"sid-real\"}"
 ok "the pane's agent records its pid" "$(st 1 pid)" "$AGENT"
@@ -76,19 +76,19 @@ kill "$NEXT"
 live_pid
 GHOST=$LIVE_PID
 printf '{"hook_event_name":"UserPromptSubmit","prompt":"doomed","cwd":"%s","session_id":"sid-ghost"}' "$T/repo" |
-	CLAUDE_PID=$GHOST as_pane 2 weaver hook >/dev/null
-ok "a live agent is listed" "$(weaver ls | grep -c 'doomed')" "1"
+	CLAUDE_PID=$GHOST as_pane 2 wvr hook >/dev/null
+ok "a live agent is listed" "$(wvr ls | grep -c 'doomed')" "1"
 kill "$GHOST"
 wait "$GHOST" 2>/dev/null
-ok "killed without SessionEnd: no longer listed" "$(weaver ls | grep -c 'doomed')" "0"
+ok "killed without SessionEnd: no longer listed" "$(wvr ls | grep -c 'doomed')" "0"
 ok "...and its state is gone" "$([ -f "$SD/${SK}_2.json" ] && echo kept || echo gone)" "gone"
 
 # --- a pid reused by an unrelated process is not the agent
 live_pid
 printf '{"hook_event_name":"UserPromptSubmit","prompt":"reused","cwd":"%s","session_id":"sid-reuse","pid":0}' "$T/repo" |
-	CLAUDE_PID=$LIVE_PID as_pane 2 weaver hook >/dev/null
+	CLAUDE_PID=$LIVE_PID as_pane 2 wvr hook >/dev/null
 jq '.proc_start = "Thu Jan  1 00:00:00 1970"' "$SD/${SK}_2.json" >"$AT/r.json" && mv "$AT/r.json" "$SD/${SK}_2.json"
-ok "a pid now running something else: forgotten" "$(weaver ls | grep -c 'reused')" "0"
+ok "a pid now running something else: forgotten" "$(wvr ls | grep -c 'reused')" "0"
 kill "$LIVE_PID"
 
 # --- a stale nvim file (that nvim has exited) never renames a pane
@@ -105,7 +105,7 @@ rm -f "$SD/${SK}_2.nvim"
 # weaver ran on tmux only, or one whose name was reused) is cleaned up
 jq -c '.ts -= 7200' "$SD/${SK}_0.json" >"$SD/weaver-gone-session_0.json"
 cp "$SD/${SK}_0.json" "$SD/weaver-busy-session_0.json"
-weaver gc >/dev/null
+wvr gc >/dev/null
 ok "state of a session that is gone: cleaned up" "$([ -f "$SD/weaver-gone-session_0.json" ] && echo kept || echo gone)" "gone"
 ok "...but not within the hour" \
 	"$([ -f "$SD/weaver-busy-session_0.json" ] && echo kept)" "kept"
@@ -115,9 +115,9 @@ ok "...and ours kept" "$([ -f "$SD/${SK}_0.json" ] && echo kept)" "kept"
 # --- a pane that is gone is cleaned up, but only on a pane list that has our
 # own pane in it: never on a partial answer
 jq '.pane = 77' "$SD/${SK}_0.json" >"$SD/${SK}_77.json"
-as_pane 999999 weaver ls >/dev/null
+as_pane 999999 wvr ls >/dev/null
 ok "a pane list without our own pane: nothing cleaned up" "$([ -f "$SD/${SK}_77.json" ] && echo kept)" "kept"
-as_pane 0 weaver ls >/dev/null
+as_pane 0 wvr ls >/dev/null
 ok "a full pane list: the closed pane's agent is cleaned up" "$([ -f "$SD/${SK}_77.json" ] && echo kept || echo gone)" "gone"
 
 # --- paths with spaces and unicode

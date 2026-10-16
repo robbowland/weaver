@@ -1,23 +1,23 @@
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "Notification": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "PermissionRequest": [{ "matcher": "", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "PermissionRequest": [{ "matcher": "", "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
     "PreToolUse": [
-      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] },
-      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }
+      { "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }
     ],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "StopFailure": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "PostToolUseFailure": [{ "matcher": "", "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "CwdChanged": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "TaskCreated": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }],
-    "TaskCompleted": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook", "--async"], "async": true }] }]
+    "Stop": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "StopFailure": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "PostToolUseFailure": [{ "matcher": "", "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "PostToolBatch": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "CwdChanged": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "TaskCreated": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }],
+    "TaskCompleted": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook", "--async"], "async": true }] }]
   }
 }

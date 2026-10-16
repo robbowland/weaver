@@ -54,7 +54,7 @@ func main() {
 func run(e *wv.Env, cmd string, args []string) (int, bool) {
 	needSession := func() bool {
 		if e.Session == "" {
-			fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `weaver`)")
+			fmt.Fprintln(os.Stderr, "weaver: not inside a tmux session (start one with `wvr`)")
 			return false
 		}
 		return true
@@ -67,7 +67,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		rest := args[1:]
 		if cmd == "adapt" {
 			if len(rest) == 0 || rest[0] != "codex" {
-				fmt.Fprintln(os.Stderr, "weaver: usage: weaver adapt codex [--bell]")
+				fmt.Fprintln(os.Stderr, "weaver: usage: wvr adapt codex [--bell]")
 				return 1, true
 			}
 			adapter, rest = "codex", rest[1:]
@@ -110,7 +110,7 @@ func run(e *wv.Env, cmd string, args []string) (int, bool) {
 		e.Goto(p, t)
 	case "go":
 		if len(args) < 2 || args[1] != "home" {
-			fmt.Fprintln(os.Stderr, "weaver: usage: weaver go home")
+			fmt.Fprintln(os.Stderr, "weaver: usage: wvr go home")
 			return 1, true
 		}
 		if !needSession() {

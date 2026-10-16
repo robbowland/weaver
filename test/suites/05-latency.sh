@@ -37,7 +37,7 @@ printf '{"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_
 run() {
 	ZELLIJ_PANE_ID=$P perl -MTime::HiRes=time -e '
 		open(STDIN, "<", shift) or die; open(my $out, ">&", \*STDOUT); open(STDOUT, ">", "/dev/null");
-		my $t = time; system(@ARGV); printf $out "%d", (time - $t) * 1000' "$1" weaver hook ${2:+"$2"}
+		my $t = time; system(@ARGV); printf $out "%d", (time - $t) * 1000' "$1" wvr hook ${2:+"$2"}
 }
 # median NAME CMD...: run CMD N times, print and keep the median. Calls are
 # spaced as agent events are, so one call's background work does not slow

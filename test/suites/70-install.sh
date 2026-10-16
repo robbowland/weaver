@@ -22,7 +22,7 @@ inst() {
 
 out=$(inst)
 ok "install builds weaver, one binary, into ~/.local/bin" \
-	"$([ -f "$H/.local/bin/weaver" ] && [ ! -L "$H/.local/bin/weaver" ] && go version -m "$H/.local/bin/weaver" | grep -c 'path	github.com/robbowland/weaver/cmd/weaver')" "1"
+	"$([ -f "$H/.local/bin/wvr" ] && [ ! -L "$H/.local/bin/wvr" ] && go version -m "$H/.local/bin/wvr" | grep -c 'path	github.com/robbowland/weaver/cmd/wvr')" "1"
 ok "...unpacks its files" "$(ls "$H/.local/share/weaver/runtime"/*/config/tmux.conf 2>/dev/null | wc -l | tr -d ' ')" "1"
 ok "...keeps its Neovim plugin where Neovim configs load it" \
 	"$(cd "$ROOT/nvim" && find . -type f | sort | tr '\n' ' ')" \
@@ -49,14 +49,14 @@ EOF
 out=$(inst --configure)
 S=$H/.claude/settings.json
 ok "no stale weaver or agentnav hook is left" \
-	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(weaver|agentnav) "))] | length' "$S")" "0"
-ok "each event (each matcher of it) has exactly one weaver hook" \
-	"$(jq '[.hooks[][] | [.hooks[] | select(.command | endswith("/weaver"))] | length | select(. > 0)] | unique' -c "$S")|$(jq '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | endswith("/weaver")))] | length' "$S")|$(jq -c '[.hooks.PreToolUse[] | select(any(.hooks[]; .command | endswith("/weaver"))) | .matcher]' "$S")" \
+	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(weaver|agentnav)( |$)"))] | length' "$S")" "0"
+ok "each event (each matcher of it) has exactly one wvr hook" \
+	"$(jq '[.hooks[][] | [.hooks[] | select(.command | endswith("/wvr"))] | length | select(. > 0)] | unique' -c "$S")|$(jq '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | endswith("/wvr")))] | length' "$S")|$(jq -c '[.hooks.PreToolUse[] | select(any(.hooks[]; .command | endswith("/wvr"))) | .matcher]' "$S")" \
 	"[1]|$(jq '.hooks | length' "$ROOT/config/claude-hooks.json")|[\"AskUserQuestion\",\"Bash\"]"
 ok "...run by absolute path, without a shell" \
-	"$(jq -r '[.hooks[][].hooks[] | select(.command | endswith("/weaver")) | .command] | unique | .[]' "$S")|$(jq -r '.hooks.Stop[] | .hooks[] | select(.command | endswith("/weaver")) | .args | join(" ")' "$S")" \
-	"$H/.local/bin/weaver|hook"
-ok "...async where nobody waits" "$(jq -r '.hooks.PostToolUse[] | .hooks[] | select(.command | endswith("/weaver")) | "\(.args | join(" ")) \(.async)"' "$S")" "hook --async true"
+	"$(jq -r '[.hooks[][].hooks[] | select(.command | endswith("/wvr")) | .command] | unique | .[]' "$S")|$(jq -r '.hooks.Stop[] | .hooks[] | select(.command | endswith("/wvr")) | .args | join(" ")' "$S")" \
+	"$H/.local/bin/wvr|hook"
+ok "...async where nobody waits" "$(jq -r '.hooks.PostToolUse[] | .hooks[] | select(.command | endswith("/wvr")) | "\(.args | join(" ")) \(.async)"' "$S")" "hook --async true"
 ok "someone else's hooks survive, even beside an old weaver one" \
 	"$(jq -r '[.. | objects | select(has("command")) | .command | select(test("say|lint"))] | join(",")' "$S")|$(jq -r .model "$S")" \
 	"say done,my-linter|opus"
@@ -71,10 +71,10 @@ cat >"$H/.codex/hooks.json" <<'EOF'
 EOF
 out=$(inst --configure)
 C=$H/.codex/hooks.json
-ok "codex: weaver adapts every Codex hook event" \
-	"$(jq -r '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | test("/weaver adapt codex"))) | .key] | sort | join(",")' "$C")" \
+ok "codex: wvr adapts every Codex hook event" \
+	"$(jq -r '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | test("/wvr adapt codex"))) | .key] | sort | join(",")' "$C")" \
 	"Interrupt,PermissionRequest,PostToolUse,SessionEnd,SessionStart,Stop,SubagentStart,SubagentStop,UserPromptSubmit"
-ok "...by absolute path" "$(jq -r '.hooks.Stop[0].hooks[0].command' "$C")" "$H/.local/bin/weaver adapt codex --bell"
+ok "...by absolute path" "$(jq -r '.hooks.Stop[0].hooks[0].command' "$C")" "$H/.local/bin/wvr adapt codex --bell"
 ok "...leaving its other hooks" "$(jq -r '.hooks.SessionStart[] | .hooks[].command' "$C" | grep -c headroom)" "1"
 ok "...and says to trust them" "$(printf '%s\n' "$out" | grep -c 'trust weaver.s hooks in /hooks')" "1"
 
@@ -93,4 +93,14 @@ printf 'keybinds {\n    // weaver: its keys\n    bind "Alt y" { Run "weaver" "ls
 out=$(inst --configure --no-codex 2>&1)
 ok "a zellij config with weaver's old keybindings: said, left alone" \
 	"$(printf '%s\n' "$out" | grep -c "still has weaver's keybindings")|$(grep -c 'Run "weaver"' "$H/.config/zellij/config.kdl")" "1|1"
+# The command's old name: a weaver binary there is kept the same build (its
+# sessions' hooks run it), never made where there was none.
+rm -f "$H/.config/zellij/config.kdl"
+printf 'old' >"$H/.local/bin/old" && cp "$H/.local/bin/wvr" "$H/.local/bin/weaver" && cat "$H/.local/bin/old" >>"$H/.local/bin/weaver"
+out=$(inst)
+ok "the old name, weaver: kept as this build, and said" \
+	"$(cmp -s "$H/.local/bin/weaver" "$H/.local/bin/wvr" && echo same)|$(printf '%s\n' "$out" | grep -c 'kept .*/weaver, the old name')" "same|1"
+rm -f "$H/.local/bin/weaver" "$H/.local/bin/old"
+inst >/dev/null
+ok "...and not made where there was none" "$([ -e "$H/.local/bin/weaver" ] && echo made || echo none)" "none"
 done_suite

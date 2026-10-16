@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install weaver; with --configure, also wire it into Claude Code (and Codex).
 #
-#   ./install.sh                  build weaver (one binary) into ~/.local/bin/weaver
-#   ./install.sh --configure      also add the Claude Code (and Codex) hooks (`weaver setup`)
+#   ./install.sh                  build weaver (one binary, wvr) into ~/.local/bin/wvr
+#   ./install.sh --configure      also add the Claude Code (and Codex) hooks (`wvr setup`)
 #     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
@@ -43,7 +43,7 @@ check_deps() {
 	done
 	[ -z "$missing" ] || die "missing dependencies:$missing"
 	command -v fzf >/dev/null 2>&1 ||
-		warn "fzf not found: 'weaver ls' will print a table instead of the interactive dashboard"
+		warn "fzf not found: 'wvr ls' will print a table instead of the interactive dashboard"
 	v=$(tmux -V 2>/dev/null)
 	v=${v#tmux }
 	major=${v%%.*} rest=${v#*.}
@@ -54,32 +54,42 @@ check_deps() {
 	fi
 }
 
+# ours FILE: is FILE a weaver binary?
+ours() { go version -m "$1" 2>/dev/null | grep -q 'github.com/robbowland/weaver'; }
+
 install_files() {
 	if [ $dry = 1 ]; then
-		say "would build $SRC into $BIN/weaver"
+		say "would build $SRC into $BIN/wvr"
 		return
 	fi
 	mkdir -p "$BIN"
-	# Only ever replace weaver: a link an older install made, or a weaver binary.
-	if [ -e "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ] &&
-		! go version -m "$BIN/weaver" 2>/dev/null | grep -q 'github.com/robbowland/weaver'; then
-		die "$BIN/weaver exists and is not weaver; not replacing it"
+	# Only ever replace weaver: a weaver binary, or (as weaver) a link an
+	# older install made.
+	if [ -e "$BIN/wvr" ] && ! ours "$BIN/wvr"; then
+		die "$BIN/wvr exists and is not weaver; not replacing it"
 	fi
 	# Built beside it, then renamed over it: a hook running meanwhile runs the
 	# old binary or the new one, never half of either.
-	(cd "$SRC" && go build -trimpath -o "$BIN/.weaver.new" ./cmd/weaver) || die "cannot build weaver"
-	mv -f "$BIN/.weaver.new" "$BIN/weaver"
+	(cd "$SRC" && go build -trimpath -o "$BIN/.wvr.new" ./cmd/wvr) || die "cannot build weaver"
+	# The command was weaver before it was wvr: hooks of Claude Code sessions
+	# started then, and a home board open since, still run that path, so it
+	# is kept the same build until you remove it.
+	if [ -f "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ] && ours "$BIN/weaver"; then
+		cp -f "$BIN/.wvr.new" "$BIN/.weaver.new" && mv -f "$BIN/.weaver.new" "$BIN/weaver"
+		say "kept $BIN/weaver, the old name, as this build: remove it once its sessions have restarted"
+	fi
+	mv -f "$BIN/.wvr.new" "$BIN/wvr"
 	# Its files unpacked now (its Neovim plugin kept at $DEST/nvim for Neovim
 	# configs), not when it first needs them.
-	"$BIN/weaver" _runtime || warn "could not unpack weaver's files under $DEST"
+	"$BIN/wvr" _runtime || warn "could not unpack weaver's files under $DEST"
 	# The binary carries the Neovim plugin and the configs (it unpacks them
 	# under $DEST/runtime). An older install's copies beside it
 	# stay while what it started may still use them (an nvim loaded its plugin
 	# from there).
-	say "installed $BIN/weaver"
+	say "installed $BIN/wvr"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
-	*) warn "$BIN is not on your PATH; tmux and Claude Code run 'weaver' from PATH" ;;
+	*) warn "$BIN is not on your PATH; weaver's tmux runs 'wvr' from PATH" ;;
 	esac
 }
 
@@ -126,16 +136,16 @@ install_files
 remove_old_copies
 remove_agentnav
 if [ $configure = 1 ]; then
-	# The hooks: `weaver setup` (with --dry-run, by a build of this checkout
+	# The hooks: `wvr setup` (with --dry-run, by a build of this checkout
 	# that is not installed).
-	set -- --bin "$BIN/weaver"
+	set -- --bin "$BIN/wvr"
 	[ $codex = 1 ] || set -- "$@" --no-codex
 	if [ $dry = 1 ]; then
 		tmp=$(mktemp -d "${TMPDIR:-/tmp}/weaver.XXXXXX")
-		(cd "$SRC" && go build -o "$tmp/weaver" ./cmd/weaver) || die "cannot build weaver"
-		"$tmp/weaver" setup --dry-run "$@"
+		(cd "$SRC" && go build -o "$tmp/wvr" ./cmd/wvr) || die "cannot build weaver"
+		"$tmp/wvr" setup --dry-run "$@"
 		rm -rf "$tmp"
 	else
-		"$BIN/weaver" setup "$@"
+		"$BIN/wvr" setup "$@"
 	fi
 fi

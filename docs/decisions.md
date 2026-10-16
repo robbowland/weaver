@@ -25,11 +25,11 @@ can supersede an earlier one, and says so.
   needs-you): the multiplexer's window mark is what makes a finished agent
   "unread", and it clears when you look. A done agent whose pane is focused
   when the counts are computed counts as seen.
-- 2026-10-14: Agents other than Claude Code report through `weaver event`
+- 2026-10-14: Agents other than Claude Code report through `wvr event`
   (normalized JSON), mapped onto the Claude Code events the state machine
   already handles; an adapter per agent turns its own hook input into it.
   Codex's hooks mirror Claude Code's (without Notification, with Interrupt),
-  so `weaver adapt codex` is a small mapping. Codex's tool names differ, so a
+  so `wvr adapt codex` is a small mapping. Codex's tool names differ, so a
   tool call without a file path is treated like Bash: the files it changed
   are found with git status. Codex runs weaver's hooks only after you trust
   them in `/hooks`.
@@ -48,11 +48,11 @@ can supersede an earlier one, and says so.
   (`done_ids`) sets nothing. Before, a working row showed at most the last
   file edited, and nothing through the long commands (tests, builds) a turn
   spends most of its time in.
-- 2026-10-15: `weaver setup` puts weaver's hooks into Claude Code's settings
+- 2026-10-15: `wvr setup` puts weaver's hooks into Claude Code's settings
   and Codex's hooks: every weaver hook out (in any form, under its old name
   agentnav too), the current ones in, run by the binary's path, nobody
   else's touched, members kept in their order, a backup first. So a weaver
-  installed as a package needs only `weaver setup`, and nothing of weaver
+  installed as a package needs only `wvr setup`, and nothing of weaver
   needs jq but its tests.
 
 ## Snapshots and reviews
@@ -217,16 +217,16 @@ can supersede an earlier one, and says so.
 - 2026-10-14: New branches start from the fetched remote default rather
   than from a possibly stale local `main`. The fetch starts when the form
   opens so enter seldom waits; offline it falls back instead of failing.
-- 2026-10-14: `weaver close` offers to remove only worktrees `weaver new`
+- 2026-10-14: `wvr close` offers to remove only worktrees `wvr new`
   made: agent tools' own worktrees (Claude Code's `--worktree`, Codex) are
   theirs to manage, and hand-made ones yours. Branches are never deleted,
   and nothing is merged: that stays with your own workflow.
-- 2026-10-14: `weaver close` asks everything first and then finishes in a
+- 2026-10-14: `wvr close` asks everything first and then finishes in a
   detached process that ignores the hangup, since closing a window can take
   the pane it runs in with it.
 - 2026-10-15: A thread's window starts its agent first, then its nvim on
-  the agent's left, told the agent's pane (`weaver nvim --fresh AGENT`) and
-  recorded as bound before `weaver new` returns. Before, the nvim started
+  the agent's left, told the agent's pane (`wvr nvim --fresh AGENT`) and
+  recorded as bound before `wvr new` returns. Before, the nvim started
   first and polled every 100 ms for a file the agent's pane wrote, so it
   started up to 100 ms later and, for that moment, belonged to no agent: a
   thread closed then left its nvim, window and worktree behind. `close`
@@ -290,7 +290,7 @@ can supersede an earlier one, and says so.
   has a new one of its name; `/exit`, `/clear` and logout (SessionEnd's
   reason, kept as `end_reason`) are never lost.
 - 2026-10-15: Quitting everything is one key, `Ctrl q`, from any pane: since
-  lost threads come back, it loses nothing. `weaver quit` asks first and
+  lost threads come back, it loses nothing. `wvr quit` asks first and
   works from outside the session, for one left running behind a closed
   window.
 
@@ -336,13 +336,21 @@ can supersede an earlier one, and says so.
     POST to fzf's socket rather than curl. A sync hook about 50 ms to 10 ms,
     an async one that changes nothing about 65 ms to 13 ms;
   - the new-thread form: one git query for the header where the script made
-    several, the background fetch a detached `weaver _fetch`; `n` on the
+    several, the background fetch a detached `wvr _fetch`; `n` on the
     board to the form's first paint, about 230 ms to 120 ms, most of the
     rest fzf starting;
   - then everything else: threads, resume, close, send, quit, edit, nvim.
 - 2026-10-15: The weaver tmux config and the hooks' settings come from the
-  binary's own files, so an install reaches a running session as `weaver`
+  binary's own files, so an install reaches a running session as `wvr`
   next attaches, and a package needs no files of its own beside the binary.
+
+- 2026-10-16: The command is `wvr` (Rob's call), short to type; the
+  product, its repository, formula, tmux server and session, state and
+  settings stay weaver. `wvr setup` replaces hooks run by `weaver` (and
+  `agentnav`) like any old ones. An installed `~/.local/bin/weaver` is kept
+  the same build while it exists, since Claude Code sessions started before
+  run their hooks by that path, and a home board open since runs its keys by
+  it; it is never made anew.
 
 ## History
 

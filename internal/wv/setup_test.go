@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// mergeHooks takes out every weaver (and agentnav) hook, whatever its form,
+// mergeHooks takes out every weaver hook (wvr, weaver or agentnav), whatever its form,
 // puts the current ones in run by bin, touches nobody else's, keeps the
 // settings' order, and changes nothing the second time.
 func TestMergeHooks(t *testing.T) {
@@ -23,10 +23,10 @@ func TestMergeHooks(t *testing.T) {
   "statusLine": { "type": "command", "command": "ünïcode ✓" }
 }`
 	add := `{"hooks": {
-    "Stop": [{ "hooks": [{ "type": "command", "command": "weaver", "args": ["hook"] }] }],
-    "Interrupt": [{ "hooks": [{ "type": "command", "command": "weaver adapt codex --bell" }] }]
+    "Stop": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
+    "Interrupt": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell" }] }]
   }}`
-	out, err := mergeHooks([]byte(settings), []byte(add), "/new/bin/weaver")
+	out, err := mergeHooks([]byte(settings), []byte(add), "/new/bin/wvr")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestMergeHooks(t *testing.T) {
 			t.Errorf("%s left in:\n%s", gone, s)
 		}
 	}
-	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/weaver adapt codex --bell"`} {
+	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/wvr adapt codex --bell"`} {
 		if !strings.Contains(s, kept) {
 			t.Errorf("%s missing from:\n%s", kept, s)
 		}
@@ -63,7 +63,7 @@ func TestMergeHooks(t *testing.T) {
 	if strings.Join(evs, " ") != "Stop PostToolUse Interrupt" {
 		t.Errorf("events (kept in place, new ones last): %v", evs)
 	}
-	again, err := mergeHooks(out, []byte(add), "/new/bin/weaver")
+	again, err := mergeHooks(out, []byte(add), "/new/bin/wvr")
 	if err != nil || string(again) != s {
 		t.Errorf("not idempotent:\n%s", again)
 	}
