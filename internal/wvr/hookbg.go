@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/neovim/go-client/nvim"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -112,23 +112,22 @@ func wtMarker(dir, m string) {
 
 // nvimEvent sends event ev (docs/design.md) to the agent's nvim: WeaverEvent,
 // or AgentFollow / AgentChecktime on a weaver.lua that predates it, over its
-// socket (msgpack-RPC; no nvim client started). Returns 0 on success, 128+
-// when nvim did not answer in time, 1 when nothing listens. In a hook, a
-// timeout is remembered: calls are skipped for 15s.
-func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) int {
+// socket (msgpack-RPC; no nvim client started). An nvim that did not
+// answer in time is left alone for 15s.
+func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) {
 	sock := e.nvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
-		return 1
+		return
 	}
 	stalled := sock + ".stalled"
 	if t, err := firstLine(stalled); err == nil {
 		if n, ok := atoi(t); ok && h.Now-int64(n) < 15 {
-			return 128
+			return
 		}
 	}
 	b, err := jsonLine(m)
 	if err != nil {
-		return 1
+		return
 	}
 	j, ev := strings.TrimSuffix(string(b), "\n"), m.name()
 	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
@@ -140,67 +139,10 @@ func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) int {
 		compat = "v:lua.AgentChecktime()"
 	}
 	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + q(j) + "') : " + compat
-	rc := nvimEval(sock, expr, 2*time.Second)
-	if rc >= 128 {
+	if nvim.Eval(sock, expr, 2*time.Second) == nvim.Stalled {
 		bestEffort(os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644))
 	} else if exists(stalled) {
 		os.Remove(stalled)
-	}
-	return rc
-}
-
-// nvimEval evaluates expr in the nvim at sock: 0, 1 when it cannot be
-// reached, 142 when it does not answer within d.
-func nvimEval(sock, expr string, d time.Duration) int {
-	ctx, cancel := context.WithTimeout(context.Background(), d)
-	defer cancel()
-	v, err := nvim.Dial(sock, nvim.DialContext(ctx), nvim.DialLogf(func(string, ...any) {}))
-	if err != nil {
-		if ctx.Err() != nil {
-			return 142
-		}
-		return 1
-	}
-	done := make(chan error, 1)
-	go func() {
-		var r any
-		done <- v.Eval(expr, &r)
-	}()
-	select {
-	case err := <-done:
-		v.Close()
-		if err != nil {
-			return 1
-		}
-		return 0
-	case <-ctx.Done():
-		v.Close()
-		return 142
-	}
-}
-
-// nvimEvalInt is expr's value in the nvim at sock, as a number.
-func nvimEvalInt(sock, expr string, d time.Duration) (int, bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), d)
-	defer cancel()
-	v, err := nvim.Dial(sock, nvim.DialContext(ctx), nvim.DialLogf(func(string, ...any) {}))
-	if err != nil {
-		return 0, false
-	}
-	defer v.Close()
-	done := make(chan int, 1)
-	go func() {
-		var r int
-		if v.Eval(expr, &r) != nil {
-			r = -1
-		}
-		done <- r
-	}()
-	select {
-	case r := <-done:
-		return r, r >= 0
-	case <-ctx.Done():
-		return 0, false
 	}
 }
 

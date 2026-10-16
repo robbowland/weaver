@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -269,7 +270,7 @@ func (e *Env) Nvim(args []string) error {
 	// Never take the socket of an nvim still serving this agent (answering,
 	// or alive but busy): go to it instead, and let this pane close.
 	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
-		if rc := nvimEval(sock, "1", 2*time.Second); rc == 0 || rc >= 128 {
+		if nvim.Eval(sock, "1", 2*time.Second) != nvim.Absent {
 			if nv := readNvimPane(e, agentPane); nv != "" && nv != e.MyPane {
 				e.focus(nv)
 			}

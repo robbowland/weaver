@@ -21,6 +21,7 @@ import (
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -881,7 +882,7 @@ func unsaved(sock string) int {
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return -1
 	}
-	n, ok := nvimEvalInt(sock, `len(filter(getbufinfo({"bufmodified": 1}), "v:val.listed"))`, 2*time.Second)
+	n, ok := nvim.EvalInt(sock, `len(filter(getbufinfo({"bufmodified": 1}), "v:val.listed"))`, 2*time.Second)
 	if !ok {
 		return -1
 	}
