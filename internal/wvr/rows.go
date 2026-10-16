@@ -270,10 +270,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if !ok {
 			continue // corrupt
 		}
-		var t obj
-		if tb, err := os.ReadFile(strings.TrimSuffix(f, ".json") + ".thread"); err == nil {
-			t, _ = readObj(tb)
-		}
+		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
 		p := byID[tostring(s["pane"])]
 		if p == nil {
 			g := gone{f, str(s.get("pid", "")), str(s.get("proc_start", "")), str(s.get("state", ""))}
@@ -354,7 +351,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Agent = str(s.get("agent", ""))
 		r.Bgtasks = str(s.get("background_tasks", ""))
 		r.Doing = clean(str(s.get("doing", "")))
-		r.Ttask, r.Tname, r.Tnum = str(t.get("task", "")), str(t.get("name", "")), str(t.get("num", ""))
+		if terr == nil {
+			r.Ttask, r.Tname, r.Tnum = clean(t.Task), clean(t.Name), strconv.Itoa(t.Num)
+		}
 		if tr, ok := s.get("turn_roots", []any{}).([]any); ok {
 			for _, x := range tr {
 				r.Troots = append(r.Troots, clean(tostring(x)))
@@ -370,23 +369,24 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if have[strings.TrimSuffix(f, ".thread")+".json"] {
 			continue
 		}
-		b, err := os.ReadFile(f)
-		if err != nil {
+		t, err := readThread(f)
+		if err != nil || t.Pane == nil {
 			continue
 		}
-		t, ok := readObj(b)
-		if !ok {
-			continue
-		}
-		p := byID[tostring(t.get("pane", ""))]
+		pane := strconv.Itoa(int(*t.Pane))
+		p := byID[pane]
 		if p == nil || p.Exited {
 			continue
 		}
-		rows = append(rows, Row{Pane: str(t["pane"]), Tab: strconv.Itoa(p.Tab), State: "starting",
-			Root: str(t.get("worktree", "")), Since: str(t.get("created", json.Number(strconv.FormatInt(now, 10)))),
-			Seen: "false", Prompt: str(t.get("task", "")), Bg: "0", Nsub: "0", Sfile: f, Turn: "0", Tdone: "0", Ttotal: "0",
-			Tabname: clean(p.TabName), Agent: str(t.get("agent", "")), Ttask: str(t.get("task", "")),
-			Tname: str(t.get("name", "")), Tnum: str(t.get("num", ""))})
+		since := t.Created
+		if since == 0 {
+			since = now
+		}
+		rows = append(rows, Row{Pane: pane, Tab: strconv.Itoa(p.Tab), State: "starting",
+			Root: clean(t.Worktree), Since: strconv.FormatInt(since, 10),
+			Seen: "false", Prompt: clean(t.Task), Bg: "0", Nsub: "0", Sfile: f, Turn: "0", Tdone: "0", Ttotal: "0",
+			Tabname: clean(p.TabName), Agent: clean(t.Agent), Ttask: clean(t.Task),
+			Tname: clean(t.Name), Tnum: strconv.Itoa(t.Num)})
 	}
 	starts := procStarts(pids)
 	for _, g := range gones {
@@ -527,16 +527,18 @@ func (e *Env) LostRows() []LostRow {
 		if err != nil {
 			continue
 		}
-		o, ok := readObj(b)
-		if !ok {
+		var lo Lost
+		if json.Unmarshal(firstJSON(b), &lo) != nil {
 			continue
 		}
-		s, _ := o.get("state", nil).(map[string]any)
-		t, _ := o.get("thread", nil).(map[string]any)
-		st, th := obj(s), obj(t)
-		r := LostRow{File: f, Sid: str(st.get("session_id", "")), Name: str(th.get("name", "")), Num: str(th.get("num", "")),
-			Dir: str(lostDir(st, th)), Lost: str(o.get("lost", json.Number("0"))), Skey: str(lostSkey(o)),
-			Task: str(firstOf(th.get("task", nil), st.get("prompt", nil), "")), Title: str(st.get("title", ""))}
+		st := lo.AgentState()
+		num := ""
+		if lo.Thread.Num > 0 {
+			num = strconv.Itoa(lo.Thread.Num)
+		}
+		r := LostRow{File: f, Sid: str(st.get("session_id", "")), Name: clean(lo.Thread.Name), Num: num,
+			Dir: clean(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: clean(lo.Key()),
+			Task: clean(lo.Task()), Title: str(st.get("title", ""))}
 		r.lost, _ = strconv.ParseFloat(r.Lost, 64)
 		rs = append(rs, r)
 	}
@@ -554,26 +556,6 @@ func (e *Env) LostRows() []LostRow {
 }
 
 func present(v any) bool { return v != nil && v != "" }
-
-// lostDir: where a lost thread resumes (where its agent started, else its
-// thread's worktree, else where it last was), as JQ_LOST's lost_dir.
-func lostDir(s, t obj) any {
-	for _, v := range []any{s["start_cwd"], t["worktree"], s["root"], s["cwd"]} {
-		if present(v) {
-			return v
-		}
-	}
-	return ""
-}
-
-func lostSkey(o obj) any {
-	for _, v := range []any{o["skey"], o["session"]} {
-		if present(v) {
-			return v
-		}
-	}
-	return ""
-}
 
 // retire: the agent of state file f (pid) is gone: its thread lost with its
 // session is kept, anything else forgotten.
@@ -705,24 +687,18 @@ func (e *Env) lose(f, pid string) bool {
 	if sid == "" {
 		return false
 	}
-	th, err := os.ReadFile(b + ".thread")
+	th, err := readThread(b + ".thread")
 	if err != nil {
 		return false
 	}
 	base := filepath.Base(b)
 	skey := base[:strings.LastIndexByte(base, '_')]
-	var sc, tc bytes.Buffer
-	if json.Compact(&sc, firstJSON(data)) != nil || json.Compact(&tc, firstJSON(th)) != nil {
+	var sc bytes.Buffer
+	if json.Compact(&sc, firstJSON(data)) != nil {
 		return false
 	}
-	sk, _ := json.Marshal(skey)
-	rec := `{"lost":` + strconv.FormatInt(time.Now().Unix(), 10) + `,"skey":` + string(sk) +
-		`,"state":` + sc.String() + `,"thread":` + tc.String() + "}\n"
-	os.MkdirAll(e.LostDir, 0o755)
-	lf := e.LostDir + "/" + skey + "_" + sid + ".json"
-	tmp := lf + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(rec), 0o644) != nil || os.Rename(tmp, lf) != nil {
-		os.Remove(tmp)
+	rec := Lost{Lost: jsonInt(time.Now().Unix()), SKey: skey, State: sc.Bytes(), Thread: th}
+	if writeRecord(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
 		return false
 	}
 	for _, x := range []string{f, b + ".nvim", b + ".bash", b + ".prompt", b + ".thread"} {

@@ -235,11 +235,9 @@ func (e *Env) Preview(args []string) string {
 		return out
 	}
 	// The work item its thread started from.
-	if tb, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + pane + ".thread"); err == nil {
-		if t, ok := readObj(tb); ok {
-			if f := itemLine(t); f != "" {
-				s["from"] = f
-			}
+	if t, err := readThread(e.threadFile(pane)); err == nil {
+		if f := itemLine(t); f != "" {
+			s["from"] = f
 		}
 	}
 	return out + card(s, previewCols(), head, ab, changed, nw, shared)
@@ -247,20 +245,18 @@ func (e *Env) Preview(args []string) string {
 
 // itemLine is a thread record's work item for its card: PR o/r#45, issue
 // o/r#12 or ENG-42, and review when it is one; "" without one.
-func itemLine(t obj) string {
-	it, _ := t["item"].(map[string]any)
-	ref, _ := it["ref"].(string)
-	if ref == "" {
+func itemLine(t Thread) string {
+	if t.Item == nil || t.Item.Ref == "" {
 		return ""
 	}
-	l := ref
-	switch it["kind"] {
+	l := t.Item.Ref
+	switch t.Item.Kind {
 	case "pr":
-		l = "PR " + ref
+		l = "PR " + l
 	case "issue":
-		l = "issue " + ref
+		l = "issue " + l
 	}
-	if t["mode"] == "review" {
+	if t.Mode == "review" {
 		l += " · review, read-only"
 	}
 	return l
@@ -395,21 +391,19 @@ func (e *Env) lostCard(sid, title string) string {
 	if err != nil {
 		return out
 	}
-	o, ok := readObj(b)
-	if !ok {
+	var lo Lost
+	if json.Unmarshal(firstJSON(b), &lo) != nil {
 		return out
 	}
-	stm, _ := o.get("state", nil).(map[string]any)
-	thm, _ := o.get("thread", nil).(map[string]any)
-	st, th := obj(stm), obj(thm)
+	st := lo.AgentState()
 	now := time.Now().Unix()
 	lost := now
-	if v, ok := num(o.get("lost", nil)); ok {
-		lost = int64(v)
+	if lo.Lost != 0 {
+		lost = int64(lo.Lost)
 	}
 	w := previewCols()
 	home := os.Getenv("HOME")
-	dir := tostring(lostDir(st, th))
+	dir := lo.Dir()
 	switch {
 	case dir == home:
 		dir = "~"
@@ -421,12 +415,12 @@ func (e *Env) lostCard(sid, title string) string {
 		dir = "…" + string(r[len(r)-n+1:])
 	}
 	ls := []string{"lost" + CDim + " · " + COff + cardAge(now-lost) + CDim + " · its session went" + COff, ""}
-	ls = append(ls, field(w, "asked", firstOf(th.get("task", nil), st.get("prompt", nil), ""), "", 4)...)
+	ls = append(ls, field(w, "asked", lo.Task(), "", 4)...)
 	if l := st.get("last_message", ""); l != "" {
 		ls = append(ls, field(w, "said", l, CGrey, 6)...)
 	}
 	ls = append(ls, field(w, "in", dir, CGrey, 1)...)
-	ls = append(ls, field(w, "session", strings.TrimPrefix(tostring(lostSkey(o)), "tmux-")+" · "+tostring(st.get("session_id", "")), CDim, 2)...)
+	ls = append(ls, field(w, "session", strings.TrimPrefix(lo.Key(), "tmux-")+" · "+tostring(st.get("session_id", "")), CDim, 2)...)
 	ls = append(ls, "", CDim+"⏎ resume it in a new window   x forget it"+COff)
 	return out + strings.Join(ls, "\n") + "\n"
 }

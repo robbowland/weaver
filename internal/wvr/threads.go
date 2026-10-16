@@ -414,14 +414,6 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	n, _ := e.threadNum()
 	// The command its agent runs, from here (the pane will not have this
 	// environment).
-	here := "false"
-	if fm.where == "here" {
-		here = "true"
-	}
-	cr := "false"
-	if created {
-		cr = "true"
-	}
 	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
 	cmd := agentCmd(fm.agent)
 	if review {
@@ -431,18 +423,15 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 			cmd += " --permission-mode plan"
 		}
 	}
-	extra := ""
+	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.repo, Branch: branch, Worktree: dir,
+		Here: fm.where == "here", WorktreeCreated: created, Agent: fm.agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
-		extra = `,"item":{"kind":` + jqStr(it.Kind) + `,"ref":` + jqStr(it.Ref()) + `,"url":` + jqStr(it.URL) + `,"title":` + jqStr(it.Title) + `}`
+		rec.Item = &ThreadItem{Kind: it.Kind, Ref: it.Ref(), URL: it.URL, Title: it.Title}
 	}
 	if review {
-		extra += `,"mode":"review"`
+		rec.Mode = "review"
 	}
-	rec := `{"num":` + strconv.Itoa(n) + `,"cmd":` + jqStr(cmd) + `,"name":` + jqStr(name) + `,"task":` + jqStr(task) +
-		`,"repo":` + jqStr(fm.repo) + `,"branch":` + jqStr(branch) + `,"worktree":` + jqStr(dir) + `,"here":` + here +
-		`,"worktree_created":` + cr + `,"agent":` + jqStr(fm.agent) + `,"created":` + strconv.FormatInt(time.Now().Unix(), 10) +
-		`,"base":` + jqStr(base) + extra + "}\n"
-	if os.WriteFile(d+"/thread.json", []byte(rec), 0o644) != nil {
+	if writeRecord(d+"/thread.json", rec) != nil {
 		unlock()
 		fmt.Fprintln(os.Stderr, "weaver: cannot write the thread record")
 		return false
@@ -499,24 +488,20 @@ func (e *Env) AgentPane(tok, kind string) int {
 		o, _ := parseOobj(b)
 		return o
 	}
-	cmdOf := func(o oobj) {
-		if r, ok := o.get("cmd"); ok {
-			var c string
-			if json.Unmarshal(r, &c) == nil && c != "" {
-				cmd = c
-			}
+	cmdOf := func(t Thread) {
+		if t.Cmd != "" {
+			cmd = t.Cmd
 		}
 	}
 	put := func(f string, o oobj) {
-		tmp := f + "." + strconv.Itoa(os.Getpid())
-		if os.WriteFile(tmp, []byte(o.String()+"\n"), 0o644) == nil {
-			os.Rename(tmp, f)
-		}
+		writeAtomic(f, []byte(o.String()+"\n"))
 	}
 	paneJSON := pane
 	if !digits(pane) {
 		paneJSON = jqStr(pane)
 	}
+	paneNum, _ := atoi(pane)
+	pn := jsonInt(paneNum)
 	run := func(args ...string) int {
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])
@@ -529,7 +514,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 	}
 	if tok != "" && pane != "" && exists(d+"/task") {
 		task, _ := os.ReadFile(d + "/task")
-		th := rec(d + "/thread.json")
+		th, therr := readThread(d + "/thread.json")
 		cmdOf(th)
 		// Claude Code starts on a session id weaver chose, named for the
 		// thread: the thread knows its conversation before its first hook,
@@ -541,19 +526,16 @@ func (e *Env) AgentPane(tok, kind string) int {
 			if sid != "" {
 				ident = append(ident, "--session-id", sid)
 			}
-			if r, ok := th.get("name"); ok {
-				var n string
-				if json.Unmarshal(r, &n) == nil && n != "" {
-					ident = append(ident, "-n", n)
-				}
+			if th.Name != "" {
+				ident = append(ident, "-n", th.Name)
 			}
 		}
-		if th != nil {
-			th = th.set("pane", paneJSON)
+		if therr == nil {
+			th.Pane = &pn
 			if sid != "" {
-				th = th.set("session_id", jqStr(sid))
+				th.SessionID = sid
 			}
-			put(e.StateDir+"/"+e.SKey+"_"+pane+".thread", th)
+			writeRecord(e.threadFile(pane), th)
 		}
 		if os.Remove(d+"/task") != nil {
 			fmt.Fprintln(os.Stderr, "weaver: cannot take the task from "+d)
@@ -569,7 +551,7 @@ func (e *Env) AgentPane(tok, kind string) int {
 	}
 	if tok != "" && pane != "" && exists(d+"/resume") {
 		sid, _ := firstLine(d + "/resume")
-		th := rec(d + "/thread.json")
+		th, therr := readThread(d + "/thread.json")
 		cmdOf(th)
 		// A dead agent's files under this pane id (an earlier session's) go
 		// first: kept as lost when they are, else forgotten.
@@ -580,8 +562,9 @@ func (e *Env) AgentPane(tok, kind string) int {
 				e.retire(sf, pk.pid)
 			}
 		}
-		if th != nil {
-			put(e.StateDir+"/"+e.SKey+"_"+pane+".thread", th.set("pane", paneJSON))
+		if therr == nil {
+			th.Pane = &pn
+			writeRecord(e.threadFile(pane), th)
 		}
 		if st := rec(d + "/state.json"); st != nil {
 			put(sf, st.set("pane", paneJSON))
@@ -605,9 +588,9 @@ func (e *Env) AgentPane(tok, kind string) int {
 	}
 	if pane != "" {
 		sid = str(rec(e.StateFile(pane)), "session_id")
-		th := rec(e.StateDir + "/" + e.SKey + "_" + pane + ".thread")
+		th, _ := readThread(e.threadFile(pane))
 		if sid == "" {
-			sid = str(th, "session_id")
+			sid = th.SessionID
 		}
 		cmdOf(th)
 	}
@@ -640,16 +623,20 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		os.Rename(d+"/lost.json", lf)
 		os.RemoveAll(d)
 	}
-	b, _ := os.ReadFile(d + "/lost.json")
-	o, _ := readObj(b)
-	stm, _ := o.get("state", nil).(map[string]any)
-	thm, _ := o.get("thread", nil).(map[string]any)
-	st, th := obj(stm), obj(thm)
+	lo, err := readLost(d + "/lost.json")
+	if err != nil {
+		back()
+		return "", fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
+	}
+	st, th := lo.AgentState(), lo.Thread
 	sid := str(st.get("session_id", ""))
-	kind := str(firstOf(th.get("agent", nil), st.get("agent", nil), "claude"))
-	dir := str(lostDir(st, th))
-	nm := str(th.get("name", ""))
-	repo := str(th.get("repo", ""))
+	kind := th.Agent
+	if kind == "" {
+		kind = str(st.get("agent", "claude"))
+	}
+	dir := clean(lo.Dir())
+	nm := clean(th.Name)
+	repo := clean(th.Repo)
 	// Its worktree gone: its repository's main checkout, from where Claude
 	// Code finds a session in any worktree of it.
 	if s, err := os.Stat(dir); err != nil || !s.IsDir() {
@@ -673,24 +660,12 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	}
 	unlock := e.numLock()
 	n, used := e.threadNum()
-	if v, ok := num(th.get("num", nil)); ok && !used[int(v)] {
-		n = int(v)
+	if th.Num > 0 && !used[th.Num] {
+		n = th.Num
 	}
-	lo, _ := parseOobj(b)
-	var tho, sto oobj
-	if r, ok := lo.get("thread"); ok {
-		tho, _ = parseOobj(r)
-	}
-	if r, ok := lo.get("state"); ok {
-		sto, _ = parseOobj(r)
-	}
-	tho = tho.set("cmd", jqStr(agentCmd(kind))).set("num", strconv.Itoa(n))
-	var t2 oobj
-	for _, m := range tho {
-		if m.k != "pane" {
-			t2 = append(t2, m)
-		}
-	}
+	sto, _ := parseOobj(lo.State)
+	t2 := th
+	t2.Cmd, t2.Num, t2.Pane = agentCmd(kind), n, nil
 	drop := map[string]bool{"pid": true, "proc_start": true, "nvim_pane": true, "end_reason": true, "waiting": true,
 		"pending": true, "marker": true, "marked_root": true}
 	var s2 oobj
@@ -702,7 +677,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	now := strconv.FormatInt(time.Now().Unix(), 10)
 	s2 = s2.set("state", `"idle"`).set("ts", now).set("since", now).set("seen", "true").set("subagents", "[]").
 		set("background", "0").set("background_tasks", `""`)
-	if os.WriteFile(d+"/thread.json", []byte(t2.String()+"\n"), 0o644) != nil ||
+	if writeRecord(d+"/thread.json", t2) != nil ||
 		os.WriteFile(d+"/state.json", []byte(s2.String()+"\n"), 0o644) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		unlock()
@@ -714,7 +689,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	if e.WeaverSession() {
 		t := str(st.get("title", ""))
 		if t == "" {
-			t = str(th.get("task", ""))
+			t = clean(th.Task)
 		}
 		if t == "" {
 			t = nm
@@ -831,14 +806,8 @@ func (e *Env) Resume(args []string) int {
 		}
 		f := match[0]
 		nm := "the thread"
-		if b, err := os.ReadFile(f); err == nil {
-			if o, ok := readObj(b); ok {
-				if t, ok := o.get("thread", nil).(map[string]any); ok {
-					if n := str(obj(t).get("name", "")); n != "" {
-						nm = n
-					}
-				}
-			}
+		if lo, err := readLost(f); err == nil && lo.Thread.Name != "" {
+			nm = clean(lo.Thread.Name)
 		}
 		if !yes {
 			t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
@@ -983,17 +952,6 @@ func worktreeRemovable(dir string) string {
 	return "its commits are neither merged nor pushed"
 }
 
-type threadRec struct{ name, task, repo, branch, dir, here, created, agent string }
-
-func (e *Env) threadRead(agent string) threadRec {
-	b, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + agent + ".thread")
-	if err != nil {
-		return threadRec{}
-	}
-	o, _ := readObj(b)
-	g := func(k string) string { return str(o.get(k, "")) }
-	return threadRec{g("name"), g("task"), g("repo"), g("branch"), g("worktree"), g("here"), g("worktree_created"), g("agent")}
-}
 
 // threadNvim is the nvim pane of a thread's agent before it is recorded
 // as bound: the pane in the agent's window started as `wvr nvim --fresh
@@ -1084,7 +1042,7 @@ func (e *Env) Close(args []string) int {
 	if nv == "" {
 		nv, pending = threadNvim(panes, byID[agent])
 	}
-	th := e.threadRead(agent)
+	th, _ := readThread(e.threadFile(agent))
 	var st, pid, start, title, kind string
 	if b, err := os.ReadFile(e.StateFile(agent)); err == nil {
 		if o, ok := readObj(b); ok {
@@ -1102,7 +1060,7 @@ func (e *Env) Close(args []string) int {
 			others = true
 		}
 	}
-	name := th.name
+	name := clean(th.Name)
 	if name == "" {
 		name = title
 	}
@@ -1130,8 +1088,8 @@ func (e *Env) Close(args []string) int {
 	}
 	// Its worktree may go only if weaver made it and nothing would be lost.
 	keep, removable, tilde := "", false, ""
-	if th.created == "true" && th.here != "true" && th.dir != "" {
-		tilde = formPath(th.dir)
+	if th.WorktreeCreated && !th.Here && th.Worktree != "" {
+		tilde = formPath(th.Worktree)
 		var users []string
 		skip := map[string]bool{agent: true, nv: true, e.MyPane: true}
 		for _, p := range panes {
@@ -1139,11 +1097,11 @@ func (e *Env) Close(args []string) int {
 			if skip[id] || p.Exited || strings.HasSuffix(p.Cmd, " sidebar") {
 				continue
 			}
-			if p.Cwd == th.dir || strings.HasPrefix(p.Cwd, th.dir+"/") {
+			if p.Cwd == th.Worktree || strings.HasPrefix(p.Cwd, th.Worktree+"/") {
 				users = append(users, id)
 			}
 		}
-		switch why := worktreeRemovable(th.dir); {
+		switch why := worktreeRemovable(th.Worktree); {
 		case why != "":
 			keep = tilde + " " + CDim + "·" + COff + CGrey + " " + why
 		case len(users) > 0:
@@ -1167,7 +1125,7 @@ func (e *Env) Close(args []string) int {
 	if nv != "" {
 		goes = "the agent and its nvim"
 	}
-	if !others && th.name != "" {
+	if !others && th.Name != "" {
 		goes = "the agent"
 		if nv != "" {
 			goes += ", its nvim"
@@ -1202,7 +1160,7 @@ func (e *Env) Close(args []string) int {
 		if rmwt {
 			remove = "1"
 		} else if t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-			br := th.branch
+			br := th.Branch
 			if br == "" {
 				br = "?"
 			}
@@ -1213,7 +1171,7 @@ func (e *Env) Close(args []string) int {
 			}
 		}
 	}
-	tail := []string{agent, nv, pid, start, remove, th.dir, th.repo, pending}
+	tail := []string{agent, nv, pid, start, remove, th.Worktree, th.Repo, pending}
 	// Closing the last panes of the window closes it, and any popup in it:
 	// when this runs in one, finish from outside it.
 	if me, ok := byID[e.MyPane]; !others && ok && me.Tab == tab {

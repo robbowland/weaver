@@ -516,12 +516,8 @@ func (e *Env) threadOnBranch(repo, branch string) string {
 		}
 	}
 	for _, f := range e.SessionFiles("thread") {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		o, ok := readObj(b)
-		if !ok || tostring(o.get("repo", "")) != repo || tostring(o.get("branch", "")) != branch {
+		t, err := readThread(f)
+		if err != nil || t.Repo != repo || t.Branch != branch {
 			continue
 		}
 		base := strings.TrimSuffix(f, ".thread")

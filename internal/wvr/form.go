@@ -668,10 +668,8 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 		if st, err := os.Stat(f); f == "" || err != nil || !st.IsDir() {
 			f = ""
-			if b, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + from + ".thread"); err == nil {
-				if o, ok := readObj(b); ok {
-					f = tostring(o.get("worktree", ""))
-				}
+			if t, err := readThread(e.threadFile(from)); err == nil {
+				f = t.Worktree
 			}
 		}
 		if st, err := os.Stat(f); f != "" && err == nil && st.IsDir() {

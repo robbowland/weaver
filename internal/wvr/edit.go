@@ -145,10 +145,12 @@ func (e *Env) Edit(args []string) int {
 			h.Sid, h.State = tostring(o.get("session_id", "")), tostring(o.get("state", ""))
 			h.Turn, _ = atoi(tostring(o.get("turn", "0")))
 			h.AgentKind = tostring(o.get("agent", "claude"))
-		} else if b, err := os.ReadFile(e.StateDir + "/" + e.SKey + "_" + agent + ".thread"); err == nil {
-			o, _ := readObj(b)
-			root = tostring(o.get("worktree", ""))
-			h.AgentKind = tostring(o.get("agent", "claude"))
+		} else if t, err := readThread(e.threadFile(agent)); err == nil {
+			root = t.Worktree
+			h.AgentKind = t.Agent
+			if h.AgentKind == "" {
+				h.AgentKind = "claude"
+			}
 		}
 		if st, err := os.Stat(root); root == "" || err != nil || !st.IsDir() {
 			root, _ = os.Getwd()
