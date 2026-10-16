@@ -253,14 +253,14 @@ waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
 ok "Alt N: the new-thread form, in a popup" "$([ "$(grep -c 'what should the agent do' "$AT/screen.log")" -gt "$n" ] && echo form)" "form"
 FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
-ok "form: its fields, from the focused thread's checkout" "$(sed -n '1p;4p;5p' "$FORM" 2>/dev/null | tr '\n' ' ')" "$(cd "$AT/repo" && pwd -P) worktree claude "
+ok "form: its fields, from the focused thread's checkout" "$(jq -r '"\(.repo) \(.where) \(.agent)"' "$FORM" 2>/dev/null)" "$(cd "$AT/repo" && pwd -P) worktree claude"
 hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" "Fix the flaky test!" | sed 's/\x1b\[[0-9;]*m//g')
 ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
 	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test ')" \
 	"repo where branch base agent |1"
 key 09 # tab: this checkout
-waitfor '[ "$(sed -n 4p "$FORM")" = here ]'
-ok "form: tab works in this checkout" "$(sed -n 4p "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
+waitfor '[ "$(jq -r .where "$FORM")" = here ]'
+ok "form: tab works in this checkout" "$(jq -r .where "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
 	"here|this checkout"
 key 1b # esc: the form goes, nothing made
 sleep 1
@@ -460,11 +460,11 @@ ok "GITHUB: Alt N runs weaver's command for the row, and goes to its thread" \
 # linear-tui's Alt N: the form, for the issue under its cursor.
 tx select-window -t "=$S:901"
 key 1b4e
-waitfor '[ -n "$(ls "$SD" | grep -E "^form\.[^.]+\.item$")" ]'
+waitfor 'f=$(ls "$SD" | grep -E "^form\.[^.]+$" | head -n 1); [ -n "$f" ] && [ "$(jq -r .item.id "$SD/$f" 2>/dev/null)" = ENG-42 ]'
 FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
 hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
 ok "LINEAR: Alt N, the form for the issue under the cursor" \
-	"$(sed -n '1p;3p;8p' "$FORM" | tr '\n' ' ')|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
+	"$(jq -r '"\(.repo) \(.branch) \(.item.id) "' "$FORM")|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
 	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
 waitfor '[ "$(grep -c "Implement ENG-42" "$AT/screen.log")" -gt 0 ]'
 key 0d # enter

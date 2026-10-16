@@ -489,22 +489,6 @@ func (it item) prompt(task string, review bool, base string) string {
 	return b.String()
 }
 
-// saveItem keeps a form's work item beside its fields; loadItem reads it.
-func saveItem(sf string, it item) {
-	if b, err := json.Marshal(it); err == nil {
-		os.WriteFile(sf+".item", b, 0o644)
-	}
-}
-
-func loadItem(sf string) (item, bool) {
-	var it item
-	b, err := os.ReadFile(sf + ".item")
-	if err != nil || json.Unmarshal(b, &it) != nil {
-		return it, false
-	}
-	return it, true
-}
-
 // threadOnBranch is the agent pane of a running thread of this session on
 // branch of repo, or "".
 func (e *Env) threadOnBranch(repo, branch string) string {

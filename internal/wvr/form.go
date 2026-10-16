@@ -17,38 +17,33 @@ import (
 
 // The new-thread form (`wvr new`, n on the board, Alt N): fzf with the
 // task as its query and the thread's choices as its header. While it is
-// open its fields live in a file, one per line: repo (the main checkout;
-// empty: not in one), here (the checkout "this checkout" means), branch (as
-// you edited it; empty: from the task), where (worktree | here), agent
-// (claude | codex), base (empty: the default), mode (review: read-only;
-// empty: work), item (the work item's reference, its details in
-// FILE.item); a long task written in $EDITOR in FILE.task.
+// open its fields live in a file, as JSON (form); a long task written in
+// $EDITOR in FILE.task.
 
-type form struct{ repo, here, branch, where, agent, base, mode, item string }
+// form is the thread the form would start: the repository (its main
+// checkout; empty: not in one), Here (the checkout "this checkout" means),
+// the branch as you edited it (empty: from the task), Where (worktree |
+// here), the agent (claude | codex), the base (empty: the default), Mode
+// (review: read-only; empty: work) and the work item it starts from.
+type form struct {
+	Repo   string `json:"repo"`
+	Here   string `json:"here"`
+	Branch string `json:"branch"`
+	Where  string `json:"where"`
+	Agent  string `json:"agent"`
+	Base   string `json:"base"`
+	Mode   string `json:"mode,omitempty"`
+	Item   *item  `json:"item,omitempty"`
+}
 
 func loadForm(f string) form {
-	fm := form{where: "worktree", agent: "claude"}
-	b, err := os.ReadFile(f)
-	if err != nil {
-		return fm
-	}
-	ls := strings.Split(string(b), "\n")
-	get := func(i int) string {
-		if i < len(ls) {
-			return ls[i]
-		}
-		return ""
-	}
-	fm.repo, fm.here, fm.branch, fm.where, fm.agent, fm.base = get(0), get(1), get(2), get(3), get(4), get(5)
-	fm.mode, fm.item = get(6), get(7)
+	fm := form{Where: "worktree", Agent: "claude"}
+	readRecord(f, &fm)
 	return fm
 }
 
 func (fm form) save(f string) {
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(strings.Join([]string{fm.repo, fm.here, fm.branch, fm.where, fm.agent, fm.base, fm.mode, fm.item}, "\n")+"\n"), 0o644) == nil {
-		os.Rename(tmp, f)
-	}
+	writeRecord(f, fm)
 }
 
 // git runs git -C dir with args; its output's first line, and whether it
@@ -385,54 +380,54 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			add("", t, CGrey+t+COff, "^e")
 		}
 	}
-	if fm.item != "" {
-		it, _ := loadItem(sf)
+	if fm.Item != nil {
+		it := *fm.Item
 		title := it.Title
 		if rlen(title) > 56 {
 			title = runeSlice(title, 55) + "…"
 		}
 		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
-		if fm.mode == "review" {
+		if fm.Mode == "review" {
 			add("mode", "review  read-only", "review  "+CGrey+"read-only"+COff, "alt-r")
 		} else {
 			add("mode", "work", "work", "alt-r")
 		}
 	}
-	if fm.repo != "" {
-		t := formPath(fm.repo)
-		add("repo", filepath.Base(fm.repo)+"  "+t, CBold+filepath.Base(fm.repo)+COff+"  "+CGrey+t+COff, "^r")
+	if fm.Repo != "" {
+		t := formPath(fm.Repo)
+		add("repo", filepath.Base(fm.Repo)+"  "+t, CBold+filepath.Base(fm.Repo)+COff+"  "+CGrey+t+COff, "^r")
 	} else {
 		add("repo", "not in a git repository", CGrey+"not in a git repository"+COff, "^r")
 	}
-	if fm.where == "here" {
-		cur, _ := git(fm.here, "symbolic-ref", "--short", "-q", "HEAD")
+	if fm.Where == "here" {
+		cur, _ := git(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
 		w := "this checkout"
 		if cur != "" {
 			w += " · " + cur
 		}
-		if fm.here == fm.repo {
+		if fm.Here == fm.Repo {
 			add("where", w, w, "tab")
 		} else {
-			t := formPath(fm.here)
+			t := formPath(fm.Here)
 			add("where", w+"  "+t, w+"  "+CGrey+t+COff, "tab")
 		}
 	} else {
 		add("where", "new worktree", "new worktree", "tab")
-		br := fm.branch
+		br := fm.Branch
 		if br == "" {
 			br = Slugify(task)
 		}
 		var m refs
-		if fm.repo != "" {
-			m = refFacts(fm.repo, br)
+		if fm.Repo != "" {
+			m = refFacts(fm.Repo, br)
 		}
 		switch {
 		case br == "":
 			add("branch", "from the task", CGrey+"from the task"+COff, "alt-b")
 			e.baseRow(fm, m, add)
-		case fm.repo != "" && (m.has("refs/heads/"+br) ||
+		case fm.Repo != "" && (m.has("refs/heads/"+br) ||
 			func() bool {
-				rm := preferredRemote(fm.repo)
+				rm := preferredRemote(fm.Repo)
 				return rm != "" && m.has("refs/remotes/"+rm+"/"+br)
 			}()):
 			add("branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff, "alt-b")
@@ -441,10 +436,10 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			e.baseRow(fm, m, add)
 		}
 	}
-	if agentInstalled(fm.agent) {
-		add("agent", fm.agent, fm.agent, "shift-tab")
+	if agentInstalled(fm.Agent) {
+		add("agent", fm.Agent, fm.Agent, "shift-tab")
 	} else {
-		add("agent", fm.agent+"  not installed", fm.agent+"  "+CGrey+"not installed"+COff, "shift-tab")
+		add("agent", fm.Agent+"  not installed", fm.Agent+"  "+CGrey+"not installed"+COff, "shift-tab")
 	}
 	// The keys in a column of their own at the right edge: fzf's width (its
 	// header's, less its border and margins).
@@ -467,13 +462,13 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
 func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
-	if fm.base != "" {
+	if fm.Base != "" {
 		note := ""
-		switch fm.base {
+		switch fm.Base {
 		case "@":
-			cur, ok := git(fm.here, "symbolic-ref", "--short", "-q", "HEAD")
-			if fm.here == "" {
-				cur, ok = git(fm.repo, "symbolic-ref", "--short", "-q", "HEAD")
+			cur, ok := git(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
+			if fm.Here == "" {
+				cur, ok = git(fm.Repo, "symbolic-ref", "--short", "-q", "HEAD")
 			}
 			if !ok || cur == "" {
 				cur = "this checkout"
@@ -482,7 +477,7 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 		case "^":
 			note = "the local default branch"
 		}
-		p, c := fm.base, fm.base
+		p, c := fm.Base, fm.Base
 		if note != "" {
 			p += "  " + note
 			c += "  " + CGrey + note + COff
@@ -490,11 +485,11 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 		add("base", p, c, "alt-B")
 		return
 	}
-	if fm.repo == "" {
+	if fm.Repo == "" {
 		return
 	}
 	v, note := "", ""
-	if rm := preferredRemote(fm.repo); rm == "" {
+	if rm := preferredRemote(fm.Repo); rm == "" {
 		v, note = m.localDefault(""), "local: no remote"
 		if v == "" {
 			v = "the default branch"
@@ -504,7 +499,7 @@ func (e *Env) baseRow(fm form, m refs, add func(l, p, c, k string)) {
 		if v == "" {
 			v = rm
 		}
-		f := e.fetchFile(fm.repo)
+		f := e.fetchFile(fm.Repo)
 		rc, _ := firstLine(f + ".rc")
 		pid, _ := firstLine(f + ".pid")
 		switch {
@@ -534,7 +529,7 @@ const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + 
 
 // newFormLabel is the new-thread form's label: a review says so.
 func newFormLabel(fm form) string {
-	if fm.mode == "review" {
+	if fm.Mode == "review" {
 		return formLabel("WEAVER", "REVIEW")
 	}
 	return formLabel("WEAVER", "NEW THREAD")
@@ -557,19 +552,19 @@ func checkThread(task string, fm form) string {
 	if strings.TrimSpace(task) == "" {
 		return "say what the agent should do"
 	}
-	if !agentInstalled(fm.agent) {
-		return fm.agent + " is not installed"
+	if !agentInstalled(fm.Agent) {
+		return fm.Agent + " is not installed"
 	}
-	if fm.where == "here" {
-		if st, err := os.Stat(fm.here); err != nil || !st.IsDir() {
-			return "no such directory: " + fm.here
+	if fm.Where == "here" {
+		if st, err := os.Stat(fm.Here); err != nil || !st.IsDir() {
+			return "no such directory: " + fm.Here
 		}
 		return ""
 	}
-	if fm.repo == "" {
+	if fm.Repo == "" {
 		return "not in a git repository: pick one (^r), or work in this checkout (tab)"
 	}
-	br := fm.branch
+	br := fm.Branch
 	if br == "" {
 		br = Slugify(task)
 	}
@@ -580,9 +575,9 @@ func checkThread(task string, fm form) string {
 		return "not a valid branch name: " + br
 	}
 	switch {
-	case fm.base == "" || fm.base == "@" || fm.base == "^" || strings.HasPrefix(fm.base, "pr:") || strings.HasPrefix(fm.base, "mr:"):
-	case !gitOK(fm.repo, "rev-parse", "--verify", "--quiet", fm.base+"^{commit}"):
-		return "no such base: " + fm.base
+	case fm.Base == "" || fm.Base == "@" || fm.Base == "^" || strings.HasPrefix(fm.Base, "pr:") || strings.HasPrefix(fm.Base, "mr:"):
+	case !gitOK(fm.Repo, "rev-parse", "--verify", "--quiet", fm.Base+"^{commit}"):
+		return "no such base: " + fm.Base
 	}
 	return ""
 }
@@ -679,26 +674,26 @@ func (e *Env) New(args []string) (int, bool) {
 	if where == "" {
 		where = "worktree"
 	}
-	fm := form{branch: branch, where: where, agent: agent, base: base}
+	fm := form{Branch: branch, Where: where, Agent: agent, Base: base}
 	if review {
-		fm.mode = "review"
+		fm.Mode = "review"
 	}
 	if r, c, ok := repoOf(start); ok {
-		fm.repo, fm.here = r, c
+		fm.Repo, fm.Here = r, c
 	} else {
 		if repoArg != "" {
 			return die("not a git repository: " + repoArg)
 		}
 		if d, err := filepath.EvalSymlinks(start); err == nil {
-			fm.here = d
+			fm.Here = d
 		} else {
-			fm.here = start
+			fm.Here = start
 		}
 		// Not in a repository: the one you used last, for a new worktree.
 		if l, err := firstLine(e.StateDir + "/repos"); err == nil && l != "" {
 			if st, err := os.Stat(l); err == nil && st.IsDir() {
 				if r, _, ok := repoOf(l); ok {
-					fm.repo = r
+					fm.Repo = r
 				}
 			}
 		}
@@ -706,7 +701,6 @@ func (e *Env) New(args []string) (int, bool) {
 	t := strings.Join(task, " ")
 	// A work item: its repository's checkout, its branch, and the task for
 	// it, read before the form opens.
-	var it *item
 	repoErr := ""
 	if itemArg != "" {
 		// In a popup (Alt N in a view), what went wrong stays on screen
@@ -727,11 +721,11 @@ func (e *Env) New(args []string) (int, bool) {
 			if x.Repo == "" {
 				x.Repo = ghRepo(start)
 			}
-			if x.Repo != "" && (fm.repo == "" || !strings.EqualFold(ghRepo(fm.repo), x.Repo)) {
-				if c := e.checkoutFor(x.Repo, fm.repo); c != "" {
-					fm.repo, fm.here = c, c
+			if x.Repo != "" && (fm.Repo == "" || !strings.EqualFold(ghRepo(fm.Repo), x.Repo)) {
+				if c := e.checkoutFor(x.Repo, fm.Repo); c != "" {
+					fm.Repo, fm.Here = c, c
 				} else {
-					fm.repo = ""
+					fm.Repo = ""
 					repoErr = "no checkout of " + x.Repo + " known: pick it (^r)"
 				}
 			}
@@ -746,18 +740,17 @@ func (e *Env) New(args []string) (int, bool) {
 		if err != nil {
 			return dieItem(err.Error())
 		}
-		it = &x
 		if branch == "" {
-			fm.branch = x.branchName()
+			fm.Branch = x.branchName()
 		}
-		fm.where = "worktree"
-		fm.item = x.Ref()
+		fm.Where = "worktree"
+		fm.Item = &x
 		// Already a thread on its branch: go to it.
-		if fm.repo != "" {
-			if a := e.threadOnBranch(fm.repo, fm.branch); a != "" {
+		if fm.Repo != "" {
+			if a := e.threadOnBranch(fm.Repo, fm.Branch); a != "" {
 				e.focus(a)
 				e.MarkSeen(a)
-				fmt.Printf("weaver: %s already has a thread (%s): went to it\n", x.Ref(), fm.branch)
+				fmt.Printf("weaver: %s already has a thread (%s): went to it\n", x.Ref(), fm.Branch)
 				return 0, true
 			}
 		}
@@ -800,7 +793,7 @@ func (e *Env) New(args []string) (int, bool) {
 		if m := checkThread(t, fm); m != "" {
 			return die(m)
 		}
-		if !e.threadCreate(t, fm, it, nofocus) {
+		if !e.threadCreate(t, fm, nofocus) {
 			return 1, true
 		}
 		return 0, true
@@ -819,12 +812,10 @@ func (e *Env) New(args []string) (int, bool) {
 	defer func() {
 		os.Remove(sf)
 		os.Remove(sf + ".task")
-		os.Remove(sf + ".item")
 	}()
 	query := ""
-	if it != nil {
-		saveItem(sf, *it)
-		query = it.defaultTask(review)
+	if fm.Item != nil {
+		query = fm.Item.defaultTask(review)
 	}
 	for {
 		t, rc := e.newForm(sf, query, repoErr)
@@ -835,7 +826,7 @@ func (e *Env) New(args []string) (int, bool) {
 		if i := strings.IndexByte(query, '\n'); i >= 0 {
 			query = query[:i]
 		}
-		if e.threadCreate(t, loadForm(sf), it, nofocus) {
+		if e.threadCreate(t, loadForm(sf), nofocus) {
 			return 0, true
 		}
 		// The worktree could not be made: its message is on screen.
@@ -878,8 +869,8 @@ func (e *Env) newForm(sf, query, errs string) (string, int) {
 	fm := loadForm(sf)
 	// The fetch for a new branch's base starts now, while you type (and
 	// while the header is made).
-	if fm.where == "worktree" && fm.base == "" {
-		go e.fetchStart(fm.repo, sf)
+	if fm.Where == "worktree" && fm.Base == "" {
+		go e.fetchStart(fm.Repo, sf)
 	}
 	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
 		os.MkdirAll(e.SockDir, 0o700)
@@ -941,38 +932,38 @@ func (e *Env) Form(op, sf, q string) {
 	case "header":
 		fmt.Print(e.FormHeader(sf, q, ""))
 	case "where":
-		if fm.where == "here" {
-			fm.where = "worktree"
+		if fm.Where == "here" {
+			fm.Where = "worktree"
 		} else {
-			fm.where = "here"
+			fm.Where = "here"
 		}
 		fm.save(sf)
-		if fm.where == "worktree" && fm.base == "" {
-			e.fetchStart(fm.repo, sf)
+		if fm.Where == "worktree" && fm.Base == "" {
+			e.fetchStart(fm.Repo, sf)
 		}
 	case "label":
 		fmt.Print(newFormLabel(fm))
 	case "mode":
-		if fm.mode == "review" {
-			fm.mode = ""
+		if fm.Mode == "review" {
+			fm.Mode = ""
 		} else {
-			fm.mode = "review"
+			fm.Mode = "review"
 		}
 		fm.save(sf)
 	case "agent":
-		if fm.agent == "claude" {
-			fm.agent = "codex"
+		if fm.Agent == "claude" {
+			fm.Agent = "codex"
 		} else {
-			fm.agent = "claude"
+			fm.Agent = "claude"
 		}
 		fm.save(sf)
 	case "base":
 		// A base means a new worktree.
-		if fm.where == "here" {
-			fm.where = "worktree"
+		if fm.Where == "here" {
+			fm.Where = "worktree"
 			fm.save(sf)
 		}
-		if fm.repo == "" {
+		if fm.Repo == "" {
 			return
 		}
 		out := e.pick(e.formBases(fm), formLabel("NEW THREAD", "BASE"), "      base  ", "where the new branch starts")
@@ -986,18 +977,18 @@ func (e *Env) Form(op, sf, q string) {
 		if d == "=" {
 			d = ""
 		}
-		fm.base = d
+		fm.Base = d
 		fm.save(sf)
-		if fm.base == "" {
-			e.fetchStart(fm.repo, sf)
+		if fm.Base == "" {
+			e.fetchStart(fm.Repo, sf)
 		}
 	case "branch":
 		// A branch means a new worktree.
-		if fm.where == "here" {
-			fm.where = "worktree"
+		if fm.Where == "here" {
+			fm.Where = "worktree"
 			fm.save(sf)
 		}
-		br := fm.branch
+		br := fm.Branch
 		if br == "" {
 			br = Slugify(q)
 		}
@@ -1014,14 +1005,14 @@ func (e *Env) Form(op, sf, q string) {
 		}
 		out := strings.TrimRight(string(b), "\n")
 		if out != "" && exec.Command("git", "check-ref-format", "--branch", out).Run() == nil {
-			fm.branch = out
+			fm.Branch = out
 			if out == Slugify(q) {
-				fm.branch = ""
+				fm.Branch = ""
 			}
 			fm.save(sf)
 		}
 	case "repo":
-		out := e.pick(e.recentRepos(fm.repo), formLabel("NEW THREAD", "REPOSITORY"), "      repo  ", "a repository, or a path")
+		out := e.pick(e.recentRepos(fm.Repo), formLabel("NEW THREAD", "REPOSITORY"), "      repo  ", "a repository, or a path")
 		if out == "" {
 			return
 		}
@@ -1036,20 +1027,20 @@ func (e *Env) Form(op, sf, q string) {
 			return
 		}
 		if r, c, ok := repoOf(d); ok {
-			fm.repo, fm.here = r, c
+			fm.Repo, fm.Here = r, c
 		} else {
-			fm.repo = ""
+			fm.Repo = ""
 			if p, err := filepath.EvalSymlinks(d); err == nil {
-				fm.here = p
+				fm.Here = p
 			} else {
-				fm.here = d
+				fm.Here = d
 			}
 		}
 		// Another repository's bases are its own.
-		fm.base = ""
+		fm.Base = ""
 		fm.save(sf)
-		if fm.where == "worktree" {
-			e.fetchStart(fm.repo, sf)
+		if fm.Where == "worktree" {
+			e.fetchStart(fm.Repo, sf)
 		}
 	case "editor":
 		first, err := firstLine(sf + ".task")
@@ -1109,25 +1100,25 @@ func pickValue(out string) string {
 // default branch, fetched).
 func (e *Env) formBases(fm form) string {
 	var b strings.Builder
-	if rm := preferredRemote(fm.repo); rm != "" && remoteDefault(fm.repo, rm) != "" {
-		b.WriteString("=\t" + remoteDefault(fm.repo, rm) + "  " + CGrey + "the remote default, fetched" + COff + "\n")
+	if rm := preferredRemote(fm.Repo); rm != "" && remoteDefault(fm.Repo, rm) != "" {
+		b.WriteString("=\t" + remoteDefault(fm.Repo, rm) + "  " + CGrey + "the remote default, fetched" + COff + "\n")
 	} else {
-		d := localDefault(fm.repo)
+		d := localDefault(fm.Repo)
 		if d == "" {
 			d = "default"
 		}
 		b.WriteString("=\t" + d + "  " + CGrey + "the local default branch" + COff + "\n")
 	}
-	h := fm.here
+	h := fm.Here
 	if h == "" {
-		h = fm.repo
+		h = fm.Repo
 	}
 	cur, _ := git(h, "symbolic-ref", "--short", "-q", "HEAD")
 	if cur == "" {
 		cur = "this checkout"
 	}
 	b.WriteString("@\t@  " + CGrey + "the HEAD of " + cur + COff + "\n")
-	out, _ := exec.Command("git", "-C", fm.repo, "for-each-ref", "--format=%(refname:short)", "--sort=-committerdate", "refs/heads", "refs/remotes").Output()
+	out, _ := exec.Command("git", "-C", fm.Repo, "for-each-ref", "--format=%(refname:short)", "--sort=-committerdate", "refs/heads", "refs/remotes").Output()
 	n := 0
 	for _, r := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
 		if r == "" || strings.HasSuffix(r, "/HEAD") {

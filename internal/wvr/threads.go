@@ -218,8 +218,8 @@ func (e *Env) fetchWait(repo string, t int) string {
 // default, or git's HEAD), and why it is not the fetched remote default
 // when it is not; fm's base, when set, as it is.
 func (e *Env) threadBase(repo string, fm form) (string, string) {
-	if fm.base != "" {
-		return fm.base, ""
+	if fm.Base != "" {
+		return fm.Base, ""
 	}
 	t := 10
 	if n, ok := atoi(os.Getenv("WEAVER_FETCH_TIMEOUT")); ok {
@@ -338,36 +338,37 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
-func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
+func (e *Env) threadCreate(task string, fm form, nofocus bool) bool {
+	it := fm.Item
 	var dir, name, branch, base string
 	created := false
-	if fm.where == "here" {
-		dir = fm.here
+	if fm.Where == "here" {
+		dir = fm.Here
 		name = Slugify(task)
 		if name == "" {
 			name = "thread-" + time.Now().Format("150405")
 		}
 		branch, _ = git(dir, "symbolic-ref", "--short", "-q", "HEAD")
 	} else {
-		branch = fm.branch
+		branch = fm.Branch
 		if branch == "" {
 			branch = Slugify(task)
 		}
 		// The checkout of the repository that @ means: the one you are in
 		// when it belongs to it, else the main one.
-		from := fm.repo
-		if fm.here != "" && fm.here != fm.repo {
-			if st, err := os.Stat(fm.here); err == nil && st.IsDir() {
-				if r, c, ok := repoOf(fm.here); ok && r == fm.repo {
+		from := fm.Repo
+		if fm.Here != "" && fm.Here != fm.Repo {
+			if st, err := os.Stat(fm.Here); err == nil && st.IsDir() {
+				if r, c, ok := repoOf(fm.Here); ok && r == fm.Repo {
 					from = c
 				}
 			}
 		}
 		// A pull request from a fork: its head, fetched as a branch here.
-		if it != nil && it.Kind == "pr" && it.Fork && !gitOK(fm.repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
-			if rm := preferredRemote(fm.repo); rm != "" {
+		if it != nil && it.Kind == "pr" && it.Fork && !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+			if rm := preferredRemote(fm.Repo); rm != "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, it.Label(), COff)
-				c := exec.Command("git", "-C", fm.repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(it.Num)+"/head:"+branch)
+				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(it.Num)+"/head:"+branch)
 				c.Stderr = os.Stderr
 				if c.Run() != nil {
 					return false
@@ -377,11 +378,11 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 		// A branch that is not here yet: fetch first (it may be on the
 		// remote), and find where it would start.
 		note := ""
-		if !gitOK(fm.repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
-			base, note = e.threadBase(fm.repo, fm)
+		if !gitOK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+			base, note = e.threadBase(fm.Repo, fm)
 		}
 		var ok bool
-		if dir, created, base, ok = threadWorktree(fm.repo, branch, base, from, note); !ok {
+		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
 			return false
 		}
 		name = branch
@@ -390,15 +391,15 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	prBase := ""
 	if it != nil && it.Kind == "pr" && it.Base != "" {
 		prBase = it.Base
-		if rm := preferredRemote(fm.repo); rm != "" {
+		if rm := preferredRemote(fm.Repo); rm != "" {
 			prBase = rm + "/" + it.Base
 		}
 		if branch != "" {
-			exec.Command("git", "-C", fm.repo, "config", "branch."+branch+".weaverbase", prBase).Run()
+			exec.Command("git", "-C", fm.Repo, "config", "branch."+branch+".weaverbase", prBase).Run()
 		}
 	}
 	prompt := task
-	review := fm.mode == "review"
+	review := fm.Mode == "review"
 	if it != nil {
 		prompt = it.prompt(task, review, prBase)
 	}
@@ -415,16 +416,16 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	// The command its agent runs, from here (the pane will not have this
 	// environment).
 	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
-	cmd := agentCmd(fm.agent)
+	cmd := agentCmd(fm.Agent)
 	if review {
-		if fm.agent == "codex" {
+		if fm.Agent == "codex" {
 			cmd += " --sandbox read-only"
 		} else {
 			cmd += " --permission-mode plan"
 		}
 	}
-	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.repo, Branch: branch, Worktree: dir,
-		Here: fm.where == "here", WorktreeCreated: created, Agent: fm.agent, Created: time.Now().Unix(), Base: base}
+	rec := Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
+		Here: fm.Where == "here", WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
 	if it != nil {
 		rec.Item = &ThreadItem{Kind: it.Kind, Ref: it.Ref(), URL: it.URL, Title: it.Title}
 	}
@@ -448,7 +449,7 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 	if review && it != nil && it.Kind == "pr" {
 		nvimEnv = append(nvimEnv, "WEAVER_OPEN_REVIEW=branch")
 	}
-	tab, ok := e.threadTab(tok, fm.agent, dir, wname, nofocus, nvimEnv...)
+	tab, ok := e.threadTab(tok, fm.Agent, dir, wname, nofocus, nvimEnv...)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -459,7 +460,7 @@ func (e *Env) threadCreate(task string, fm form, it *item, nofocus bool) bool {
 		return false
 	}
 	e.threadPlace(tab, n)
-	e.rememberRepo(fm.repo)
+	e.rememberRepo(fm.Repo)
 	fmt.Printf("weaver: thread %s in %s (tab %s)\n", name, tildify(dir), tab)
 	return true
 }
