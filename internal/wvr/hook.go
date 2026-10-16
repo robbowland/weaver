@@ -733,186 +733,21 @@ func (h *hk) run(e *Env, me string) {
 		h.TurnEnded = h.Turn
 	}
 
-	h.Waiting, h.Pending, h.Bg, h.Bgdesc = h.Old.Waiting, h.Old.Pending, h.oBg(), h.Old.BackgroundTasks
-	h.Doing, h.DoingID, h.DoneIDs = h.sess().Doing, h.sess().DoingID, h.sess().DoneIDs
-	h.State = h.Old.State
-	if h.State == "" {
-		h.State = StateWorking
-	}
-	switch h.Event {
-	case "SessionStart":
-		// A compaction is not a new start: the agent carries on as it was.
-		if h.Source == "compact" {
-			h.State = h.Old.State
-			if h.State == "" {
-				h.State = StateIdle
-			}
-		} else {
-			h.State, h.Bg, h.Bgdesc = StateIdle, "", ""
-		}
-	case "UserPromptSubmit":
-		h.State, h.Bg, h.Bgdesc = StateWorking, "", ""
-	case "PreToolUse":
-		if h.Mode == "async" {
-			// A command starting (the async PreToolUse on Bash): what the
-			// agent is doing, while its turn goes on, unless it has already
-			// finished.
-			if (h.Old.State == StateWorking || h.Old.State == StateNeedsYou) && h.Cmd != "" &&
-				(h.ToolUseID == "" || !strings.Contains(" "+h.DoneIDs+" ", " "+h.ToolUseID+" ")) {
-				h.Doing, h.DoingID = h.Cmd, h.ToolUseID
-			}
-			break
-		}
-		// (PreToolUse on AskUserQuestion) a question.
-		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, h.Key
-	case "PermissionRequest":
-		// A permission dialog.
-		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, h.Key
-	case "Notification":
-		switch h.Ntype {
-		case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input",
-			"worker_permission_prompt", "quota_auto_resume_stale", "":
-			// A dialog: keep the more specific text of the request that opened it.
-			h.State = StateNeedsYou
-			if h.Old.State != StateNeedsYou || h.Old.Waiting == "" {
-				h.Waiting = h.WaitingNew
-			}
-		case "elicitation_complete", "elicitation_response":
-			if h.Old.State == StateNeedsYou {
-				h.State = StateWorking
-			}
-		case "quota_auto_resume_fired":
-			h.State = StateWorking
-		case "idle_prompt":
-			// The reminder 60s after the agent went quiet: still StateWorking
-			// means Esc stopped it (no Stop fires), unless background work is
-			// pending.
-			switch h.Old.State {
-			case StateWorking:
-				if n, ok := atoi(h.oBg()); !ok || n <= 0 {
-					h.State = StateInterrupted
-				}
-			case "":
-				h.State = StateDone
-			case StateNeedsYou, StateDone, StateIdle, StateInterrupted, StateEnded, StateStarting:
-			}
-		}
-	case "PostToolUse", "PostToolUseFailure":
-		if h.ToolUseID != "" {
-			if h.ToolUseID == h.DoingID {
-				h.Doing, h.DoingID = "", ""
-			}
-			ids := append(strings.Fields(h.DoneIDs), h.ToolUseID)
-			if len(ids) > 8 {
-				ids = ids[len(ids)-8:]
-			}
-			h.DoneIDs = strings.Join(ids, " ")
-		}
-		h.State = StateWorking
-		if h.Event == "PostToolUseFailure" && h.Interrupt != "" {
-			h.State = StateInterrupted
-		} else if h.Old.State == StateNeedsYou && h.Old.Pending != "" && h.Key != h.Old.Pending {
-			// Another tool finished while one still waits for you.
-			h.State = StateNeedsYou
-		} else {
-			// A late async hook must not undo a Stop or an interrupt: one of
-			// the turn that ended (its prompt_id) never does; without a
-			// prompt_id, one within 3 s of it.
-			switch h.Old.State {
-			case StateDone, StateIdle, StateInterrupted:
-				recent := false
-				if h.oSince() == "" {
-					recent = h.Now < 3
-				} else if n, err := strconv.ParseInt(h.oSince(), 10, 64); err == nil {
-					recent = h.Now-n < 3
-				}
-				if h.PromptID != "" && h.PromptID == h.sess().PromptID || recent {
-					h.State = h.Old.State
-				}
-			case StateEnded:
-				h.State = StateEnded
-			case StateWorking, StateNeedsYou, StateStarting:
-			}
-		}
-	case "PostToolBatch":
-		// Every call in the batch has resolved: the dialog has been answered.
-		if h.Old.State == StateNeedsYou {
-			if h.Rejected != "" {
-				h.State = StateInterrupted
-			} else {
-				h.State = StateWorking
-			}
-		}
-	case "StopFailure":
-		h.State, h.Waiting, h.Pending = StateNeedsYou, h.WaitingNew, ""
-	case "Stop":
-		// Not done while background subagents work on: their reports wake it.
-		h.Bg, h.Bgdesc = h.BgNew, h.BgdescNew
-		h.State = StateDone
-		if n, ok := atoi(h.Bg); ok && n > 0 {
-			h.State = StateWorking
-		}
-	case "SessionEnd":
-		h.State, h.Bg, h.Bgdesc = StateEnded, "", ""
-	}
-	// A turn's commands end with it, or with the agent's work.
-	if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" && h.Source != "compact" {
-		h.Doing, h.DoingID, h.DoneIDs = "", "", ""
-	}
-	if h.State != StateWorking && h.State != StateNeedsYou {
-		h.Doing, h.DoingID = "", ""
-	}
-	// Why the session ended: /exit, /clear or a logout ends it on purpose; a
-	// hangup (its session going) is "other".
-	h.EndReason = h.sess().EndReason
-	if h.Event == "SessionEnd" {
-		h.EndReason = h.EndNew
-	}
-	if h.State != StateNeedsYou {
-		h.Waiting, h.Pending = "", ""
-	}
-	if h.State != h.Old.State {
-		switch h.State {
-		case StateNeedsYou:
-			h.rc = 10
-		case StateDone:
-			h.rc = 11
-		case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
-		}
-	}
-	h.Since = h.oSince()
-	if h.State != h.Old.State || h.Since == "" {
-		h.Since, h.Seen = strconv.FormatInt(h.Now, 10), "false"
-	} else {
-		h.Seen = h.oSeen()
-	}
-	h.Last = h.Old.LastMessage
-	if (h.Event == "Stop" || h.Event == "StopFailure") && h.LastNew != "" {
-		h.Last = h.LastNew
-	}
-	if h.Prompt == "" {
-		h.Prompt = h.Old.Prompt
-	}
-	if h.EvFile != "" {
-		h.File = h.EvFile
-	} else {
-		h.File = h.Old.File
-	}
-	h.Title = h.TitleNew
-	if h.Title == "" {
-		h.Title = h.sess().Title
-	}
-	if h.PromptID == "" {
-		h.PromptID = h.sess().PromptID
-	}
-	if h.Transcript == "" {
-		h.Transcript = h.sess().Transcript
-	}
+	bg, _ := atoi(h.BgNew)
+	ch := transition(h.Old, h.sess(), hookEvent{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
+		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt != "", Rejected: h.Rejected != "",
+		Background: bg, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
+		Title: h.TitleNew, Transcript: h.Transcript, LastMessage: h.LastNew, EndReason: h.EndNew, Now: h.Now})
+	n := ch.Next
+	h.State, h.Waiting, h.Pending = n.State, n.Waiting, n.Pending
+	h.Bg, h.Bgdesc = strconv.Itoa(n.Background), n.BackgroundTasks
+	h.Doing, h.DoingID, h.DoneIDs = n.Doing, n.DoingID, n.DoneIDs
+	h.EndReason, h.rc = n.EndReason, ch.Bell
+	h.Since, h.Seen = n.Since.String(), strconv.FormatBool(n.Seen)
+	h.Last, h.Prompt, h.File, h.Title, h.PromptID, h.Transcript = n.LastMessage, n.Prompt, n.File, n.Title, n.PromptID, n.Transcript
 	// Worktrunk branch markers, like its own Claude Code plugin sets for the
 	// session's start directory, but on the worktree the agent is really in.
-	if h.State != StateEnded {
-		h.Marker = stateCell(h.State)
-	}
+	h.Marker = n.Marker
 	if os.Getenv("WEAVER_WT_MARKERS") != "0" && h.Marker != "" && h.Root != h.Proj && exists(h.Root+"/.git") {
 		h.MarkDir = h.Root
 	}
