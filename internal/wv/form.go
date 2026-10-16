@@ -711,9 +711,19 @@ func (e *Env) New(args []string) (int, bool) {
 	var it *item
 	repoErr := ""
 	if itemArg != "" {
+		// In a popup (Alt N in a view), what went wrong stays on screen
+		// until a key: the popup would close with it.
+		dieItem := func(m string) (int, bool) {
+			if isTTY(0) && isTTY(2) && t == "" {
+				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n\n%spress a key%s", CRed, m, COff, CGrey, COff)
+				readKey()
+				return 1, true
+			}
+			return die(m)
+		}
 		x, err := parseItem(itemKind, itemArg)
 		if err != nil {
-			return die(err.Error())
+			return dieItem(err.Error())
 		}
 		if x.Kind != "linear" {
 			if x.Repo == "" {
@@ -736,7 +746,7 @@ func (e *Env) New(args []string) (int, bool) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
 		if err != nil {
-			return die(err.Error())
+			return dieItem(err.Error())
 		}
 		it = &x
 		if branch == "" {

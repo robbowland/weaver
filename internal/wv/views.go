@@ -345,7 +345,21 @@ func (e *Env) From(args []string) int {
 	}
 	// The form in a popup, from a process of its own: whatever ran this
 	// (gh-dash, waiting on its command) goes on at once.
-	argv := []string{"display-popup", "-B", "-E", "-w", "96", "-h", "20", "-d", dir, "--", e.Self, "new"}
+	// On the client looking at this session: what ran this may have none
+	// (tmux's run-shell).
+	argv := []string{"display-popup"}
+	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name}"); err == nil {
+		best, at := "", ""
+		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if t, c, ok := strings.Cut(l, " "); ok && t >= at {
+				best, at = c, t
+			}
+		}
+		if best != "" {
+			argv = append(argv, "-c", best)
+		}
+	}
+	argv = append(argv, "-B", "-E", "-w", "96", "-h", "20", "-d", dir, "--", e.Self, "new")
 	argv = append(argv, nw...)
 	if !e.InTmux {
 		argv = append(append([]string{}, e.TSock...), argv...)
