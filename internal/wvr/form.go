@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -387,7 +388,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		it := fm.Item.it
 		title := it.text().Title
 		if rlen(title) > 56 {
-			title = runeSlice(title, 55) + "…"
+			title = oneline.Cut(title, 55) + "…"
 		}
 		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
 		if fm.Mode == ModeReview {

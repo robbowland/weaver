@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 	"unicode/utf8"
+
+	"github.com/robbowland/weaver/internal/oneline"
 )
 
 // snapMsg are a snapshot commit's message fields.
@@ -170,7 +172,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	return commit, true, true
 }
 
-func firstRunes(s string, n int) string { return runeSlice(s, n) }
+func firstRunes(s string, n int) string { return oneline.Cut(s, n) }
 
 // snapKeep is how long a session's snapshots outlive its last turn: as long
 // as weaver keeps its activity logs and turns.

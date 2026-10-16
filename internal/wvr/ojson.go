@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/jsonx"
 )
@@ -108,67 +106,6 @@ func joinRaw(a []json.RawMessage) string {
 		}
 	}
 	return "[" + strings.Join(parts, ",") + "]"
-}
-
-// one is jq's one($n): runs of white space and control characters as one
-// space, trimmed, the first n characters.
-func one(s string, n int) string {
-	var b strings.Builder
-	sp := false
-	for _, r := range s {
-		if unicode.IsSpace(r) || r < 0x20 || r == 0x7f {
-			if !sp {
-				b.WriteByte(' ')
-			}
-			sp = true
-			continue
-		}
-		sp = false
-		b.WriteRune(r)
-	}
-	t := strings.TrimPrefix(b.String(), " ")
-	t = strings.TrimSuffix(t, " ")
-	return runeSlice(t, n)
-}
-
-func runeSlice(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:n])
-}
-
-// line is jq's line: runs of control characters (and DEL) as one space.
-func line(s string) string {
-	var b strings.Builder
-	c := false
-	for _, r := range s {
-		if r < 0x20 || r == 0x7f {
-			if !c {
-				b.WriteByte(' ')
-			}
-			c = true
-			continue
-		}
-		c = false
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-// ctl is each control character but RS and US (and DEL) as a space, as the
-// hook's parsed line was (gsub("[\u0000-\u001d\u007f]"; " ")).
-func ctl(s string) string {
-	if strings.IndexFunc(s, func(r rune) bool { return r < 0x1e || r == 0x7f }) < 0 {
-		return s
-	}
-	return strings.Map(func(r rune) rune {
-		if r < 0x1e || r == 0x7f {
-			return ' '
-		}
-		return r
-	}, s)
 }
 
 // jsonStr is s as a JSON string, \ and " escaped, tab

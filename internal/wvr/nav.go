@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -211,7 +212,7 @@ func (e *Env) Next() {
 			l = l[:i]
 		}
 		if rlen(l) > 40 {
-			l = runeSlice(l, 39) + "…"
+			l = oneline.Cut(l, 39) + "…"
 		}
 		if r.Tnum > 0 {
 			l = fmt.Sprintf("%02d %s", r.Tnum, l)
@@ -219,7 +220,7 @@ func (e *Env) Next() {
 		if r.State == agent.StateNeedsYou {
 			l += " · needs you"
 			if r.Waiting != "" {
-				l += " · " + runeSlice(r.Waiting, 50)
+				l += " · " + oneline.Cut(r.Waiting, 50)
 			}
 		} else {
 			l += " · done"

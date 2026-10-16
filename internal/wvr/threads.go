@@ -18,6 +18,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -746,7 +747,7 @@ func (e *Env) Resume(args []string) error {
 				wh += "/" + w.branch
 			}
 			lost, _ := strconv.ParseInt(r.Lost, 10, 64)
-			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), runeSlice(r.Sid, 8))
+			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), oneline.Cut(r.Sid, 8))
 		}
 		fmt.Println("wvr resume NAME (a number, or a session id) brings one back; --all, every one")
 		return nil

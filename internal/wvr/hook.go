@@ -15,6 +15,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -152,20 +153,20 @@ func peek(sf string) peeked {
 // parse reads the event and the stored state: false when there is no
 // event to fold in.
 func (h *hk) parse(in hookInput, st []byte) bool {
-	h.Sid = ctl(in.SessionID)
-	h.Aid = ctl(in.AgentID)
+	h.Sid = oneline.Ctl(in.SessionID)
+	h.Aid = oneline.Ctl(in.AgentID)
 	now := time.Now()
 	h.Now = now.Unix()
 	h.NowMs = now.UnixMilli()
-	h.Event = ctl(in.Event)
-	h.Cwd = ctl(in.Cwd)
-	h.File = ctl(editFile(in))
+	h.Event = oneline.Ctl(in.Event)
+	h.Cwd = oneline.Ctl(in.Cwd)
+	h.File = oneline.Ctl(editFile(in))
 	if in.Event == "UserPromptSubmit" && yours(in) {
-		h.Prompt = ctl(one(in.Prompt, 120))
-		h.PromptLong = ctl(one(in.Prompt, 2000))
+		h.Prompt = oneline.Ctl(oneline.Squash(in.Prompt, 120))
+		h.PromptLong = oneline.Ctl(oneline.Squash(in.Prompt, 2000))
 	}
-	h.Tool = ctl(in.ToolName)
-	h.Ntype = ctl(in.Ntype)
+	h.Tool = oneline.Ctl(in.ToolName)
+	h.Ntype = oneline.Ctl(in.Ntype)
 	w := ""
 	switch in.Event {
 	case "PermissionRequest", "PreToolUse":
@@ -175,43 +176,43 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	case "StopFailure":
 		w = "error: " + string(in.Error)
 	}
-	h.WaitingNew = ctl(one(w, 100))
+	h.WaitingNew = oneline.Ctl(oneline.Squash(w, 100))
 	if in.ToolName != "" {
 		ti := "null"
 		if len(in.ToolInput) > 0 {
 			ti = jsonx.Canon(in.ToolInput)
 		}
-		h.Key = ctl(in.ToolName + ":" + runeSlice(ti, 300))
+		h.Key = oneline.Ctl(in.ToolName + ":" + oneline.Cut(ti, 300))
 	}
-	h.LastNew = ctl(one(in.LastMessage, 400))
-	h.Atype = ctl(one(in.AgentType, 40))
+	h.LastNew = oneline.Ctl(oneline.Squash(in.LastMessage, 400))
+	h.Atype = oneline.Ctl(oneline.Squash(in.AgentType, 40))
 	if in.Event == "Stop" {
 		bg := background(in)
 		h.BgNew = strconv.Itoa(len(bg))
 		var ds []string
 		for _, d := range bg {
-			ds = append(ds, one(d, 80))
+			ds = append(ds, oneline.Squash(d, 80))
 		}
-		h.BgdescNew = ctl(one(strings.Join(ds, "; "), 240))
+		h.BgdescNew = oneline.Ctl(oneline.Squash(strings.Join(ds, "; "), 240))
 	}
-	h.Source = ctl(in.Source)
+	h.Source = oneline.Ctl(in.Source)
 	if in.Interrupt {
 		h.Interrupt = "1"
 	}
-	h.TitleNew = ctl(one(in.Title, 80))
-	h.PromptID = ctl(in.PromptID)
-	h.Transcript = ctl(in.Transcript)
-	h.NewCwd = ctl(in.NewCwd)
+	h.TitleNew = oneline.Ctl(oneline.Squash(in.Title, 80))
+	h.PromptID = oneline.Ctl(in.PromptID)
+	h.Transcript = oneline.Ctl(in.Transcript)
+	h.NewCwd = oneline.Ctl(in.NewCwd)
 	if rejected(in) {
 		h.Rejected = "1"
 	}
-	h.Err = ctl(one(string(in.Error), 100))
-	h.ToolUseID = ctl(one(in.ToolUseID, 80))
+	h.Err = oneline.Ctl(oneline.Squash(string(in.Error), 100))
+	h.ToolUseID = oneline.Ctl(oneline.Squash(in.ToolUseID, 80))
 	if in.ToolName == "Bash" {
-		h.Cmd = ctl(one(in.input().Command, 200))
+		h.Cmd = oneline.Ctl(oneline.Squash(in.input().Command, 200))
 	}
 	if in.Event == "SessionEnd" {
-		h.EndNew = ctl(one(in.Reason, 40))
+		h.EndNew = oneline.Ctl(oneline.Squash(in.Reason, 40))
 	}
 	// The stored state, typed; whether it is this session's.
 	known := jsonx.Decode(jsonx.First(st), &h.Old) == nil
@@ -224,7 +225,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	h.Tasks = tasksNew(h.sess().Tasks, in)
 	var tr []string
 	for _, r := range h.sess().TurnRoots {
-		tr = append(tr, line(r))
+		tr = append(tr, oneline.Line(r))
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
 	h.Paths = commandPaths(in)

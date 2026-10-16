@@ -9,6 +9,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 )
 
 // Claude Code's hook input (and what `wvr event` makes of another agent's
@@ -121,7 +122,7 @@ func editFile(in hookInput) string {
 	if in.Event != "PostToolUse" {
 		return ""
 	}
-	s := line(in.input().path())
+	s := oneline.Line(in.input().path())
 	if s == "" || strings.HasPrefix(s, "/") {
 		return s
 	}
@@ -140,7 +141,7 @@ func commandPaths(in hookInput) string {
 			switch x := v.(type) {
 			case string:
 				if strings.HasPrefix(x, "/") {
-					ps = append(ps, line(x))
+					ps = append(ps, oneline.Line(x))
 				}
 			case []any:
 				for _, y := range x {
@@ -157,7 +158,7 @@ func commandPaths(in hookInput) string {
 		walk(v)
 	case in.ToolName == "Bash":
 		for _, m := range reCmdPath.FindAllStringSubmatch(in.input().Command, -1) {
-			ps = append(ps, line(m[1]))
+			ps = append(ps, oneline.Line(m[1]))
 		}
 	default:
 		return ""
@@ -263,7 +264,7 @@ func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent
 	switch in.Event {
 	case "SubagentStart":
 		if aid != "" {
-			return append(without(), agent.Subagent{ID: aid, Type: one(in.AgentType, 40), Since: json.Number(strconv.FormatInt(now, 10))})
+			return append(without(), agent.Subagent{ID: aid, Type: oneline.Squash(in.AgentType, 40), Since: json.Number(strconv.FormatInt(now, 10))})
 		}
 	case "SubagentStop":
 		return without()
@@ -281,7 +282,7 @@ func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent
 
 // tasksNew is the agent's tasks after the event: the last 30.
 func tasksNew(tasks []agent.Task, in hookInput) []agent.Task {
-	id, subject := string(in.TaskID), one(in.TaskSubject, 80)
+	id, subject := string(in.TaskID), oneline.Squash(in.TaskSubject, 80)
 	last30 := func(a []agent.Task) []agent.Task {
 		if len(a) > 30 {
 			return a[len(a)-30:]

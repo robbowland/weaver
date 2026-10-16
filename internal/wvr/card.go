@@ -13,6 +13,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -38,11 +39,11 @@ func wrap(t string, n int) []string {
 		}
 		switch {
 		case len(ls) == 0:
-			ls = append(ls, runeSlice(x, n))
+			ls = append(ls, oneline.Cut(x, n))
 		case rlen(ls[len(ls)-1])+1+rlen(x) <= n:
 			ls[len(ls)-1] += " " + x
 		default:
-			ls = append(ls, runeSlice(x, n))
+			ls = append(ls, oneline.Cut(x, n))
 		}
 	}
 	return ls
@@ -63,7 +64,7 @@ func field(w int, label, text, color string, lines int) []string {
 		}
 		lead := "           "
 		if i == 0 {
-			lead = CDim + runeSlice(label+"           ", 11) + COff
+			lead = CDim + oneline.Cut(label+"           ", 11) + COff
 		}
 		s := lead + color + l + COff
 		if i == lines-1 && len(ls) > lines {
