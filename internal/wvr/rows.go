@@ -535,14 +535,14 @@ func (e *Env) LostRows() []LostRow {
 		if json.Unmarshal(firstJSON(b), &lo) != nil {
 			continue
 		}
-		st := lo.AgentState()
+		st := lo.State
 		num := ""
 		if lo.Thread.Num > 0 {
 			num = strconv.Itoa(lo.Thread.Num)
 		}
-		r := LostRow{File: f, Sid: str(st.get("session_id", "")), Name: clean(lo.Thread.Name), Num: num,
+		r := LostRow{File: f, Sid: clean(st.SessionID), Name: clean(lo.Thread.Name), Num: num,
 			Dir: clean(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: clean(lo.Key()),
-			Task: clean(lo.Task()), Title: str(st.get("title", ""))}
+			Task: clean(lo.Task()), Title: clean(st.Title)}
 		r.lost, _ = strconv.ParseFloat(r.Lost, 64)
 		rs = append(rs, r)
 	}
@@ -682,13 +682,9 @@ func (e *Env) lose(f, pid string) bool {
 		return true
 	}
 	b := strings.TrimSuffix(f, ".json")
-	data, err := os.ReadFile(f)
-	if err != nil {
-		return false
-	}
-	s, _ := readObj(data)
-	sid := tostring(s.get("session_id", ""))
-	if sid == "" {
+	st, err := readState(f)
+	sid := st.SessionID
+	if err != nil || sid == "" {
 		return false
 	}
 	th, err := readThread(b + ".thread")
@@ -697,11 +693,7 @@ func (e *Env) lose(f, pid string) bool {
 	}
 	base := filepath.Base(b)
 	skey := base[:strings.LastIndexByte(base, '_')]
-	var sc bytes.Buffer
-	if json.Compact(&sc, firstJSON(data)) != nil {
-		return false
-	}
-	rec := Lost{Lost: jsonInt(time.Now().Unix()), SKey: skey, State: sc.Bytes(), Thread: th}
+	rec := Lost{Lost: jsonInt(time.Now().Unix()), SKey: skey, State: st, Thread: th}
 	if writeRecord(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
 		return false
 	}

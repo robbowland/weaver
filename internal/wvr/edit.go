@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -282,22 +283,11 @@ func (e *Env) Nvim(args []string) int {
 		if os.WriteFile(tmp, []byte(e.MyPane+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
 			os.Rename(tmp, nf)
 		}
-		if exists(sf) {
-			lk := lock(sf)
-			b, _ := os.ReadFile(sf)
-			if o, ok := parseOobj(b); ok {
-				v := jqStr(e.MyPane)
-				if digits(e.MyPane) {
-					v = e.MyPane
-				}
-				if os.WriteFile(lk, []byte(o.set("nvim_pane", v).String()+"\n"), 0o644) == nil {
-					os.Rename(lk, sf)
-				} else {
-					os.Remove(lk)
-				}
-			} else {
-				os.Remove(lk)
-			}
+		if exists(sf) && digits(e.MyPane) {
+			updateState(sf, func(st *AgentState) {
+				nv := json.Number(e.MyPane)
+				st.NvimPane = &nv
+			})
 		}
 	}
 	dir, err := Runtime()

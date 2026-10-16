@@ -397,7 +397,7 @@ func (e *Env) lostCard(sid, title string) string {
 	if json.Unmarshal(firstJSON(b), &lo) != nil {
 		return out
 	}
-	st := lo.AgentState()
+	st := lo.State
 	now := time.Now().Unix()
 	lost := now
 	if lo.Lost != 0 {
@@ -418,11 +418,11 @@ func (e *Env) lostCard(sid, title string) string {
 	}
 	ls := []string{"lost" + CDim + " · " + COff + cardAge(now-lost) + CDim + " · its session went" + COff, ""}
 	ls = append(ls, field(w, "asked", lo.Task(), "", 4)...)
-	if l := st.get("last_message", ""); l != "" {
+	if l := st.LastMessage; l != "" {
 		ls = append(ls, field(w, "said", l, CGrey, 6)...)
 	}
 	ls = append(ls, field(w, "in", dir, CGrey, 1)...)
-	ls = append(ls, field(w, "session", strings.TrimPrefix(lo.Key(), "tmux-")+" · "+tostring(st.get("session_id", "")), CDim, 2)...)
+	ls = append(ls, field(w, "session", strings.TrimPrefix(lo.Key(), "tmux-")+" · "+st.SessionID, CDim, 2)...)
 	ls = append(ls, "", CDim+"⏎ resume it in a new window   x forget it"+COff)
 	return out + strings.Join(ls, "\n") + "\n"
 }

@@ -982,7 +982,10 @@ func (e *Env) writeState(h *hk, lk string) {
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
 		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
-		Subagents: rawOrEmpty(h.SubsJSON), Tasks: rawOrEmpty(h.TasksJSON), Files: rawOrEmpty(h.FilesJSON), TurnRoots: []string{}}
+		Subagents: rawOrEmpty(h.SubsJSON), Tasks: rawOrEmpty(h.TasksJSON), Files: []string{}, TurnRoots: []string{}}
+	if h.FilesJSON != "" {
+		bestEffort(json.Unmarshal([]byte(h.FilesJSON), &st.Files))
+	}
 	if digits(h.Pid) {
 		st.Pid = json.Number(h.Pid)
 	}

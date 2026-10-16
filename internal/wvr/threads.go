@@ -483,25 +483,10 @@ func (e *Env) AgentPane(tok, agent string) int {
 	pane := e.MyPane
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	cmd := agentCmd(kind)
-	rec := func(f string) oobj {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return nil
-		}
-		o, _ := parseOobj(b)
-		return o
-	}
 	cmdOf := func(t Thread) {
 		if t.Cmd != "" {
 			cmd = t.Cmd
 		}
-	}
-	put := func(f string, o oobj) {
-		writeAtomic(f, []byte(o.String()+"\n"))
-	}
-	paneJSON := pane
-	if !digits(pane) {
-		paneJSON = jqStr(pane)
 	}
 	paneNum, _ := atoi(pane)
 	pn := jsonInt(paneNum)
@@ -569,8 +554,10 @@ func (e *Env) AgentPane(tok, agent string) int {
 			th.Pane = &pn
 			writeRecord(e.threadFile(pane), th)
 		}
-		if st := rec(d + "/state.json"); st != nil {
-			put(sf, st.set("pane", paneJSON))
+		if st, err := readState(d + "/state.json"); err == nil {
+			st.Pane = pn
+			// Without it the agent's first hook starts its state afresh.
+			bestEffort(writeRecord(sf, st))
 		}
 		os.RemoveAll(d)
 		if kind == AgentClaude {
@@ -581,16 +568,9 @@ func (e *Env) AgentPane(tok, agent string) int {
 	// Its pane again (enter on an exited agent): the conversation it was
 	// in, else the one weaver started it on.
 	sid := ""
-	str := func(o oobj, k string) string {
-		if r, ok := o.get(k); ok {
-			var s string
-			json.Unmarshal(r, &s)
-			return s
-		}
-		return ""
-	}
 	if pane != "" {
-		sid = str(rec(e.StateFile(pane)), "session_id")
+		st, _ := readState(e.StateFile(pane))
+		sid = st.SessionID
 		th, _ := readThread(e.threadFile(pane))
 		if sid == "" {
 			sid = th.SessionID
@@ -631,11 +611,11 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		back()
 		return "", fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
 	}
-	st, th := lo.AgentState(), lo.Thread
-	sid := str(st.get("session_id", ""))
+	st, th := lo.State, lo.Thread
+	sid := clean(st.SessionID)
 	kind := th.Agent
 	if kind == "" {
-		kind = AgentKind(str(st.get("agent", "")))
+		kind = AgentKind(st.Agent)
 	}
 	dir := clean(lo.Dir())
 	nm := clean(th.Name)
@@ -668,22 +648,18 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	if th.Num > 0 && !used[th.Num] {
 		n = th.Num
 	}
-	sto, _ := parseOobj(lo.State)
 	t2 := th
 	t2.Cmd, t2.Num, t2.Pane = agentCmd(kind), n, nil
-	drop := map[string]bool{"pid": true, "proc_start": true, "nvim_pane": true, "end_reason": true, "waiting": true,
-		"pending": true, "marker": true, "marked_root": true}
-	var s2 oobj
-	for _, m := range sto {
-		if !drop[m.k] {
-			s2 = append(s2, m)
-		}
-	}
-	now := strconv.FormatInt(time.Now().Unix(), 10)
-	s2 = s2.set("state", `"idle"`).set("ts", now).set("since", now).set("seen", "true").set("subagents", "[]").
-		set("background", "0").set("background_tasks", `""`)
+	// Its state carries on, idle, without what belonged to its old process
+	// and pane.
+	s2 := st
+	now := time.Now().Unix()
+	s2.Pid, s2.ProcStart, s2.NvimPane, s2.EndReason = "", "", nil, ""
+	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
+	s2.State, s2.TS, s2.Since, s2.Seen = StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
+	s2.Subagents, s2.Background, s2.BackgroundTasks = json.RawMessage("[]"), 0, ""
 	if writeRecord(d+"/thread.json", t2) != nil ||
-		os.WriteFile(d+"/state.json", []byte(s2.String()+"\n"), 0o644) != nil ||
+		writeRecord(d+"/state.json", s2) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		unlock()
 		back()
@@ -692,7 +668,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	unlock()
 	wname := nm
 	if e.WeaverSession() {
-		t := str(st.get("title", ""))
+		t := clean(st.Title)
 		if t == "" {
 			t = clean(th.Task)
 		}

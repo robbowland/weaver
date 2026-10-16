@@ -52,7 +52,7 @@ type AgentState struct {
 	Subagents       json.RawMessage `json:"subagents"`
 	Tasks           json.RawMessage `json:"tasks"`
 	TurnRoots       []string        `json:"turn_roots"`
-	Files           json.RawMessage `json:"files"`
+	Files           []string        `json:"files"`
 }
 
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
@@ -88,10 +88,10 @@ type ThreadItem struct {
 // when, which session, and its agent's state and thread record as they
 // were.
 type Lost struct {
-	Lost   jsonInt         `json:"lost"`
-	SKey   string          `json:"skey"`
-	State  json.RawMessage `json:"state"`
-	Thread Thread          `json:"thread"`
+	Lost   jsonInt    `json:"lost"`
+	SKey   string     `json:"skey"`
+	State  AgentState `json:"state"`
+	Thread Thread     `json:"thread"`
 	// Session is older records' name for SKey.
 	Session string `json:"session,omitempty"`
 }
@@ -104,19 +104,12 @@ func (l Lost) Key() string {
 	return l.Session
 }
 
-// AgentState is its agent's state as it was, as an object.
-func (l Lost) AgentState() obj {
-	o, _ := readObj(l.State)
-	return o
-}
-
 // Dir is where it resumes: where its agent started, else its worktree,
 // else where its agent last was.
 func (l Lost) Dir() string {
-	s := l.AgentState()
-	for _, v := range []any{s["start_cwd"], l.Thread.Worktree, s["root"], s["cwd"]} {
-		if present(v) {
-			return tostring(v)
+	for _, d := range []string{l.State.StartCwd, l.Thread.Worktree, l.State.Root, l.State.Cwd} {
+		if d != "" {
+			return d
 		}
 	}
 	return ""
@@ -127,7 +120,7 @@ func (l Lost) Task() string {
 	if l.Thread.Task != "" {
 		return l.Thread.Task
 	}
-	return str(l.AgentState().get("prompt", ""))
+	return clean(l.State.Prompt)
 }
 
 func readLost(f string) (Lost, error) {
@@ -137,7 +130,7 @@ func readLost(f string) (Lost, error) {
 }
 
 // jsonInt is a number that older files may hold as a string ("12"), or
-// not at all.
+// not at all; anything else (a zellij pane's "terminal_3") reads as 0.
 type jsonInt int
 
 func (n *jsonInt) UnmarshalJSON(b []byte) error {
@@ -148,7 +141,7 @@ func (n *jsonInt) UnmarshalJSON(b []byte) error {
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return err
+		f = 0
 	}
 	*n = jsonInt(f)
 	return nil
@@ -208,3 +201,31 @@ func (e *Env) threadFile(p string) string {
 // bestEffort marks an error left unhandled on purpose: what failed (a
 // marker, a cache, a view started early) costs nothing that matters.
 func bestEffort(error) {}
+
+// readState is the agent state in file sf.
+func readState(sf string) (AgentState, error) {
+	var st AgentState
+	err := readRecord(sf, &st)
+	return st, err
+}
+
+// updateState changes the agent state in file sf under its lock: read,
+// changed, written back whole (the rename releases the lock). False when
+// there was none to change.
+func updateState(sf string, change func(*AgentState)) bool {
+	lk := lock(sf)
+	st, err := readState(sf)
+	if err != nil {
+		os.Remove(lk)
+		return false
+	}
+	change(&st)
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if enc.Encode(st) != nil || os.WriteFile(lk, b.Bytes(), 0o644) != nil {
+		os.Remove(lk)
+		return false
+	}
+	return os.Rename(lk, sf) == nil
+}

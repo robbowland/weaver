@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -315,18 +316,7 @@ func (e *Env) MarkSeen(p string) {
 	if !exists(sf) {
 		return
 	}
-	lk := lock(sf)
-	b, err := os.ReadFile(sf)
-	o, ok := parseOobj(b)
-	if err != nil || !ok {
-		os.Remove(lk)
-		return
-	}
-	if os.WriteFile(lk, []byte(o.set("seen", "true").String()+"\n"), 0o644) == nil {
-		os.Rename(lk, sf)
-	} else {
-		os.Remove(lk)
-	}
+	updateState(sf, func(st *AgentState) { st.Seen = true })
 }
 
 // threadTabLabels: in the weaver session a thread's window is its line on
@@ -471,51 +461,23 @@ func (e *Env) followBashEdits(h *hk) bool {
 		return false
 	}
 	if exists(h.sf) {
-		lk := lock(h.sf)
-		b, _ := os.ReadFile(h.sf)
-		if o, ok := parseOobj(b); ok {
-			o = o.set("root", jqStr(r)).set("file", jqStr(newest))
-			var fs []json.RawMessage
-			if raw, ok := o.get("files"); ok {
-				fs, _ = rawArray(raw)
-			}
-			var nf []json.RawMessage
-			for _, f := range fs {
-				var s string
-				if json.Unmarshal(f, &s) == nil && s == newest {
-					continue
-				}
-				nf = append(nf, f)
-			}
-			nf = append(nf, json.RawMessage(jqStr(newest)))
-			if len(nf) > 200 {
-				nf = nf[len(nf)-200:]
-			}
-			o = o.set("files", joinRaw(nf))
-			if h.Turn > 0 {
-				var tr []json.RawMessage
-				if raw, ok := o.get("turn_roots"); ok {
-					tr, _ = rawArray(raw)
-				}
-				has := false
-				for _, x := range tr {
-					var s string
-					if json.Unmarshal(x, &s) == nil && s == r {
-						has = true
-					}
-				}
-				if !has {
-					o = o.set("turn_roots", joinRaw(append(tr, json.RawMessage(jqStr(r)))))
+		updateState(h.sf, func(st *AgentState) {
+			st.Root, st.File = r, newest
+			var fs []string
+			for _, f := range st.Files {
+				if f != newest {
+					fs = append(fs, f)
 				}
 			}
-			if os.WriteFile(lk, []byte(o.String()+"\n"), 0o644) == nil {
-				os.Rename(lk, h.sf)
-			} else {
-				os.Remove(lk)
+			fs = append(fs, newest)
+			if len(fs) > 200 {
+				fs = fs[len(fs)-200:]
 			}
-		} else {
-			os.Remove(lk)
-		}
+			st.Files = fs
+			if h.Turn > 0 && !slices.Contains(st.TurnRoots, r) {
+				st.TurnRoots = append(st.TurnRoots, r)
+			}
+		})
 	}
 	// A root first touched this turn starts its chain from HEAD.
 	if !strings.Contains(rs+h.TurnRoots+rs, rs+r+rs) && h.Turn > 0 && h.Sid != "" {
