@@ -449,6 +449,20 @@ ok "Alt j: past the views, round to home" "$(where | cut -d ' ' -f 1)" "0"
 key 1b6b # Alt k
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
 ok "Alt k: back past them" "$(where | cut -d ' ' -f 1)" "2"
+key 1b79 # Alt y: home
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+sleep 0.5
+key 71 # q
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+ok "home's q: back to the thread, not on to the views" "$(where | cut -d ' ' -f 1)" "2"
+key 1b79
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+key 1b79
+waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'
+sleep 0.5
+key 1b # esc
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+ok "a view's esc: back to the thread" "$(where | cut -d ' ' -f 1)" "2"
 
 # The pull request has a thread now (its review, above): the GITHUB view
 # shows it, and Alt N and enter go there.

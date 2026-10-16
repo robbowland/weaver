@@ -5,8 +5,8 @@ KEYS
   n           new thread (wvr new)
   x           close the thread, its nvim and its window
               (and offers to remove a merged worktree)
-  e  ^e       jump and open its nvim
-  s  tab      resume card ↔ screen
+  v  e  ^e    jump and open its nvim (Alt v anywhere)
+  s  tab      the card ↔ the agent's screen
   ^r          reload
   ?           this help (? again: back)
   q  esc      close the dashboard (home: back to your thread)
@@ -22,3 +22,11 @@ THREADS
 LOST (its session went: a crash, or quit)
   ⏎           resume it in a new window (wvr resume)
   x           forget it (its worktree stays)
+
+ANYWHERE
+  Alt y       home, then each view, then back where you were
+  Alt N       new thread (in a view: from the item)
+  Alt 1       the thread that has waited on you longest (row 1)
+  Alt v  V    the thread's nvim; full screen
+  Alt j  k    next, previous window (past the views)
+  Alt h  l    the pane left, right

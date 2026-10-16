@@ -24,6 +24,19 @@ type ghCache struct {
 }
 
 func (githubSource) name() string    { return "github" }
+func (githubSource) service() string { return "GitHub" }
+
+func (githubSource) guide() viewGuide {
+	return viewGuide{
+		queue:    "yours to do: your review asked for, or assigned to you",
+		mine:     "yours: opened by you",
+		watch:    "what involves you otherwise",
+		red:      "changes requested, or a check failing",
+		green:    "approved",
+		faint:    "a draft, or nothing to say but who",
+		readOnly: "a review (a pull request), an investigation (an issue)",
+	}
+}
 func (githubSource) kinds() []string { return []string{string(github.PRs), string(github.Issues)} }
 
 func (githubSource) label(kind string) string {

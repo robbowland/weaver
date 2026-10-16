@@ -108,8 +108,8 @@ func Help() string {
 		"  " + g + "n" + o + "           new thread " + d + "(wvr new)" + o + "\n" +
 		"  " + g + "x" + o + "           close the thread, its nvim and its window\n" +
 		"              " + d + "(and offers to remove a merged worktree)" + o + "\n" +
-		"  " + g + "e  ^e" + o + "       jump and open its nvim\n" +
-		"  " + g + "s  tab" + o + "      resume card ↔ screen\n" +
+		"  " + g + "v  e  ^e" + o + "    jump and open its nvim " + d + "(Alt v anywhere)" + o + "\n" +
+		"  " + g + "s  tab" + o + "      the card ↔ the agent's screen\n" +
 		"  " + g + "^r" + o + "          reload\n" +
 		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
 		"  " + g + "q  esc" + o + "      close the dashboard " + d + "(home: back to your thread)" + o + "\n" +
@@ -124,7 +124,15 @@ func Help() string {
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
 		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(wvr resume)" + o + "\n" +
-		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n"
+		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n" +
+		"\n" +
+		g + "ANYWHERE" + o + "\n" +
+		"  " + g + "Alt y" + o + "       home, then each view, then back where you were\n" +
+		"  " + g + "Alt N" + o + "       new thread " + d + "(in a view: from the item)" + o + "\n" +
+		"  " + g + "Alt 1" + o + "       the thread that has waited on you longest " + d + "(row 1)" + o + "\n" +
+		"  " + g + "Alt v  V" + o + "    the thread's nvim; full screen\n" +
+		"  " + g + "Alt j  k" + o + "    next, previous window " + d + "(past the views)" + o + "\n" +
+		"  " + g + "Alt h  l" + o + "    the pane left, right\n"
 }
 
 // Intro is the card of an empty dashboard.

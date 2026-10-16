@@ -136,13 +136,17 @@ var commands = map[string]command{
 	"quit":   {run: helped((*wvr.Env).Quit)},
 	"next":   {session: true, run: done(func(e *wvr.Env, _ []string) { e.Next() })},
 	"go": {run: func(e *wvr.Env, args []string) error {
-		if arg(args, 0) != "home" {
-			return errors.New("usage: wvr go home")
-		}
 		if e.Session == "" {
 			return errNoSession
 		}
-		e.GoHome()
+		switch arg(args, 0) {
+		case "home":
+			e.GoHome()
+		case "back":
+			e.GoBack()
+		default:
+			return errors.New("usage: wvr go home|back")
+		}
 		return nil
 	}},
 	"status": {session: true, run: done(func(e *wvr.Env, args []string) {

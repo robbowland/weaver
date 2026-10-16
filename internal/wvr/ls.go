@@ -22,7 +22,7 @@ const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+
 
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
-const lsKeys = "j,k,g,G,n,x,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
+const lsKeys = "j,k,g,G,n,x,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
@@ -68,8 +68,9 @@ func (e *Env) Ls() error {
 		// an empty board: this one prints the field for the action it returns.
 		newAct = "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute(" + q + " new)+reload(" + q +
 			" _rows)'; else printf '%s2})+reload(%s _rows)\\n' 'execute(" + q + " new --from {' '" + q + "'; fi"
-		// q and esc: back to the thread you came from, as Alt y does.
-		quitAct = "execute-silent(" + q + " go home)"
+		// q and esc: back to the thread you came from, as Alt y's last
+		// step does (not on to the views).
+		quitAct = "execute-silent(" + q + " go back)"
 		resumeAct = "execute(" + q + " resume {2})+reload(" + q + " _rows)"
 	} else {
 		jumpAct, editAct, newAct, quitAct, resumeAct = "print(jump)+accept", "print(ctrl-e)+accept", "print(new)+accept",
@@ -164,7 +165,7 @@ func (e *Env) Ls() error {
 		args = append(args,
 			"--bind", "n:"+newAct,
 			"--bind", "x:transform:case {1} in a*) echo 'execute("+q+" close {2})+reload("+q+" _rows)' ;; l*) echo 'execute("+q+" resume --forget {2})+reload("+q+" _rows)' ;; esac",
-			"--bind", "e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
+			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s,tab:transform("+q+" _view screen)",
 			"--bind", "?:transform("+q+" _view help)",
 			"--bind", "ctrl-r:reload("+q+" _rows)+refresh-preview",

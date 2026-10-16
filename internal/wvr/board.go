@@ -678,10 +678,10 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 // work now, as many as fit the list's width, ? always last.
 func Footer() string {
 	g, d, o := CGrey, CDim, COff
-	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|e NVIM|^q QUIT"
+	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|^q QUIT"
 	search := "⏎ JUMP|esc BACK|tab SCREEN|^e NVIM"
 	if pl := os.Getenv("FZF_PREVIEW_LINES"); sockBase() != "" && files.Exists(sockBase()+".tight") && (pl == "" || pl == "0") {
-		browse = "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|e NVIM|^q QUIT"
+		browse = "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s CARD|v NVIM|^q QUIT"
 	}
 	cols, _ := lsSize()
 	width := lsWidth(cols) - 6

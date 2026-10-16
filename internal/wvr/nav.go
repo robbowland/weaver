@@ -67,33 +67,9 @@ func (e *Env) tabs() []tab {
 // home, made again first if it was closed; from home on through the views
 // (THREADS, GITHUB, LINEAR), and from the last back to where you came from.
 func (e *Env) GoHome() {
-	ts := e.tabs()
-	var cur tab
-	var home tmux.WindowID
-	for _, t := range ts {
-		if t.active && cur.id == "" {
-			cur = t
-		}
-		if t.name == "home" && t.view == "" && home == "" {
-			home = t.id
-		}
-	}
-	lf := e.StateDir + "/" + e.SKey + ".last"
-	// Back where you came from; when that is gone (or was nowhere), home.
-	back := func() {
-		if l, _ := files.FirstLine(lf); l != "" {
-			last, _ := tmux.ParseWindow(l)
-			for _, t := range ts {
-				if t.id == last && t.view == "" && t.id != home {
-					e.Tmux("select-window", "-t", last.Target())
-					return
-				}
-			}
-		}
-		if home != "" && cur.id != home {
-			e.Tmux("select-window", "-t", home.Target())
-		}
-	}
+	ts, cur, home := e.where()
+	lf := e.lastFile()
+	back := func() { e.goBack(ts, cur, home) }
 	views := e.viewNames()
 	at := -1
 	if cur.view != "" {
@@ -123,6 +99,47 @@ func (e *Env) GoHome() {
 		return
 	}
 	e.Tmux("select-window", "-t", home.Target())
+}
+
+// where is the session's windows, the one you are on, and home.
+func (e *Env) where() ([]tab, tab, tmux.WindowID) {
+	ts := e.tabs()
+	var cur tab
+	var home tmux.WindowID
+	for _, t := range ts {
+		if t.active && cur.id == "" {
+			cur = t
+		}
+		if t.name == "home" && t.view == "" && home == "" {
+			home = t.id
+		}
+	}
+	return ts, cur, home
+}
+
+// lastFile keeps the thread's window Alt y left, for going back to it.
+func (e *Env) lastFile() string { return e.StateDir + "/" + e.SKey + ".last" }
+
+// GoBack is `wvr go back` (q and esc on home and in a view): back to the
+// thread's window you came from; when that is gone (or was nowhere), home.
+func (e *Env) GoBack() {
+	ts, cur, home := e.where()
+	e.goBack(ts, cur, home)
+}
+
+func (e *Env) goBack(ts []tab, cur tab, home tmux.WindowID) {
+	if l, _ := files.FirstLine(e.lastFile()); l != "" {
+		last, _ := tmux.ParseWindow(l)
+		for _, t := range ts {
+			if t.id == last && t.view == "" && t.id != home {
+				e.Tmux("select-window", "-t", last.Target())
+				return
+			}
+		}
+	}
+	if home != "" && cur.id != home {
+		e.Tmux("select-window", "-t", home.Target())
+	}
 }
 
 // uiLock is one `wvr edit` or `wvr next` per session at a time: it waits

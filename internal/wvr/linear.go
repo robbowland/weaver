@@ -27,9 +27,21 @@ type linCache struct {
 	Results []linear.Result `json:"results"`
 }
 
+func (linearSource) service() string     { return "Linear" }
 func (linearSource) name() string        { return "linear" }
 func (linearSource) kinds() []string     { return []string{"issues"} }
 func (linearSource) label(string) string { return "LINEAR ISSUES" }
+
+func (linearSource) guide() viewGuide {
+	return viewGuide{
+		queue:    "yours to do: assigned to you, to do or in progress",
+		mine:     "made by you, someone else's to do",
+		watch:    "what you subscribe to otherwise",
+		red:      "urgent",
+		faint:    "not started yet",
+		readOnly: "an investigation",
+	}
+}
 
 func linCacheFile(e *Env) string { return e.StateDir + "/linear.json" }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The views of work items, GITHUB and LINEAR: a service's items under
@@ -39,6 +40,18 @@ type itemSource interface {
 	read(e *Env) itemData
 	// fetch asks the service again and keeps the answer.
 	fetch(e *Env)
+	// service is where the items live: GitHub, Linear.
+	service() string
+	// guide is what its ? card says of its sections (Queue, Mine, Watch)
+	// and its rows' signals (red, green, faint).
+	guide() viewGuide
+}
+
+// viewGuide is a source's words for its ? card.
+type viewGuide struct {
+	queue, mine, watch string
+	red, green, faint  string
+	readOnly           string // what Alt R starts
 }
 
 // itemData is what a service said: when, what went wrong, and its
@@ -86,6 +99,7 @@ type cardField struct {
 
 // viewThread is a thread of this session, as a view matches it to an item.
 type viewThread struct {
+	pane   tmux.PaneID // its agent's
 	num    int
 	state  agent.State
 	seen   bool
@@ -112,7 +126,7 @@ func (e *Env) itemThreads() []viewThread {
 		if err != nil {
 			continue
 		}
-		t := viewThread{num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch}
+		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch}
 		if th.Item != nil {
 			t.ref = th.Item.Ref
 		}
@@ -327,23 +341,45 @@ const asking = CDim + "asking…" + COff
 // wrong asking.
 func (e *Env) itemFresh(src itemSource) string {
 	d := src.read(e)
-	switch {
-	case d.fetched.IsZero() && d.err == "":
+	if d.fetched.IsZero() {
+		if d.err != "" {
+			return CRed + oneline.Cut(d.err, 80) + COff
+		}
 		return asking
-	case d.err != "":
-		return CRed + oneline.Cut(d.err, 80) + COff
 	}
-	return CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
+	t := CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
+	if d.err != "" {
+		// What it shows is what it heard before: how old, and why.
+		return t + CDim + " · " + COff + CRed + oneline.Cut(d.err, 80) + COff
+	}
+	n := 0
+	for _, s := range d.sections[e.itemKind(src)] {
+		n += len(s.items)
+	}
+	if n == 0 {
+		// Nothing to show: say so, not an empty list.
+		t += CDim + " · nothing for you in Queue, Mine or Watch" + COff
+	}
+	return t
+}
+
+// readOnly is what Alt R starts on kind: a review of a pull request, an
+// investigation of an issue.
+func readOnly(kind string) string {
+	if kind == "prs" {
+		return "REVIEW"
+	}
+	return "INVESTIGATE"
 }
 
 // itemFooter is the view's keys: browsing, or searching.
-func itemFooter(src itemSource) string {
+func (e *Env) itemFooter(src itemSource) string {
 	g, d, o := CGrey, CDim, COff
-	items := []string{"⏎ THREAD", "Alt-R REVIEW", "o OPEN"}
+	items := []string{"⏎ THREAD", "Alt-R " + readOnly(e.itemKind(src)), "o OPEN"}
 	if len(src.kinds()) > 1 {
 		items = append(items, "s "+strings.ToUpper(strings.Join(src.kinds(), "/")))
 	}
-	items = append(items, "/ SEARCH", "^r REFRESH")
+	items = append(items, "/ SEARCH", "^r REFRESH", "? HELP")
 	if in := os.Getenv("FZF_INPUT_STATE"); in != "" && in != "hidden" {
 		items = []string{"⏎ THREAD", "esc BACK"}
 	}
@@ -376,7 +412,7 @@ func (e *Env) itemChrome(src itemSource) string {
 	if a, ok := fzfAct("change-header", e.itemFresh(src)); ok {
 		acts = append(acts, a)
 	}
-	if a, ok := fzfAct("change-footer", itemFooter(src)); ok {
+	if a, ok := fzfAct("change-footer", e.itemFooter(src)); ok {
 		acts = append(acts, a)
 	}
 	return strings.Join(acts, "+") + "\n"
@@ -399,6 +435,9 @@ func findItem(d itemData, ref string) (viewItem, bool) {
 // itemCard is item ref's card: the thread first (what it has, or what
 // enter starts), then what the service says, then its description.
 func (e *Env) itemCard(src itemSource, ref string) string {
+	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".help") {
+		return e.itemHelp(src)
+	}
 	it, ok := findItem(src.read(e), ref)
 	if !ok {
 		return ""
@@ -425,11 +464,56 @@ func (e *Env) itemCard(src itemSource, ref string) string {
 	return strings.ReplaceAll(strings.Join(ls, "\n"), nbsp, " ") + "\n"
 }
 
+// itemHelp is a view's ? card: its keys, its sections and its rows.
+func (e *Env) itemHelp(src itemSource) string {
+	d, g, o := CDim, CGrey, COff
+	key := func(k, what, note string) string {
+		s := "  " + g + k + o + strings.Repeat(" ", max(12-rlen(k), 1)) + what
+		if note != "" {
+			s += " " + d + note + o
+		}
+		return s + "\n"
+	}
+	gd := src.guide()
+	out := g + "KEYS" + o + "\n" +
+		key("⏎  Alt N", "a thread from it", "(or to the one it has)") +
+		key("Alt R", "a read-only thread:", d+gd.readOnly+o) +
+		key("j k  g G", "move; first, last", "") +
+		key("o", "open it in "+src.service(), "") +
+		key("/", "search", "(esc: back)")
+	if len(src.kinds()) > 1 {
+		out += key("s  tab", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
+	}
+	out += key("^r", "ask "+src.service()+" again", "(it does every 5 minutes)") +
+		key("?", "this help", "(? again: back)") +
+		key("q  esc", "back to your thread", "") +
+		"\n" + g + "SECTIONS" + o + "\n" +
+		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n" +
+		"  " + g + "MINE" + o + "    " + gd.mine + "\n" +
+		"  " + g + "WATCH" + o + "   " + gd.watch + "\n" +
+		"\n" + g + "ROWS" + o + "\n" +
+		"  " + d + "01" + o + " " + paint(GWork, CGrey, CDim, COff) + "  the thread it has, as on the board\n"
+	for _, s := range []struct{ word, colour, what string }{{"red", CRed, gd.red}, {"green", CGreen, gd.green}, {"faint", CDim, gd.faint}} {
+		if s.what != "" {
+			out += "  " + s.colour + s.word + o + strings.Repeat(" ", 8-len(s.word)) + s.what + "\n"
+		}
+	}
+	return out
+}
+
 // itemFrom opens the new-thread form for item ref (review: read-only).
 func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 	it, ok := findItem(src.read(e), ref)
 	if !ok {
 		return fmt.Errorf("no item %s in the %s view", ref, src.name())
+	}
+	// One thread a branch: the one it has, said so (Alt R too: its thread
+	// is where to review it).
+	if t, ok := threadOf(e.itemThreads(), it); ok && t.pane != "" {
+		e.focus(t.pane)
+		e.MarkSeen(t.pane)
+		e.Tmux("display-message", "-d", "2500", fmt.Sprintf("weaver: %s has thread %02d: went to it", it.where, t.num))
+		return nil
 	}
 	args := append([]string{}, it.from...)
 	if review {
@@ -440,10 +524,10 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 
 // itemKeys are the view's keys while browsing; searching (/) unbinds them so
 // they type.
-const itemKeys = "j,k,g,G,o,s,q"
+const itemKeys = "j,k,g,G,o,s,q,?"
 
 // Items is `wvr _items NAME [rows|chrome|card REF|from REF [--review]|open
-// REF|switch|fetch|fetch-bg]`: view NAME (github, linear), for good
+// REF|switch|help|fetch|fetch-bg]`: view NAME (github, linear), for good
 // (ctrl-c starts it again), and what its fzf runs. It shows what the
 // service said last at once, and asks again behind it when that is more
 // than 2 minutes old, and every 5 minutes it is open.
@@ -482,6 +566,16 @@ func (e *Env) Items(args []string) error {
 	case "switch":
 		e.switchKind(src)
 		return nil
+	case "help":
+		// ? shows the keys in the card's place; ? again, the card.
+		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
+			if files.Exists(s + ".help") {
+				os.Remove(s + ".help")
+			} else {
+				bestEffort(os.WriteFile(s+".help", nil, 0o600))
+			}
+		}
+		return nil
 	case "fetch":
 		src.fetch(e)
 		e.reloadItems(src)
@@ -505,6 +599,7 @@ func (e *Env) itemsView(src itemSource) error {
 	bestEffort(os.MkdirAll(e.SockDir, 0o700))
 	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
 	defer os.Remove(sock)
+	defer os.Remove(sock + ".help")
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
 	go func() {
@@ -545,7 +640,7 @@ func (e *Env) itemsView(src itemSource) error {
 			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
 			"--delimiter", "\t", "--with-nth", "5..", "--tabstop", "1",
 			"--no-sort", "--ansi", "--layout", "reverse", "--no-input",
-			"--header", e.itemFresh(src), "--header-first", "--footer", itemFooter(src), "--footer-border", "none",
+			"--header", e.itemFresh(src), "--header-first", "--footer", e.itemFooter(src), "--footer-border", "none",
 			"--border", "sharp", "--border-label", e.itemLabel(src), "--border-label-pos", "3", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
 			"--no-scrollbar", "--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
@@ -558,15 +653,18 @@ func (e *Env) itemsView(src itemSource) error {
 			"--bind", "o:" + act("open"),
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
-			"--bind", "esc:clear-query+hide-input+rebind(" + itemKeys + ")+transform(" + me + " chrome)",
-			"--bind", "q:ignore",
+			// q and esc: back to your thread, as on home.
+			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo 'execute-silent(` + q + ` go back)'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
+			"--bind", "q:execute-silent(" + q + " go back)",
+			"--bind", "?:execute-silent(" + me + " help)+refresh-preview",
 		}
 		if len(src.kinds()) > 1 {
-			args = append(args, "--bind", "s:execute-silent("+me+" switch)+"+reload+"+first")
+			args = append(args, "--bind", "s,tab:execute-silent("+me+" switch)+"+reload+"+first")
 		} else {
-			args = append(args, "--bind", "s:ignore")
+			args = append(args, "--bind", "s,tab:ignore")
 		}
 		c := exec.Command("fzf", args...)
+		c.Env = append(os.Environ(), "WEAVER_VIEW_SOCK="+sock)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr
 		err := c.Run()
