@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/neovim/go-client/nvim"
+	"github.com/robbowland/weaver/internal/agent"
 )
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
@@ -44,9 +45,9 @@ func (e *Env) hookBg() {
 	// tmux: the window of an agent that has just finished is flagged, for
 	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
 	if h.State != h.Old.State {
-		if h.State == StateDone {
+		if h.State == agent.StateDone {
 			e.Tmux("set-option", "-w", "-t", h.Pane.target(), "@weaver-unseen", "1")
-		} else if h.Old.State == StateDone {
+		} else if h.Old.State == agent.StateDone {
 			e.Tmux("set-option", "-w", "-u", "-t", h.Pane.target(), "@weaver-unseen")
 		}
 	}
@@ -234,11 +235,11 @@ func (e *Env) pushStatus(labels bool) {
 			continue
 		}
 		switch r.State {
-		case StateNeedsYou:
+		case agent.StateNeedsYou:
 			need++
-		case StateWorking, StateStarting:
+		case agent.StateWorking, agent.StateStarting:
 			work++
-		case StateDone:
+		case agent.StateDone:
 			if r.Seen {
 				continue
 			}
@@ -247,7 +248,7 @@ func (e *Env) pushStatus(labels bool) {
 			} else {
 				done++
 			}
-		case StateIdle, StateInterrupted, StateEnded:
+		case agent.StateIdle, agent.StateInterrupted, agent.StateEnded:
 			// Not counted.
 		}
 	}
@@ -312,7 +313,7 @@ func (e *Env) MarkSeen(p PaneID) {
 	if !exists(sf) {
 		return
 	}
-	updateState(sf, func(st *AgentState) { st.Seen = true })
+	updateState(sf, func(st *agent.Record) { st.Seen = true })
 }
 
 // threadTabLabels: in the weaver session a thread's window is its line on
@@ -456,7 +457,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 		return false
 	}
 	if exists(h.sf) {
-		updateState(h.sf, func(st *AgentState) {
+		updateState(h.sf, func(st *agent.Record) {
 			st.Root, st.File = r, newest
 			var fs []string
 			for _, f := range st.Files {

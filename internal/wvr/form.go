@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"golang.org/x/sys/unix"
 )
 
@@ -27,18 +28,18 @@ import (
 // here), the agent (claude | codex), the base (empty: the default), Mode
 // (review: read-only; empty: work) and the work item it starts from.
 type form struct {
-	Repo   string    `json:"repo"`
-	Here   string    `json:"here"`
-	Branch string    `json:"branch"`
-	Where  Where     `json:"where"`
-	Agent  AgentKind `json:"agent"`
-	Base   string    `json:"base"`
-	Mode   Mode      `json:"mode,omitempty"`
-	Item   *itemBox  `json:"item,omitempty"`
+	Repo   string     `json:"repo"`
+	Here   string     `json:"here"`
+	Branch string     `json:"branch"`
+	Where  Where      `json:"where"`
+	Agent  agent.Kind `json:"agent"`
+	Base   string     `json:"base"`
+	Mode   Mode       `json:"mode,omitempty"`
+	Item   *itemBox   `json:"item,omitempty"`
 }
 
 func loadForm(f string) form {
-	fm := form{Where: WhereWorktree, Agent: AgentClaude}
+	fm := form{Where: WhereWorktree, Agent: agent.Claude}
 	readRecord(f, &fm)
 	return fm
 }
@@ -255,14 +256,14 @@ func formPath(p string) string {
 	return t
 }
 
-func agentCmd(a AgentKind) string {
+func agentCmd(a agent.Kind) string {
 	switch a {
-	case AgentClaude:
+	case agent.Claude:
 		if c := os.Getenv("WEAVER_CLAUDE"); c != "" {
 			return c
 		}
 		return "claude"
-	case AgentCodex:
+	case agent.Codex:
 		if c := os.Getenv("WEAVER_CODEX"); c != "" {
 			return c
 		}
@@ -271,7 +272,7 @@ func agentCmd(a AgentKind) string {
 	return ""
 }
 
-func agentInstalled(a AgentKind) bool {
+func agentInstalled(a agent.Kind) bool {
 	c := agentCmd(a)
 	if c == "" {
 		return false
@@ -586,7 +587,7 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) error {
-	var repoArg, branch, base, agent, itemArg string
+	var repoArg, branch, base, agentArg, itemArg string
 	var from PaneID
 	var where Where
 	var itemKind ghKind
@@ -611,7 +612,7 @@ func (e *Env) New(args []string) error {
 			case "--base":
 				base = v
 			case "--agent":
-				agent = v
+				agentArg = v
 			case "--pr", "--issue":
 				itemArg, itemKind = v, ghKind(strings.TrimPrefix(a, "--"))
 			}
@@ -641,9 +642,9 @@ func (e *Env) New(args []string) error {
 	if e.Session == "" {
 		return errors.New("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
 	}
-	kind, ok := parseAgentKind(agent)
+	kind, ok := agent.ParseKind(agentArg)
 	if !ok {
-		return errors.New("unknown agent: " + agent + " (claude or codex)")
+		return errors.New("unknown agent: " + agentArg + " (claude or codex)")
 	}
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()
@@ -950,10 +951,10 @@ func (e *Env) Form(op, sf, q string) {
 		}
 		fm.save(sf)
 	case "agent":
-		if fm.Agent == AgentClaude {
-			fm.Agent = AgentCodex
+		if fm.Agent == agent.Claude {
+			fm.Agent = agent.Codex
 		} else {
-			fm.Agent = AgentClaude
+			fm.Agent = agent.Claude
 		}
 		fm.save(sf)
 	case "base":

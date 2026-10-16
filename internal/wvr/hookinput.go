@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 )
 
@@ -80,7 +82,7 @@ func (t toolInput) path() string {
 
 // asyncGate: the async hook runs after every tool call; most of them change
 // nothing.
-func asyncGate(in hookInput, state State) bool {
+func asyncGate(in hookInput, state agent.State) bool {
 	switch in.Event {
 	case "PostToolUse":
 		t := in.ToolName
@@ -96,9 +98,9 @@ func asyncGate(in hookInput, state State) bool {
 				}
 			}
 		}
-		return state != StateWorking
+		return state != agent.StateWorking
 	case "PostToolBatch":
-		return state == StateNeedsYou
+		return state == agent.StateNeedsYou
 	}
 	return true
 }
@@ -248,9 +250,9 @@ func filesNew(fs []string, file string) []string {
 }
 
 // subsNew is the subagents running after the event (aid its subagent's).
-func subsNew(subs []Subagent, in hookInput, aid string, now int64) []Subagent {
-	without := func() []Subagent {
-		out := []Subagent{}
+func subsNew(subs []agent.Subagent, in hookInput, aid string, now int64) []agent.Subagent {
+	without := func() []agent.Subagent {
+		out := []agent.Subagent{}
 		for _, s := range subs {
 			if s.ID != aid {
 				out = append(out, s)
@@ -261,26 +263,26 @@ func subsNew(subs []Subagent, in hookInput, aid string, now int64) []Subagent {
 	switch in.Event {
 	case "SubagentStart":
 		if aid != "" {
-			return append(without(), Subagent{ID: aid, Type: one(in.AgentType, 40), Since: strconvNum(now)})
+			return append(without(), agent.Subagent{ID: aid, Type: one(in.AgentType, 40), Since: json.Number(strconv.FormatInt(now, 10))})
 		}
 	case "SubagentStop":
 		return without()
 	case "Stop":
 		if len(background(in)) == 0 {
-			return []Subagent{}
+			return []agent.Subagent{}
 		}
 	case "SessionStart":
 		if in.Source != "compact" {
-			return []Subagent{}
+			return []agent.Subagent{}
 		}
 	}
 	return subs
 }
 
 // tasksNew is the agent's tasks after the event: the last 30.
-func tasksNew(tasks []Task, in hookInput) []Task {
+func tasksNew(tasks []agent.Task, in hookInput) []agent.Task {
 	id, subject := string(in.TaskID), one(in.TaskSubject, 80)
-	last30 := func(a []Task) []Task {
+	last30 := func(a []agent.Task) []agent.Task {
 		if len(a) > 30 {
 			return a[len(a)-30:]
 		}
@@ -288,15 +290,15 @@ func tasksNew(tasks []Task, in hookInput) []Task {
 	}
 	switch in.Event {
 	case "TaskCreated":
-		out := []Task{}
+		out := []agent.Task{}
 		for _, t := range tasks {
 			if t.ID != id {
 				out = append(out, t)
 			}
 		}
-		return last30(append(out, Task{ID: id, Subject: subject}))
+		return last30(append(out, agent.Task{ID: id, Subject: subject}))
 	case "TaskCompleted":
-		out := append([]Task{}, tasks...)
+		out := append([]agent.Task{}, tasks...)
 		found := false
 		for i := range out {
 			if out[i].ID == id {
@@ -306,10 +308,10 @@ func tasksNew(tasks []Task, in hookInput) []Task {
 		if found {
 			return out
 		}
-		return last30(append(out, Task{ID: id, Subject: subject, Done: true}))
+		return last30(append(out, agent.Task{ID: id, Subject: subject, Done: true}))
 	case "SessionStart":
 		if in.Source != "compact" && in.Source != "resume" {
-			return []Task{}
+			return []agent.Task{}
 		}
 	}
 	return tasks

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/robbowland/weaver/internal/agent"
 )
 
 // A member of an unexpected type reads as its zero value; the rest reads.
@@ -26,7 +28,7 @@ func TestReadStateTolerant(t *testing.T) {
 		if (err == nil) != c.ok || s.Prompt != c.prompt {
 			t.Errorf("%s: err %v prompt %q, want ok %v prompt %q", c.json, err, s.Prompt, c.ok, c.prompt)
 		}
-		if c.ok && (s.State != StateDone || s.Turn != 0 || len(s.Tasks) != 0) {
+		if c.ok && (s.State != agent.StateDone || s.Turn != 0 || len(s.Tasks) != 0) {
 			t.Errorf("%s: %+v", c.json, s)
 		}
 	}

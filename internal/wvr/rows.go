@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"golang.org/x/sys/unix"
 )
@@ -77,7 +78,7 @@ func (e *Env) Panes() ([]Pane, bool) {
 // Row is an agent of the session as the board, the status line and the
 // navigation show it: its text with control characters made spaces.
 type Row struct {
-	State                                                             State
+	State                                                             agent.State
 	Pane                                                              PaneID
 	Tab                                                               WindowID
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
@@ -164,7 +165,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	var rows []Row
 	type gone struct {
 		f, pid, start string
-		st            State
+		st            agent.State
 	}
 	var gones []gone
 	var pids []int
@@ -183,7 +184,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			}
 			continue
 		}
-		if p.Exited || s.State == StateEnded {
+		if p.Exited || s.State == agent.StateEnded {
 			continue
 		}
 		// Claude Code's own session file says more than the hooks can:
@@ -199,21 +200,21 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		st0 := s.State
 		if st0 == "" {
-			st0 = StateIdle
+			st0 = agent.StateIdle
 		}
 		st := st0
 		changed := false
 		since := numberOr(s.Since, 0)
 		switch {
 		case c == nil:
-		case st0 == StateNeedsYou && cst == "busy" && cu > since:
-			st, changed = StateWorking, true
-		case st0 != StateNeedsYou && cst == "waiting" && !(float64(s.TS) > cu):
-			st, changed = StateNeedsYou, st0 != StateNeedsYou
-		case st0 == StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
-			st, changed = StateInterrupted, true
+		case st0 == agent.StateNeedsYou && cst == "busy" && cu > since:
+			st, changed = agent.StateWorking, true
+		case st0 != agent.StateNeedsYou && cst == "waiting" && !(float64(s.TS) > cu):
+			st, changed = agent.StateNeedsYou, st0 != agent.StateNeedsYou
+		case st0 == agent.StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
+			st, changed = agent.StateInterrupted, true
 		}
-		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: State(clean(string(st)))}
+		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: agent.State(clean(string(st)))}
 		r.Root = clean(s.Root)
 		if r.Root == "" {
 			r.Root = clean(s.Cwd)
@@ -228,7 +229,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		r.Seen = s.Seen
 		r.Prompt = clean(s.Prompt)
-		if st == StateNeedsYou && st0 != StateNeedsYou {
+		if st == agent.StateNeedsYou && st0 != agent.StateNeedsYou {
 			r.Waiting = "input"
 			if cwait != "" {
 				r.Waiting = clean(cwait)
@@ -289,7 +290,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if since == 0 {
 			since = now
 		}
-		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: StateStarting,
+		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: clean(t.Worktree), Since: since, Prompt: clean(t.Task), Sfile: f,
 			Tabname: clean(p.TabName), Agent: clean(string(t.Agent)), Ttask: clean(t.Task),
 			Tname: clean(t.Name), Tnum: t.Num})
@@ -299,7 +300,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if !trusted {
 			continue
 		}
-		if agentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != StateEnded {
+		if agentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
 			continue
 		}
 		e.retire(g.f, g.pid)

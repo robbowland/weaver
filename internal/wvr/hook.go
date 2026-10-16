@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 )
 
@@ -42,15 +43,15 @@ type hk struct {
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
-	Old               AgentState
+	Old               agent.Record
 	Same              bool
 	OTurnRoots, Paths string
 	// The lists after the event, written in the foreground only.
-	Files     []string   `json:"-"`
-	Subagents []Subagent `json:"-"`
-	Tasks     []Task     `json:"-"`
+	Files     []string         `json:"-"`
+	Subagents []agent.Subagent `json:"-"`
+	Tasks     []agent.Task     `json:"-"`
 
-	State                                                                 State
+	State                                                                 agent.State
 	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
 	Marked, Marker, MarkDir, Bg, Bgdesc, Pid, ProcStart, Title, EndReason string
 	Turn, TurnEnded                                                       int
@@ -76,8 +77,8 @@ func (e *Env) Hook(in []byte, mode string, pane PaneID, agent, me string) int {
 }
 
 // hook folds event ev into the state of the agent in pane.
-func (e *Env) hook(ev hookInput, mode string, pane PaneID, agent, me string) int {
-	h := &hk{Pane: pane, AgentKind: agent, Mode: mode, SKey: e.SKey}
+func (e *Env) hook(ev hookInput, mode string, pane PaneID, agentName, me string) int {
+	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
 	}
@@ -91,7 +92,7 @@ func (e *Env) hook(ev hookInput, mode string, pane PaneID, agent, me string) int
 	// ours.
 	if me != "" && pk.pid != "" && me != pk.pid {
 		if agentAlive(pk.pid, pk.start, nil) {
-			if pk.state != StateEnded {
+			if pk.state != agent.StateEnded {
 				return 0
 			}
 		} else {
@@ -120,7 +121,7 @@ func (e *Env) hook(ev hookInput, mode string, pane PaneID, agent, me string) int
 }
 
 type peeked struct {
-	state      State
+	state      agent.State
 	pid, start string
 }
 
@@ -136,7 +137,7 @@ func peek(sf string) peeked {
 	l, _ := firstLine(sf)
 	var p peeked
 	if m := rePkState.FindStringSubmatch(l); m != nil {
-		p.state = State(m[1])
+		p.state = agent.State(m[1])
 	}
 	if m := rePkPid.FindStringSubmatch(l); m != nil {
 		p.pid = m[1]
@@ -214,7 +215,7 @@ func (h *hk) parse(in hookInput, st []byte) bool {
 	// The stored state, typed; whether it is this session's.
 	known := jsonx.Decode(jsonx.First(st), &h.Old) == nil
 	if !known {
-		h.Old = AgentState{}
+		h.Old = agent.Record{}
 	}
 	h.Same = known && h.Old.SessionID == in.SessionID
 	h.Files = filesNew(h.sess().Files, h.File)
@@ -418,7 +419,7 @@ func (h *hk) run(e *Env, me string) {
 	}
 
 	bg, _ := atoi(h.BgNew)
-	ch := transition(h.Old, h.sess(), hookEvent{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
+	ch := agent.Transition(h.Old, h.sess(), agent.Event{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
 		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt != "", Rejected: h.Rejected != "",
 		Background: bg, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
 		Title: h.TitleNew, Transcript: h.Transcript, LastMessage: h.LastNew, EndReason: h.EndNew, Now: h.Now})
@@ -442,30 +443,11 @@ func (h *hk) run(e *Env, me string) {
 func (h *hk) oPid() string { return string(h.Old.Pid) }
 
 // sess is the stored state when it is this session's, else none.
-func (h *hk) sess() AgentState {
+func (h *hk) sess() agent.Record {
 	if h.Same {
 		return h.Old
 	}
-	return AgentState{}
-}
-
-// stateCell is a state's glyph.
-func stateCell(s State) string {
-	switch s {
-	case StateNeedsYou:
-		return GNeed
-	case StateDone:
-		return GDone
-	case StateWorking, StateStarting:
-		return GWork
-	case StateInterrupted:
-		return GInt
-	case StateEnded:
-		return GEnd
-	case StateIdle:
-		return GIdle
-	}
-	return GIdle
+	return agent.Record{}
 }
 
 // readNvimPane is the agent's nvim pane, when that nvim still runs.
@@ -500,7 +482,7 @@ func (e *Env) writeState(h *hk, lk string) {
 	if since == "" {
 		since = "0"
 	}
-	st := AgentState{Pane: jsonx.Int(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
+	st := agent.Record{Pane: jsonx.Int(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
 		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn, TurnEnded: h.TurnEnded,
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
@@ -608,7 +590,7 @@ func (h *hk) hookLog(e *Env) {
 		h.logLine(e, "cwd", `,"cwd":`+jsonStr(h.Cwd)+`,"root":`+jsonStr(h.Root))
 	}
 	if h.State != h.Old.State {
-		if h.State == StateNeedsYou {
+		if h.State == agent.StateNeedsYou {
 			h.logLine(e, "needs-you", `,"waiting":`+jsonStr(h.Waiting))
 		}
 		h.logLine(e, "state", `,"state":"`+string(h.State)+`"`)

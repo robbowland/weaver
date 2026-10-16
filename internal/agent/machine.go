@@ -1,4 +1,4 @@
-package wvr
+package agent
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 // state, works out where the agent is (its cwd, root and turns, which need
 // the file system), and writes what this returns.
 
-// hookEvent is a hook event as the state machine needs it.
-type hookEvent struct {
+// Event is a hook event as the state machine needs it.
+type Event struct {
 	Name   string // hook_event_name
 	Async  bool   // run by the async hook (only its PreToolUse means a command)
 	Source string // SessionStart's: startup, resume, clear, compact
@@ -33,20 +33,20 @@ type hookEvent struct {
 	Now                                                               int64
 }
 
-// stateChange is the next state, and the bell it rings: 10 needs you, 11
+// Change is the next state, and the bell it rings: 10 needs you, 11
 // done, 0 none.
-type stateChange struct {
-	Next AgentState
+type Change struct {
+	Next Record
 	Bell int
 }
 
-// transition is what ev makes of old, the stored state (sess: old when it
+// Transition is what ev makes of old, the stored state (sess: old when it
 // is this session's, else empty). Only the members the state machine owns
 // are set: state, what it waits on, background work, the command it runs,
 // why it ended, since and seen, its last reply, prompt, file, title, turn's
 // prompt_id, transcript and Worktrunk marker.
-func transition(old, sess AgentState, ev hookEvent) stateChange {
-	n := AgentState{
+func Transition(old, sess Record, ev Event) Change {
+	n := Record{
 		Waiting: old.Waiting, Pending: old.Pending, Background: old.Background, BackgroundTasks: old.BackgroundTasks,
 		Doing: sess.Doing, DoingID: sess.DoingID, DoneIDs: sess.DoneIDs, State: old.State,
 	}
@@ -196,7 +196,7 @@ func transition(old, sess AgentState, ev hookEvent) stateChange {
 		}
 	}
 	if n.State != old.State || old.Since == "" {
-		n.Since, n.Seen = strconvNum(ev.Now), false
+		n.Since, n.Seen = numberOf(ev.Now), false
 	} else {
 		n.Since, n.Seen = old.Since, old.Seen
 	}
@@ -226,10 +226,10 @@ func transition(old, sess AgentState, ev hookEvent) stateChange {
 	}
 	// Worktrunk's branch marker: the state's cell, none once it ended.
 	if n.State != StateEnded {
-		n.Marker = stateCell(n.State)
+		n.Marker = n.State.Cell()
 	}
-	return stateChange{n, bell}
+	return Change{n, bell}
 }
 
-// strconvNum is epoch seconds as a JSON number.
-func strconvNum(n int64) json.Number { return json.Number(strconv.FormatInt(n, 10)) }
+// numberOf is epoch seconds as a JSON number.
+func numberOf(n int64) json.Number { return json.Number(strconv.FormatInt(n, 10)) }

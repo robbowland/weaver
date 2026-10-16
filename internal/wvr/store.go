@@ -7,68 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // The records weaver keeps under $STATE_DIR (docs/design.md, Files), as
 // types: read whole, written whole, atomically.
-
-// AgentState is an agent's state file (docs/design.md, State file), as the
-// hook writes it, in this order.
-type AgentState struct {
-	Pane            jsonx.Int    `json:"pane"`
-	Agent           string       `json:"agent"`
-	State           State        `json:"state"`
-	TS              int64        `json:"ts"`
-	Since           json.Number  `json:"since"`
-	Seen            bool         `json:"seen"`
-	SessionID       string       `json:"session_id"`
-	Pid             json.Number  `json:"pid,omitempty"`
-	ProcStart       string       `json:"proc_start"`
-	Title           string       `json:"title"`
-	Turn            int          `json:"turn"`
-	TurnEnded       int          `json:"turn_ended"`
-	PromptID        string       `json:"prompt_id"`
-	Transcript      string       `json:"transcript"`
-	Cwd             string       `json:"cwd"`
-	Root            string       `json:"root"`
-	StartCwd        string       `json:"start_cwd"`
-	ProjectRoot     string       `json:"project_root"`
-	File            string       `json:"file"`
-	Prompt          string       `json:"prompt"`
-	Waiting         string       `json:"waiting"`
-	Pending         string       `json:"pending"`
-	LastMessage     string       `json:"last_message"`
-	MarkedRoot      string       `json:"marked_root"`
-	Marker          string       `json:"marker"`
-	Background      int          `json:"background"`
-	BackgroundTasks string       `json:"background_tasks"`
-	Doing           string       `json:"doing,omitempty"`
-	DoingID         string       `json:"doing_id,omitempty"`
-	DoneIDs         string       `json:"done_ids,omitempty"`
-	NvimPane        *json.Number `json:"nvim_pane"`
-	Server          int          `json:"server,omitempty"`
-	EndReason       string       `json:"end_reason,omitempty"`
-	Log             string       `json:"log,omitempty"`
-	Subagents       []Subagent   `json:"subagents"`
-	Tasks           []Task       `json:"tasks"`
-	TurnRoots       []string     `json:"turn_roots"`
-	Files           []string     `json:"files"`
-}
-
-// Task is one of an agent's tasks (TaskCreated, TaskCompleted).
-type Task struct {
-	ID      string `json:"id"`
-	Subject string `json:"subject"`
-	Done    bool   `json:"done"`
-}
-
-// Subagent is a subagent an agent runs now.
-type Subagent struct {
-	ID    string      `json:"id"`
-	Type  string      `json:"type"`
-	Since json.Number `json:"since"`
-}
 
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
 // new` made, and where; its agent's pane and conversation once it has them.
@@ -82,7 +26,7 @@ type Thread struct {
 	Worktree        string      `json:"worktree"`
 	Here            bool        `json:"here"`
 	WorktreeCreated bool        `json:"worktree_created"`
-	Agent           AgentKind   `json:"agent"`
+	Agent           agent.Kind  `json:"agent"`
 	Created         int64       `json:"created"`
 	Base            string      `json:"base"`
 	Item            *ThreadItem `json:"item,omitempty"`
@@ -103,10 +47,10 @@ type ThreadItem struct {
 // when, which session, and its agent's state and thread record as they
 // were.
 type Lost struct {
-	Lost   jsonx.Int  `json:"lost"`
-	SKey   string     `json:"skey"`
-	State  AgentState `json:"state"`
-	Thread Thread     `json:"thread"`
+	Lost   jsonx.Int    `json:"lost"`
+	SKey   string       `json:"skey"`
+	State  agent.Record `json:"state"`
+	Thread Thread       `json:"thread"`
 	// Session is older records' name for SKey.
 	Session string `json:"session,omitempty"`
 }
@@ -200,8 +144,8 @@ func (e *Env) threadFile(p PaneID) string {
 func bestEffort(error) {}
 
 // readState is the agent state in file sf.
-func readState(sf string) (AgentState, error) {
-	var st AgentState
+func readState(sf string) (agent.Record, error) {
+	var st agent.Record
 	err := readRecord(sf, &st)
 	return st, err
 }
@@ -209,7 +153,7 @@ func readState(sf string) (AgentState, error) {
 // updateState changes the agent state in file sf under its lock: read,
 // changed, written back whole (the rename releases the lock). False when
 // there was none to change.
-func updateState(sf string, change func(*AgentState)) bool {
+func updateState(sf string, change func(*agent.Record)) bool {
 	lk := lock(sf)
 	st, err := readState(sf)
 	if err != nil {

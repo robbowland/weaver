@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"golang.org/x/sys/unix"
 )
@@ -99,7 +100,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
 // nofocus), nvim with nvimEnv too. Its window id.
-func (e *Env) threadTab(tok string, kind AgentKind, dir, name string, nofocus bool, nvimEnv ...string) (WindowID, bool) {
+func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (WindowID, bool) {
 	args := []string{"new-window"}
 	if nofocus {
 		args = append(args, "-d")
@@ -112,25 +113,25 @@ func (e *Env) threadTab(tok string, kind AgentKind, dir, name string, nofocus bo
 		return "", false
 	}
 	tab, _ := parseWindow(f[0])
-	agent, _ := parsePane(f[1])
+	agentPane, _ := parsePane(f[1])
 	total, ok := atoi(f[2])
 	if !ok {
 		total = 200
 	}
 	nvCols := max(total-agentCols(total)-1, 1)
-	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agent.target(),
+	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.target(),
 		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION=" + e.Session}
 	for _, v := range nvimEnv {
 		sw = append(sw, "-e", v)
 	}
-	out, err = e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agent))...)
+	out, err = e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agentPane))...)
 	f = strings.Fields(string(out))
 	if err != nil || len(f) < 2 {
 		e.Tmux("kill-window", "-t", tab.target())
 		return "", false
 	}
 	nv, _ := parsePane(f[0])
-	e.bindNvim(agent, nv, f[1])
+	e.bindNvim(agentPane, nv, f[1])
 	e.Tmux("select-pane", "-t", nv.target(), "-T", "nvim: "+filepath.Base(dir))
 	return tab, true
 }
@@ -426,7 +427,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
 	cmd := agentCmd(fm.Agent)
 	if review {
-		if fm.Agent == AgentCodex {
+		if fm.Agent == agent.Codex {
 			cmd += " --sandbox read-only"
 		} else {
 			cmd += " --permission-mode plan"
@@ -475,10 +476,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 // it where the agent is, and start the agent with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
-func (e *Env) AgentPane(tok, agent string) error {
-	kind, ok := parseAgentKind(agent)
+func (e *Env) AgentPane(tok, agentName string) error {
+	kind, ok := agent.ParseKind(agentName)
 	if !ok {
-		return errors.New("unknown agent: " + agent)
+		return errors.New("unknown agent: " + agentName)
 	}
 	pane := e.MyPane
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
@@ -507,7 +508,7 @@ func (e *Env) AgentPane(tok, agent string) error {
 		// so it can be resumed (never --continue).
 		var ident []string
 		sid := ""
-		if kind == AgentClaude {
+		if kind == agent.Claude {
 			sid = uuid()
 			if sid != "" {
 				ident = append(ident, "--session-id", sid)
@@ -557,7 +558,7 @@ func (e *Env) AgentPane(tok, agent string) error {
 			bestEffort(writeRecord(sf, st))
 		}
 		os.RemoveAll(d)
-		if kind == AgentClaude {
+		if kind == agent.Claude {
 			return run("--resume", sid)
 		}
 		return run("resume", sid)
@@ -575,9 +576,9 @@ func (e *Env) AgentPane(tok, agent string) error {
 		cmdOf(th)
 	}
 	switch {
-	case kind == AgentClaude && sid != "":
+	case kind == agent.Claude && sid != "":
 		return run("--resume", sid)
-	case kind == AgentClaude:
+	case kind == agent.Claude:
 		return run("--continue")
 	case sid != "":
 		return run("resume", sid)
@@ -612,7 +613,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	sid := clean(st.SessionID)
 	kind := th.Agent
 	if kind == "" {
-		kind = AgentKind(st.Agent)
+		kind = agent.Kind(st.Agent)
 	}
 	dir := clean(lo.Dir())
 	nm := clean(th.Name)
@@ -627,10 +628,10 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	if nm == "" {
 		nm = "thread"
 	}
-	if k, ok := parseAgentKind(string(kind)); ok {
+	if k, ok := agent.ParseKind(string(kind)); ok {
 		kind = k
 	} else {
-		kind = AgentClaude
+		kind = agent.Claude
 	}
 	if s, err := os.Stat(dir); sid == "" || err != nil || !s.IsDir() {
 		back()
@@ -653,8 +654,8 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	now := time.Now().Unix()
 	s2.Pid, s2.ProcStart, s2.NvimPane, s2.EndReason = "", "", nil, ""
 	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
-	s2.State, s2.TS, s2.Since, s2.Seen = StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
-	s2.Subagents, s2.Background, s2.BackgroundTasks = []Subagent{}, 0, ""
+	s2.State, s2.TS, s2.Since, s2.Seen = agent.StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
+	s2.Subagents, s2.Background, s2.BackgroundTasks = []agent.Subagent{}, 0, ""
 	if writeRecord(d+"/thread.json", t2) != nil ||
 		writeRecord(d+"/state.json", s2) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
@@ -998,32 +999,32 @@ func (e *Env) Close(args []string) error {
 			}
 		}
 	}
-	agent := e.agentOf(target)
-	if agent == "" {
+	agentPane := e.agentOf(target)
+	if agentPane == "" {
 		t := string(target)
 		if t == "" {
 			t = "?"
 		}
 		return errors.New("no agent in pane " + t)
 	}
-	nv, pending := readNvimPane(e, agent), ""
+	nv, pending := readNvimPane(e, agentPane), ""
 	if nv == "" {
-		nv, pending = threadNvim(panes, byID[agent])
+		nv, pending = threadNvim(panes, byID[agentPane])
 	}
-	th, _ := readThread(e.threadFile(agent))
-	var st State
+	th, _ := readThread(e.threadFile(agentPane))
+	var st agent.State
 	var pid, start, title, kind string
-	if s, err := readState(e.StateFile(agent)); err == nil {
+	if s, err := readState(e.StateFile(agentPane)); err == nil {
 		st, pid, start = s.State, clean(string(s.Pid)), clean(s.ProcStart)
 		title, kind = clean(s.Title), clean(s.Agent)
 	}
-	tab := byID[agent].Tab
+	tab := byID[agentPane].Tab
 	// The window's other panes, which close must leave alone (and which
 	// keep it open).
 	others := false
 	for _, p := range panes {
 		id := p.ID
-		if p.Tab == tab && id != agent && id != nv && !strings.HasSuffix(p.Cmd, " sidebar") {
+		if p.Tab == tab && id != agentPane && id != nv && !strings.HasSuffix(p.Cmd, " sidebar") {
 			others = true
 		}
 	}
@@ -1036,30 +1037,30 @@ func (e *Env) Close(args []string) error {
 		if k == "" {
 			k = "agent"
 		}
-		name = k + " in pane " + string(agent)
+		name = k + " in pane " + string(agentPane)
 	}
 	what := CGrey + string(st) + COff
 	switch st {
-	case StateNeedsYou:
+	case agent.StateNeedsYou:
 		what = CRed + "needs you" + COff
-	case StateDone:
-		what = CGreen + string(StateDone) + COff
-	case StateWorking:
-		what = string(StateWorking)
+	case agent.StateDone:
+		what = CGreen + string(agent.StateDone) + COff
+	case agent.StateWorking:
+		what = string(agent.StateWorking)
 	case "":
-		what = CGrey + string(StateStarting) + COff
-	case StateIdle, StateInterrupted, StateEnded, StateStarting:
+		what = CGrey + string(agent.StateStarting) + COff
+	case agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
 	}
 	n := 0
 	if nv != "" {
-		n = max(unsaved(e.nvimSock(agent)), 0)
+		n = max(unsaved(e.nvimSock(agentPane)), 0)
 	}
 	// Its worktree may go only if weaver made it and nothing would be lost.
 	keep, removable, tilde := "", false, ""
 	if th.WorktreeCreated && !th.Here && th.Worktree != "" {
 		tilde = formPath(th.Worktree)
 		var users []string
-		skip := map[PaneID]bool{agent: true, nv: true, e.MyPane: true}
+		skip := map[PaneID]bool{agentPane: true, nv: true, e.MyPane: true}
 		for _, p := range panes {
 			id := p.ID
 			if skip[id] || p.Exited || strings.HasSuffix(p.Cmd, " sidebar") {
@@ -1138,7 +1139,7 @@ func (e *Env) Close(args []string) error {
 			}
 		}
 	}
-	tail := []string{string(agent), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
+	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
 	// Closing the last panes of the window closes it, and any popup in it:
 	// when this runs in one, finish from outside it.
 	if me, ok := byID[e.MyPane]; !others && ok && me.Tab == tab {
@@ -1243,7 +1244,7 @@ func (e *Env) Send(args []string) error {
 		return errors.New("nothing to send")
 	}
 	rows, _ := e.AgentRows()
-	var st State
+	var st agent.State
 	for _, r := range rows {
 		if r.Pane == want {
 			st = r.State
@@ -1255,10 +1256,10 @@ func (e *Env) Send(args []string) error {
 	}
 	if !force {
 		switch st {
-		case StateIdle, StateDone, StateInterrupted:
-		case StateNeedsYou:
+		case agent.StateIdle, agent.StateDone, agent.StateInterrupted:
+		case agent.StateNeedsYou:
 			return errors.New("the agent waits on a dialog: answer it first (or --force)")
-		case StateWorking, StateEnded, StateStarting:
+		case agent.StateWorking, agent.StateEnded, agent.StateStarting:
 			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
 		default:
 			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)

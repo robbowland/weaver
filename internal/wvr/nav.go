@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/robbowland/weaver/internal/agent"
 )
 
 // Moving between agents: the board's jumps, Alt y (go home), Alt 1 (next),
@@ -185,13 +187,13 @@ func (e *Env) Next() {
 		}
 		class := 0
 		switch r.State {
-		case StateNeedsYou:
-		case StateDone:
+		case agent.StateNeedsYou:
+		case agent.StateDone:
 			if r.Seen {
 				continue
 			}
 			class = 1
-		case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
+		case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
 			continue
 		default:
 			continue
@@ -213,7 +215,7 @@ func (e *Env) Next() {
 		if r.Tnum > 0 {
 			l = fmt.Sprintf("%02d %s", r.Tnum, l)
 		}
-		if r.State == StateNeedsYou {
+		if r.State == agent.StateNeedsYou {
 			l += " · needs you"
 			if r.Waiting != "" {
 				l += " · " + runeSlice(r.Waiting, 50)

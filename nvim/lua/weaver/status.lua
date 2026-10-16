@@ -189,7 +189,7 @@ end
 
 -- The bar ---------------------------------------------------------------
 
--- weaver's state cells (the G* in internal/wvr/board.go): task cells, a mark
+-- weaver's state cells (the Cell* in internal/agent/state.go): task cells, a mark
 -- between faint brackets.
 local GLYPH = {
   working = { '/', 'WeaverBar' },

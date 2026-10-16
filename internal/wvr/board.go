@@ -10,18 +10,19 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"golang.org/x/sys/unix"
 )
 
 // Glyphs and colours: every state is a task cell, a mark between brackets.
 const (
-	GNeed = "[!]"
-	GDone = "[x]"
-	GSeen = "[x]"
-	GWork = "[/]"
-	GIdle = "[ ]"
-	GInt  = "[-]"
-	GEnd  = "[-]"
+	GNeed = agent.CellNeedsYou
+	GDone = agent.CellDone
+	GSeen = agent.CellDone
+	GWork = agent.CellWorking
+	GIdle = agent.CellIdle
+	GInt  = agent.CellInterrupted
+	GEnd  = agent.CellEnded
 
 	CRed   = "\033[38;2;255;59;47m"
 	CGreen = "\033[38;2;57;217;122m"
@@ -243,22 +244,22 @@ func (e *Env) rows(plain bool) string {
 			name = a.Prompt
 		}
 		if name == "" {
-			ag := a.Agent
-			if ag == "" {
-				ag = "claude"
+			kind := a.Agent
+			if kind == "" {
+				kind = string(agent.Claude)
 			}
-			name = "new " + ag + " session"
+			name = "new " + kind + " session"
 		}
 		var g int
 		var glyph, fact string
 		switch a.State {
-		case StateNeedsYou:
+		case agent.StateNeedsYou:
 			g, fact = 0, a.Waiting
 			if fact == "" {
 				fact = "input"
 			}
 			glyph = paint(GNeed, red, dim, off)
-		case StateWorking:
+		case agent.StateWorking:
 			g = 2
 			glyph = paint(GWork, grey, dim, off)
 			switch {
@@ -276,7 +277,7 @@ func (e *Env) rows(plain bool) string {
 			case a.File != "":
 				fact = "editing " + a.File
 			}
-		case StateDone:
+		case agent.StateDone:
 			if a.Seen {
 				g, glyph = 3, paint(GSeen, dim, dim, off)
 			} else {
@@ -302,14 +303,14 @@ func (e *Env) rows(plain bool) string {
 					fact += " · " + last
 				}
 			}
-		case StateInterrupted:
-			g, fact = 3, string(StateInterrupted)
+		case agent.StateInterrupted:
+			g, fact = 3, string(agent.StateInterrupted)
 			glyph = paint(GInt, grey, dim, off)
-		case StateStarting:
+		case agent.StateStarting:
 			// Its agent reports within seconds, unless its hooks are not in
 			// place (Codex runs them only once trusted in /hooks).
 			if now-since < 120 {
-				g, fact = 2, string(StateStarting)
+				g, fact = 2, string(agent.StateStarting)
 				glyph = paint(GWork, grey, dim, off)
 			} else {
 				g, fact = 3, "not reporting"
@@ -318,7 +319,7 @@ func (e *Env) rows(plain bool) string {
 					fact = "no hooks: trust them in codex /hooks"
 				}
 			}
-		case StateIdle, StateEnded:
+		case agent.StateIdle, agent.StateEnded:
 			// Seen and quiet: as anything else, the idle cell.
 			fallthrough
 		default:
@@ -541,7 +542,7 @@ func (e *Env) rows(plain bool) string {
 	// gap knows the agents around it.
 	type item struct {
 		id, pane, tab, text, label string
-		agent                      bool
+		isAgent                    bool
 	}
 	var ls []item
 	var keyl [10]string
@@ -604,7 +605,7 @@ func (e *Env) rows(plain bool) string {
 		if r.lost {
 			id = "l" + r.pane
 		}
-		ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, agent: true})
+		ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, isAgent: true})
 	}
 	if plain {
 		for _, it := range ls {
@@ -625,19 +626,19 @@ func (e *Env) rows(plain bool) string {
 		putFile(base+".keys", keys)
 	}
 	for i, it := range ls {
-		if it.agent {
+		if it.isAgent {
 			fmt.Fprintf(&b, "%s\t%s\t%s\t\t\t%s\t%s\n", it.id, it.pane, it.tab, it.label, it.text)
 			continue
 		}
 		prevp, nextp := "", ""
 		for j := i - 1; j >= 0; j-- {
-			if ls[j].agent {
+			if ls[j].isAgent {
 				prevp = strconv.Itoa(j + 1)
 				break
 			}
 		}
 		for j := i + 1; j < len(ls); j++ {
-			if ls[j].agent {
+			if ls[j].isAgent {
 				nextp = strconv.Itoa(j + 1)
 				break
 			}

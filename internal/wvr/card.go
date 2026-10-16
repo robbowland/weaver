@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 )
 
@@ -241,7 +242,7 @@ func (e *Env) Preview(args []string) string {
 		if terr != nil {
 			return out
 		}
-		s = AgentState{State: StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task, Agent: string(t.Agent)}
+		s = agent.Record{State: agent.StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task, Agent: string(t.Agent)}
 	} else if err != nil {
 		return out
 	}
@@ -267,11 +268,11 @@ func itemLine(t Thread) string {
 	return l
 }
 
-func card(s AgentState, from string, w int, head, ab string, changed, nw, shared int) string {
+func card(s agent.Record, from string, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
 	st := s.State
 	if st == "" {
-		st = StateIdle
+		st = agent.StateIdle
 	}
 	since := now
 	if v := numberOr(s.Since, 0); s.Since != "" {
@@ -281,17 +282,17 @@ func card(s AgentState, from string, w int, head, ab string, changed, nw, shared
 	}
 	word := string(st)
 	switch st {
-	case StateNeedsYou:
+	case agent.StateNeedsYou:
 		word = CRed + "needs you" + COff
-	case StateDone:
+	case agent.StateDone:
 		if !s.Seen {
-			word = CGreen + string(StateDone) + COff
+			word = CGreen + string(agent.StateDone) + COff
 		}
-	case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
+	case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
 		// The state's own word.
 	}
 	first := word + CDim + " · " + COff + cardAge(now-since)
-	if s.Agent != "" && s.Agent != string(AgentClaude) {
+	if s.Agent != "" && s.Agent != string(agent.Claude) {
 		first += CDim + " · " + COff + s.Agent
 	}
 	ls := []string{first, ""}
@@ -300,20 +301,20 @@ func card(s AgentState, from string, w int, head, ab string, changed, nw, shared
 		add(field(w, "from", from, "", 1))
 	}
 	add(field(w, "asked", s.Prompt, "", 4))
-	if st == StateNeedsYou {
+	if st == agent.StateNeedsYou {
 		waits := s.Waiting
 		if waits == "" {
 			waits = "you"
 		}
 		add(field(w, "waits", waits, "", 3))
 	}
-	if s.Doing != "" && st == StateWorking {
+	if s.Doing != "" && st == agent.StateWorking {
 		add(field(w, "runs", s.Doing, "", 3))
 	}
 	if s.Background > 0 {
 		add(field(w, "background", s.BackgroundTasks, "", 2))
 	}
-	if s.LastMessage != "" && st != StateWorking {
+	if s.LastMessage != "" && st != agent.StateWorking {
 		add(field(w, "said", s.LastMessage, CGrey, 6))
 	}
 	if ts := s.Tasks; len(ts) > 0 {

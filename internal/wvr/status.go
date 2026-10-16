@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/robbowland/weaver/internal/agent"
 )
 
 // CountsFmt is the status line's counts in tmux's colours: needs you, done,
@@ -64,15 +66,15 @@ func (e *Env) StatusText() string {
 			continue
 		}
 		switch r.State {
-		case StateNeedsYou:
+		case agent.StateNeedsYou:
 			n++
-		case StateWorking, StateStarting:
+		case agent.StateWorking, agent.StateStarting:
 			w++
-		case StateDone:
+		case agent.StateDone:
 			if !r.Seen {
 				d++
 			}
-		case StateIdle, StateInterrupted, StateEnded:
+		case agent.StateIdle, agent.StateInterrupted, agent.StateEnded:
 			// Not counted.
 		}
 	}

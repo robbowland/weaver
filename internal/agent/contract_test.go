@@ -1,4 +1,4 @@
-package wvr
+package agent
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 
 // The contracts between weaver's halves, which no single test sees whole:
 // the states an agent can be in and their cells, as the Go half
-// (stateCell), Neovim (STATES in init.lua, GLYPH in status.lua) and
+// (State.Cell), Neovim (STATES in init.lua, GLYPH in status.lua) and
 // docs/design.md have them. A copied list drifting from the first fails here.
 func TestStateContract(t *testing.T) {
 	read := func(p string) string {
@@ -45,7 +45,7 @@ func TestStateContract(t *testing.T) {
 		t.Errorf("Neovim's states %v are not the design doc's %v", lua, doc)
 	}
 	var goStates []string
-	for _, s := range agentStates {
+	for _, s := range States {
 		goStates = append(goStates, string(s))
 	}
 	sort.Strings(goStates)
@@ -65,11 +65,11 @@ func TestStateContract(t *testing.T) {
 		}
 	}
 	for _, s := range lua {
-		if c := stateCell(State(s)); c[1:2] != glyph[s] {
+		if c := State(s).Cell(); c[1:2] != glyph[s] {
 			t.Errorf("state %s: the Go half's cell %q, Neovim's mark %q", s, c, glyph[s])
 		}
 	}
-	if stateCell(StateStarting) != GWork {
-		t.Errorf("a starting thread shows as %q, not working's %q", stateCell("starting"), GWork)
+	if StateStarting.Cell() != CellWorking {
+		t.Errorf("a starting thread shows as %q, not working's %q", StateStarting.Cell(), CellWorking)
 	}
 }

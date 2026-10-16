@@ -20,9 +20,14 @@ as_pane() {
 }
 pane_env() { printf 'TMUX_PANE=%%%s' "$1"; }
 pass=0 fail=0
-# weaver's state glyphs (G_NEED, G_DONE, ...), from its own definition.
-eval "$(sed -nE 's/^	G(Need|Done|Seen|Work|Idle|Int|End) += "(.*)"$/\1 \2/p' "$(dirname "${BASH_SOURCE[0]}")/../internal/wvr/board.go" |
-	while read -r n g; do printf "G_%s='%s'\n" "$(echo "$n" | tr '[:lower:]' '[:upper:]')" "$g"; done)"
+# weaver's state cells (G_NEED, G_DONE, ...), from their own definition;
+# done and seen is done's cell.
+eval "$(sed -nE 's/^	Cell(NeedsYou|Done|Working|Idle|Interrupted|Ended) += "(.*)"$/\1 \2/p' "$(dirname "${BASH_SOURCE[0]}")/../internal/agent/state.go" |
+	while read -r n g; do
+		case $n in (NeedsYou) n=NEED ;; (Working) n=WORK ;; (Interrupted) n=INT ;; (Ended) n=END ;; (*) n=$(echo "$n" | tr "[:lower:]" "[:upper:]") ;; esac
+		printf "G_%s='%s'\n" "$n" "$g"
+	done)"
+G_SEEN=$G_DONE
 
 ok() {
 	if [ "$2" = "$3" ]; then

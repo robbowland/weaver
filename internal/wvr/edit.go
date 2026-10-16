@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/robbowland/weaver/internal/agent"
 )
 
 // The agent's nvim: `wvr edit` (Alt v, e on the board) opens it beside the
@@ -118,9 +120,9 @@ func (e *Env) Edit(args []string) error {
 		}
 		return nil
 	}
-	agent := e.agentOf(target)
+	agentPane := e.agentOf(target)
 	var newPane, nv PaneID
-	if agent == "" {
+	if agentPane == "" {
 		cwd := ""
 		if p := paneOf(panes, target); p != nil {
 			cwd = p.Cwd
@@ -133,10 +135,10 @@ func (e *Env) Edit(args []string) error {
 			return err
 		}
 	} else {
-		e.MarkSeen(agent)
-		h := &hk{Pane: agent, AgentKind: "claude"}
+		e.MarkSeen(agentPane)
+		h := &hk{Pane: agentPane, AgentKind: "claude"}
 		root, file := "", ""
-		if s, err := readState(e.StateFile(agent)); err == nil {
+		if s, err := readState(e.StateFile(agentPane)); err == nil {
 			root = s.Root
 			if root == "" {
 				root = s.Cwd
@@ -145,9 +147,9 @@ func (e *Env) Edit(args []string) error {
 			h.Sid, h.State, h.Turn = s.SessionID, s.State, s.Turn
 			h.AgentKind = s.Agent
 			if h.AgentKind == "" {
-				h.AgentKind = string(AgentClaude)
+				h.AgentKind = string(agent.Claude)
 			}
-		} else if t, err := readThread(e.threadFile(agent)); err == nil {
+		} else if t, err := readThread(e.threadFile(agentPane)); err == nil {
 			root = t.Worktree
 			h.AgentKind = string(t.Agent)
 			if h.AgentKind == "" {
@@ -167,10 +169,10 @@ func (e *Env) Edit(args []string) error {
 		if !strings.HasPrefix(file, root+"/") || !exists(file) {
 			file = ""
 		}
-		unlock := e.editLock(agent)
+		unlock := e.editLock(agentPane)
 		// Fresh, now that no other press is opening an nvim for this agent.
 		panes, _ = e.Panes()
-		nv = readNvimPane(e, agent)
+		nv = readNvimPane(e, agentPane)
 		// Reuse the agent's nvim while its pane is alive, even when nvim does
 		// not answer: never a second one.
 		if p := paneOf(panes, nv); nv != "" && p != nil && !p.Exited {
@@ -180,31 +182,31 @@ func (e *Env) Edit(args []string) error {
 			e.nvimEditEvent(h, "focus", root, file, "")
 			e.focus(nv)
 		} else {
-			argv := []string{e.Self, "nvim", string(agent)}
+			argv := []string{e.Self, "nvim", string(agentPane)}
 			if file != "" {
 				argv = append(argv, file)
 			}
 			var err error
-			if newPane, err = e.openLeftOf(agent, root, "nvim: "+filepath.Base(root), argv...); err != nil {
+			if newPane, err = e.openLeftOf(agentPane, root, "nvim: "+filepath.Base(root), argv...); err != nil {
 				unlock()
 				return err
 			}
 			// A thread's window gets its split back.
-			if exists(e.paneFile(agent, "thread")) {
-				e.threadWidth(agent)
+			if exists(e.paneFile(agentPane, "thread")) {
+				e.threadWidth(agentPane)
 			}
 			// The new nvim records itself (pane and pid) as it starts; give it
 			// a moment, still holding the lock, so a second press finds it.
 			// Only if it is slow, record its pane ourselves, without the pid
 			// (never over its own record).
 			for i := 0; i < 15; i++ {
-				if readNvimPane(e, agent) == newPane {
+				if readNvimPane(e, agentPane) == newPane {
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			if readNvimPane(e, agent) != newPane {
-				nf := e.paneFile(agent, "nvim")
+			if readNvimPane(e, agentPane) != newPane {
+				nf := e.paneFile(agentPane, "nvim")
 				if f, err := os.OpenFile(nf, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
 					_, err := f.WriteString(string(newPane) + "\n\n")
 					bestEffort(err)
@@ -216,8 +218,8 @@ func (e *Env) Edit(args []string) error {
 	}
 	if full {
 		p := target
-		if agent != "" {
-			if v := readNvimPane(e, agent); v != "" {
+		if agentPane != "" {
+			if v := readNvimPane(e, agentPane); v != "" {
 				p = v
 			} else if newPane != "" {
 				p = newPane
@@ -238,7 +240,7 @@ func (e *Env) Nvim(args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: wvr nvim <agent-pane-id> [file]")
 	}
-	agent, _ := parsePane(args[0])
+	agentPane, _ := parsePane(args[0])
 	file, fresh := "", false
 	if len(args) > 1 {
 		file = args[1]
@@ -247,7 +249,7 @@ func (e *Env) Nvim(args []string) error {
 		if len(args) < 2 {
 			return errors.New("usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 		}
-		agent, _ = parsePane(args[1])
+		agentPane, _ = parsePane(args[1])
 		file, fresh = "", true
 		if len(args) > 2 {
 			file = args[2]
@@ -260,12 +262,12 @@ func (e *Env) Nvim(args []string) error {
 		return errors.New(e.SockDir + " is not owned by you")
 	}
 	os.Chmod(e.SockDir, 0o700)
-	sock := e.nvimSock(agent)
+	sock := e.nvimSock(agentPane)
 	// Never take the socket of an nvim still serving this agent (answering,
 	// or alive but busy): go to it instead, and let this pane close.
 	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
 		if rc := nvimEval(sock, "1", 2*time.Second); rc == 0 || rc >= 128 {
-			if nv := readNvimPane(e, agent); nv != "" && nv != e.MyPane {
+			if nv := readNvimPane(e, agentPane); nv != "" && nv != e.MyPane {
 				e.focus(nv)
 			}
 			return nil
@@ -273,17 +275,17 @@ func (e *Env) Nvim(args []string) error {
 	}
 	os.Remove(sock)
 	os.Remove(sock + ".stalled")
-	sf := e.StateFile(agent)
+	sf := e.StateFile(agentPane)
 	if e.MyPane != "" {
 		os.MkdirAll(e.StateDir, 0o755)
-		nf := e.paneFile(agent, "nvim")
+		nf := e.paneFile(agentPane, "nvim")
 		tmp := nf + "." + strconv.Itoa(os.Getpid())
 		// exec keeps this pid for nvim.
 		if os.WriteFile(tmp, []byte(string(e.MyPane)+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
 			os.Rename(tmp, nf)
 		}
 		if exists(sf) && digits(string(e.MyPane)) {
-			updateState(sf, func(st *AgentState) {
+			updateState(sf, func(st *agent.Record) {
 				nv := json.Number(e.MyPane)
 				st.NvimPane = &nv
 			})
@@ -297,7 +299,7 @@ func (e *Env) Nvim(args []string) error {
 	if err != nil {
 		return errors.New("nvim is not installed")
 	}
-	env := append(os.Environ(), "WEAVER_PANE="+string(agent), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
+	env := append(os.Environ(), "WEAVER_PANE="+string(agentPane), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+PluginsDir())
 	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
 	// The ATTENTION dialog for a stale swap file would block this nvim and
 	// every remote call: open the startup file read-only instead (weaver.lua
