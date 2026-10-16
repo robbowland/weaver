@@ -363,7 +363,7 @@ case "$1 $2" in
 "pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
 "api graphql") echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
 "issue view") echo '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","author":{"login":"dan"},"state":"OPEN","comments":[]}' ;;
-"auth status") echo "Logged in to github.com account alice" ;;
+"auth token") echo "gho_fake" ;;
 *) echo "gh (fake): $*" >&2; exit 1 ;;
 esac
 GH

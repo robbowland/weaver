@@ -165,7 +165,7 @@ func onPath(name string) bool {
 	return err == nil
 }
 
-// signedIn: is tool (gh, linear-tui) signed in, as its `auth status` says?
+// signedIn: is tool (gh, linear-tui) signed in, as its auth says?
 // Asked at most once a minute, the answer kept in $STATE_DIR (linear-auth,
 // gh-auth): Alt y asks on every press.
 func (e *Env) signedIn(tool string) bool {
@@ -176,11 +176,18 @@ func (e *Env) signedIn(tool string) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c := exec.CommandContext(ctx, tool, "auth", "status")
+	// gh's auth status checks its token over the network (2 s): whether it
+	// has one is enough, and its token is never kept.
+	args := []string{"auth", "status"}
+	if tool == "gh" {
+		args = []string{"auth", "token"}
+	}
+	c := exec.CommandContext(ctx, tool, args...)
 	c.WaitDelay = time.Second
 	var out bytes.Buffer
 	c.Stdout = &out
 	ok := c.Run() == nil && !strings.Contains(out.String(), "Not authenticated")
+	out.Reset()
 	ans := "no"
 	if ok {
 		ans = "yes"
