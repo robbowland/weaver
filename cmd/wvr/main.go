@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/engine"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/wvr"
@@ -154,16 +155,16 @@ var commands = map[string]command{
 	"gc": {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
 
 	// The agents' hooks, and other agents' events.
-	"hook":  {run: done((*wvr.Env).HookMain)},
-	"event": {run: func(e *wvr.Env, args []string) error { return e.Event("", slices.Contains(args, "--bell")) }},
+	"hook":  {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
+	"event": {run: func(e *wvr.Env, args []string) error { return engine.Event(e.Env, "", slices.Contains(args, "--bell")) }},
 	"adapt": {run: func(e *wvr.Env, args []string) error {
 		if arg(args, 0) != "codex" {
 			return errors.New("usage: wvr adapt codex [--bell]")
 		}
-		return e.Event("codex", slices.Contains(args[1:], "--bell"))
+		return engine.Event(e.Env, "codex", slices.Contains(args[1:], "--bell"))
 	}},
 	"snapshot": {run: func(_ *wvr.Env, args []string) error {
-		c, msg := wvr.Snapshot(args)
+		c, msg := engine.Snapshot(args)
 		if msg != "" {
 			return errors.New(msg)
 		}

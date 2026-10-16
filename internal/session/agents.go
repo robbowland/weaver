@@ -77,5 +77,5 @@ func (e *Env) RenamePane(p tmux.PaneID, title string) {
 	if !e.InTmux {
 		args = append(append([]string{}, e.TSock...), args...)
 	}
-	exec.CommandContext(ctx, "tmux", args...).Run()
+	bestEffort(exec.CommandContext(ctx, "tmux", args...).Run()) // a title, nothing more
 }

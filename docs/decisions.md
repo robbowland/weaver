@@ -393,9 +393,15 @@ can supersede an earlier one, and says so.
   - commands return errors and `main` says them, from a command table;
   - the domain and the adapters are packages, dependencies pointing
     inward: `agent`; `store`, `tmux`, `git`, `nvim`, `items`, `hooks`,
-    `setup`; with `jsonx`, `oneline` and `cli` beneath them. `wvr` keeps
-    the application and its screens (threads, views, board, card, form),
-    which share `Env`; splitting them waits on `Env` itself splitting.
+    `setup`; with `jsonx`, `oneline`, `files` and `cli` beneath them.
+    `session` is the core the rest share (`Env`, its panes, the agents in
+    them, lost threads, the status counts, the sweep); `engine`, the hook
+    engine, runs on it, in the hooks' processes on every event; `wvr` is
+    the application and its screens, its `Env` embedding `session.Env`.
+  - `wvr` is not split further into threads, views and screens: they call
+    each other by design (the form opens threads, closing one shows its
+    card, the board lists lost threads), so packages would only export
+    their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
 

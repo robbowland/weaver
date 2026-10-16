@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ import (
 // agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, tmux, Worktrunk,
 // snapshots, the status line) runs after it in a detached `wvr hook --bg`.
 
-const rs, us = "\x1e", "\x1f"
+const rs = "\x1e" // separates the members of the hook's lists
 
 // bellJSON rings the bell: Claude Code writes terminalSequence to the agent's
 // terminal.
@@ -77,16 +77,16 @@ type hk struct {
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
 // returns the bell to ring (10 needs you, 11 done; 0 none).
-func (e *Env) Hook(in []byte, mode string, pane tmux.PaneID, agent, me string) int {
+func Hook(e *session.Env, in []byte, mode string, pane tmux.PaneID, agent, me string) int {
 	var ev hooks.Input
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
 		return 0
 	}
-	return e.hook(ev, mode, pane, agent, me)
+	return hook(e, ev, mode, pane, agent, me)
 }
 
 // hook folds event ev into the state of the agent in pane.
-func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me string) int {
+func hook(e *session.Env, ev hooks.Input, mode string, pane tmux.PaneID, agentName, me string) int {
 	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey}
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
@@ -124,8 +124,8 @@ func (e *Env) hook(ev hooks.Input, mode string, pane tmux.PaneID, agentName, me 
 		return 0
 	}
 	h.run(e, me)
-	e.writeState(h, lk)
-	e.afterWrite(h)
+	writeState(e, h, lk)
+	afterWrite(e, h)
 	return h.rc
 }
 
@@ -222,7 +222,7 @@ func atoi(s string) (int, bool) {
 var reProcStart = regexp.MustCompile(`"procStart":"([^"]*)"`)
 
 // run is the state machine, from the parse on.
-func (h *hk) run(e *Env, me string) {
+func (h *hk) run(e *session.Env, me string) {
 	// A new agent session in this pane (not a resume or compaction) starts
 	// afresh; otherwise the root is never reset to the start directory.
 	if h.Sid != "" && h.Sid != h.Old.SessionID {
@@ -384,7 +384,7 @@ func (h *hk) sess() agent.Record {
 }
 
 // writeState writes the state file from the hook's fields through its lock, which the rename releases.
-func (e *Env) writeState(h *hk, lk string) {
+func writeState(e *session.Env, h *hk, lk string) {
 	pane, _ := atoi(string(h.Pane))
 	since := h.Since
 	if since == "" {
@@ -440,7 +440,7 @@ func (e *Env) writeState(h *hk, lk string) {
 }
 
 // hookLog is the activity log's lines for this event (docs/design.md).
-func (h *hk) hookLog(e *Env) {
+func (h *hk) hookLog(e *session.Env) {
 	if h.Sid == "" {
 		return
 	}
@@ -485,9 +485,9 @@ func (h *hk) hookLog(e *Env) {
 
 // afterWrite: the activity log, the turn's prompt, following a Bash or MCP
 // edit (async), and the background work when there is some.
-func (e *Env) afterWrite(h *hk) {
+func afterWrite(e *session.Env, h *hk) {
 	if h.Sid != "" {
-		os.MkdirAll(e.LogDir, 0o755)
+		bestEffort(os.MkdirAll(e.LogDir, 0o755)) // else no log line
 	}
 	pf := e.PaneFile(h.Pane, "prompt")
 	if h.SnapPrev+h.SnapEnd != "" && files.Exists(pf) {
@@ -495,18 +495,19 @@ func (e *Env) afterWrite(h *hk) {
 		h.PrevPrompt = h.TurnPrompt
 	}
 	if h.SnapStart != "" {
-		os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644)
+		// Unwritten, the turn's snapshot goes without its prompt.
+		bestEffort(os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644))
 	}
 	h.hookLog(e)
 	if h.Mode == "async" && h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
 		// Following a Bash or MCP edit needs git: this process runs in the
 		// background anyway, so do it here.
-		if !e.followBashEdits(h) {
+		if !followBashEdits(e, h) {
 			if h.Tool == "Bash" {
 				h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
 			}
 			if h.NV != "" {
-				e.nvimEvent(h, h.nvimHead("checktime"), "", "")
+				nvimEvent(e, h, h.nvimHead("checktime"), "", "")
 			}
 		}
 	}
@@ -514,13 +515,13 @@ func (e *Env) afterWrite(h *hk) {
 	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch != "" ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
-		e.spawnBg(h)
+		spawnBg(e, h)
 	}
 }
 
 // spawnBg starts `wvr hook --bg`, detached, with this run in its
 // environment.
-func (e *Env) spawnBg(h *hk) {
+func spawnBg(e *session.Env, h *hk) {
 	// The stored state's lists stay behind: the background run has the new
 	// ones, and its environment has room for so much.
 	bg := *h
@@ -537,18 +538,19 @@ func (e *Env) spawnBg(h *hk) {
 		}
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	c.Start()
+	// Not started, nvim, tmux and the snapshots catch up at the next event.
+	bestEffort(c.Start())
 }
 
 // HookMain is `wvr hook [--async|--bg]`.
-func (e *Env) HookMain(args []string) {
+func HookMain(e *session.Env, args []string) {
 	mode := "sync"
 	if len(args) > 0 {
 		switch args[0] {
 		case "--async":
 			mode = "async"
 		case "--bg":
-			e.hookBg()
+			hookBg(e)
 			return
 		}
 	}
@@ -560,14 +562,15 @@ func (e *Env) HookMain(args []string) {
 	if me == "" {
 		me = os.Getenv("CLAUDE_PID")
 	}
-	rc := e.Hook(in, mode, e.MyPane, os.Getenv("WEAVER_AGENT"), me)
+	rc := Hook(e, in, mode, e.MyPane, os.Getenv("WEAVER_AGENT"), me)
 	if mode == "sync" {
 		bell := os.Getenv("WEAVER_BELL")
 		if bell == "" {
 			bell = "1"
 		}
 		if bell == "1" && (rc == 10 || rc == 11) || bell == "needs-you" && rc == 10 {
-			os.Stdout.WriteString(bellJSON + "\n")
+			_, err := os.Stdout.WriteString(bellJSON + "\n")
+			bestEffort(err) // a bell missed
 		}
 	}
 }

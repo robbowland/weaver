@@ -1,4 +1,4 @@
-package wvr
+package session
 
 import (
 	"os"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
-	"github.com/robbowland/weaver/internal/session"
 )
 
 var (
@@ -33,7 +32,7 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 	m := map[string]bool{}
 	ok := false
 	add := func(args ...string) {
-		out, err := session.RunTmux(args...)
+		out, err := RunTmux(args...)
 		if err != nil {
 			return
 		}
@@ -75,7 +74,7 @@ func (e *Env) GC() {
 		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), agent.State(sub1(reGcState, l))
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
 		if pid != "" {
-			if !session.AgentAlive(pid, start, nil) {
+			if !AgentAlive(pid, start, nil) {
 				e.Retire(f, pid)
 				continue
 			}
@@ -99,14 +98,14 @@ func (e *Env) GC() {
 		alive := false
 		if len(ls) > 1 {
 			if n, ok := atoi(ls[1]); ok {
-				alive = session.AgentAlive(ls[1], "", nil) && n > 0
+				alive = AgentAlive(ls[1], "", nil) && n > 0
 			}
 		}
 		if !alive {
 			os.Remove(f)
 		}
 	}
-	// A thread whose agent never reported (no state) goes with its session.
+	// A thread whose agent never reported (no state) goes with its
 	for _, f := range paneFiles(e.StateDir, "thread") {
 		if files.Exists(strings.TrimSuffix(f, ".thread") + ".json") {
 			continue
@@ -155,31 +154,4 @@ func paneFiles(dir, ext string) []string {
 		}
 	}
 	return out
-}
-
-// Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
-// behind its home board (whose fzf listens on SOCKET): old states swept, the
-// threads it lost back (unless WEAVER_RESTORE=0), and the status line's
-// counts and the windows' labels, whose push reloads the board.
-func (e *Env) Boot(sock string) {
-	e.GC()
-	if os.Getenv("WEAVER_RESTORE") != "0" {
-		also := strings.TrimPrefix(e.SKey, "tmux-")
-		for _, l := range e.LostRows() {
-			if l.Skey == e.SKey || l.Skey == also {
-				e.ResumeSession()
-				break
-			}
-		}
-	}
-	for i := 0; i < 20; i++ {
-		if st, err := os.Stat(sock); err == nil && st.Mode()&os.ModeSocket != 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	e.PushStatusAndLabels()
-	if e.WeaverSession() {
-		e.StartViews()
-	}
 }

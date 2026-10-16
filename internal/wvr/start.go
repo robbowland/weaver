@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/setup"
@@ -65,4 +66,31 @@ func (e *Env) Start(name string) error {
 	}
 	return fmt.Errorf("tmux: %w", syscall.Exec(tmux, append(base, "new-session", "-s", name, "-n", "home", "-c", here, "-e", "WEAVER_TMUX_SESSION="+name,
 		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
+}
+
+// Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
+// behind its home board (whose fzf listens on SOCKET): old states swept, the
+// threads it lost back (unless WEAVER_RESTORE=0), and the status line's
+// counts and the windows' labels, whose push reloads the board.
+func (e *Env) Boot(sock string) {
+	e.GC()
+	if os.Getenv("WEAVER_RESTORE") != "0" {
+		also := strings.TrimPrefix(e.SKey, "tmux-")
+		for _, l := range e.LostRows() {
+			if l.Skey == e.SKey || l.Skey == also {
+				e.ResumeSession()
+				break
+			}
+		}
+	}
+	for i := 0; i < 20; i++ {
+		if st, err := os.Stat(sock); err == nil && st.Mode()&os.ModeSocket != 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	e.PushStatusAndLabels()
+	if e.WeaverSession() {
+		e.StartViews()
+	}
 }

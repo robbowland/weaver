@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"encoding/json"
@@ -16,29 +16,31 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/nvim"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
 // state, after it, so the agent never waits on nvim,
 // tmux, git or Worktrunk.
-func (e *Env) hookBg() {
+func hookBg(e *session.Env) {
 	h := &hk{}
 	if json.Unmarshal([]byte(os.Getenv("WEAVER_BG")), h) != nil {
 		return
 	}
-	os.Unsetenv("WEAVER_BG")
+	bestEffort(os.Unsetenv("WEAVER_BG"))
 	h.sf = e.StateFile(h.Pane)
 	// nvim first: following is what you see.
 	if h.NV != "" {
 		if h.EvFile != "" {
-			e.nvimEditEvent(h, "edit", h.Root, h.EvFile, h.Tool)
+			nvimEditEvent(e, h, "edit", h.Root, h.EvFile, h.Tool)
 		} else if h.Root != h.Old.Root {
-			e.nvimEvent(h, nvimRoot{h.nvimHead("root"), h.Root}, h.Root, "")
+			nvimEvent(e, h, nvimRoot{h.nvimHead("root"), h.Root}, h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
 		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
-			e.nvimStateEvent(h)
+			nvimStateEvent(e, h)
 		}
 	}
 	// tmux: the window of an agent that has just finished is flagged, for
@@ -59,7 +61,7 @@ func (e *Env) hookBg() {
 			e.PushStatus()
 		}
 	}
-	if h.NV != "" && h.Root != h.Old.Root && e.sameRoot(h) {
+	if h.NV != "" && h.Root != h.Old.Root && sameRoot(h) {
 		e.RenamePane(h.NV, "nvim: "+filepath.Base(h.Root))
 	}
 	if h.MarkDir != h.Old.MarkedRoot || h.MarkDir != "" && h.Marker != h.Old.Marker {
@@ -73,12 +75,12 @@ func (e *Env) hookBg() {
 	if h.Event == "SessionStart" {
 		e.GC()
 	}
-	e.hookSnapshots(h)
+	hookSnapshots(e, h)
 }
 
 // sameRoot: is h's root still the agent's? A later hook may have moved it
 // on while this one waited.
-func (e *Env) sameRoot(h *hk) bool {
+func sameRoot(h *hk) bool {
 	l, _ := files.FirstLine(h.sf)
 	m := regexp.MustCompile(`"root":"([^"]*)"`).FindStringSubmatch(l)
 	return m == nil || m[1] == h.Root
@@ -89,18 +91,18 @@ func wtMarker(dir, m string) {
 	if _, err := exec.LookPath("wt"); err != nil {
 		return
 	}
+	args := []string{"-C", dir, "config", "state", "marker", "clear"}
 	if m != "" {
-		exec.Command("wt", "-C", dir, "config", "state", "marker", "set", m).Run()
-	} else {
-		exec.Command("wt", "-C", dir, "config", "state", "marker", "clear").Run()
+		args = []string{"-C", dir, "config", "state", "marker", "set", m}
 	}
+	bestEffort(exec.Command("wt", args...).Run()) // a branch's mark, nothing more
 }
 
 // nvimEvent sends event ev (docs/design.md) to the agent's nvim: WeaverEvent,
 // or AgentFollow / AgentChecktime on a weaver.lua that predates it, over its
 // socket (msgpack-RPC; no nvim client started). An nvim that did not
 // answer in time is left alone for 15s.
-func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) {
+func nvimEvent(e *session.Env, h *hk, m nvimMessage, r, f string) {
 	sock := e.NvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return
@@ -133,12 +135,12 @@ func (e *Env) nvimEvent(h *hk, m nvimMessage, r, f string) {
 }
 
 // nvimEditEvent: an edit (or a focus) at file f in root r.
-func (e *Env) nvimEditEvent(h *hk, ev, r, f, tool string) {
-	e.nvimEvent(h, nvimEdit{h.nvimHead(ev), r, f, tool, h.Aid}, r, f)
+func nvimEditEvent(e *session.Env, h *hk, ev, r, f, tool string) {
+	nvimEvent(e, h, nvimEdit{h.nvimHead(ev), r, f, tool, h.Aid}, r, f)
 }
 
-func (e *Env) nvimStateEvent(h *hk) {
-	e.nvimEvent(h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing}, "", "")
+func nvimStateEvent(e *session.Env, h *hk) {
+	nvimEvent(e, h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing}, "", "")
 }
 
 // followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
@@ -146,7 +148,7 @@ func (e *Env) nvimStateEvent(h *hk) {
 // command names, the one it ran in and the agent's root, the files git sees
 // as changed since the previous such call; the newest is followed. False
 // when nothing changed.
-func (e *Env) followBashEdits(h *hk) bool {
+func followBashEdits(e *session.Env, h *hk) bool {
 	stamp := e.PaneFile(h.Pane, "bash")
 	nw := stamp + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(nw, nil, 0o644) != nil {
@@ -154,7 +156,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 	}
 	sst, err := os.Stat(stamp)
 	if err != nil {
-		os.Rename(nw, stamp)
+		bestEffort(os.Rename(nw, stamp)) // without it, the next command looks further back
 		return false
 	}
 	var roots []string
@@ -215,7 +217,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 			cs = append(cs, cand{p, st.ModTime()})
 		}
 	}
-	os.Rename(nw, stamp)
+	bestEffort(os.Rename(nw, stamp))
 	if len(cs) == 0 {
 		return false
 	}
@@ -251,7 +253,7 @@ func (e *Env) followBashEdits(h *hk) bool {
 	}
 	// A root first touched this turn starts its chain from HEAD.
 	if !strings.Contains(rs+h.TurnRoots+rs, rs+r+rs) && h.Turn > 0 && h.Sid != "" {
-		e.snapRoots(h, "base", h.Turn, r, "", h.PromptID)
+		snapRoots(e, h, "base", h.Turn, r, "", h.PromptID)
 	}
 	if h.Tool == "Bash" {
 		h.logLine(e, logBash{h.logHead("bash"), h.Cmd, newest})
@@ -261,9 +263,20 @@ func (e *Env) followBashEdits(h *hk) bool {
 	if h.NV == "" {
 		return true
 	}
-	e.nvimEditEvent(h, "edit", r, newest, h.Tool)
+	nvimEditEvent(e, h, "edit", r, newest, h.Tool)
 	if r != h.Old.Root {
 		e.RenamePane(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true
+}
+
+// Focus tells the nvim of the agent in pane p, which rec says (its kind
+// alone before it reports), to show file in root.
+func Focus(e *session.Env, p tmux.PaneID, rec agent.Record, root, file string) {
+	now := time.Now()
+	h := &hk{Pane: p, AgentKind: rec.Agent, Sid: rec.SessionID, State: rec.State, Turn: rec.Turn, Now: now.Unix(), NowMs: now.UnixMilli()}
+	if h.AgentKind == "" {
+		h.AgentKind = string(agent.Claude)
+	}
+	nvimEditEvent(e, h, "focus", root, file, "")
 }

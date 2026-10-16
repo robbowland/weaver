@@ -45,6 +45,9 @@ type tab struct {
 	active     bool
 }
 
+// us separates the fields of a tmux format's line.
+const us = "\x1f"
+
 func (e *Env) tabs() []tab {
 	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id}"+us+"#{window_name}"+us+"#{window_active}"+us+"#{@weaver-view}")
 	if err != nil {

@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -20,7 +21,7 @@ import (
 // input into such an event first.
 
 // Event is `wvr event [--bell]` and `wvr adapt codex [--bell]`.
-func (e *Env) Event(adapter string, bell bool) error {
+func Event(e *session.Env, adapter string, bell bool) error {
 	if cli.IsTTY(0) {
 		return errors.New("usage: wvr event [--bell] < event.json")
 	}
@@ -79,7 +80,7 @@ func (e *Env) Event(adapter string, bell bool) error {
 	if pid == "" && adapter != "" && h.Event == "SessionStart" {
 		pid = agentAncestor()
 	}
-	rc := e.hook(h, mode, tmux.PaneID(pane), agent, pid)
+	rc := hook(e, h, mode, tmux.PaneID(pane), agent, pid)
 	if bell {
 		bl := os.Getenv("WEAVER_BELL")
 		if bl == "" {
@@ -87,8 +88,8 @@ func (e *Env) Event(adapter string, bell bool) error {
 		}
 		if bl == "1" && (rc == 10 || rc == 11) || bl == "needs-you" && rc == 10 {
 			if t, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
-				t.WriteString("\a")
-				t.Close()
+				_, err := t.WriteString("\a")
+				bestEffort(errors.Join(err, t.Close())) // a bell missed
 			}
 		}
 	}

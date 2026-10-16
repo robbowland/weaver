@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"os"
@@ -36,13 +36,21 @@ func TestPruneSnapshots(t *testing.T) {
 	git(nil, "update-ref", "refs/worktree/weaver/sessions/new", commit(now.Add(-time.Hour)))
 	git(nil, "update-ref", "refs/worktree/weaver/reviewed", commit(now.Add(-90*24*time.Hour)))
 	gd := filepath.Join(top, ".git", "weaver")
-	os.MkdirAll(gd, 0o755)
+	if err := os.MkdirAll(gd, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	stale := now.Add(-40 * 24 * time.Hour)
 	for _, f := range []string{"index-old", "index-new", "index-reviewed"} {
-		os.WriteFile(filepath.Join(gd, f), []byte("x"), 0o644)
+		if err := os.WriteFile(filepath.Join(gd, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	os.Chtimes(filepath.Join(gd, "index-old"), stale, stale)
-	os.Chtimes(filepath.Join(gd, "index-reviewed"), stale, stale)
+	if err := os.Chtimes(filepath.Join(gd, "index-old"), stale, stale); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(gd, "index-reviewed"), stale, stale); err != nil {
+		t.Fatal(err)
+	}
 
 	pruneSnapshots(top, gd, now.Add(-snapKeep))
 

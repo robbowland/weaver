@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/session"
 )
 
 // What the hook tells beyond the state file: the agent session's activity
@@ -88,7 +89,7 @@ func (h *hk) logHead(ev string) logHead {
 }
 
 // logLine appends line to the agent session's activity log.
-func (h *hk) logLine(e *Env, line any) {
+func (h *hk) logLine(e *session.Env, line any) {
 	if h.Sid == "" {
 		return
 	}

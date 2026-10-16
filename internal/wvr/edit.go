@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/engine"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/setup"
@@ -141,25 +142,15 @@ func (e *Env) Edit(args []string) error {
 		}
 	} else {
 		e.MarkSeen(agentPane)
-		h := &hk{Pane: agentPane, AgentKind: "claude"}
+		var rec agent.Record
 		root, file := "", ""
 		if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
-			root = s.Root
+			rec, root, file = s, s.Root, s.File
 			if root == "" {
 				root = s.Cwd
 			}
-			file = s.File
-			h.Sid, h.State, h.Turn = s.SessionID, s.State, s.Turn
-			h.AgentKind = s.Agent
-			if h.AgentKind == "" {
-				h.AgentKind = string(agent.Claude)
-			}
 		} else if t, err := store.ReadThread(e.ThreadFile(agentPane)); err == nil {
-			root = t.Worktree
-			h.AgentKind = string(t.Agent)
-			if h.AgentKind == "" {
-				h.AgentKind = "claude"
-			}
+			rec.Agent, root = string(t.Agent), t.Worktree
 		}
 		if st, err := os.Stat(root); root == "" || err != nil || !st.IsDir() {
 			root, _ = os.Getwd()
@@ -182,9 +173,7 @@ func (e *Env) Edit(args []string) error {
 		// not answer: never a second one.
 		if p := paneOf(panes, nv); nv != "" && p != nil && !p.Exited {
 			unlock()
-			now := time.Now()
-			h.Now, h.NowMs = now.Unix(), now.UnixMilli()
-			e.nvimEditEvent(h, "focus", root, file, "")
+			engine.Focus(e.Env, agentPane, rec, root, file)
 			e.focus(nv)
 		} else {
 			argv := []string{e.Self, "nvim", string(agentPane)}

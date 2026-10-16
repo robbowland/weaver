@@ -1,6 +1,9 @@
 package wvr
 
-import "github.com/robbowland/weaver/internal/session"
+import (
+	"github.com/robbowland/weaver/internal/session"
+	"strconv"
+)
 
 // Env is the weaver session, with what the application does in it.
 type Env struct{ *session.Env }
@@ -24,3 +27,12 @@ func digits(s string) bool {
 // bestEffort marks an error left unhandled on purpose: what failed (a
 // marker, a cache, a view started early) costs nothing that matters.
 func bestEffort(error) {}
+
+// atoi is s as a number when it is digits.
+func atoi(s string) (int, bool) {
+	if !digits(s) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}

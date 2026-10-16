@@ -157,3 +157,12 @@ func digits(s string) bool {
 	}
 	return true
 }
+
+// atoi is s as a number when it is digits.
+func atoi(s string) (int, bool) {
+	if !digits(s) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}

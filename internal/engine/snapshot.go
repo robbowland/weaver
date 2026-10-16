@@ -1,4 +1,4 @@
-package wvr
+package engine
 
 import (
 	"os"
@@ -13,6 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 )
 
 // snapMsg are a snapshot commit's message fields.
@@ -52,7 +53,8 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	os.WriteFile(lockd+"/pid", []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
+	// Without its owner, the lock is waited out.
+	bestEffort(os.WriteFile(lockd+"/pid", []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644))
 	defer os.RemoveAll(lockd)
 
 	label := point
@@ -73,7 +75,8 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		if !files.Exists(idx) {
 			if index, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
 				if b, err := os.ReadFile(index); err == nil {
-					os.WriteFile(idx, b, 0o644)
+					// A head start; without it git reads every file.
+					bestEffort(os.WriteFile(idx, b, 0o644))
 				}
 			}
 		}
@@ -216,7 +219,7 @@ func pruneSnapshots(top, gd string, before time.Time) {
 
 // snapRoots snapshots each root (RS-separated) onto the session's chain;
 // logs and tells nvim about each new commit.
-func (e *Env) snapRoots(h *hk, point string, turn int, roots, prompt, promptID string) {
+func snapRoots(e *session.Env, h *hk, point string, turn int, roots, prompt, promptID string) {
 	seen := map[string]bool{}
 	ref := "refs/worktree/weaver/sessions/" + h.Sid
 	for _, r := range strings.Split(roots, rs) {
@@ -236,34 +239,34 @@ func (e *Env) snapRoots(h *hk, point string, turn int, roots, prompt, promptID s
 		}
 		h.logLine(e, logSnapshot{h.logHead("snapshot"), r, c, point})
 		if h.NV != "" {
-			e.nvimEvent(h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref}, "", "")
+			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref}, "", "")
 		}
 	}
 }
 
 // hookSnapshots are the turn's snapshots, from the hook's background run.
-func (e *Env) hookSnapshots(h *hk) {
+func hookSnapshots(e *session.Env, h *hk) {
 	if os.Getenv("WEAVER_SNAPSHOTS") == "0" || h.Sid == "" {
 		return
 	}
 	if h.SnapPrev != "" {
 		n, _ := atoi(h.SnapPrev)
-		e.snapRoots(h, "end", n, h.OTurnRoots, h.PrevPrompt, h.sess().PromptID)
+		snapRoots(e, h, "end", n, h.OTurnRoots, h.PrevPrompt, h.sess().PromptID)
 	}
 	if h.SnapStart != "" {
 		// The agent's root, and the roots of its previous turn: changes made
 		// there since are not this turn's.
-		e.snapRoots(h, "start", h.Turn, h.Root+rs+h.OTurnRoots, h.PromptLong, h.PromptID)
+		snapRoots(e, h, "start", h.Turn, h.Root+rs+h.OTurnRoots, h.PromptLong, h.PromptID)
 	}
 	if h.FirstTouch != "" {
-		e.snapRoots(h, "base", h.Turn, h.FirstTouch, "", h.PromptID)
+		snapRoots(e, h, "base", h.Turn, h.FirstTouch, "", h.PromptID)
 	}
 	if h.SnapEnd != "" {
 		tr := h.TurnRoots
 		if tr != "" {
 			tr += rs
 		}
-		e.snapRoots(h, "end", h.Turn, tr+h.Root, h.TurnPrompt, h.PromptID)
+		snapRoots(e, h, "end", h.Turn, tr+h.Root, h.TurnPrompt, h.PromptID)
 	}
 }
 
