@@ -81,14 +81,8 @@ func (e *Env) threadNum() (int, map[int]bool) {
 		}
 	}
 	for _, f := range fs {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		if o, ok := readObj(b); ok {
-			if n, ok := num(o.get("num", nil)); ok {
-				used[int(n)] = true
-			}
+		if t, err := readThread(f); err == nil && t.Num > 0 {
+			used[t.Num] = true
 		}
 	}
 	n := 1
@@ -657,7 +651,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	s2.Pid, s2.ProcStart, s2.NvimPane, s2.EndReason = "", "", nil, ""
 	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
 	s2.State, s2.TS, s2.Since, s2.Seen = StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
-	s2.Subagents, s2.Background, s2.BackgroundTasks = json.RawMessage("[]"), 0, ""
+	s2.Subagents, s2.Background, s2.BackgroundTasks = []Subagent{}, 0, ""
 	if writeRecord(d+"/thread.json", t2) != nil ||
 		writeRecord(d+"/state.json", s2) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
@@ -1025,11 +1019,9 @@ func (e *Env) Close(args []string) int {
 	th, _ := readThread(e.threadFile(agent))
 	var st State
 	var pid, start, title, kind string
-	if b, err := os.ReadFile(e.StateFile(agent)); err == nil {
-		if o, ok := readObj(b); ok {
-			st, pid, start = State(str(o.get("state", ""))), str(o.get("pid", "")), str(o.get("proc_start", ""))
-			title, kind = str(o.get("title", "")), str(o.get("agent", ""))
-		}
+	if s, err := readState(e.StateFile(agent)); err == nil {
+		st, pid, start = s.State, clean(string(s.Pid)), clean(s.ProcStart)
+		title, kind = clean(s.Title), clean(s.Agent)
 	}
 	tab := byID[agent].Tab
 	// The window's other panes, which close must leave alone (and which

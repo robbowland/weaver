@@ -226,21 +226,23 @@ func (e *Env) Preview(args []string) string {
 			}
 		}
 	}
-	b, err := os.ReadFile(sf)
-	if err != nil {
-		return out
-	}
-	s, ok := readObj(b)
-	if !ok {
-		return out
-	}
 	// The work item its thread started from.
-	if t, err := readThread(e.threadFile(pane)); err == nil {
-		if f := itemLine(t); f != "" {
-			s["from"] = f
-		}
+	from := ""
+	t, terr := readThread(e.threadFile(pane))
+	if terr == nil {
+		from = itemLine(t)
 	}
-	return out + card(s, previewCols(), head, ab, changed, nw, shared)
+	s, err := readState(sf)
+	if sf == e.threadFile(pane) {
+		// Its agent has not reported: the thread as it starts.
+		if terr != nil {
+			return out
+		}
+		s = AgentState{State: StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task, Agent: string(t.Agent)}
+	} else if err != nil {
+		return out
+	}
+	return out + card(s, from, previewCols(), head, ab, changed, nw, shared)
 }
 
 // itemLine is a thread record's work item for its card: PR o/r#45, issue
@@ -262,85 +264,88 @@ func itemLine(t Thread) string {
 	return l
 }
 
-func card(s obj, w int, head, ab string, changed, nw, shared int) string {
+func card(s AgentState, from string, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
-	if _, ok := s["state"]; !ok {
-		s = obj{"state": string(StateStarting), "since": s["created"], "prompt": s["task"], "agent": s["agent"], "from": s["from"]}
+	st := s.State
+	if st == "" {
+		st = StateIdle
 	}
-	st := State(tostring(s.get("state", string(StateIdle))))
-	seen := s.get("seen", false) == true
 	since := now
-	if v, ok := num(firstOf(s.get("since", nil), s.get("ts", nil))); ok {
+	if v := numberOr(s.Since, 0); s.Since != "" {
 		since = int64(v)
+	} else if s.TS != 0 {
+		since = s.TS
 	}
 	word := string(st)
 	switch st {
 	case StateNeedsYou:
 		word = CRed + "needs you" + COff
 	case StateDone:
-		if !seen {
+		if !s.Seen {
 			word = CGreen + string(StateDone) + COff
 		}
 	case StateWorking, StateIdle, StateInterrupted, StateEnded, StateStarting:
 		// The state's own word.
 	}
 	first := word + CDim + " · " + COff + cardAge(now-since)
-	if ag := tostring(s.get("agent", "claude")); ag != "claude" {
-		first += CDim + " · " + COff + ag
+	if s.Agent != "" && s.Agent != string(AgentClaude) {
+		first += CDim + " · " + COff + s.Agent
 	}
 	ls := []string{first, ""}
 	add := func(f []string) { ls = append(ls, f...) }
-	if f := s.get("from", ""); f != "" {
-		add(field(w, "from", f, "", 1))
+	if from != "" {
+		add(field(w, "from", from, "", 1))
 	}
-	add(field(w, "asked", s.get("prompt", ""), "", 4))
+	add(field(w, "asked", s.Prompt, "", 4))
 	if st == StateNeedsYou {
-		add(field(w, "waits", s.get("waiting", "you"), "", 3))
+		waits := s.Waiting
+		if waits == "" {
+			waits = "you"
+		}
+		add(field(w, "waits", waits, "", 3))
 	}
-	if d := s.get("doing", ""); d != "" && st == StateWorking {
-		add(field(w, "runs", d, "", 3))
+	if s.Doing != "" && st == StateWorking {
+		add(field(w, "runs", s.Doing, "", 3))
 	}
-	if n, ok := num(s.get("background", json.Number("0"))); ok && n > 0 {
-		add(field(w, "background", s.get("background_tasks", ""), "", 2))
+	if s.Background > 0 {
+		add(field(w, "background", s.BackgroundTasks, "", 2))
 	}
-	if l := s.get("last_message", ""); l != "" && st != StateWorking {
-		add(field(w, "said", l, CGrey, 6))
+	if s.LastMessage != "" && st != StateWorking {
+		add(field(w, "said", s.LastMessage, CGrey, 6))
 	}
-	if ts, ok := s.get("tasks", []any{}).([]any); ok && len(ts) > 0 {
+	if ts := s.Tasks; len(ts) > 0 {
 		if len(ts) > 12 {
 			ts = ts[len(ts)-12:]
 		}
 		var ps []string
 		for _, t := range ts {
-			to, _ := t.(map[string]any)
 			g := GIdle + " "
-			if to["done"] == true {
+			if t.Done {
 				g = GSeen + " "
 			}
-			ps = append(ps, strings.ReplaceAll(cardOne(g+tostring(to["subject"])), " ", nbsp))
+			ps = append(ps, strings.ReplaceAll(cardOne(g+t.Subject), " ", nbsp))
 		}
 		add(field(w, "tasks", strings.Join(ps, nbsp+" "), "", 3))
 	}
-	if ss, ok := s.get("subagents", []any{}).([]any); ok && len(ss) > 0 {
+	if len(s.Subagents) > 0 {
 		var ps []string
-		for _, x := range ss {
-			so, _ := x.(map[string]any)
+		for _, x := range s.Subagents {
 			sn := now
-			if v, ok := num(obj(so).get("since", nil)); ok {
-				sn = int64(v)
+			if x.Since != "" {
+				sn = int64(numberOr(x.Since, float64(now)))
 			}
-			ps = append(ps, tostring(so["type"])+" "+cardAge(now-sn))
+			ps = append(ps, x.Type+" "+cardAge(now-sn))
 		}
 		add(field(w, "subagents", strings.Join(ps, " · "), "", 2))
 	}
-	if fs, ok := s.get("files", []any{}).([]any); ok && len(fs) > 0 {
+	if fs := s.Files; len(fs) > 0 {
 		last := fs
 		if len(last) > 6 {
 			last = last[len(last)-6:]
 		}
 		var ps []string
 		for i := len(last) - 1; i >= 0; i-- {
-			ps = append(ps, strings.ReplaceAll(filepath.Base(tostring(last[i])), " ", nbsp))
+			ps = append(ps, strings.ReplaceAll(filepath.Base(last[i]), " ", nbsp))
 		}
 		t := strings.Join(ps, nbsp+" ")
 		if len(fs) > 6 {

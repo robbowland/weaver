@@ -165,6 +165,14 @@ func hasCtl(s string) bool {
 	return false
 }
 
+// numberOr is n as a float, or d when it is not a number.
+func numberOr(n json.Number, d float64) float64 {
+	if f, err := n.Float64(); err == nil {
+		return f
+	}
+	return d
+}
+
 // num is a JSON value as a number (jq's arithmetic); ok false when it is not one.
 func num(v any) (float64, bool) {
 	switch x := v.(type) {
@@ -266,29 +274,28 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	var gones []gone
 	var pids []int
 	for _, f := range jsons {
-		b, err := os.ReadFile(f)
+		s, err := readState(f)
 		if err != nil {
-			continue
-		}
-		s, ok := readObj(b)
-		if !ok {
-			continue // corrupt
+			continue // gone, or corrupt
 		}
 		t, terr := readThread(strings.TrimSuffix(f, ".json") + ".thread")
-		p := byID[tostring(s["pane"])]
+		p := byID[strconv.Itoa(int(s.Pane))]
 		if p == nil {
-			g := gone{f, str(s.get("pid", "")), str(s.get("proc_start", "")), State(str(s.get("state", "")))}
+			g := gone{f, clean(string(s.Pid)), clean(s.ProcStart), s.State}
 			gones = append(gones, g)
 			if n, err := strconv.Atoi(g.pid); err == nil {
 				pids = append(pids, n)
 			}
 			continue
 		}
-		if p.Exited || State(tostring(s["state"])) == StateEnded {
+		if p.Exited || s.State == StateEnded {
 			continue
 		}
+		// Claude Code's own session file says more than the hooks can:
+		// a long tool you approved is work, an unreported dialog needs
+		// you, quiet after Esc is interrupted.
 		var c obj
-		if c0, ok := live[tostring(s.get("pid", ""))]; ok && tostring(c0.get("sessionId", "")) == tostring(s.get("session_id", "")) {
+		if c0, ok := live[string(s.Pid)]; ok && tostring(c0.get("sessionId", "")) == s.SessionID {
 			c = c0
 		}
 		cu := 0.0
@@ -297,71 +304,75 @@ func (e *Env) AgentRows() ([]Row, int64) {
 				cu = math.Floor(v / 1000)
 			}
 		}
-		st0 := State(tostring(s.get("state", string(StateIdle))))
+		st0 := s.State
+		if st0 == "" {
+			st0 = StateIdle
+		}
 		st := st0
 		changed := false
 		cst := ""
 		if c != nil {
 			cst = tostring(c.get("status", nil))
 		}
-		cuv := json.Number(strconv.FormatFloat(cu, 'f', -1, 64))
+		since := numberOr(s.Since, 0)
 		switch {
 		case c == nil:
-		case st0 == StateNeedsYou && cst == "busy" && jqGreater(cuv, s.get("since", json.Number("0"))):
+		case st0 == StateNeedsYou && cst == "busy" && cu > since:
 			st, changed = StateWorking, true
-		case st0 != StateNeedsYou && cst == "waiting" && !jqGreater(s.get("ts", json.Number("0")), cuv):
+		case st0 != StateNeedsYou && cst == "waiting" && !(float64(s.TS) > cu):
 			st, changed = StateNeedsYou, st0 != StateNeedsYou
-		case st0 == StateWorking && cst == "idle" && jqCmp(s.get("background", json.Number("0")), json.Number("0")) == 0 &&
-			jqGreater(cuv, s.get("ts", json.Number("0"))) && float64(now)-cu > 3:
+		case st0 == StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = StateInterrupted, true
 		}
-		r := Row{Pane: str(s["pane"]), Tab: strconv.Itoa(p.Tab), State: State(clean(string(st)))}
-		r.Root = str(firstOf(s.get("root", nil), s.get("cwd", nil), ""))
-		if !changed {
-			r.Since = str(firstOf(s.get("since", nil), s.get("ts", nil), json.Number("0")))
-		} else {
-			r.Since = str(cuv)
+		r := Row{Pane: strconv.Itoa(int(s.Pane)), Tab: strconv.Itoa(p.Tab), State: State(clean(string(st)))}
+		r.Root = clean(s.Root)
+		if r.Root == "" {
+			r.Root = clean(s.Cwd)
 		}
-		r.Seen = str(s.get("seen", false))
-		r.Prompt = str(s.get("prompt", ""))
+		switch {
+		case changed:
+			r.Since = strconv.FormatFloat(cu, 'f', -1, 64)
+		case s.Since != "":
+			r.Since = s.Since.String()
+		default:
+			r.Since = strconv.FormatInt(s.TS, 10)
+		}
+		r.Seen = strconv.FormatBool(s.Seen)
+		r.Prompt = clean(s.Prompt)
 		if st == StateNeedsYou && st0 != StateNeedsYou {
 			r.Waiting = str(c.get("waitingFor", "input"))
 		} else {
-			r.Waiting = str(s.get("waiting", ""))
+			r.Waiting = clean(s.Waiting)
 		}
-		r.Bg = str(s.get("background", json.Number("0")))
-		r.Title = str(s.get("title", ""))
-		r.Nsub = strconv.Itoa(jqLength(s.get("subagents", []any{})))
-		r.Pid = str(s.get("pid", ""))
-		r.Pstart = str(s.get("proc_start", ""))
+		r.Bg = strconv.Itoa(s.Background)
+		r.Title = clean(s.Title)
+		r.Nsub = strconv.Itoa(len(s.Subagents))
+		r.Pid = clean(string(s.Pid))
+		r.Pstart = clean(s.ProcStart)
 		r.Sfile = f
-		r.Turn = str(s.get("turn", json.Number("0")))
-		r.Last = str(s.get("last_message", ""))
-		if ts, ok := s.get("tasks", []any{}).([]any); ok {
-			d := 0
-			for _, x := range ts {
-				if o, ok := x.(map[string]any); ok && o["done"] == true {
-					d++
-				}
+		r.Turn = strconv.Itoa(s.Turn)
+		r.Last = clean(s.LastMessage)
+		d := 0
+		for _, x := range s.Tasks {
+			if x.Done {
+				d++
 			}
-			r.Tdone, r.Ttotal = strconv.Itoa(d), strconv.Itoa(len(ts))
-		} else {
-			continue // jq's arrays filter: no row at all
 		}
-		fs := strings.Split(tostring(s.get("file", "")), "/")
-		r.File = clean(fs[len(fs)-1])
-		r.Sid = str(s.get("session_id", ""))
+		r.Tdone, r.Ttotal = strconv.Itoa(d), strconv.Itoa(len(s.Tasks))
+		r.File = clean(filepath.Base(s.File))
+		if s.File == "" {
+			r.File = ""
+		}
+		r.Sid = clean(s.SessionID)
 		r.Tabname = clean(p.TabName)
-		r.Agent = str(s.get("agent", ""))
-		r.Bgtasks = str(s.get("background_tasks", ""))
-		r.Doing = clean(str(s.get("doing", "")))
+		r.Agent = clean(s.Agent)
+		r.Bgtasks = clean(s.BackgroundTasks)
+		r.Doing = clean(s.Doing)
 		if terr == nil {
 			r.Ttask, r.Tname, r.Tnum = clean(t.Task), clean(t.Name), strconv.Itoa(t.Num)
 		}
-		if tr, ok := s.get("turn_roots", []any{}).([]any); ok {
-			for _, x := range tr {
-				r.Troots = append(r.Troots, clean(tostring(x)))
-			}
+		for _, x := range s.TurnRoots {
+			r.Troots = append(r.Troots, clean(x))
 		}
 		if n, err := strconv.Atoi(r.Pid); err == nil {
 			pids = append(pids, n)
@@ -578,25 +589,20 @@ func (e *Env) lostCheck(f string) bool {
 	if !exists(b+".thread") || !exists(f) {
 		return false
 	}
-	data, err := os.ReadFile(f)
-	if err != nil {
+	s, err := readState(f)
+	if err != nil || s.SessionID == "" {
 		return false
 	}
-	s, ok := readObj(data)
-	if !ok {
-		return false
-	}
-	sid := tostring(s.get("session_id", ""))
-	if sid == "" {
-		return false
-	}
-	switch tostring(s.get("end_reason", "")) {
+	switch s.EndReason {
 	case "prompt_input_exit", "logout", "clear":
 		return false
 	}
-	ts, _ := num(s.get("ts", json.Number("0")))
+	srv := ""
+	if s.Server != 0 {
+		srv = strconv.Itoa(s.Server)
+	}
 	base := filepath.Base(b)
-	return e.serverLost(base[:strings.LastIndexByte(base, '_')], ts, tostring(s.get("server", "")))
+	return e.serverLost(base[:strings.LastIndexByte(base, '_')], float64(s.TS), srv)
 }
 
 // serverLost: did session key skey's session go since ts (epoch s), the

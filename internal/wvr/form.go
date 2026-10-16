@@ -657,9 +657,10 @@ func (e *Env) New(args []string) (int, bool) {
 		}
 	case from != "":
 		f := ""
-		if b, err := os.ReadFile(e.StateFile(from)); err == nil {
-			if o, ok := readObj(b); ok {
-				f = tostring(firstOf(o.get("root", nil), o.get("cwd", nil), ""))
+		if s, err := readState(e.StateFile(from)); err == nil {
+			f = s.Root
+			if f == "" {
+				f = s.Cwd
 			}
 		}
 		if st, err := os.Stat(f); f == "" || err != nil || !st.IsDir() {
@@ -1146,15 +1147,17 @@ func (e *Env) recentRepos(first string) string {
 	ts, _ := filepath.Glob(e.StateDir + "/*_*.thread")
 	seen := map[string]bool{}
 	for _, f := range append(fs, ts...) {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			continue
+		d := ""
+		if strings.HasSuffix(f, ".thread") {
+			if t, err := readThread(f); err == nil {
+				d = t.Repo
+			}
+		} else if s, err := readState(f); err == nil {
+			d = s.Root
+			if d == "" {
+				d = s.Cwd
+			}
 		}
-		o, ok := readObj(b)
-		if !ok {
-			continue
-		}
-		d := tostring(firstOf(o.get("repo", nil), o.get("root", nil), o.get("cwd", nil), ""))
 		if d == "" || seen[d] {
 			continue
 		}

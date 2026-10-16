@@ -139,13 +139,17 @@ func (e *Env) Edit(args []string) int {
 		e.MarkSeen(agent)
 		h := &hk{Pane: agent, AgentKind: "claude"}
 		root, file := "", ""
-		if b, err := os.ReadFile(e.StateFile(agent)); err == nil {
-			o, _ := readObj(b)
-			root = tostring(firstOf(o.get("root", nil), o.get("cwd", nil), ""))
-			file = tostring(o.get("file", ""))
-			h.Sid, h.State = tostring(o.get("session_id", "")), State(tostring(o.get("state", "")))
-			h.Turn, _ = atoi(tostring(o.get("turn", "0")))
-			h.AgentKind = tostring(o.get("agent", "claude"))
+		if s, err := readState(e.StateFile(agent)); err == nil {
+			root = s.Root
+			if root == "" {
+				root = s.Cwd
+			}
+			file = s.File
+			h.Sid, h.State, h.Turn = s.SessionID, s.State, s.Turn
+			h.AgentKind = s.Agent
+			if h.AgentKind == "" {
+				h.AgentKind = string(AgentClaude)
+			}
 		} else if t, err := readThread(e.threadFile(agent)); err == nil {
 			root = t.Worktree
 			h.AgentKind = string(t.Agent)

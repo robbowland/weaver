@@ -982,9 +982,15 @@ func (e *Env) writeState(h *hk, lk string) {
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
 		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
-		Subagents: rawOrEmpty(h.SubsJSON), Tasks: rawOrEmpty(h.TasksJSON), Files: []string{}, TurnRoots: []string{}}
-	if h.FilesJSON != "" {
-		bestEffort(json.Unmarshal([]byte(h.FilesJSON), &st.Files))
+		Subagents: []Subagent{}, Tasks: []Task{}, Files: []string{}, TurnRoots: []string{}}
+	// The lists, kept as JSON text while the hook merges them.
+	for _, l := range []struct {
+		text string
+		v    any
+	}{{h.FilesJSON, &st.Files}, {h.SubsJSON, &st.Subagents}, {h.TasksJSON, &st.Tasks}} {
+		if l.text != "" {
+			bestEffort(json.Unmarshal([]byte(l.text), l.v))
+		}
 	}
 	if digits(h.Pid) {
 		st.Pid = json.Number(h.Pid)
@@ -1026,14 +1032,6 @@ func (e *Env) writeState(h *hk, lk string) {
 		return
 	}
 	bestEffort(os.Rename(lk, h.sf))
-}
-
-// rawOrEmpty is a JSON array kept as text, or an empty one.
-func rawOrEmpty(s string) json.RawMessage {
-	if s == "" {
-		return json.RawMessage("[]")
-	}
-	return json.RawMessage(s)
 }
 
 // logLine appends one line to the agent session's activity log: members
