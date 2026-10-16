@@ -3,6 +3,7 @@ package wvr
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -167,7 +168,19 @@ func readRecord(f string, v any) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(firstJSON(b), v)
+	return decodeRecord(firstJSON(b), v)
+}
+
+// decodeRecord decodes the JSON object b into v. A member of another type
+// than v gives it (an older or newer weaver's) reads as its zero value, and
+// the rest still reads; b not an object is an error.
+func decodeRecord(b []byte, v any) error {
+	err := json.Unmarshal(b, v)
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &te) && te.Field != "" {
+		return nil
+	}
+	return err
 }
 
 // readThread is the thread record in file f.

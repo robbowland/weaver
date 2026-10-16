@@ -399,7 +399,7 @@ func (h *hk) parse(ev obj, raw map[string]json.RawMessage, st []byte) bool {
 		h.EndNew = ctl(one(ev.get("reason", ""), 40))
 	}
 	// The stored state, typed; whether it is this session's.
-	if json.Unmarshal(firstJSON(st), &h.Old) != nil {
+	if decodeRecord(firstJSON(st), &h.Old) != nil {
 		h.Old = AgentState{}
 	}
 	h.Same = len(o) > 0
