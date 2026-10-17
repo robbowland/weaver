@@ -169,7 +169,7 @@ func (e *Env) Fetch(repo, remote, f, sf string) {
 		return
 	}
 	if s := e.formSock(sf); files.Exists(s) {
-		session.FzfPost(s, "transform-header("+session.Quote(e.Self)+" _form header "+session.Quote(sf)+" {q})")
+		session.FzfPost(s, "reload("+session.Quote(e.Self)+" _form rows "+session.Quote(sf)+" {q})")
 	}
 }
 
@@ -179,19 +179,18 @@ func (e *Env) formSock(sf string) string {
 	return e.SockDir + "/form." + sf[strings.LastIndexByte(sf, '.')+1:] + ".sock"
 }
 
-type row struct{ l, plain, col, key string }
+// formField is one of the form's rows: its id (what enter and a click on it
+// do), its label, and its value, plain and coloured.
+type formField struct{ id, label, plain, col string }
 
 // FormHeader is the form's header for form file sf and the task typed so
-// far, with err on top: right-aligned labels under the prompt's, then the
-// key for each.
+// far: what went wrong starting the thread, and how much of the task is
+// in $EDITOR's file beyond its first line.
 func (e *Env) FormHeader(sf, task, errs string) string {
-	fm := loadForm(sf)
 	var b strings.Builder
 	if errs != "" {
 		b.WriteString("        " + CRed + errs + COff + "\n")
 	}
-	var rs []row
-	add := func(l, p, c, k string) { rs = append(rs, row{l, p, c, k}) }
 	if first, err := files.FirstLine(sf + ".task"); err == nil {
 		bs, _ := os.ReadFile(sf + ".task")
 		n := strings.Count(string(bs), "\n")
@@ -199,43 +198,46 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			n++
 		}
 		if lines := n - 1; first == task && lines > 0 {
-			t := "+" + strconv.Itoa(lines) + " more lines"
-			add("", t, CGrey+t+COff, "^e")
+			b.WriteString("        " + CGrey + "+" + strconv.Itoa(lines) + " more lines" + COff + CDim + " (^e)" + COff + "\n")
 		}
 	}
+	return b.String()
+}
+
+// formFields are the thread's choices, for form file sf and the task typed
+// so far.
+func (e *Env) formFields(sf, task string) []formField {
+	fm := loadForm(sf)
+	var fs []formField
+	add := func(id, l, p, c string) { fs = append(fs, formField{id, l, p, c}) }
 	if fm.Item != nil {
 		it := fm.Item.Item
 		title := it.Content().Title
 		if rlen(title) > 56 {
 			title = oneline.Cut(title, 55) + "…"
 		}
-		add("from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title, "")
+		add("from", "from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title)
 		if fm.Mode == items.ModeReview {
-			add("mode", "review  read-only", "review  "+CGrey+"read-only"+COff, "alt-r")
+			add("mode", "mode", "review  read-only", "review  "+CGrey+"read-only"+COff)
 		} else {
-			add("mode", "work", "work", "alt-r")
+			add("mode", "mode", "work", "work")
 		}
 	}
 	if fm.Repo != "" {
 		t := formPath(fm.Repo)
-		add("repo", filepath.Base(fm.Repo)+"  "+t, CBold+filepath.Base(fm.Repo)+COff+"  "+CGrey+t+COff, "^r")
+		add("repo", "repo", filepath.Base(fm.Repo)+"  "+t, CBold+filepath.Base(fm.Repo)+COff+"  "+CGrey+t+COff)
 	} else {
-		add("repo", "not in a git repository", CGrey+"not in a git repository"+COff, "^r")
+		add("repo", "repo", "not in a git repository", CGrey+"not in a git repository"+COff)
 	}
 	if fm.Where == WhereHere {
 		cur, _ := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
-		w := "this checkout"
-		if cur != "" {
-			w += " · " + cur
+		if cur == "" {
+			cur = "this directory"
 		}
-		if fm.Here == fm.Repo {
-			add("where", w, w, "alt-w")
-		} else {
-			t := formPath(fm.Here)
-			add("where", w+"  "+t, w+"  "+CGrey+t+COff, "alt-w")
-		}
+		t := formPath(fm.Here)
+		add("where", "where", cur+"  "+t, cur+"  "+CGrey+t+COff)
 	} else {
-		add("where", "new worktree", "new worktree", "alt-w")
+		add("where", "where", "new worktree", "new worktree")
 		br := fm.Branch
 		if br == "" {
 			br = items.Slugify(task)
@@ -246,45 +248,87 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 		switch {
 		case br == "":
-			add("branch", "from the task", CGrey+"from the task"+COff, "alt-b")
+			add("branch", "branch", "from the task", CGrey+"from the task"+COff)
 			e.baseRow(fm, m, add)
 		case fm.Repo != "" && (m.Has("refs/heads/"+br) ||
 			func() bool {
 				rm := git.PreferredRemote(fm.Repo)
 				return rm != "" && m.Has("refs/remotes/"+rm+"/"+br)
 			}()):
-			add("branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff, "alt-b")
+			add("branch", "branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff)
 		default:
-			add("branch", br, br, "alt-b")
+			add("branch", "branch", br, br)
 			e.baseRow(fm, m, add)
 		}
 	}
 	if agentInstalled(fm.Agent) {
-		add("agent", string(fm.Agent), string(fm.Agent), "alt-a")
+		add("agent", "agent", string(fm.Agent), string(fm.Agent))
 	} else {
-		add("agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff, "alt-a")
+		add("agent", "agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff)
 	}
-	// The keys in a column of their own at the right edge: fzf's width (its
-	// header's, less its border and margins).
-	w, ok := cli.EnvInt("FZF_COLUMNS")
-	if !ok {
-		if _, c, ok2 := ttySize(); ok2 {
-			w = c
-		} else {
-			w = 96
+	return fs
+}
+
+// formStart is the form's first row, the one enter starts the thread from:
+// what it would start, in a line.
+func formStart(fm form, task string) string {
+	what := string(fm.Agent)
+	if fm.Mode == items.ModeReview {
+		what += ", read-only,"
+	}
+	if fm.Where == WhereHere {
+		where := filepath.Base(fm.Here)
+		if br, _ := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD"); br != "" {
+			where = br
 		}
+		return CGrey + what + " in " + where + ", where it is" + COff
 	}
-	room := w - 8 - 8 - 10
-	for _, r := range rs {
-		pad := max(room-rlen(r.plain), 1)
-		fmt.Fprintf(&b, "%s%6s%s  %s%*s %s%9s%s\n", CGrey, r.l, COff, r.col, pad, "", CDim, r.key, COff)
+	br := fm.Branch
+	if br == "" {
+		br = items.Slugify(task)
+	}
+	if br == "" {
+		return CGrey + what + " in a new worktree" + COff
+	}
+	return CGrey + what + " in a new worktree, on " + br + COff
+}
+
+// FormRows are the form's rows for fzf: id, then what it shows.
+func (e *Env) FormRows(sf, task string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "start\t%s%6s%s  %s\n", CBold+CInk, "start", COff, formStart(loadForm(sf), task))
+	for _, f := range e.formFields(sf, task) {
+		fmt.Fprintf(&b, "%s\t%s%6s%s  %s\n", f.id, CGrey, f.label, COff, f.col)
 	}
 	return b.String()
 }
 
+// formKeys are each row's key, for the footer: the row's action from
+// anywhere in the form.
+var formKeys = map[string]string{"repo": "^r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
+
+// formRowFooter is the form's footer with the cursor on row id: what enter
+// (or a click) does there, then how to move.
+func formRowFooter(id string) string {
+	g, d, o := CGrey, CDim, COff
+	k := func(key, what string) string { return g + key + o + " " + d + what + o + "   " }
+	does := map[string]string{"repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
+		"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
+	out := ""
+	switch {
+	case id == "start" || id == "":
+		out = k("⏎", "START") + k("↑↓", "FIELDS") + k("^e", "WRITE IT IN $EDITOR")
+	case does[id] != "":
+		out = k("⏎", does[id]+" "+d+"("+formKeys[id]+")") + k("↑↓", "FIELDS")
+	default:
+		out = k("↑↓", "FIELDS")
+	}
+	return out + k("esc", "CANCEL")
+}
+
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
-func (e *Env) baseRow(fm form, m git.Refs, add func(l, p, c, k string)) {
+func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 	if fm.Base != "" {
 		note := ""
 		switch fm.Base {
@@ -305,7 +349,7 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(l, p, c, k string)) {
 			p += "  " + note
 			c += "  " + CGrey + note + COff
 		}
-		add("base", p, c, "alt-B")
+		add("base", "base", p, c)
 		return
 	}
 	if fm.Repo == "" {
@@ -344,11 +388,8 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(l, p, c, k string)) {
 		p += "  " + note
 		c += "  " + CGrey + note + COff
 	}
-	add("base", p, c, "alt-B")
+	add("base", "base", p, c)
 }
-
-const formFooter = CGrey + "⏎" + COff + " " + CDim + "START" + COff + "   " + CGrey + "^e" + COff + " " + CDim + "WRITE IT IN $EDITOR" + COff +
-	"   " + CGrey + "esc" + COff + " " + CDim + "CANCEL" + COff
 
 // newFormLabel is the new-thread form's label: a review says so.
 func newFormLabel(fm form) string {
@@ -385,7 +426,7 @@ func checkThread(task string, fm form) string {
 		return ""
 	}
 	if fm.Repo == "" {
-		return "not in a git repository: pick one (^r), or work in this checkout (alt-w)"
+		return "not in a git repository: pick one (repo), or work in this directory (where)"
 	}
 	br := fm.Branch
 	if br == "" {
@@ -688,6 +729,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 	q := session.Quote(e.Self)
 	qs := session.Quote(sf)
 	hd := q + " _form header " + qs + " {q}"
+	rows := q + " _form rows " + qs + " {q}"
 	fm := loadForm(sf)
 	// The fetch for a new branch's base starts now, while you type (and
 	// while the header is made).
@@ -704,21 +746,28 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 		os.Remove(sock)
 		args := []string{"--listen", sock, "--disabled", "--reverse"}
 		args = append(args, formFzf...)
-		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "      task  ", "--ghost", "what should the agent do?",
-			"--query", query, "--header", h, "--footer", formFooter, "--color", FzfColors,
-			"--bind", "change:bg-cancel+bg-transform-header("+hd+")",
-			// Each field on an Alt letter (tab and shift-tab both toggle where,
-			// which has two values).
-			"--bind", "alt-w,tab,btab:execute-silent("+q+" _form where "+qs+")+transform-header("+hd+")",
-			"--bind", "alt-a:execute-silent("+q+" _form agent "+qs+")+transform-header("+hd+")",
-			"--bind", "alt-r:execute-silent("+q+" _form mode "+qs+")+transform-header("+hd+")+transform-border-label("+q+" _form label "+qs+")",
-			"--bind", "alt-b:execute("+q+" _form branch "+qs+" {q})+transform-header("+hd+")",
-			"--bind", "alt-B:execute("+q+" _form base "+qs+")+transform-header("+hd+")",
-			"--bind", "ctrl-r:execute("+q+" _form repo "+qs+")+transform-header("+hd+")",
-			"--bind", "ctrl-e:execute("+q+" _form editor "+qs+" {q})+transform-query("+q+" _form query "+qs+" {q})+transform-header("+hd+")",
-			"--bind", "enter:print-query")
+		// The task is the query; the rows are what enter (or a click) acts
+		// on: start, first, then each choice, which ↑↓, tab and the mouse
+		// move between. After a choice, the cursor is back on start.
+		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "    task  ", "--ghost", "what should the agent do?",
+			"--query", query, "--header", h, "--footer", formRowFooter("start"), "--color", FzfColors,
+			// No --track: fzf would hold keys while a reload looked for the
+			// row. Typing is for the task, and puts the cursor on start.
+			"--delimiter", "\t", "--with-nth", "2..", "--cycle",
+			"--bind", "change:bg-cancel+bg-transform-header("+hd+")+reload("+rows+")+first",
+			"--bind", "focus:transform-footer("+q+" _form footer {1})",
+			"--bind", "tab:down,btab:up",
+			"--bind", "enter,left-click:transform("+q+" _form keys {1} "+qs+")",
+			"--bind", "double-click:ignore")
+		for id, k := range formKeys {
+			args = append(args, "--bind", strings.Replace(k, "^", "ctrl-", 1)+":"+formAct(q, qs, id))
+		}
+		args = append(args,
+			"--bind", "ctrl-e:execute("+q+" _form editor "+qs+" {q})+transform-query("+q+" _form query "+qs+" {q})+transform-header("+hd+")+reload("+rows+")")
+
 		c := exec.Command("fzf", args...)
 		c.Env = append(os.Environ(), "SHELL=/bin/sh")
+		c.Stdin = strings.NewReader(e.FormRows(sf, query))
 		c.Stderr = os.Stderr
 		out, err := c.Output()
 		os.Remove(sock)
@@ -748,22 +797,75 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 	}
 }
 
-// Form is `wvr _form OP FILE [QUERY]`: what the form's keys do, run by fzf.
+// formAct is the action that changes the form's row id (a picker, which
+// needs the terminal, or a switch, which does not), then shows the rows
+// again with the cursor back on start.
+func formAct(q, qs, id string) string {
+	ex := "execute"
+	if id == "agent" || id == "mode" {
+		ex = "execute-silent"
+	}
+	return ex + "(" + q + " _form " + id + " " + qs + " {q})+reload(" + q + " _form rows " + qs + " {q})" +
+		"+transform-header(" + q + " _form header " + qs + " {q})+transform-border-label(" + q + " _form label " + qs + ")+first"
+}
+
+// Form is `wvr _form OP FILE [QUERY]`: what the form's keys do, run by fzf;
+// `wvr _form footer ID` and `wvr _form keys ID FILE` for its rows.
 func (e *Env) Form(op, sf, q string) {
+	switch op {
+	case "footer":
+		fmt.Print(formRowFooter(sf))
+		return
+	case "keys":
+		// What enter (or a click) on row sf does: start the thread, change
+		// that choice, or nothing.
+		switch id := sf; {
+		case id == "start":
+			fmt.Print("print-query")
+		case formKeys[id] != "":
+			fmt.Print(formAct(session.Quote(e.Self), session.Quote(q), id))
+		}
+		return
+	}
 	fm := loadForm(sf)
 	switch op {
 	case "header":
 		fmt.Print(e.FormHeader(sf, q, ""))
+	case "rows":
+		fmt.Print(e.FormRows(sf, q))
+	case "fields":
+		// The choices as text, as the form shows them.
+		for _, f := range e.formFields(sf, q) {
+			fmt.Printf("%6s  %s\n", f.label, f.plain)
+		}
 	case "where":
-		if fm.Where == WhereHere {
-			fm.Where = WhereWorktree
-		} else {
+		if fm.Repo == "" {
+			// Not a repository: only where it is.
 			fm.Where = WhereHere
+			fm.save(sf)
+			return
+		}
+		out := e.pick(e.formWheres(fm), formLabel("NEW THREAD", "WHERE"), "     where  ", "a new worktree, or a checkout that is there")
+		d := pickValue(out)
+		switch d {
+		case "":
+			return
+		case "new":
+			fm.Where = WhereWorktree
+			if fm.Base == "" {
+				e.fetchStart(fm.Repo, sf)
+			}
+		default:
+			if strings.HasPrefix(d, "~/") {
+				d = os.Getenv("HOME") + d[1:]
+			}
+			r, c, ok := git.RepoOf(d)
+			if !ok || r != fm.Repo {
+				return
+			}
+			fm.Where, fm.Here = WhereHere, c
 		}
 		fm.save(sf)
-		if fm.Where == WhereWorktree && fm.Base == "" {
-			e.fetchStart(fm.Repo, sf)
-		}
 	case "label":
 		fmt.Print(newFormLabel(fm))
 	case "mode":
@@ -917,6 +1019,57 @@ func pickValue(out string) string {
 		return v
 	}
 	return q
+}
+
+// formWheres are where a thread can work, to offer: a new worktree, then
+// the repository's checkouts (its main one, its worktrees), each by its
+// branch.
+func (e *Env) formWheres(fm form) string {
+	var b strings.Builder
+	b.WriteString("new\tnew worktree  " + CGrey + "a branch of its own, from the base" + COff + "\n")
+	// The session's threads, by where they work: another agent there
+	// shares its diffs.
+	busy := map[string]int{}
+	for _, f := range e.SessionFiles("thread") {
+		if t, err := store.ReadThread(f); err == nil && t.Worktree != "" {
+			busy[t.Worktree] = t.Num
+		}
+	}
+	out, _ := exec.Command("git", "-C", fm.Repo, "worktree", "list", "--porcelain").Output()
+	path, br := "", ""
+	flush := func() {
+		if path == "" {
+			return
+		}
+		if st, err := os.Stat(path); err == nil && st.IsDir() {
+			if br == "" {
+				br = "detached"
+			}
+			note := ""
+			if path == fm.Repo {
+				note = "  " + CDim + "the main checkout" + COff
+			}
+			if n, ok := busy[path]; ok {
+				note += "  " + CDim + fmt.Sprintf("thread %02d works here", n) + COff
+			}
+			b.WriteString(path + "\t" + br + "  " + CGrey + formPath(path) + COff + note + "\n")
+		}
+		path, br = "", ""
+	}
+	for _, l := range strings.Split(string(out), "\n") {
+		switch {
+		case strings.HasPrefix(l, "worktree "):
+			flush()
+			path = strings.TrimPrefix(l, "worktree ")
+			if p, err := filepath.EvalSymlinks(path); err == nil {
+				path = p
+			}
+		case strings.HasPrefix(l, "branch refs/heads/"):
+			br = strings.TrimPrefix(l, "branch refs/heads/")
+		}
+	}
+	flush()
+	return b.String()
 }
 
 // formBases are the bases to offer ("=" is the default: the remote's

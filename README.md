@@ -126,17 +126,24 @@ keeps your status bar, and you land on the agent.
 The form (`Alt N`, `wvr new`, or `n` in the dashboard) starts in the
 repository of the pane you were on (else the one you used last):
 
-| Key | Does |
-| --- | --- |
-| `enter` | Start the thread |
-| `alt-w` | New worktree, or this checkout (for a quick question); `tab` too |
-| `alt-b` | Edit the branch name (from the task by default); an existing branch, here or on the remote, continues in its own worktree |
-| `alt-B` | Where a new branch starts: the remote's default branch, fetched (the default), `@` (the HEAD of the checkout you are in), or any branch |
-| `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
-| `alt-a` | Claude Code or Codex |
-| `alt-r` | A read-only thread: a review, or an investigation |
-| `ctrl-e` | Write a long task in `$EDITOR` |
-| `esc` | Cancel |
+You type the task; under it are its choices, a row each, with `start`
+first. `↑`/`↓` (or `tab`) move between the rows, and `enter` (or a click)
+acts on the one you are on: on `start`, it starts the thread; on a choice,
+it changes it, then puts you back on `start`. The footer says what `enter`
+does where you are, and each choice has a key that changes it from
+anywhere:
+
+| Row | Key | Does |
+| --- | --- | --- |
+| `start` | `enter` | Start the thread (the row says what it would start) |
+| `repo` | `ctrl-r` | Another repository: recent ones, any zoxide knows, or a path |
+| `where` | `alt-w` | A new worktree, or a checkout that is there: the main one, or a worktree (one a thread works in says so) |
+| `branch` | `alt-b` | The new worktree's branch (from the task by default); an existing branch, here or on the remote, continues in its own worktree |
+| `base` | `alt-B` | Where a new branch starts: the remote's default branch, fetched (the default), `@` (the HEAD of the checkout you are in), or any branch |
+| `agent` | `alt-a` | Claude Code or Codex |
+| `mode` | `alt-r` | Work, or read-only: a review, or an investigation (from a pull request or issue) |
+|  | `ctrl-e` | Write a long task in `$EDITOR` |
+|  | `esc` | Cancel |
 
 From a shell: `wvr new "fix the flaky test"`, with `--repo DIR`,
 `--branch NAME`, `--base REF`, `--here`, `--agent codex`, `--edit` (write the

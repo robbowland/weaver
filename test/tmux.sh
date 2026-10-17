@@ -256,14 +256,18 @@ ok "Alt N: the new-thread form, in a popup" "$([ "$(grep -c 'what should the age
 FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
 ok "form: its fields, from the focused thread's checkout" "$(jq -r '"\(.repo) \(.where) \(.agent)"' "$FORM" 2>/dev/null)" "$(cd "$AT/repo" && pwd -P) worktree claude"
-hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" "Fix the flaky test!" | sed 's/\x1b\[[0-9;]*m//g')
+hdr=$(wvr _form fields "$FORM" "Fix the flaky test!")
 ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
-	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test ')" \
+	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test$')" \
 	"repo where branch base agent |1"
-key 1b77 # alt-w: this checkout
+key 1b77 # alt-w: where it works, picked
+waitfor '[ "$(grep -c "a checkout that is there" "$AT/screen.log")" -gt 0 ]'
+key 6d61696e # main
+sleep 0.3
+key 0d
 waitfor '[ "$(jq -r .where "$FORM")" = here ]'
-ok "form: alt-w works in this checkout" "$(jq -r .where "$FORM")|$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g' | awk '$1 == "where" { print $2, $3 }')" \
-	"here|this checkout"
+ok "form: alt-w picks where it works: here, the main checkout" "$(jq -r .where "$FORM")|$(wvr _form fields "$FORM" x | awk '$1 == "where" { print $2 }')" \
+	"here|main"
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "
@@ -498,7 +502,7 @@ ok "LINEAR: weaver's own, what Linear finds for you, its card" \
 key 0d # enter
 waitfor 'f=$(ls "$SD" | grep -E "^form\.[^.]+$" | head -n 1); [ -n "$f" ] && [ "$(jq -r .item.linear.id "$SD/$f" 2>/dev/null)" = ENG-42 ]'
 FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
-hdr=$(FZF_COLUMNS=96 wvr _form header "$FORM" x | sed 's/\x1b\[[0-9;]*m//g')
+hdr=$(wvr _form fields "$FORM" x)
 ok "...enter, the form for the issue, in the repository used last" \
 	"$(jq -r '"\(.repo) \(.branch) \(.item.linear.id) "' "$FORM")|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
 	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
