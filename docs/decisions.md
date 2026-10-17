@@ -449,6 +449,19 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-17: Nothing piles up (Rob: "Make sure we clean up old worktrees
+  and processes so nothings bloating storage"). Found: thread nvims left
+  running (one at 1.9 GB) when a tmux server was killed under them, the
+  embedded server outliving its TUI; 439 dead sockets; the worktrees of
+  threads closed before their work had landed, or forgotten, never went;
+  and the test suites kept every run's scratch dir (17 GB in /tmp).
+  - GC ends weaver's nvims whose parent has gone and removes dead sockets.
+  - weaver lists the worktrees it makes, and as a session starts removes
+    those no thread or pane uses once nothing in them would be lost (the
+    rule close's offer uses), branch kept. Keeping one as its thread closes
+    makes it yours. Forgetting a lost thread no longer keeps its worktree
+    for good.
+  - The suites remove their scratch dirs and nvims unless a suite failed.
 - 2026-10-17: No prompt is sent for you (Rob: "I don't think a default
   prompt should be sent when starting an agent either unless
   configured"). A thread from a pull request or an issue had its task

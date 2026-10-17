@@ -1,11 +1,14 @@
 package session
 
 import (
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -55,7 +58,8 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 
 // GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid goes an hour
-// after its session, an ended one an hour after it ended; then old files.
+// after its session, an ended one an hour after it ended; then old files,
+// the nvims a server that went left running, and dead sockets.
 // States of other keys (zellij's, from before weaver ran on tmux only) go
 // the same way as their agents do.
 func (e *Env) GC() {
@@ -140,6 +144,77 @@ func (e *Env) GC() {
 	old(e.LogDir, "*.jsonl", month, false)
 	old(e.LostDir, "*.json", month, false)
 	old(e.StateDir+"/turns", "*", month, false)
+	e.sweepOrphans()
+	e.sweepSockets(day)
+}
+
+// sweepOrphans ends weaver's nvims that their tmux server left behind: one
+// listening in the socket dir whose parent has gone (launchd, or a
+// subreaper, has it now). A thread's nvim is its pane's process, and its
+// --embed server that nvim's child; a server that crashes, or is killed,
+// can leave either running, a language server or two under it.
+func (e *Env) sweepOrphans() {
+	out, err := exec.Command("ps", "-Aww", "-o", "pid=,ppid=,command=").Output()
+	if err != nil {
+		return
+	}
+	type proc struct{ ppid, argv0 string }
+	ps := map[string]proc{}
+	var lines [][]string
+	for _, l := range strings.Split(string(out), "\n") {
+		f := strings.Fields(l)
+		if len(f) < 3 {
+			continue
+		}
+		ps[f[0]] = proc{f[1], filepath.Base(f[2])}
+		if filepath.Base(f[2]) == "nvim" && strings.Contains(l, " --listen "+e.SockDir+"/") {
+			lines = append(lines, f)
+		}
+	}
+	var pids []int
+	for _, f := range lines {
+		parent, ok := ps[f[1]]
+		if f[1] != "1" && ok && parent.argv0 != "systemd" {
+			continue
+		}
+		if pid, err := strconv.Atoi(f[0]); err == nil && pid > 1 && syscall.Kill(pid, syscall.SIGTERM) == nil {
+			pids = append(pids, pid)
+		}
+	}
+	// An --embed server whose UI went may not hear TERM: what is left after
+	// two seconds is killed (its swap file stays, to recover from).
+	for i := 0; i < 20 && len(pids) > 0; i++ {
+		time.Sleep(100 * time.Millisecond)
+		var left []int
+		for _, pid := range pids {
+			if syscall.Kill(pid, 0) == nil {
+				left = append(left, pid)
+			}
+		}
+		pids = left
+	}
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+}
+
+// sweepSockets removes sockets nothing listens on any more (a board, a
+// view or an nvim that was killed leaves its own) once they are older
+// than age.
+func (e *Env) sweepSockets(age time.Duration) {
+	ms, _ := filepath.Glob(e.SockDir + "/*.sock")
+	for _, m := range ms {
+		st, err := os.Lstat(m)
+		if err != nil || st.Mode()&os.ModeSocket == 0 || time.Since(st.ModTime()) <= age {
+			continue
+		}
+		c, err := net.DialTimeout("unix", m, 200*time.Millisecond)
+		if err != nil {
+			os.Remove(m)
+			continue
+		}
+		_ = c.Close()
+	}
 }
 
 // paneFiles are dir's per-pane files with extension ext, of any session:

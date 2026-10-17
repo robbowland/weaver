@@ -7,9 +7,10 @@
 #
 #   test/hooks.sh [suite...]   default: every suite in test/suites/
 #
-# Each run gets a fresh scratch directory (printed at the end) holding a git
-# repo with two worktrees, the state dir and the server's socket. Your real
-# weaver state, Claude Code sessions and tmux servers are not touched.
+# Each run gets a fresh scratch directory (kept, and printed, only when a
+# suite fails) holding a git repo with two worktrees, the state dir and the
+# server's socket. Your real weaver state, Claude Code sessions and tmux
+# servers are not touched.
 set -u
 
 # These tests may run inside a Claude Code agent: nothing of its session may
@@ -22,6 +23,9 @@ ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-hooks.XXXXXX) || exit 1
 # Physical path: git reports roots that way (macOS /tmp is a symlink).
 AT=$(cd "$AT" && pwd -P)
+# Gone however the run ends (cleanup, below, takes over once there is a
+# server to end).
+trap 'rm -rf "$AT"' EXIT
 SESSION="weaver-test-$$"
 export AT
 
@@ -75,10 +79,15 @@ TERM=xterm-256color python3 -I "$HERE/pty_drive.py" "$AT/keys.fifo" "$AT/screen.
 driver=$!
 for _ in $(seq 50); do [ -n "$(tmux -S "$SOCK" list-clients 2>/dev/null)" ] && break; sleep 0.1; done
 
+# The server, its client and the nvims of its threads go; the scratch dir
+# too, unless a suite failed (it is printed, to look into).
+keep=0
 cleanup() {
 	trap - EXIT INT TERM HUP
 	tmux -S "$SOCK" kill-server >/dev/null 2>&1
-	kill "$driver" 2>/dev/null
+	kill "$driver" 2>/dev/null && wait "$driver" 2>/dev/null
+	pkill -f -- "--listen /tmp/weaver-$(id -u)/[^ ]*${SESSION}_" 2>/dev/null
+	[ "$keep" = 1 ] || { chmod -R u+w "$AT" 2>/dev/null; rm -rf "$AT"; }
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
@@ -98,9 +107,10 @@ for suite in "$@"; do
 	bash "$HERE/suites/$suite.sh" || failed=$((failed + 1))
 done
 
+[ $failed -gt 0 ] && keep=1
 cleanup
-echo "scratch dir: $AT"
 if [ $failed -gt 0 ]; then
+	echo "scratch dir: $AT"
 	echo "$failed suite(s) failed"
 	exit 1
 fi

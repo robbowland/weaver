@@ -3,6 +3,7 @@ package wvr
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -70,8 +71,9 @@ func (e *Env) Start(name string) error {
 
 // Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
 // behind its home board (whose fzf listens on SOCKET): old states swept, the
-// threads it lost back (unless WEAVER_RESTORE=0), and the status line's
-// counts and the windows' labels, whose push reloads the board.
+// threads it lost back (unless WEAVER_RESTORE=0), the status line's counts
+// and the windows' labels, whose push reloads the board, and the worktrees
+// weaver made that are done with (said on the status line).
 func (e *Env) Boot(sock string) {
 	e.GC()
 	if os.Getenv("WEAVER_RESTORE") != "0" {
@@ -93,4 +95,15 @@ func (e *Env) Boot(sock string) {
 	if e.WeaverSession() {
 		e.StartViews()
 	}
+	if n := len(e.SweepWorktrees(io.Discard)); n > 0 {
+		e.Tmux("display-message", "-t", "="+e.Session+":", fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
+	}
+}
+
+// Sweep is `wvr gc`: what is gone or left behind (agents' states, old
+// files, orphaned nvims, dead sockets), then the worktrees weaver made that
+// are done with.
+func (e *Env) Sweep() {
+	e.GC()
+	e.SweepWorktrees(os.Stdout)
 }

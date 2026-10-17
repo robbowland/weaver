@@ -15,6 +15,10 @@ mkdir -p "$H/.local/share/weaver/config"
 printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/weaver"
 printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/install.sh"
 echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
+# Go's caches stay yours: in the sandbox home every run would fetch and
+# build weaver's modules again, into a cache rm cannot remove (read-only).
+export GOMODCACHE GOCACHE
+GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)
 inst() {
 	env -u ZELLIJ_CONFIG_FILE HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
 		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:$PATH" "$ROOT/install.sh" "$@" 2>&1

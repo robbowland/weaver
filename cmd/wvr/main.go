@@ -156,7 +156,7 @@ var commands = map[string]command{
 			fmt.Println(e.StatusText())
 		}
 	})},
-	"gc": {run: done(func(e *wvr.Env, _ []string) { e.GC() })},
+	"gc": {run: done(func(e *wvr.Env, _ []string) { e.Sweep() })},
 	"doctor": {run: func(e *wvr.Env, args []string) error {
 		switch arg(args, 0) {
 		case "":

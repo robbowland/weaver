@@ -73,7 +73,8 @@ const Usage = `usage: wvr [command]
                                not set up shows how; one you hid shows again)
   status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
-  gc                           forget agents that are gone, in every session
+  gc                           forget agents that are gone; end the nvims and
+                               remove the worktrees weaver left behind
   setup [--dry-run] [--no-codex] [--bin PATH]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file

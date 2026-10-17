@@ -124,7 +124,7 @@ func Help() string {
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
 		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(wvr resume)" + o + "\n" +
-		"  " + g + "x" + o + "           forget it " + d + "(its worktree stays)" + o + "\n" +
+		"  " + g + "x" + o + "           forget it " + d + "(its worktree goes once nothing in it is unsaved)" + o + "\n" +
 		"\n" +
 		g + "ANYWHERE" + o + "\n" +
 		"  " + g + "Alt y" + o + "       home, then each view, then back where you were\n" +

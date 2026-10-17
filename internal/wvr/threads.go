@@ -411,6 +411,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
 			return cli.ErrSaid
 		}
+		if created {
+			e.noteWorktree(dir, fm.Repo)
+		}
 		name = branch
 	}
 	// A pull request's thread reviews against what it merges into.
@@ -1170,6 +1173,9 @@ func (e *Env) Close(args []string) error {
 			fmt.Fprint(t, cardRow(pad, "remove", "the worktree "+tilde+" "+CGrey+"· branch "+br+" stays"+COff)+"\n")
 			if choose(t, pad, []choice{{"y", "remove"}, {"n", "keep"}}, 1) == 0 {
 				remove = "1"
+			} else {
+				// Kept on purpose: yours now, never swept.
+				e.forgetWorktree(th.Worktree)
 			}
 			_ = t.Close()
 		}
@@ -1233,20 +1239,10 @@ func (e *Env) CloseTail(a []string) error {
 		if why := worktreeRemovable(dir); why != "" {
 			rc = fmt.Errorf("kept %s: %s", t, why)
 		} else {
-			r := repo
-			if r == "" {
-				r = dir
-			}
-			var c *exec.Cmd
-			if _, err := exec.LookPath("wt"); err == nil && os.Getenv("WEAVER_WORKTRUNK") != "0" {
-				c = exec.Command("wt", "-C", r, "remove", "--no-delete-branch", "--foreground", dir)
-			} else {
-				c = exec.Command("git", "-C", r, "worktree", "remove", dir)
-			}
-			c.Stdout, c.Stderr = os.Stdout, os.Stderr
-			if c.Run() != nil {
+			if removeWorktree(dir, repo, os.Stdout) != nil {
 				rc = cli.ErrSaid
 			} else {
+				e.forgetWorktree(dir)
 				fmt.Println("weaver: removed " + t)
 			}
 		}

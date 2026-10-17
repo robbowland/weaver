@@ -15,6 +15,9 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=${HERE%/test}
 AT=$(mktemp -d /tmp/weaver-tmux.XXXXXX)
+# Gone however the run ends (cleanup, below, takes over once there is a
+# server to end).
+trap 'rm -rf "$AT"' EXIT
 SOCK=$AT/tmux.sock
 S=wt$$
 unset TMUX TMUX_PANE ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
@@ -69,6 +72,8 @@ cleanup() {
 	tx kill-server >/dev/null 2>&1
 	[ -n "$linear" ] && kill "$linear" 2>/dev/null
 	[ -n "$driver" ] && kill "$driver" 2>/dev/null
+	pkill -f -- "--listen /tmp/weaver-$(id -u)/tmux-${S}_" 2>/dev/null
+	rm -f /tmp/weaver-$(id -u)/tmux-${S}[._]*
 	rm -rf "$AT"
 }
 trap cleanup EXIT
@@ -316,6 +321,14 @@ click 33 $((row + 3))
 waitfor '[ "$(where)" = "1 %$NV" ]'
 ok "...whose items are the row's keys: nvim" "$(where)" "1 %$NV"
 tx select-pane -t "%$AG"
+
+# --- gc: an nvim its server left behind (its parent gone) ends
+(nvim --headless -u NONE --listen "/tmp/weaver-$(id -u)/tmux-${S}_98.sock" </dev/null >/dev/null 2>&1 & echo $! >"$AT/orphan")
+waitfor '[ -S "/tmp/weaver-$(id -u)/tmux-${S}_98.sock" ]'
+wvr gc >/dev/null 2>&1
+waitfor '! kill -0 "$(cat "$AT/orphan")" 2>/dev/null'
+ok "gc: an nvim its tmux server left behind ends; the threads' stay" \
+	"$(kill -0 "$(cat "$AT/orphan")" 2>/dev/null && echo running || echo ended)|$(tx display -p -t "%$NV" '#{pane_current_command}')" "ended|nvim"
 
 # --- a thread in a worktree of its own (its branch from the task), then
 # closed with its worktree, which is clean and merged

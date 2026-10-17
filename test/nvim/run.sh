@@ -23,9 +23,10 @@ for spec in "$@"; do
 		[ -s "$SCRATCH/${spec##*/}.err" ] && sed 's/^/  stderr: /' "$SCRATCH/${spec##*/}.err" | head -20
 	fi
 done
-echo "scratch dir: $SCRATCH"
 [ $failed = 0 ] || {
+	echo "scratch dir: $SCRATCH"
 	echo "$failed nvim spec file(s) failed"
 	exit 1
 }
+rm -rf "$SCRATCH"
 echo "all nvim specs passed"

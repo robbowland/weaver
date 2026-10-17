@@ -364,7 +364,19 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   board as `wvr _boot`) runs `GC`, then resumes every thread lost by a
   session of its name (and by the zellij session of that name, from before
   weaver ran on tmux only), in number order, without leaving home
-  (`WEAVER_RESTORE=0`: listed instead).
+  (`WEAVER_RESTORE=0`: listed instead), then sweeps worktrees (below).
+- **Sweeping:** `GC` (also on every SessionStart hook) ends weaver's nvims
+  whose parent has gone (`--listen` in the socket dir, parent pid 1 or a
+  systemd subreaper: a server that crashed or was killed left them, with
+  their language servers) and removes sockets in the socket dir nothing
+  accepts on, a day after they were made. `$STATE_DIR/worktrees` lists the
+  worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
+  before the list join it as they are seen); `SweepWorktrees` (at `_boot`,
+  and `wvr gc`) removes one an hour or more old that no open or lost thread
+  record and no pane's directory is in, when `worktreeRemovable` holds
+  (clean, its HEAD merged into a default branch or pushed), with `wt remove
+  --no-delete-branch` or `git worktree remove`, and says so on the status
+  line. Close's `keep` takes a worktree off the list.
 - **Dashboard:** lost threads (of every session) last, under `LOST`, glyph
   `[-]`, without a number or a 1-9 key and not counted in the title; their item
   id is `l<session id>` and field 2 the session id. Enter resumes one

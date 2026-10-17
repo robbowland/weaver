@@ -21,7 +21,7 @@ THREADS
 
 LOST (its session went: a crash, or quit)
   ⏎           resume it in a new window (wvr resume)
-  x           forget it (its worktree stays)
+  x           forget it (its worktree goes once nothing in it is unsaved)
 
 ANYWHERE
   Alt y       home, then each view, then back where you were

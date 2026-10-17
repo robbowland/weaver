@@ -251,7 +251,7 @@ thread is kept as lost rather than forgotten:
   window, its number kept, its agent resuming its conversation beside a bound
   nvim (`WEAVER_RESTORE=0` lists them on home instead).
 - Anywhere else, lost threads are listed last on the dashboard, under `LOST`:
-  enter resumes one in a new window, `x` forgets it (its worktree stays).
+  enter resumes one in a new window, `x` forgets it.
 - `wvr resume` lists them; `wvr resume NAME` (a number, or a session
   id) brings one back, `--all` every one, `--forget NAME` drops one.
 
@@ -265,6 +265,19 @@ time. While an agent is mid-turn (working, or waiting on you), whose turn
 quitting would stop, it asks first. `wvr quit` does the same after asking, says what stops (turns under
 way, unsaved buffers in the agents' nvims), and from outside the session
 quits the `weaver` session left running behind a closed window.
+
+### What it cleans up
+
+Nothing weaver makes piles up. As the session starts (and on `wvr gc`):
+
+- **Worktrees.** One weaver made for a thread goes once no thread (open or
+  lost) and no pane uses it and nothing in it would be lost: no uncommitted
+  or untracked files, its commits merged or pushed. Its branch stays. One
+  you chose to keep as you closed its thread is yours, and stays.
+- **Processes.** An nvim a crashed or killed tmux server left running (with
+  its language servers) is ended, and sockets nothing listens on go.
+- **Files.** Agents that are gone are forgotten; activity logs, per-turn
+  snapshots and lost threads go after a month.
 
 ## What it tracks
 
