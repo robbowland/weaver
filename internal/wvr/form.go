@@ -408,7 +408,7 @@ func formLabel(where, what string) string {
 
 var formFzf = []string{"--border", "sharp", "--border-label-pos", "3", "--footer-border", "none", "--pointer", " ", "--marker", " ", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
 
-const pickFooter = CGrey + "⏎" + COff + " " + CDim + "PICK" + COff + "   " + CGrey + "esc" + COff + " " + CDim + "BACK" + COff
+const pickFooter = CGrey + "⏎" + COff + " " + CDim + "PICK" + COff + "   " + CGrey + "↑↓" + COff + " " + CDim + "MOVE" + COff + "   " + CGrey + "esc" + COff + " " + CDim + "BACK" + COff
 
 // checkThread: can a thread start from task and the form's fields? Why
 // not, or "".
@@ -693,8 +693,14 @@ func (e *Env) New(args []string) error {
 		if !errors.Is(err, cli.ErrSaid) {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
 		}
-		fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s enter: back to the form   esc: cancel ", CRed, COff)
-		if readKey() == 0x1b {
+		fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s\n", CRed, COff)
+		tt, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			return cli.ErrCancelled
+		}
+		c := choose(tt, "", []choice{{"⏎", "back to the form"}, {"esc", "cancel"}}, 0)
+		_ = tt.Close()
+		if c != 0 {
 			return cli.ErrCancelled
 		}
 	}
@@ -1002,7 +1008,9 @@ func (e *Env) Form(op, sf, q string) {
 func (e *Env) pick(items, label, prompt, ghost string) string {
 	args := append([]string{"--reverse"}, formFzf...)
 	args = append(args, "--border-label", label, "--delimiter", "\t", "--with-nth", "2", "--print-query", "--prompt", prompt,
-		"--ghost", ghost, "--color", FzfColors, "--footer", pickFooter)
+		"--ghost", ghost, "--color", FzfColors, "--footer", pickFooter,
+		// A menu: a click picks, as on the form's rows.
+		"--bind", "left-click:accept")
 	c := exec.Command("fzf", args...)
 	c.Env = append(os.Environ(), "SHELL=/bin/sh")
 	c.Stdin = strings.NewReader(items)

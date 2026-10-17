@@ -53,9 +53,17 @@ func (e *Env) ViewSetup(name string) error {
 			fmt.Fprint(tty, cardRow(pad, "", CRed+said+COff))
 		}
 		keys = append(keys, "h", "hide this view", "esc", "home")
-		fmt.Fprint(tty, "\n"+cardKeys(pad, keys...)+"\033[?25l")
+		fmt.Fprint(tty, "\n")
+		var cs []choice
+		for i := 0; i+1 < len(keys); i += 2 {
+			cs = append(cs, choice{keys[i], keys[i+1]})
+		}
 		said = ""
-		switch k := readKey(); {
+		k := byte(0x1b)
+		if c := choose(tty, pad, cs, 0); c >= 0 {
+			k = cs[c].keyByte()
+		}
+		switch {
 		case (k == '\r' || k == '\n') && need.fix != nil:
 			fmt.Fprint(tty, "\033[H\033[2J\033[?25h")
 			if name == "linear" {

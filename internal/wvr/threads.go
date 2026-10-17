@@ -805,9 +805,10 @@ func (e *Env) Resume(args []string) error {
 			pad := cardPlace(t, 6)
 			fmt.Fprint(t, cardRow(pad, "forget", CBold+nm+COff))
 			fmt.Fprint(t, cardRow(pad, "", CGrey+"its conversation and worktree stay; weaver stops offering it"+COff))
-			fmt.Fprint(t, "\n"+cardKeys(pad, "y", "forget", "n", "keep"))
+			fmt.Fprint(t, "\n")
+			c := choose(t, pad, []choice{{"y", "forget"}, {"n", "keep"}}, 1)
 			t.Close()
-			if !readYes() {
+			if c != 0 {
 				return cli.ErrCancelled
 			}
 		}
@@ -872,12 +873,6 @@ func cardKeys(pad string, kv ...string) string {
 		ps = append(ps, CGrey+kv[i]+COff+" "+CDim+kv[i+1]+COff)
 	}
 	return pad + "        " + strings.Join(ps, "   ") + "\n"
-}
-
-// readYes: a key from the terminal, y or Y.
-func readYes() bool {
-	k := readKey()
-	return k == 'y' || k == 'Y'
 }
 
 func plural(n int) string {
@@ -1148,8 +1143,8 @@ func (e *Env) Close(args []string) error {
 		fmt.Fprint(out, cardRow(pad, "stays", CGrey+keep+COff))
 	}
 	if !yes {
-		fmt.Fprint(out, "\n"+cardKeys(pad, "y", "close", "n", "keep"))
-		if !readYes() {
+		fmt.Fprint(out, "\n")
+		if choose(tty, pad, []choice{{"y", "close"}, {"n", "keep"}}, 1) != 0 {
 			return cli.ErrCancelled
 		}
 	}
@@ -1162,11 +1157,11 @@ func (e *Env) Close(args []string) error {
 			if br == "" {
 				br = "?"
 			}
-			fmt.Fprint(t, "\n"+cardRow(pad, "remove", "the worktree "+tilde+" "+CGrey+"· branch "+br+" stays"+COff)+"\n"+cardKeys(pad, "y", "remove", "n", "keep"))
-			t.Close()
-			if readYes() {
+			fmt.Fprint(t, cardRow(pad, "remove", "the worktree "+tilde+" "+CGrey+"· branch "+br+" stays"+COff)+"\n")
+			if choose(t, pad, []choice{{"y", "remove"}, {"n", "keep"}}, 1) == 0 {
 				remove = "1"
 			}
+			_ = t.Close()
 		}
 	}
 	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
@@ -1378,9 +1373,10 @@ func (e *Env) Quit(args []string) error {
 		if bufs > 0 {
 			fmt.Fprint(t, cardRow(pad, "", CRed+"nvim has "+strconv.Itoa(bufs)+" unsaved buffer"+plural(bufs)+COff))
 		}
-		fmt.Fprint(t, "\n"+cardKeys(pad, "y", "quit", "n", "keep"))
+		fmt.Fprint(t, "\n")
+		c := choose(t, pad, []choice{{"y", "quit"}, {"n", "keep"}}, 1)
 		t.Close()
-		if !readYes() {
+		if c != 0 {
 			return cli.ErrCancelled
 		}
 	}

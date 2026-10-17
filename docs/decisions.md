@@ -449,6 +449,27 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-17: The new-thread form is rows you move between (Rob: "REALLY
+  bad ergonomics, there's no way to pick a worktree ... I'd expect to be
+  able to navigate via mouse and also arrow keys but instead I have to use
+  awkward shortcuts that are situated a long way from the actual field").
+  - The task is fzf's query; the choices are rows under it, `start` first,
+    so typing and enter still start a thread. Up/down, tab and the mouse
+    move; enter or a click acts on the row (a picker, or a switch), then
+    the cursor is back on `start`. The footer says what enter does on the
+    row and its key from anywhere: a hint beside what it changes, not a
+    column at the far edge. The start row says what would start.
+  - `where` is a picker: a new worktree, or any checkout of the
+    repository (the main one, each worktree, one a thread works in marked).
+  - No `--track` on its reloads: fzf holds keys while a reload looks for
+    the tracked row, and typing lost them.
+  - The same ergonomics everywhere: a card's choices (close, remove the
+    worktree, forget, quit, a view's setup, a failed start, doctor's
+    sign-ins) are buttons that ←/→, tab, enter and a click work, each
+    with its key as before; enter's first pick is the one that keeps
+    things as they are where the other undoes something. Pickers are
+    menus, so a click picks (lists with a card, the board and the views,
+    keep click to look and double-click to go).
 - 2026-10-16: An interaction pass, against Nielsen's ten heuristics,
   Shneiderman's golden rules and clig.dev (Rob: "check that the
   interactions are all logical and the UX makes sense").

@@ -266,9 +266,13 @@ func (e *Env) Fix(out io.Writer) error {
 			if !ok {
 				continue
 			}
-			fmt.Fprintf(out, "\n%s is %s. Sign in now (%s)? %sy/n%s ", c.name, c.found, r.text(), CGrey, COff)
-			yes := readYes()
-			fmt.Fprintln(out)
+			fmt.Fprintf(out, "\n%s is %s. Sign in now (%s)?\n", c.name, c.found, r.text())
+			t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+			if err != nil {
+				continue
+			}
+			yes := choose(t, "", []choice{{"y", "sign in"}, {"n", "not now"}}, 0) == 0
+			_ = t.Close()
 			if !yes {
 				continue
 			}
