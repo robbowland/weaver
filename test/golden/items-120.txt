@@ -6,3 +6,4 @@ a1	1	0			Add a README · dash/readme · turn 1	02 [x] 	Add a README          2 f
 g2			5	8			
 h2			5	8		WORKING · 1	
 a2	2	1			Refine the dashboard · dash/main · turn 4	03 [/] 	Refine the dashboard  2 subagents                              dash/main    10m
+gz			8				

@@ -18,7 +18,7 @@ import (
 // FzfColors are the dashboards' fzf colours.
 const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+:#000000:underline,gutter:-1," +
 	"pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff," +
-	"prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999"
+	"prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999,scrollbar:#616161"
 
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
@@ -151,7 +151,7 @@ func (e *Env) Ls() error {
 			"--no-input", "--header", header, "--header-first",
 			"--border", "sharp", "--border-label", label, "--border-label-pos", "3",
 			"--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
-			"--no-scrollbar", "--footer", foot, "--footer-border", "none",
+			"--scrollbar", "│", "--footer", foot, "--footer-border", "none",
 			"--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search threads", "--info", "hidden", "--no-separator",
 			"--preview", q + " _preview {2} {6} {1}", "--preview-window", pw,

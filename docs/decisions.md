@@ -449,6 +449,18 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-17: A polish pass against modern TUI conventions (Rob: "another
+  visual and interaction pass ... a final super nice bit of polish using
+  modern tui standards").
+  - The strip is a tab bar on every window, a thread's name after it, so
+    the views are a click away from a thread too (zellij's and tmux's
+    tab bars never go).
+  - Lists and cards have a scrollbar when they overflow (the help's last
+    sections were cut off with no sign there was more).
+  - The board leaves a gap between its list and its keys, as the views do.
+  - Keys are written one way: `^r`, `Alt R` (footers had `Alt-R`, the
+    form `alt-w`).
+  - Pickers say where they are: `WEAVER :: NEW THREAD › WHERE`.
 - 2026-10-17: Nothing piles up (Rob: "Make sure we clean up old worktrees
   and processes so nothings bloating storage"). Found: thread nvims left
   running (one at 1.9 GB) when a tmux server was killed under them, the

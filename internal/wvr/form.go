@@ -321,6 +321,15 @@ func (e *Env) FormRows(sf, task string) string {
 // anywhere in the form.
 var formKeys = map[string]string{"repo": "^r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
 
+// keyName is fzf's name for a key as weaver writes keys: alt-w is Alt w,
+// as in the help and the README (^r stays).
+func keyName(k string) string {
+	if rest, ok := strings.CutPrefix(k, "alt-"); ok {
+		return "Alt " + rest
+	}
+	return k
+}
+
 // formHints are the form's footer with the cursor on row id: what enter
 // (or a click) does there, then how to move.
 func formHints(id string) []choice {
@@ -331,7 +340,7 @@ func formHints(id string) []choice {
 	case id == "start" || id == "":
 		hs = []choice{{"⏎", "START"}, {"↑↓", "FIELDS"}, {"^e", "WRITE IT IN $EDITOR"}}
 	case does[id] != "":
-		hs = []choice{{"⏎", does[id] + " (" + formKeys[id] + ")"}, {"↑↓", "FIELDS"}}
+		hs = []choice{{"⏎", does[id] + " (" + keyName(formKeys[id]) + ")"}, {"↑↓", "FIELDS"}}
 	default:
 		hs = []choice{{"↑↓", "FIELDS"}}
 	}
@@ -421,7 +430,7 @@ func formLabel(where, what string) string {
 		" " + CDim + "]" + COff + " "
 }
 
-var formFzf = []string{"--border", "sharp", "--border-label-pos", "3", "--footer-border", "none", "--pointer", " ", "--marker", " ", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
+var formFzf = []string{"--border", "sharp", "--border-label-pos", "3", "--footer-border", "none", "--pointer", " ", "--marker", " ", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line", "--scrollbar", "│"}
 
 // pickHints are a picker's footer, pickFooter as it shows.
 var (
@@ -873,7 +882,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 			return
 		}
-		out := e.pick(e.formWheres(fm), formLabel("NEW THREAD", "WHERE"), "     where  ", "a new worktree, or a checkout that is there")
+		out := e.pick(e.formWheres(fm), formLabel("WEAVER", "NEW THREAD › WHERE"), "     where  ", "a new worktree, or a checkout that is there")
 		d := pickValue(out)
 		switch d {
 		case "":
@@ -919,7 +928,7 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.Repo == "" {
 			return
 		}
-		out := e.pick(e.formBases(fm), formLabel("NEW THREAD", "BASE"), "      base  ", "where the new branch starts")
+		out := e.pick(e.formBases(fm), formLabel("WEAVER", "NEW THREAD › BASE"), "      base  ", "where the new branch starts")
 		if out == "" {
 			return
 		}
@@ -946,7 +955,7 @@ func (e *Env) Form(op, sf, q string) {
 			br = items.Slugify(q)
 		}
 		args := append([]string{"--disabled", "--reverse"}, formFzf...)
-		args = append(args, "--border-label", formLabel("NEW THREAD", "BRANCH"), "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
+		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD › BRANCH"), "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
 			"--color", FzfColors, "--header", "        "+CGrey+"names the branch and its worktree; an existing branch continues"+COff,
 			"--footer", CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff, "--bind", "enter:print-query")
 		c := exec.Command("fzf", args...)
@@ -965,7 +974,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 		}
 	case "repo":
-		out := e.pick(e.recentRepos(fm.Repo), formLabel("NEW THREAD", "REPOSITORY"), "      repo  ", "a repository, or a path")
+		out := e.pick(e.recentRepos(fm.Repo), formLabel("WEAVER", "NEW THREAD › REPOSITORY"), "      repo  ", "a repository, or a path")
 		if out == "" {
 			return
 		}

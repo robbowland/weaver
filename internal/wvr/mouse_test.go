@@ -28,7 +28,7 @@ func TestHintAt(t *testing.T) {
 func TestHintAct(t *testing.T) {
 	for key, want := range map[string]string{
 		"⏎": "trigger(enter)", "esc": "trigger(esc)", "?": "trigger(?)", "n": "trigger(n)",
-		"^r": "trigger(ctrl-r)", "^e": "trigger(ctrl-e)", "Alt-R": "trigger(alt-R)", "alt-B": "trigger(alt-B)",
+		"^r": "trigger(ctrl-r)", "^e": "trigger(ctrl-e)", "Alt R": "trigger(alt-R)", "Alt B": "trigger(alt-B)",
 		"^q": "execute-silent(tmux send-keys -K C-q)", "1-9": "", "↑↓": "",
 	} {
 		if got := hintAct(key); got != want {

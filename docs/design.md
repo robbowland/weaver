@@ -563,9 +563,10 @@ else weaver's.
 - **Focus:** `select-window` and `select-pane` work from anywhere, and the
   focused pane (in a popup or `run-shell`) is the session's active pane.
   weaver's keys pass `#{pane_id}` to `run-shell` as well.
-- **Status line:** tmux's own, one line: on the left the current window's
-  name, which in the weaver session `PushStatus` keeps as each thread's label
-  (`<num> <title, else task, at most 30> · <repo>/<branch>`, faint grey;
+- **Status line:** tmux's own, one line: on the left the strip (below), then
+  on a thread's window, after a faint rule, the window's name, which in the
+  weaver session `PushStatus` keeps as each thread's label
+  (`<num> <title, else task, at most 30> · <repo>/<branch>`, grey;
   renamed only when it is not its label, since window ids start again with
   each server); on the right the session's `@weaver-counts` (`CountsFmt`),
   set when the counts change or as the session starts, so nothing polls
@@ -690,7 +691,7 @@ lexer as it loads, which costs every hook 6 ms.
   the repository used last (`$STATE_DIR/repos`).
 - **Strip:** the session option `@weaver-strip`, set as the views start, is
   `THREADS` and each view's label, the current one in ink; the status line
-  shows it on home and in a view. Each is a tmux user range
+  shows it on every window. Each is a tmux user range
   (`#[range=user|home]`, `|github`, `|linear`), as `@weaver-counts`' counts
   are (`|next` for needs you and done, `|home` for working).
 - **Alt j / Alt k** step past the views (`next-window` again while

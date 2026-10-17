@@ -198,7 +198,7 @@ When the agent exits its pane stays; enter there resumes its conversation
 
 Beside home are two views: **GITHUB**, your pull requests and issues, and
 **LINEAR**, your Linear issues. `Alt y` steps from a thread to home, on through them,
-and back; on home and in a view the status line shows the strip of them
+and back; the status line shows the strip of them on every window, a tab bar
 (`THREADS   GITHUB   LINEAR`). A view not set up yet has a dot
 (`LINEAR ·`): its window says what it needs (gh installed and signed in, a
 Linear API key), and enter does that, after which it is the view. `h` there hides it

@@ -377,7 +377,7 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if searching() {
 		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}}
 	}
-	hs := []choice{{"⏎", "THREAD"}, {"Alt-R", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
+	hs := []choice{{"⏎", "THREAD"}, {"Alt R", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
 		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
@@ -672,7 +672,7 @@ func (e *Env) itemsView(src itemSource) error {
 			"--no-sort", "--ansi", "--layout", "reverse", "--no-input",
 			"--header", e.itemFresh(src), "--header-first", "--footer", e.itemFooter(src), "--footer-border", "none",
 			"--border", "sharp", "--border-label", e.itemLabel(src), "--border-label-pos", "3", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
-			"--no-scrollbar", "--color", FzfColors,
+			"--scrollbar", "│", "--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
 			"--preview", me + " card {2}", "--preview-window", pw,
 			"--bind", "load:transform(" + me + " chrome)",

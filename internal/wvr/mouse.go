@@ -63,7 +63,7 @@ func hintAct(key string) string {
 		return "execute-silent(tmux send-keys -K C-q)"
 	case strings.HasPrefix(key, "^"):
 		return "trigger(ctrl-" + strings.ToLower(key[1:]) + ")"
-	case strings.HasPrefix(strings.ToLower(key), "alt-"):
+	case strings.HasPrefix(key, "Alt "):
 		return "trigger(alt-" + key[4:] + ")"
 	}
 	return "trigger(" + key + ")"

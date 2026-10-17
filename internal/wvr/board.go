@@ -405,9 +405,11 @@ func (e *Env) rows(plain bool) string {
 		if ww > 0 {
 			nw = min(ww+2, 30)
 		}
+		// Each group's heading and the gap under it (the last one's
+		// between the list and its keys).
 		items := 0
 		if n > 0 {
-			items = n + groups*2 - 1
+			items = n + groups*2
 		}
 		lsCols, lsLines = lsSize()
 		if n > 0 && items+4 > lsLines {
@@ -584,6 +586,11 @@ func (e *Env) rows(plain bool) string {
 			id = "l" + r.pane
 		}
 		ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, isAgent: true})
+	}
+	// A gap under the last group too, between the list and its keys, as a
+	// view has.
+	if gaps && lastG != -1 && !plain {
+		ls = append(ls, item{id: "gz"})
 	}
 	if plain {
 		for _, it := range ls {
