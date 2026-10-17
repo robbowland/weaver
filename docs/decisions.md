@@ -449,6 +449,29 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-17: The mouse, as modern terminal apps have it (Rob: "a lot of
+  them are mouse supported as well which is a convenience we should have
+  too"). What they share: btop ("all buttons with a highlighted key are
+  clickable"), Textual (a footer key's click presses it, and it lights
+  on hover), lazygit and yazi (click to pick, the wheel scrolls what is
+  under the pointer), tmux itself (the status line's ranges, right-click
+  menus); and the rule under them, that every mouse action has a key
+  (WCAG 2.1.1), the mouse a convenience over it.
+  - Hints are buttons: a footer's hint does what its key does when
+    clicked (fzf's `click-footer` and `trigger`), across the board, the
+    views, the form and its pickers, as the cards' choices already were.
+  - The status line's strip and counts are buttons (tmux user ranges), on
+    the release: tmux makes a second click soon after a first a double
+    click, and its `MouseDown` never comes.
+  - A right click opens weaver's menu of what is under it, each item with
+    its key: a row's (its keys, sent to its list), an agent's thread, or
+    weaver's own on the status line. tmux's default menus offered Kill,
+    Respawn and Rename on weaver's windows, which end an agent or break
+    its label behind weaver's back; they stay on Alt and a right click.
+  - Not done: hover. fzf has no hover event, and lighting a card's
+    choice under the pointer would either move what enter takes (a
+    surprise) or mean a second highlight; tmux's menus light on hover by
+    themselves.
 - 2026-10-17: The new-thread form is rows you move between (Rob: "REALLY
   bad ergonomics, there's no way to pick a worktree ... I'd expect to be
   able to navigate via mouse and also arrow keys but instead I have to use

@@ -194,12 +194,12 @@ hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
 ok "status: needs you, done and unseen, working" "$(wvr status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
 settle
-ok "status for the status line, kept by the hooks: Micrographics signal colours" "$(status_line)" \
-	"#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
+ok "status for the status line, kept by the hooks: Micrographics signal colours, each a button" "$(status_line)" \
+	"#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|next]#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
 focus 0
 wvr status --push
 ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(wvr status)" "true|$G_NEED 1  $G_WORK 1"
-ok "...in the status line too" "$(status_line)" "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1  #[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
+ok "...in the status line too" "$(status_line)" "#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
 printf 'garbage\n' >"$SD/$SK.status"
 ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "
 rc=0"

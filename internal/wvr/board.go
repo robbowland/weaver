@@ -674,10 +674,9 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 	return strconv.Itoa(total)
 }
 
-// Footer is the dashboard's footer: the keys that
-// work now, as many as fit the list's width, ? always last.
-func Footer() string {
-	g, d, o := CGrey, CDim, COff
+// boardHints are the dashboard's footer: the keys that work now, as many as
+// fit the list's width, ? always last.
+func boardHints() []choice {
 	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|^q QUIT"
 	search := "⏎ JUMP|esc BACK|tab SCREEN|^e NVIM"
 	if pl := os.Getenv("FZF_PREVIEW_LINES"); sockBase() != "" && files.Exists(sockBase()+".tight") && (pl == "" || pl == "0") {
@@ -687,11 +686,10 @@ func Footer() string {
 	width := lsWidth(cols) - 6
 	w := 0
 	var items []string
-	end := ""
-	in := os.Getenv("FZF_INPUT_STATE")
+	help := false
 	total := os.Getenv("FZF_TOTAL_COUNT")
 	switch {
-	case in != "" && in != "hidden":
+	case searching():
 		items = strings.Split(search, "|")
 	case os.Getenv("LS_EMPTY") == "1" || total == "0":
 		if os.Getenv("LS_HOME") != "" {
@@ -701,23 +699,25 @@ func Footer() string {
 		}
 	default:
 		items = strings.Split(browse, "|")
-		end, w = g+"?"+o+" "+d+"HELP"+o, 6
+		help, w = true, 6
 	}
-	out := ""
+	var hs []choice
 	for _, it := range items {
 		if w+rlen(it)+2 > width {
 			break
 		}
-		k, rest, ok := strings.Cut(it, " ")
-		if !ok {
-			out += g + k + o + "  "
-		} else {
-			out += g + k + o + " " + d + rest + o + "  "
-		}
+		k, rest, _ := strings.Cut(it, " ")
+		hs = append(hs, choice{k, rest})
 		w += rlen(it) + 2
 	}
-	return out + end + "\n"
+	if help {
+		hs = append(hs, choice{"?", "HELP"})
+	}
+	return hs
 }
+
+// Footer is the dashboard's footer: its hints, each a button.
+func Footer() string { return hintLine(boardHints(), 2) + "\n" }
 
 // Title is the dashboard's header: with no agents,
 // what to do; else a blank line while browsing, whose place the search input

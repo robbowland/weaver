@@ -115,6 +115,28 @@ Agents you start by hand in any tmux session report to weaver as well, and
 tmux's own keys work behind its prefix, `Ctrl b` (`Ctrl b d` detaches, `Ctrl b
 [` scrolls back).
 
+### Mouse
+
+Every key has its place to click, as in btop or lazygit, and every click
+has its key:
+
+- **Hints are buttons.** A key shown under a list (`n NEW`, `x CLOSE`, `esc
+  CANCEL`) does what it says when clicked, as do a card's choices.
+- **Rows.** A click picks a row, a second opens it (as `enter`). In the
+  form and a picker, one click is enough.
+- **Right click** opens a menu of what can be done there, each item with
+  its key: on a row of the board or a view, that row's (jump, nvim, close;
+  start a thread, review, open); on an agent, its thread's; on the status
+  line, weaver's (home, the views, the next that needs you, a new thread,
+  quit). tmux's own menu stays on `Alt` and a right click.
+- **The status line.** `THREADS`, `GITHUB` and `LINEAR` go there; the counts
+  go to the agent that needs you (`[!]`, `[x]`) or home (`[/]`).
+- **The wheel** scrolls what is under it: a list, a card, or a pane's
+  history, with a scrollbar to drag while you are back in it.
+
+A drag in a pane selects and copies, in tmux's copy mode. To select the
+terminal's own way, hold `Shift` (Ghostty) or `Option` (iTerm2) as you drag.
+
 ## Threads
 
 A thread is one task for one agent, in a window of its own:
@@ -323,7 +345,8 @@ the counts.
 
 `wvr status` prints the counts (`[!] 1  [x] 2  [/] 3`: needs you, done and
 unseen, working). weaver's tmux status line shows them in their signal
-colours, set by weaver as they change, so nothing polls.
+colours, set by weaver as they change, so nothing polls. A click on one goes
+to it.
 
 ### Turns and the activity log
 

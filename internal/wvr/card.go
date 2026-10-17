@@ -132,7 +132,23 @@ func Help() string {
 		"  " + g + "Alt 1" + o + "       the thread that has waited on you longest " + d + "(row 1)" + o + "\n" +
 		"  " + g + "Alt v  V" + o + "    the thread's nvim; full screen\n" +
 		"  " + g + "Alt j  k" + o + "    next, previous window " + d + "(past the views)" + o + "\n" +
-		"  " + g + "Alt h  l" + o + "    the pane left, right\n"
+		"  " + g + "Alt h  l" + o + "    the pane left, right\n" +
+		"\n" + mouseHelp()
+}
+
+// mouseHelp is what the mouse does, for the help cards: what the keys do,
+// where they are shown.
+func mouseHelp() string {
+	g, o := CGrey, COff
+	row := func(k, what string) string {
+		return "  " + g + k + o + strings.Repeat(" ", max(12-rlen(k), 1)) + what + "\n"
+	}
+	return g + "MOUSE" + o + "\n" +
+		row("click", "a row; a key shown, as if pressed") +
+		row("click twice", "the row, as ⏎") +
+		row("right click", "a menu of what can be done there") +
+		row("wheel", "scroll (a pane: back through it)") +
+		row("status line", "THREADS, a view or a count: go there")
 }
 
 // Intro is the card of an empty dashboard.

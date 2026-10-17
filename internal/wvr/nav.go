@@ -68,7 +68,6 @@ func (e *Env) tabs() []tab {
 // (THREADS, GITHUB, LINEAR), and from the last back to where you came from.
 func (e *Env) GoHome() {
 	ts, cur, home := e.where()
-	lf := e.lastFile()
 	back := func() { e.goBack(ts, cur, home) }
 	views := e.viewNames()
 	at := -1
@@ -89,8 +88,14 @@ func (e *Env) GoHome() {
 		back()
 		return
 	}
-	if cur.id != "" && cur.view == "" {
-		bestEffort(os.WriteFile(lf, []byte(string(cur.id)+"\n"), 0o644))
+	e.toHome(cur, home)
+}
+
+// toHome goes home from window cur (kept, when a thread's, for going back
+// to), made again first if it was closed.
+func (e *Env) toHome(cur tab, home tmux.WindowID) {
+	if cur.id != "" && cur.view == "" && cur.id != home {
+		bestEffort(os.WriteFile(e.lastFile(), []byte(string(cur.id)+"\n"), 0o644))
 	}
 	if home == "" {
 		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {

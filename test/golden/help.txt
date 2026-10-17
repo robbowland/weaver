@@ -30,3 +30,10 @@ ANYWHERE
   Alt v  V    the thread's nvim; full screen
   Alt j  k    next, previous window (past the views)
   Alt h  l    the pane left, right
+
+MOUSE
+  click       a row; a key shown, as if pressed
+  click twice the row, as ⏎
+  right click a menu of what can be done there
+  wheel       scroll (a pane: back through it)
+  status line THREADS, a view or a count: go there

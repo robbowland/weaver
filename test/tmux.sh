@@ -3,11 +3,13 @@
 # server of its own, in a pseudo-terminal as Ghostty would run it, and the
 # tests press its keys there. Threads (nvim on the left, the agent at its
 # width), hooks keyed by tmux pane, Alt y, the board's digits, Alt v, Alt 1,
-# Cmd+D (as Ghostty sends it), Alt N, the server crashing and its threads resumed (by the board's
-# enter, and by themselves), the board's x, Ctrl q, and threads from work
-# items in the GITHUB and LINEAR views. Its own socket, session name, state,
-# Claude Code dir, nvim config and PATH, with fake agents, gh, Keychain and
-# Linear API: never your tmux, agents, keys or accounts.
+# Cmd+D (as Ghostty sends it), Alt N, the mouse (a hint's click, the status
+# line's buttons, right-click menus), the server crashing and its threads
+# resumed (by the board's enter, and by themselves), the board's x, Ctrl q,
+# and threads from work items in the GITHUB and LINEAR views. Its own socket,
+# session name, state, Claude Code dir, nvim config and PATH, with fake
+# agents, gh, Keychain and Linear API: never your tmux, agents, keys or
+# accounts.
 #   test/tmux.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
@@ -76,6 +78,15 @@ trap 'exit 130' INT TERM HUP
 mkfifo "$AT/keys"
 exec 3<>"$AT/keys"
 key() { printf '%s\n' "$1" >&3; }
+# click X Y [BUTTON]: a press and release at column X, line Y (from 1), as the
+# terminal reports them (SGR); hover X Y: the pointer moving there.
+sgr() { printf '\033[<%s;%s;%s%s' "$1" "$2" "$3" "$4" | xxd -p | tr -d '\n'; }
+click() {
+	key "$(sgr "${3:-0}" "$1" "$2" M)"
+	sleep 0.1
+	key "$(sgr "${3:-0}" "$1" "$2" m)"
+}
+hover() { key "$(sgr 35 "$1" "$2" M)"; }
 # `weaver` (with environment ARGS) in a 200 x 50 terminal: the session, attached.
 attach() {
 	python3 -I "$HERE/pty_drive.py" "$AT/keys" "$AT/screen.log" env "$@" wvr &
@@ -154,11 +165,11 @@ ok "...and the next prompt is working again" "$(jq -r .state "$SD/tmux-${S}_$AG.
 waitfor '[ "$(tx display -p -t "=$S:1" "#{window_name}")" = "01 say hello · repo/main" ]'
 ok "hook: the thread's window takes its label" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
 waitfor '[ -n "$(wvr status --tmux "$S")" ]'
-ok "status: the counts for tmux's status line" "$(wvr status --tmux "$S")" \
-	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  "
+ok "status: the counts for tmux's status line, working a button home" "$(wvr status --tmux "$S")" \
+	"#[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
 ok "...set on the session for its status line to show, nothing polled" \
 	"$(tx show -v -t "=$S:" @weaver-counts)|$(tx show -gv status-interval)" \
-	"#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1  |0"
+	"#[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  |0"
 
 # --- seen when you look: a thread done while you are elsewhere stays new until
 # you stay on its window a moment (tmux's pane-focus-in hook)
@@ -271,6 +282,40 @@ ok "form: alt-w picks where it works: here, the main checkout" "$(jq -r .where "
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "
+
+# --- the mouse: a key's hint is its button, the status line's counts go to
+# their agents, and a right click opens the menu of what is under it
+tx select-window -t "=$S:0"
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+foot=$(tx capture-pane -p -t "=$S:0" | grep -n 'n NEW' | head -n 1)
+n=$(grep -c 'what should the agent do' "$AT/screen.log")
+click "$(python3 -I -c 'import sys; print(sys.argv[1].index("n NEW") + 3)' "${foot#*:}")" "${foot%%:*}"
+waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
+ok "mouse: a click on the board's n NEW, as n" "$([ "$(grep -c 'what should the agent do' "$AT/screen.log")" -gt "$n" ] && echo form)" "form"
+key 1b
+waitfor 'tx capture-pane -p -t "=$S:0" | grep -q "n NEW"'
+click 189 50 # the status line's [!] 1
+waitfor '[ "$(where)" = "1 %$AG" ]'
+ok "...one on the status line's count of agents that need you, to it" "$(where)" "1 %$AG"
+n=$(grep -c 'close thread' "$AT/screen.log")
+click 190 10 2 # the agent's pane: a shell, which takes no mouse
+waitfor '[ "$(grep -c "close thread" "$AT/screen.log")" -gt "$n" ]'
+ok "...a right click on the agent, its thread's menu, not tmux's" "$([ "$(grep -c 'close thread' "$AT/screen.log")" -gt "$n" ] && echo menu)" "menu"
+key 1b # esc: the menu goes (before the window changes, which would close it, and the board would take the esc)
+sleep 0.5
+tx select-window -t "=$S:0"
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+row=$(tx capture-pane -p -t "=$S:0" | grep -n ' 01 ' | head -n 1 | cut -d : -f 1)
+n=$(grep -c 'jump to it' "$AT/screen.log")
+click 30 "$row" 2
+waitfor '[ "$(grep -c "jump to it" "$AT/screen.log")" -gt "$n" ]'
+ok "...one on a board row, its menu where the click was" \
+	"$([ "$(grep -c 'jump to it' "$AT/screen.log")" -gt "$n" ] && echo menu)|$(tx show -pv -t "=$S:0" @weaver-mouse | cut -d ' ' -f 2-)" "menu|29 $((row - 1))"
+hover 33 $((row + 3)) # nvim, its second item
+click 33 $((row + 3))
+waitfor '[ "$(where)" = "1 %$NV" ]'
+ok "...whose items are the row's keys: nvim" "$(where)" "1 %$NV"
+tx select-pane -t "%$AG"
 
 # --- a thread in a worktree of its own (its branch from the task), then
 # closed with its worktree, which is clean and merged
@@ -417,7 +462,13 @@ ok "GITHUB: weaver's own, what GitHub finds for you, a section under its heading
 	"$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')|$(tx capture-pane -p -t "=$S:900" | grep -c 'Add a flag')|$(tx capture-pane -p -t "=$S:900" | grep -c 'none yet: ⏎ starts one on add-flag')" "1|2|1" ||
 	{ tx capture-pane -p -t "=$S:900" | sed 's/^/  github: /' | head -20; tx display -p -t "=$S:900" '#{pane_start_command} #{pane_dead}' | sed 's/^/  pane: /'; }
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
-	" #[fg=#ffffff]THREADS   #[fg=#616161]GITHUB   #[fg=#616161]LINEAR"
+	" #[range=user|home]#[fg=#ffffff]THREADS#[norange]   #[range=user|github]#[fg=#616161]GITHUB#[norange]   #[range=user|linear]#[fg=#616161]LINEAR#[norange]"
+click 14 50 # GITHUB, on the status line
+waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'
+ok "...each a button: GITHUB" "$(where | cut -d ' ' -f 1)" "900"
+click 3 50
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+ok "...THREADS: home" "$(where | cut -d ' ' -f 1)" "0"
 
 # A review of the pull request: on its head, read-only, its nvim on the review.
 tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
@@ -525,7 +576,7 @@ rm -f "$AT/linear-key" "$SD/linear-auth"
 tx run-shell -t "=$S:" "wvr view linear"
 waitfor 'tx capture-pane -p -t "=$S:901" 2>/dev/null | grep -q "wvr linear login"'
 ok "a view not signed in: a dot in the strip, and its window says what it needs" \
-	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*no Linear API key')" "1|1"
+	"$(tx display -p -t "=$S:0" '#{T:status-left}' | grep -c 'LINEAR#\[norange\] #\[fg=#616161\]·')|$(tx capture-pane -p -t "=$S:901" | grep -c 'needs.*no Linear API key')" "1|1"
 tx send-keys -t "=$S:901" Enter
 waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "personal API key"'
 tx send-keys -t "=$S:901" -l lin_wrong

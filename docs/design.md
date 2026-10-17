@@ -455,6 +455,38 @@ pane's terminal and reopens the dashboard when it is cancelled (130) or
 fails. Home does both inside fzf and keeps running. `x` runs `wvr close
 <pane>` inside fzf (`execute`), then reloads.
 
+### Mouse
+
+Whatever shows a key is its button, and every mouse action has its key.
+
+- **Footers:** each is a list of hints (`choice`: key, what it does),
+  drawn by `hintLine`. fzf's `click-footer` runs `wvr _click board`, `_click
+  form <row>`, `_click pick` or `_items NAME click`, which finds the hint
+  at `$FZF_CLICK_FOOTER_COLUMN` in the same list (`hintAt`) and prints its
+  action (`hintAct`): `trigger(<its fzf key>)`, `^q` as `tmux send-keys -K
+  C-q` (tmux's binding, which asks mid-turn), nothing for `1-9` and `↑↓`.
+- **Status line:** `MouseUp1Status` (on the release: a second click soon
+  after the first is tmux's double click, never its `MouseDown`) runs `wvr
+  _click status <range>`: `home` goes home (`toHome`, not Alt y's cycle),
+  `next` is `wvr next`, a view's name opens it.
+- **Right click:** `MouseDown3Pane`, on a program that takes the mouse,
+  sets the pane option `@weaver-mouse` to `<client> <x> <y>` (the click,
+  in the client's cells from 0) and forwards the click; the board's and
+  the views' fzf bind `right-click` (the cursor on the clicked row first)
+  to `wvr _menu board <kind>` and `wvr _items NAME menu <kind>`, which show
+  that row's menu there. On a program that does not, `wvr _menu pane
+  <client> <x> <y> <pane>`; on the status line, `wvr _menu status <client>
+  <x>`, over it. The menus are `display-menu -MO` (they take the mouse,
+  and the right click's release off them leaves them open) under the
+  click, or over it with no room below. A row's items send the row's keys
+  to its list (searching, only those that do not type); the others run
+  weaver's commands (`nvim`, `close thread` in an 80 x 12 popup, the
+  views, `next`, Alt N and Ctrl q as `send-keys -K`). tmux's own menus,
+  whose Kill and Respawn would end an agent behind weaver's back, stay on
+  Alt and a right click.
+- **Scrolling back:** `pane-scrollbars modal` (tmux 3.6 and on): a
+  scrollbar while a pane is in copy mode.
+
 ### Resume card
 
 `wvr _preview PANE LABEL`: the label in bold, then the state and its age,
@@ -642,7 +674,9 @@ lexer as it loads, which costs every hook 6 ms.
   the repository used last (`$STATE_DIR/repos`).
 - **Strip:** the session option `@weaver-strip`, set as the views start, is
   `THREADS` and each view's label, the current one in ink; the status line
-  shows it on home and in a view.
+  shows it on home and in a view. Each is a tmux user range
+  (`#[range=user|home]`, `|github`, `|linear`), as `@weaver-counts`' counts
+  are (`|next` for needs you and done, `|home` for working).
 - **Alt j / Alt k** step past the views (`next-window` again while
   `@weaver-view` is set), so they cycle threads and home only.
 

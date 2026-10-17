@@ -372,23 +372,47 @@ func readOnly(kind string) string {
 	return "INVESTIGATE"
 }
 
-// itemFooter is the view's keys: browsing, or searching.
-func (e *Env) itemFooter(src itemSource) string {
-	g, d, o := CGrey, CDim, COff
-	items := []string{"⏎ THREAD", "Alt-R " + readOnly(e.itemKind(src)), "o OPEN"}
+// itemHints are the view's keys: browsing, or searching.
+func (e *Env) itemHints(src itemSource) []choice {
+	if searching() {
+		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}}
+	}
+	hs := []choice{{"⏎", "THREAD"}, {"Alt-R", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
-		items = append(items, "s "+strings.ToUpper(strings.Join(src.kinds(), "/")))
+		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
-	items = append(items, "/ SEARCH", "^r REFRESH", "? HELP")
-	if in := os.Getenv("FZF_INPUT_STATE"); in != "" && in != "hidden" {
-		items = []string{"⏎ THREAD", "esc BACK"}
+	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"?", "HELP"})
+}
+
+// itemFooter is the view's footer: its hints, each a button.
+func (e *Env) itemFooter(src itemSource) string { return hintLine(e.itemHints(src), 2) }
+
+// itemMenu is a right click's menu on a view's row of kind k: what its keys
+// do to the item (none on a section's heading), and the view's own.
+func (e *Env) itemMenu(src itemSource, k string) []menuItem {
+	var ms []menuItem
+	if strings.HasPrefix(k, "i") {
+		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "R", "M-R"}}
+		if !searching() {
+			ms = append(ms, menuItem{"open in the browser", "o", "o"})
+		}
 	}
-	out := ""
-	for _, it := range items {
-		k, rest, _ := strings.Cut(it, " ")
-		out += g + k + o + " " + d + rest + o + "  "
+	if searching() {
+		return ms
 	}
-	return out
+	if len(ms) > 0 {
+		ms = append(ms, menuItem{})
+	}
+	if ks := src.kinds(); len(ks) > 1 {
+		next := ks[0]
+		for i, k := range ks {
+			if k == e.itemKind(src) {
+				next = ks[(i+1)%len(ks)]
+			}
+		}
+		ms = append(ms, menuItem{"show " + strings.ToLower(src.label(next)), "s", "s"})
+	}
+	return append(ms, menuItem{"refresh", "r", "C-r"}, menuItem{"help", "?", "?"})
 }
 
 // itemCardRoom is where a view's card goes, as the board's goes: beside the
@@ -498,7 +522,7 @@ func (e *Env) itemHelp(src itemSource) string {
 			out += "  " + s.colour + s.word + o + strings.Repeat(" ", 8-len(s.word)) + s.what + "\n"
 		}
 	}
-	return out
+	return out + "\n" + mouseHelp()
 }
 
 // itemFrom opens the new-thread form for item ref (review: read-only).
@@ -565,6 +589,12 @@ func (e *Env) Items(args []string) error {
 		return nil
 	case "switch":
 		e.switchKind(src)
+		return nil
+	case "click":
+		fmt.Print(footClick(e.itemHints(src), 2))
+		return nil
+	case "menu":
+		e.rowMenu(e.itemMenu(src, ref))
 		return nil
 	case "help":
 		// ? shows the keys in the card's place; ? again, the card.
@@ -657,6 +687,9 @@ func (e *Env) itemsView(src itemSource) error {
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo 'execute-silent(` + q + ` go back)'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
 			"--bind", "q:execute-silent(" + q + " go back)",
 			"--bind", "?:execute-silent(" + me + " help)+refresh-preview",
+			// The footer's hints are buttons; a right click, the row's menu.
+			"--bind", "click-footer:transform(" + me + " click)",
+			"--bind", "right-click:execute-silent(" + me + " menu {1})",
 		}
 		if len(src.kinds()) > 1 {
 			args = append(args, "--bind", "s,tab:execute-silent("+me+" switch)+"+reload+"+first")

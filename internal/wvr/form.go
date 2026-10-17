@@ -307,24 +307,25 @@ func (e *Env) FormRows(sf, task string) string {
 // anywhere in the form.
 var formKeys = map[string]string{"repo": "^r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
 
-// formRowFooter is the form's footer with the cursor on row id: what enter
+// formHints are the form's footer with the cursor on row id: what enter
 // (or a click) does there, then how to move.
-func formRowFooter(id string) string {
-	g, d, o := CGrey, CDim, COff
-	k := func(key, what string) string { return g + key + o + " " + d + what + o + "   " }
+func formHints(id string) []choice {
 	does := map[string]string{"repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
 		"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
-	out := ""
+	var hs []choice
 	switch {
 	case id == "start" || id == "":
-		out = k("⏎", "START") + k("↑↓", "FIELDS") + k("^e", "WRITE IT IN $EDITOR")
+		hs = []choice{{"⏎", "START"}, {"↑↓", "FIELDS"}, {"^e", "WRITE IT IN $EDITOR"}}
 	case does[id] != "":
-		out = k("⏎", does[id]+" "+d+"("+formKeys[id]+")") + k("↑↓", "FIELDS")
+		hs = []choice{{"⏎", does[id] + " (" + formKeys[id] + ")"}, {"↑↓", "FIELDS"}}
 	default:
-		out = k("↑↓", "FIELDS")
+		hs = []choice{{"↑↓", "FIELDS"}}
 	}
-	return out + k("esc", "CANCEL")
+	return append(hs, choice{"esc", "CANCEL"})
 }
+
+// formRowFooter is the form's footer on row id: its hints, each a button.
+func formRowFooter(id string) string { return hintLine(formHints(id), 3) }
 
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
@@ -408,7 +409,11 @@ func formLabel(where, what string) string {
 
 var formFzf = []string{"--border", "sharp", "--border-label-pos", "3", "--footer-border", "none", "--pointer", " ", "--marker", " ", "--no-info", "--no-separator", "--ansi", "--height", "100%", "--highlight-line"}
 
-const pickFooter = CGrey + "⏎" + COff + " " + CDim + "PICK" + COff + "   " + CGrey + "↑↓" + COff + " " + CDim + "MOVE" + COff + "   " + CGrey + "esc" + COff + " " + CDim + "BACK" + COff
+// pickHints are a picker's footer, pickFooter as it shows.
+var (
+	pickHints  = []choice{{"⏎", "PICK"}, {"↑↓", "MOVE"}, {"esc", "BACK"}}
+	pickFooter = hintLine(pickHints, 3)
+)
 
 // checkThread: can a thread start from task and the form's fields? Why
 // not, or "".
@@ -764,7 +769,8 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			"--bind", "focus:transform-footer("+q+" _form footer {1})",
 			"--bind", "tab:down,btab:up",
 			"--bind", "enter,left-click:transform("+q+" _form keys {1} "+qs+")",
-			"--bind", "double-click:ignore")
+			"--bind", "double-click:ignore",
+			"--bind", "click-footer:transform("+q+" _click form {1})")
 		for id, k := range formKeys {
 			args = append(args, "--bind", strings.Replace(k, "^", "ctrl-", 1)+":"+formAct(q, qs, id))
 		}
@@ -1009,8 +1015,9 @@ func (e *Env) pick(items, label, prompt, ghost string) string {
 	args := append([]string{"--reverse"}, formFzf...)
 	args = append(args, "--border-label", label, "--delimiter", "\t", "--with-nth", "2", "--print-query", "--prompt", prompt,
 		"--ghost", ghost, "--color", FzfColors, "--footer", pickFooter,
-		// A menu: a click picks, as on the form's rows.
-		"--bind", "left-click:accept")
+		// A menu: a click picks, as on the form's rows; the footer's hints
+		// are buttons.
+		"--bind", "left-click:accept", "--bind", "click-footer:transform("+session.Quote(e.Self)+" _click pick)")
 	c := exec.Command("fzf", args...)
 	c.Env = append(os.Environ(), "SHELL=/bin/sh")
 	c.Stdin = strings.NewReader(items)

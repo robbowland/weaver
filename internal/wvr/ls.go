@@ -168,6 +168,9 @@ func (e *Env) Ls() error {
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s,tab:transform("+q+" _view screen)",
 			"--bind", "?:transform("+q+" _view help)",
+			// The footer's hints are buttons; a right click, the row's menu.
+			"--bind", "click-footer:transform("+q+" _click board)",
+			"--bind", "right-click:execute-silent("+q+" _menu board {1})",
 			"--bind", "ctrl-r:reload("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)

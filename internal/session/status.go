@@ -21,15 +21,17 @@ import (
 // CountsFmt is the status line's counts in tmux's colours: needs you, done,
 // working, each only when there are some.
 func CountsFmt(n, d, w int) string {
+	// Each a button (tmux's user ranges, which `wvr _click status` reads):
+	// to the agent that needs you, or home.
 	out := ""
 	if n > 0 {
-		out += "#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(n) + "  "
+		out += "#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(n) + "#[norange]  "
 	}
 	if d > 0 {
-		out += "#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(d) + "  "
+		out += "#[range=user|next]#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(d) + "#[norange]  "
 	}
 	if w > 0 {
-		out += "#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(w) + "  "
+		out += "#[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(w) + "#[norange]  "
 	}
 	return out
 }

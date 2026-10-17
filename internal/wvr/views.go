@@ -249,11 +249,12 @@ func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
 
 // SetStrip sets the session's view strip, the status line's left on home
 // and in a view: THREADS and each view, the one you are on in ink, one not
-// set up yet with a faint dot.
+// set up yet with a faint dot; each a button (a tmux user range, which
+// `wvr _click status` reads).
 func (e *Env) SetStrip() {
-	strip := "#{?#{==:#{window_index},0},#[fg=#ffffff],#[fg=#616161]}THREADS"
+	strip := "#[range=user|home]#{?#{==:#{window_index},0},#[fg=#ffffff],#[fg=#616161]}THREADS#[norange]"
 	for _, n := range e.viewNames() {
-		strip += "   #{?#{==:#{@weaver-view}," + n + "},#[fg=#ffffff],#[fg=#616161]}" + strings.ToUpper(n)
+		strip += "   #[range=user|" + n + "]#{?#{==:#{@weaver-view}," + n + "},#[fg=#ffffff],#[fg=#616161]}" + strings.ToUpper(n) + "#[norange]"
 		if e.viewNeeds(n).state != viewReady {
 			strip += " #[fg=#616161]·"
 		}
