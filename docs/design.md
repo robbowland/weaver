@@ -275,7 +275,7 @@ written: `gh pr view` and `gh api graphql` (the unresolved review threads),
 its comments). The branch is what ties a
 thread to its item:
 
-| Item | Branch | Default task |
+| Item | Branch | weaver's task (`WEAVER_ITEM_TASK=1`) |
 | --- | --- | --- |
 | pull request | its head (`pr-N`, fetched from `pull/N/head`, for one from a fork) | `Address the review on #N`, `Review #N` |
 | GitHub issue | `N-<title's slug>` | `Implement #N`, `Investigate #N` |
@@ -289,7 +289,11 @@ to that thread instead. A pull request's branch gets `git config
 branch.<branch>.weaverbase <remote>/<base>`, so reviews compare with what it
 merges into.
 
-The agent is sent the task, a line on what to do in this worktree, and the
+The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
+and an item's thread may start without one: its agent then runs with no
+prompt, and the thread is named for the item (`store.Thread.About`: `#45 Add
+a flag`, `ENG-42 Fix it`) until the agent's first title. With a task, the
+agent is sent the task, a line on what to do in this worktree, and the
 item's text (description, unresolved review comments with file:line,
 comments, the latest kept within 48 KB) between two marker lines carrying a
 random nonce, said to be untrusted: written by anyone who can comment.

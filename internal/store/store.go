@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,6 +38,20 @@ type Thread struct {
 	Mode            string      `json:"mode,omitempty"`
 	Pane            *jsonx.Int  `json:"pane,omitempty"`
 	SessionID       string      `json:"session_id,omitempty"`
+}
+
+// About is what the thread is about, for its label: its task, else (one
+// from an item, told nothing) the item, as "#45 Add a flag" or "ENG-42 Fix
+// it".
+func (t Thread) About() string {
+	if strings.TrimSpace(t.Task) != "" || t.Item == nil {
+		return t.Task
+	}
+	ref := t.Item.Ref
+	if i := strings.LastIndexByte(ref, '#'); i >= 0 {
+		ref = ref[i:]
+	}
+	return strings.TrimSpace(ref + " " + t.Item.Title)
 }
 
 // ThreadItem is the work item a thread started from.

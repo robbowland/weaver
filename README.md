@@ -205,13 +205,16 @@ Linear API key), and enter does that, after which it is the view. `h` there hide
 (`wvr view linear` shows it again; `$WEAVER_VIEWS` picks them outright).
 
 On a pull request or an issue there, `Alt N` opens the new-thread form
-filled in for it: the task (`Address the review on #45`, `Implement #12`),
-its branch (the pull request's own, `12-fix-the-flaky-test` for a GitHub
-issue, Linear's name for a Linear one) and the repository's checkout, found
-among those weaver knows (`^r` when it knows none). Enter starts it, and the
-agent gets the task with the item's description, its unresolved review
-comments and its comments, fenced and marked as untrusted text. A branch
-that already has a thread goes to that thread instead.
+filled in for it: its branch (the pull request's own, `12-fix-the-flaky-test`
+for a GitHub issue, Linear's name for a Linear one) and the repository's
+checkout, found among those weaver knows (`^r` when it knows none). The task
+is yours to write. Left empty, enter starts the agent told nothing, waiting
+for you, its window named for the item (`03 ENG-42 Fix it`); written, the
+agent gets it with the item's description, its unresolved review comments
+and its comments, fenced and marked as untrusted text
+(`WEAVER_ITEM_TASK=1` writes weaver's task in for you: `Address the review
+on #45`, `Implement #12`). A branch that already has a thread goes to that
+thread instead.
 
 `Alt R` is the read-only twin: on a pull request, a thread on its head
 whose nvim opens on the review against what it merges into, and whose agent
@@ -445,6 +448,7 @@ and `User WeaverEvent` autocmds receive every event from the agent.
 | `WEAVER_WORKTRUNK` | `1` | `0` makes threads' worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
+| `WEAVER_ITEM_TASK` | `0` | `1`: a thread from a pull request or an issue starts with weaver's task written in the form (`Review #45`, `Implement ENG-42`), sent with the item as the agent's first prompt; else the task is empty, and an empty one starts the agent told nothing |
 | `WEAVER_VIEWS` | both, but hidden ones | The views beside home: `github`, `linear`, both, or `none` |
 | `LINEAR_API_KEY` | unset | The Linear API key weaver reads Linear with, over the one `wvr linear login` keeps in the Keychain |
 | `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves the hooks and plugins as they are as it starts (`wvr setup` still does it) |

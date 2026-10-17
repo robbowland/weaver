@@ -276,21 +276,35 @@ func formStart(fm form, task string) string {
 	if fm.Mode == items.ModeReview {
 		what += ", read-only,"
 	}
+	// An item's thread with no task starts its agent told nothing.
+	waits := ""
+	if fm.Item != nil && strings.TrimSpace(task) == "" {
+		waits = ", waiting for you"
+	}
 	if fm.Where == WhereHere {
 		where := filepath.Base(fm.Here)
 		if br, _ := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD"); br != "" {
 			where = br
 		}
-		return CGrey + what + " in " + where + ", where it is" + COff
+		return CGrey + what + " in " + where + ", where it is" + waits + COff
 	}
 	br := fm.Branch
 	if br == "" {
 		br = items.Slugify(task)
 	}
 	if br == "" {
-		return CGrey + what + " in a new worktree" + COff
+		return CGrey + what + " in a new worktree" + waits + COff
 	}
-	return CGrey + what + " in a new worktree, on " + br + COff
+	return CGrey + what + " in a new worktree, on " + br + waits + COff
+}
+
+// formGhost is the task's placeholder: an item's thread may start with
+// none.
+func formGhost(fm form) string {
+	if fm.Item != nil {
+		return "what should the agent do? (nothing: it waits for you)"
+	}
+	return "what should the agent do?"
 }
 
 // FormRows are the form's rows for fzf: id, then what it shows.
@@ -418,7 +432,7 @@ var (
 // checkThread: can a thread start from task and the form's fields? Why
 // not, or "".
 func checkThread(task string, fm form) string {
-	if strings.TrimSpace(task) == "" {
+	if strings.TrimSpace(task) == "" && fm.Item == nil {
 		return "say what the agent should do"
 	}
 	if !agentInstalled(fm.Agent) {
@@ -677,8 +691,10 @@ func (e *Env) New(args []string) error {
 		os.Remove(sf)
 		os.Remove(sf + ".task")
 	}()
+	// An item's form starts with no task, so its agent is told nothing
+	// unless you say (WEAVER_ITEM_TASK=1: weaver's, "Implement ENG-42").
 	query := ""
-	if fm.Item != nil {
+	if fm.Item != nil && os.Getenv("WEAVER_ITEM_TASK") == "1" {
 		query = fm.Item.Item.DefaultTask(mode)
 	}
 	for {
@@ -760,7 +776,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 		// The task is the query; the rows are what enter (or a click) acts
 		// on: start, first, then each choice, which ↑↓, tab and the mouse
 		// move between. After a choice, the cursor is back on start.
-		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "    task  ", "--ghost", "what should the agent do?",
+		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "    task  ", "--ghost", formGhost(loadForm(sf)),
 			"--query", query, "--header", h, "--footer", formRowFooter("start"), "--color", FzfColors,
 			// No --track: fzf would hold keys while a reload looked for the
 			// row. Typing is for the task, and puts the cursor on start.

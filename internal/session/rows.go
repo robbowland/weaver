@@ -180,7 +180,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Bgtasks = oneline.Line(s.BackgroundTasks)
 		r.Doing = oneline.Line(s.Doing)
 		if terr == nil {
-			r.Ttask, r.Tname, r.Tnum = oneline.Line(t.Task), oneline.Line(t.Name), t.Num
+			r.Ttask, r.Tname, r.Tnum = oneline.Line(t.About()), oneline.Line(t.Name), t.Num
 		}
 		for _, x := range s.TurnRoots {
 			r.Troots = append(r.Troots, oneline.Line(x))
@@ -210,7 +210,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
-			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.Task),
+			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
 			Tname: oneline.Line(t.Name), Tnum: t.Num})
 	}
 	starts := ProcStarts(pids)

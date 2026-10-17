@@ -359,11 +359,18 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		it = fm.Item.Item
 	}
 	pr, isPR := it.(items.PullRequest)
+	var ti *store.ThreadItem
+	if it != nil {
+		ti = &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
+	}
+	// What names the thread: its task, else (an item's, told nothing) the
+	// item.
+	label := store.Thread{Task: task, Item: ti}.About()
 	var dir, name, branch, base string
 	created := false
 	if fm.Where == WhereHere {
 		dir = fm.Here
-		name = items.Slugify(task)
+		name = items.Slugify(label)
 		if name == "" {
 			name = "thread-" + time.Now().Format("150405")
 		}
@@ -371,7 +378,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	} else {
 		branch = fm.Branch
 		if branch == "" {
-			branch = items.Slugify(task)
+			branch = items.Slugify(label)
 		}
 		// The checkout of the repository that @ means: the one you are in
 		// when it belongs to it, else the main one.
@@ -417,9 +424,11 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 			exec.Command("git", "-C", fm.Repo, "config", "branch."+branch+".weaverbase", prBase).Run()
 		}
 	}
+	// The agent's first prompt: the task, with the item it is on; with no
+	// task, nothing (it waits for you).
 	prompt := task
 	review := fm.Mode == items.ModeReview
-	if it != nil {
+	if it != nil && strings.TrimSpace(task) != "" {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
 	}
 	tok := token()
@@ -444,9 +453,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	}
 	rec := store.Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
 		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
-	if it != nil {
-		rec.Item = &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
-	}
+	rec.Item = ti
 	if review {
 		rec.Mode = "review"
 	}
@@ -459,7 +466,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	// once its agent first reports.
 	wname := name
 	if e.WeaverSession() {
-		wname = session.ThreadLabel(n, task, dir)
+		wname = session.ThreadLabel(n, label, dir)
 	}
 	// A review of a pull request opens its nvim on the review.
 	var nvimEnv []string
@@ -542,6 +549,9 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		}
 		os.RemoveAll(d)
 		t := string(task)
+		if strings.TrimSpace(t) == "" {
+			return run(ident...)
+		}
 		// A task starting with "-" is not an option.
 		if strings.HasPrefix(t, "-") {
 			t = " " + t
@@ -681,7 +691,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	if e.WeaverSession() {
 		t := oneline.Line(st.Title)
 		if t == "" {
-			t = oneline.Line(th.Task)
+			t = oneline.Line(th.About())
 		}
 		if t == "" {
 			t = nm

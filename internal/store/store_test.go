@@ -33,3 +33,22 @@ func TestReadStateTolerant(t *testing.T) {
 		}
 	}
 }
+
+// A thread is about its task; one from an item, told nothing, about the
+// item.
+func TestThreadAbout(t *testing.T) {
+	for _, c := range []struct {
+		th   Thread
+		want string
+	}{
+		{Thread{Task: "fix it"}, "fix it"},
+		{Thread{Task: "fix it", Item: &ThreadItem{Ref: "o/r#45", Title: "Add a flag"}}, "fix it"},
+		{Thread{Item: &ThreadItem{Ref: "o/r#45", Title: "Add a flag"}}, "#45 Add a flag"},
+		{Thread{Task: " ", Item: &ThreadItem{Ref: "ENG-42", Title: "Fix it"}}, "ENG-42 Fix it"},
+		{Thread{}, ""},
+	} {
+		if got := c.th.About(); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.th, got, c.want)
+		}
+	}
+}

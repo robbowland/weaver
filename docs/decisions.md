@@ -449,6 +449,14 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-17: No prompt is sent for you (Rob: "I don't think a default
+  prompt should be sent when starting an agent either unless
+  configured"). A thread from a pull request or an issue had its task
+  written in (`Implement ENG-42`), and enter sent it with weaver's
+  instructions, so the agent set to work on a task nobody wrote. The
+  form's task is now empty; empty, the agent starts with no prompt and
+  waits, the thread named for its item; written, it goes with the item as
+  before. `WEAVER_ITEM_TASK=1` brings weaver's task back.
 - 2026-10-17: The mouse, as modern terminal apps have it (Rob: "a lot of
   them are mouse supported as well which is a convenience we should have
   too"). What they share: btop ("all buttons with a highlighted key are

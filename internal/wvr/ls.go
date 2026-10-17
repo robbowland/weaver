@@ -117,6 +117,11 @@ func (e *Env) Ls() error {
 	// _chrome to tell that a newer weaver is installed under it.
 	if home {
 		os.WriteFile(base+".born", nil, 0o644)
+		// The status line's strip and counts as this weaver draws them (and
+		// clicks them): an install may have changed that under a running
+		// session, whose home board then starts again in it.
+		e.SetStrip()
+		e.PushStatusAndLabels()
 	}
 	for {
 		for _, f := range side {

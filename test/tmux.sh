@@ -557,14 +557,16 @@ hdr=$(wvr _form fields "$FORM" x)
 ok "...enter, the form for the issue, in the repository used last" \
 	"$(jq -r '"\(.repo) \(.branch) \(.item.linear.id) "' "$FORM")|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
 	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
-waitfor '[ "$(grep -c "Implement ENG-42" "$AT/screen.log")" -gt 0 ]'
+waitfor '[ "$(grep -c "nothing: it waits for you" "$AT/screen.log")" -gt 0 ]'
+ok "...no task written for you" "$(grep -c 'Implement ENG-42' "$AT/screen.log")" "0"
 key 0d # enter
 waitfor '[ "$(windows)" = "0 1 2 3 900 901 " ]'
 AG3=$(pane_at 3 1)
 waitfor '[ -f "$AT/args.$AG3" ]'
-ok "...enter: its thread, on Linear's branch, its comments in the prompt" \
-	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(grep -c '^Implement ENG-42$' "$AT/args.$AG3")|$(grep -c '^Linear issue ENG-42 by Eve' "$AT/args.$AG3")|$(grep -c 'Seen it' "$AT/args.$AG3")" \
-	"t/eng-42-fix-it|1|1|1"
+waitfor '[ "$(tx display -p -t "=$S:3" "#{window_name}")" = "03 ENG-42 Fix it · r/t/eng-42-fix-it" ]'
+ok "...enter: its thread, on Linear's branch, named for the issue, its agent told nothing" \
+	"$(git -C "$(tx display -p -t "%$AG3" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(tx display -p -t "=$S:3" '#{window_name}')|$(grep -c 'ENG-42' "$AT/args.$AG3")" \
+	"t/eng-42-fix-it|03 ENG-42 Fix it · r/t/eng-42-fix-it|0"
 tx select-window -t "=$S:901"
 waitfor 'tx capture-pane -p -t "=$S:901" | grep -q "goes there"'
 ok "...the view shows the thread it has" "$(tx capture-pane -p -t "=$S:901" | grep -c '03 \[')|$(tx capture-pane -p -t "=$S:901" | grep -c '⏎ goes there')" "2|1"
