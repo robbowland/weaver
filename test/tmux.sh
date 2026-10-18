@@ -298,7 +298,8 @@ click "$(python3 -I -c 'import sys; print(sys.argv[1].index("n NEW") + 3)' "${fo
 waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
 ok "mouse: a click on the board's n NEW, as n" "$([ "$(grep -c 'what should the agent do' "$AT/screen.log")" -gt "$n" ] && echo form)" "form"
 key 1b
-waitfor 'tx capture-pane -p -t "=$S:0" | grep -q "n NEW"'
+# (The form is a popup over the board: gone once its process is.)
+waitfor '! pgrep -f "$AT/bin/wvr new" >/dev/null'
 click 189 50 # the status line's [!] 1
 waitfor '[ "$(where)" = "1 %$AG" ]'
 ok "...one on the status line's count of agents that need you, to it" "$(where)" "1 %$AG"
@@ -417,6 +418,30 @@ ok "resume: its worktree gone, from its repository" \
 	"$(windows)|$(tx display -p -t "%$AG" '#{pane_current_path}')|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)" \
 	"0 2 |$(cd "$AT/repo" && pwd -P)|--resume sid-g " ||
 	{ tx list-windows -t "=$S" -F '#{window_index} #{window_name}' | sed 's/^/  window: /'; panes 1 | sed 's/^/  pane: /'; ls "$SD" "$SD/lost" | sed 's/^/  state: /'; }
+
+# --- transitions: home from a thread has the board's cursor on it, and
+# closing the thread you are in lands home, whatever tmux showed before
+tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here --no-focus 'one more' >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 1 2 " ]'
+AG1=$(pane_at 1 1)
+cursor() { curl -s -m 2 --unix-socket "$(board)" http://localhost | jq -r .current.text | cut -f 1; }
+for w in 1 2; do
+	tx select-window -t "=$S:$w"
+	waitfor '[ "$(where | cut -d " " -f 1)" = '"$w"' ]'
+	key 1b79 # Alt y
+	waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+	a=$AG
+	[ $w = 1 ] && a=$AG1
+	waitfor '[ "$(cursor)" = "a'"$a"'" ]'
+	ok "transitions: Alt y from thread $w, the board's cursor on its row" "$(cursor)" "a$a"
+done
+tx select-window -t "=$S:2"
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+tx run-shell -b -t "%$AG" "wvr close --yes $AG >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 1 " ]'
+ok "...closing the thread you are in: home, not the window tmux showed before" "$(where | cut -d ' ' -f 1)" "0"
+tx run-shell -b -t "%$AG1" "wvr close --yes $AG1 >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 " ]'
 
 # --- work items and views: a pull request's review and thread, an issue
 # investigated, and the GITHUB and LINEAR views. Fakes: gh answers for o/r,

@@ -166,7 +166,7 @@ func (e *Env) pushStatus(labels bool) {
 		if st, err := os.Stat(s); err != nil || st.Mode()&os.ModeSocket == 0 {
 			continue
 		}
-		if !FzfPost(s, "reload(COLOR=1 "+q+" _rows)+refresh-preview") {
+		if !FzfPost(s, "reload-sync(COLOR=1 "+q+" _rows)+refresh-preview") {
 			b := strings.TrimSuffix(s, ".sock")
 			for _, x := range []string{s, b + ".keys", b + ".view", b + ".title", b + ".label", b + ".room", b + ".shown", b + ".tight", b + ".vp"} {
 				os.Remove(x)
@@ -178,7 +178,7 @@ func (e *Env) pushStatus(labels bool) {
 	views, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".view.*.*.sock")
 	for _, s := range views {
 		name, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(s), e.SKey+".view."), ".")
-		if !FzfPost(s, "reload("+q+" _items "+name+" rows)+refresh-preview") {
+		if !FzfPost(s, "reload-sync("+q+" _items "+name+" rows)+refresh-preview") {
 			os.Remove(s)
 		}
 	}

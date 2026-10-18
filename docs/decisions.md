@@ -449,6 +449,31 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Transitions (Rob: "is the flow clear to a user or does
+  changing a view result in jarring jumps and inconsistencies that
+  increase mental fatigue"). Held to: orientation (where am I, how did I
+  get here, how do I get back), continuity (what persists stays put),
+  starting a transition where it was asked for (Material motion), one
+  change at a time and no masking flash (NN/g on change blindness), and
+  not moving things under the user (spatial memory).
+  - The board's `n` replaced the board with a full-screen form, and `x`
+    with a full-pane card, where Alt N and the menus open popups over
+    where you are: all are the same popups now, one size each (the form
+    had been 96 x 18 or 96 x 20 by where it was asked from).
+  - Closing the thread you were in landed on whichever window tmux had
+    shown last (a view, say): it lands home.
+  - Going home from a thread left the board's cursor where it had been:
+    it is on that thread's row.
+  - A view's search pushed its list down a line (the board's takes the
+    header's line): both do the board's.
+  - Reloads emptied the list while their command ran (`reload`): they
+    swap it whole (`reload-sync`). Resuming a lost thread showed the
+    pane's own screen between (`execute`): it runs in the background.
+  - The footers' toggles say where they go (`? CARD` while the help shows).
+  - Left as it is: a row moves between the board's groups as its agent's
+    state changes, with the cursor kept on it (`--track`). The move is
+    the signal (a thread rising to NEEDS YOU); holding the order still
+    would hide it.
 - 2026-10-17: A polish pass against modern TUI conventions (Rob: "another
   visual and interaction pass ... a final super nice bit of polish using
   modern tui standards").

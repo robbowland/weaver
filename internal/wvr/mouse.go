@@ -198,7 +198,7 @@ func (e *Env) threadMenu(a tmux.PaneID) []menuItem {
 	}
 	return []menuItem{
 		{"nvim", "v", e.menuRun("edit", a.Target())},
-		{"close thread", "x", "display-popup -E -w 80 -h 12 -- " + session.Quote(e.Self) + " close " + a.Target()},
+		{"close thread", "x", e.menuRun("_popup", "close", a.Target())},
 	}
 }
 

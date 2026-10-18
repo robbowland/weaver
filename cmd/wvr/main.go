@@ -199,11 +199,13 @@ var commands = map[string]command{
 	"_hf":      {run: prints(func(*wvr.Env, []string) string { return wvr.HF() + "\n" })},
 	"_chrome":  {run: prints(func(e *wvr.Env, _ []string) string { return e.Chrome() })},
 	"_goto":    {session: true, run: done(func(e *wvr.Env, args []string) { e.Goto(arg(args, 0), arg(args, 1)) })},
+	"_pos":     {session: true, run: prints(func(e *wvr.Env, args []string) string { return e.Pos(arg(args, 0)) })},
 
 	// The mouse: a click on a footer's hint or the status line, a right
 	// click's menu.
 	"_click": {run: done((*wvr.Env).Click)},
 	"_menu":  {run: done((*wvr.Env).Menu)},
+	"_popup": {session: true, run: (*wvr.Env).Popup},
 
 	// tmux's hooks.
 	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},

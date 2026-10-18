@@ -3,6 +3,7 @@ package wvr
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,6 +98,16 @@ func (e *Env) toHome(cur tab, home tmux.WindowID) {
 	if cur.id != "" && cur.view == "" && cur.id != home {
 		bestEffort(os.WriteFile(e.lastFile(), []byte(string(cur.id)+"\n"), 0o644))
 	}
+	e.selectHome(home)
+	// The board's cursor on the thread you came from: what you were looking
+	// at stays in view as you step back.
+	if cur.id != "" && cur.view == "" && cur.id != home {
+		e.boardOn(cur.id)
+	}
+}
+
+// selectHome shows home (window home), made again first if it was closed.
+func (e *Env) selectHome(home tmux.WindowID) {
 	if home == "" {
 		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {
 			e.Tmux("new-window", "-t", "="+e.Session+":", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home")
@@ -104,6 +115,37 @@ func (e *Env) toHome(cur tab, home tmux.WindowID) {
 		return
 	}
 	e.Tmux("select-window", "-t", home.Target())
+}
+
+// boardOn puts the boards' cursors on the thread whose window is w (its
+// row, as the board's own rows place it: _pos).
+func (e *Env) boardOn(w tmux.WindowID) {
+	panes, ok := e.Panes()
+	if !ok {
+		return
+	}
+	for _, p := range panes {
+		if p.Tab != w || e.agentOf(p.ID) != p.ID {
+			continue
+		}
+		q := session.Quote(e.Self)
+		socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
+		for _, s := range socks {
+			session.FzfPost(s, "transform("+q+" _pos "+string(p.ID)+")")
+		}
+		return
+	}
+}
+
+// Pos is `wvr _pos PANE`, in a board's fzf: the action that puts its
+// cursor on PANE's row (nothing when it has none).
+func (e *Env) Pos(pane string) string {
+	for i, l := range strings.Split(e.Rows(), "\n") {
+		if id, _, _ := strings.Cut(l, "\t"); id == "a"+pane {
+			return "pos(" + strconv.Itoa(i+1) + ")\n"
+		}
+	}
+	return ""
 }
 
 // where is the session's windows, the one you are on, and home.

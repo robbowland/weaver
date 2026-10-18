@@ -252,7 +252,7 @@ func (e *Env) itemSocks(name string) []string {
 func (e *Env) reloadItems(src itemSource) {
 	q := session.Quote(e.Self)
 	for _, s := range e.itemSocks(src.name()) {
-		session.FzfPost(s, "reload("+q+" _items "+src.name()+" rows)+refresh-preview+transform("+q+" _items "+src.name()+" chrome)")
+		session.FzfPost(s, "reload-sync("+q+" _items "+src.name()+" rows)+refresh-preview+transform("+q+" _items "+src.name()+" chrome)")
 	}
 }
 
@@ -381,7 +381,11 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if len(src.kinds()) > 1 {
 		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
-	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"?", "HELP"})
+	help := "HELP"
+	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".help") {
+		help = "CARD"
+	}
+	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"?", help})
 }
 
 // itemFooter is the view's footer: its hints, each a button.
@@ -433,7 +437,13 @@ func (e *Env) itemChrome(src itemSource) string {
 	if a, ok := fzfAct("change-border-label", e.itemLabel(src)); ok {
 		acts = append(acts, a)
 	}
-	if a, ok := fzfAct("change-header", e.itemFresh(src)); ok {
+	// Searching, the input takes the header's line, as on the board: the
+	// list stays where it was.
+	head := e.itemFresh(src)
+	if searching() {
+		head = ""
+	}
+	if a, ok := fzfAct("change-header", head); ok {
 		acts = append(acts, a)
 	}
 	if a, ok := fzfAct("change-footer", e.itemFooter(src)); ok {
@@ -651,7 +661,7 @@ func (e *Env) itemsView(src itemSource) error {
 	}()
 	q := session.Quote(e.Self)
 	me := q + " _items " + src.name()
-	reload := "reload(" + me + " rows)+transform(" + me + " chrome)"
+	reload := "reload-sync(" + me + " rows)+transform(" + me + " chrome)"
 	act := func(cmd string) string {
 		return "transform:case {1} in i*) echo 'execute-silent(" + me + " " + cmd + " {2})' ;; esac"
 	}
@@ -686,7 +696,7 @@ func (e *Env) itemsView(src itemSource) error {
 			// q and esc: back to your thread, as on home.
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo 'execute-silent(` + q + ` go back)'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
 			"--bind", "q:execute-silent(" + q + " go back)",
-			"--bind", "?:execute-silent(" + me + " help)+refresh-preview",
+			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform(" + me + " click)",
 			"--bind", "right-click:execute-silent(" + me + " menu {1})",

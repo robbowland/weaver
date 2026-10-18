@@ -817,7 +817,8 @@ func (e *Env) Resume(args []string) error {
 			}
 			pad := cardPlace(t, 6)
 			fmt.Fprint(t, cardRow(pad, "forget", CBold+nm+COff))
-			fmt.Fprint(t, cardRow(pad, "", CGrey+"its conversation and worktree stay; weaver stops offering it"+COff))
+			fmt.Fprint(t, cardRow(pad, "", CGrey+"weaver stops offering it; its conversation stays"+COff))
+			fmt.Fprint(t, cardRow(pad, "", CGrey+"its worktree goes once nothing in it is unsaved"+COff))
 			fmt.Fprint(t, "\n")
 			c := choose(t, pad, []choice{{"y", "forget"}, {"n", "keep"}}, 1)
 			t.Close()
@@ -826,6 +827,10 @@ func (e *Env) Resume(args []string) error {
 			}
 		}
 		os.Remove(f)
+		// The boards drop its row (forgotten from a popup over one).
+		if e.Session != "" {
+			e.PushStatus()
+		}
 		return nil
 	}
 	if e.Session == "" {
@@ -1211,6 +1216,15 @@ func (e *Env) CloseTail(a []string) error {
 	agent, _ := tmux.ParsePane(a[0])
 	nv, _ := tmux.ParsePane(a[1])
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
+	// Closing the thread you are looking at: home, where the rest are, not
+	// whichever window tmux would show next.
+	if out, err := e.Tmux("display-message", "-p", "-t", agent.Target(), "#{window_id}"); err == nil {
+		if w, ok := tmux.ParseWindow(string(out)); ok {
+			if _, cur, home := e.where(); cur.id == w && home != w {
+				e.selectHome(home)
+			}
+		}
+	}
 	e.Tmux("kill-pane", "-t", agent.Target())
 	if nv != "" {
 		e.Tmux("kill-pane", "-t", nv.Target())

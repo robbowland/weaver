@@ -64,14 +64,17 @@ func (e *Env) Ls() error {
 	if home {
 		jumpAct = "execute-silent(" + q + " _goto {2} {3})"
 		editAct = "execute-silent(" + q + " _goto {2} {3}; " + q + " edit {2})"
-		// fzf skips any action whose template names a field, such as {2}, on
-		// an empty board: this one prints the field for the action it returns.
-		newAct = "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute(" + q + " new)+reload(" + q +
-			" _rows)'; else printf '%s2})+reload(%s _rows)\\n' 'execute(" + q + " new --from {' '" + q + "'; fi"
+		// The form in the popup Alt N opens, over the board (which the new
+		// thread's status push reloads). fzf skips any action whose
+		// template names a field, such as {2}, on an empty board: this one
+		// prints the field for the action it returns.
+		newAct = "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent(" + q + " _popup new)'; else printf '%s2})\\n' 'execute-silent(" + q + " _popup new --from {'; fi"
 		// q and esc: back to the thread you came from, as Alt y's last
 		// step does (not on to the views).
 		quitAct = "execute-silent(" + q + " go back)"
-		resumeAct = "execute(" + q + " resume {2})+reload(" + q + " _rows)"
+		// In the background, as a jump is: you land on its window (or are
+		// told why not), with no flash of the pane's own screen between.
+		resumeAct = "execute-silent(o=$(" + q + " resume {2} 2>&1) || tmux display-message -d 4000 \"$o\")+reload-sync(" + q + " _rows)"
 	} else {
 		jumpAct, editAct, newAct, quitAct, resumeAct = "print(jump)+accept", "print(ctrl-e)+accept", "print(new)+accept",
 			"abort", "print(resume)+accept"
@@ -155,7 +158,7 @@ func (e *Env) Ls() error {
 			"--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search threads", "--info", "hidden", "--no-separator",
 			"--preview", q + " _preview {2} {6} {1}", "--preview-window", pw,
-			"--bind", "resize:reload(LS_REMEASURE=1 " + q + " _rows)", "--bind", "load:transform(" + q + " _chrome)",
+			"--bind", "resize:reload-sync(LS_REMEASURE=1 " + q + " _rows)", "--bind", "load:transform(" + q + " _chrome)",
 			"--bind", `focus:transform:case {1} in a*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n "$t" ] || t={5} ;; *) t={5}; [ -n "$t" ] || t={4} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last,q:" + quitAct,
 			"--bind", "enter,double-click:transform:case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; esac",
@@ -169,14 +172,15 @@ func (e *Env) Ls() error {
 		}
 		args = append(args,
 			"--bind", "n:"+newAct,
-			"--bind", "x:transform:case {1} in a*) echo 'execute("+q+" close {2})+reload("+q+" _rows)' ;; l*) echo 'execute("+q+" resume --forget {2})+reload("+q+" _rows)' ;; esac",
+			// Its card in a popup over the board, as the menus open it.
+			"--bind", "x:transform:case {1} in a*) echo 'execute-silent("+q+" _popup close {2})' ;; l*) echo 'execute-silent("+q+" _popup forget {2})' ;; esac",
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s,tab:transform("+q+" _view screen)",
 			"--bind", "?:transform("+q+" _view help)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform("+q+" _click board)",
 			"--bind", "right-click:execute-silent("+q+" _menu board {1})",
-			"--bind", "ctrl-r:reload("+q+" _rows)+refresh-preview",
+			"--bind", "ctrl-r:reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)
 		c := exec.Command("fzf", args...)

@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/cli"
@@ -325,32 +324,6 @@ func (e *Env) From(args []string) error {
 	if review {
 		nw = append(nw, "--review")
 	}
-	// The form in a popup, from a process of its own: whatever ran this
-	// (a view, waiting on its command) goes on at once.
-	// On the client looking at this session: what ran this may have none
-	// (tmux's run-shell).
-	argv := []string{"display-popup"}
-	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name}"); err == nil {
-		best, at := "", ""
-		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if t, c, ok := strings.Cut(l, " "); ok && t >= at {
-				best, at = c, t
-			}
-		}
-		if best != "" {
-			argv = append(argv, "-c", best)
-		}
-	}
-	argv = append(argv, "-B", "-E", "-w", "96", "-h", "20", "-d", dir, "--", e.Self, "new")
-	argv = append(argv, nw...)
-	if !e.InTmux {
-		argv = append(append([]string{}, e.TSock...), argv...)
-	}
-	c := exec.Command("tmux", argv...)
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := c.Start(); err != nil {
-		e.Tmux("display-message", "-d", "2500", "weaver: could not open the form")
-		return cli.ErrSaid
-	}
-	return nil
+	// The form in a popup, as Alt N opens it, while the view goes on.
+	return e.formPopup(dir, append([]string{"new"}, nw...)...)
 }

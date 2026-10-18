@@ -96,7 +96,7 @@ func (e *Env) Boot(sock string) {
 		e.StartViews()
 	}
 	if n := len(e.SweepWorktrees(io.Discard)); n > 0 {
-		e.Tmux("display-message", "-t", "="+e.Session+":", fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
+		e.Tmux("display-message", "-d", "4000", "-t", "="+e.Session+":", fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
 	}
 }
 

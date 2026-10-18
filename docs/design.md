@@ -468,8 +468,32 @@ whose agent went away) in one place, for one `/bin/dash` spawn per move
 Outside home, `n` and `e` end fzf with a key (`print`), and `Ls` acts: `e`
 jumps and runs `wvr edit`; `n` runs `wvr new --from <pane>` on the
 pane's terminal and reopens the dashboard when it is cancelled (130) or
-fails. Home does both inside fzf and keeps running. `x` runs `wvr close
-<pane>` inside fzf (`execute`), then reloads.
+fails. Home keeps running: `e` and enter act in the background
+(`execute-silent`), as does enter on a lost thread (`wvr resume`, its
+failure said on the status line), and `n` and `x` open the dialogs
+everything else opens (`wvr _popup new --from <pane>`, `_popup close
+<pane>`, `_popup forget <thread>`: the form 96 x 20, a card 80 x 12, over
+the board), whose status push reloads it.
+
+### Transitions
+
+Changing view keeps you oriented (where you are, how you got there, how
+to get back) and changes one thing at a time:
+
+- **One dialog, one place:** the form and the cards are popups over where
+  you are, the same size whichever key, click or menu asks (`popup.go`);
+  never the board replaced by a full-screen one, nor fzf's `execute`,
+  which shows the pane's own screen between.
+- **Back where you were:** going home from a thread (Alt y, THREADS, a
+  menu) puts the boards' cursor on its row (`_pos`, posted to each board);
+  closing the thread you are in lands home, not on whichever window tmux
+  showed before.
+- **No shifts:** search takes the header's line on the board and in the
+  views alike, so the list does not move; lists reload with
+  `reload-sync`, the old list showing until the new one is whole, never an
+  empty one between.
+- **Toggles say where they go:** `s` reads CARD while the screen shows, `?`
+  CARD while the help does.
 
 ### Mouse
 
