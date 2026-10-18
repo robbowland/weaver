@@ -13,34 +13,54 @@ var reSGRTest = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 func TestRender(t *testing.T) {
 	src := "## Summary\n\nFixes the **flaky** test in `ci.yml`, see [the run](https://example.com/run).\n\n" +
 		"- [x] wrote it\n- [ ] tested it\n\n1. one\n2. two\n\n> quoted\n\n```go\nfunc f() {}\n```\n\n" +
-		"<!-- a template's note -->\n<details><summary>Logs</summary>\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n\n![shot](https://x/y.png)\n"
-	got := Render(src, 40, plain)
+		"<!-- a template's note -->\n<details><summary>Logs</summary>\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n\n![shot](https://x/y.png)\n" +
+		"\n> [!WARNING]\n> Breaks the API.\n\n## Testing\n\n### Unit\n\n#### notes\n\nsee https://github.com/o/r/pull/45\n"
+	// The styles aside (plain has no Off to end them), the shape.
+	got := reSGRTest.ReplaceAllString(Render(src, 40, plain), "")
 	want := strings.Join([]string{
-		"SUMMARY",
+		strings.Repeat("─", 40),
+		"01  SUMMARY",
 		"",
-		"Fixes the flaky test in ci.yml, see the",
-		"run.",
+		"Fixes the flaky test in ci.yml, see",
+		"[ SRC: the run ].",
 		"",
-		"✓ wrote it",
-		"○ tested it",
+		"[x] wrote it",
+		"[ ] tested it",
 		"",
 		"1. one",
 		"2. two",
 		"",
 		"│ quoted",
 		"",
+		"┌" + strings.Repeat(" ", 37) + "GO",
 		"  func f() {}",
+		strings.Repeat(" ", 39) + "┘",
 		"",
 		"Logs",
 		"",
-		"a │ b",
-		"──┼──",
-		"1 │ 2",
+		"A   B",
+		"─────",
+		"1   2",
 		"",
-		"──────",
+		strings.Repeat("─", 40),
 		"",
-		"[shot]",
+		"[ IMG: shot ]",
+		"",
+		strings.Repeat("━", 40),
+		"[ WARNING ]",
+		"Breaks the API.",
+		"",
+		strings.Repeat("─", 40),
+		"02  TESTING",
+		"",
+		"Unit",
+		"",
+		"NOTES",
+		"",
+		"see [ SRC: github.com/o/r/pull/45 ]",
 	}, "\n")
+	// Links' brackets hold to their words with no-break spaces.
+	got = strings.ReplaceAll(got, "\u00a0", " ")
 	if got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}

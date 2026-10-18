@@ -449,6 +449,15 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Cards' markdown in the Micrographics style (Rob: "push the
+  markdown rendering even further in terms of the way different elements
+  are displayed in the micrographics style"). The vault theme's own
+  vocabulary, in a terminal's terms: sections under a faint rule with a
+  faint index, capitals for titles and labels, `[ SRC: … ]` links, code
+  in crop corners with its language as a label, callouts under an ink
+  stripe with a bracketed kind, tables with faint capital headers and no
+  inner rules. Task boxes take weaver's own cells, and strong text is
+  bold, so it no longer looks like code.
 - 2026-10-18: Dense rows, grouped (Rob, on the form with a blank line
   between every row: "I'm not sure the spacing between the lines actually
   makes this more readable ... the cognitive effort to read and find the

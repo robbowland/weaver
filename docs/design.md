@@ -721,10 +721,17 @@ fails keeps what it had. A row shows the thread the item has: its item's
 ref, else its branch (a pull request's head; a GitHub issue's `N-…`;
 Linear's branch name). The card is the thread first (the one it has, or
 the branch enter starts one on), the item's fields, and its description,
-rendered from markdown by `internal/markdown` (goldmark's parser, weaver's
-palette: headings, lists and task lists, quotes, code, tables; no HTML,
-images or link targets). Not glamour, whose highlighter registers every
-lexer as it loads, which costs every hook 6 ms.
+rendered from markdown by `internal/markdown` (goldmark's parser, with
+GitHub's tables, strikethrough, task lists and bare links; no HTML or
+link targets), set as the vault's Micrographics theme sets a note: a
+section (h2) under a faint rule with its index (`01  SUMMARY`), h3 bold,
+h4 to h6 grey capitals; links `[ SRC: text ]`, images `[ IMG: alt ]`;
+code in crop corners with its language at the top right; a GitHub alert
+(`> [!WARNING]`) under an ink stripe, its kind a `[ LABEL ]` (red for one
+to heed); task boxes as cells (`[x]`, `[ ]`); a quote on a rail in
+italics; tables with a faint capitals header over a rule, columns apart
+by space; rules the card's width. Not glamour, whose highlighter
+registers every lexer as it loads, which costs every hook 6 ms.
 
 - **Alt N / Alt R** in a view: a thread from the item under the cursor, or a
   read-only review of it. tmux passes the key to the view, whose fzf (also

@@ -1,14 +1,22 @@
 // Package markdown renders markdown (a pull request's description, a Linear
 // issue's) for a terminal card: wrapped to a width, in the colours it is
-// given, its structure kept (headings, lists and task lists, quotes, code,
-// tables) and its noise left out (HTML, link targets, images). Parsed by
-// goldmark, with GitHub's extensions.
+// given, its structure kept (headings, lists and task lists, quotes and
+// GitHub's alerts, code, tables) and its noise left out (HTML, link
+// targets). Parsed by goldmark, with GitHub's extensions.
+//
+// Set as Micrographics sets a note (the vault's theme), in a terminal's
+// terms: a section (h2) under a faint rule with its index (01) before it in
+// capitals; links and images as [ SRC: text ] and [ IMG: alt ]; code in
+// crop corners with its language at the top right; an alert under an ink
+// stripe with its kind as a [ LABEL ]; task boxes as weaver's cells; tables
+// with a faint capitals header and no rules between columns.
 //
 // Not glamour: it renders more, but its highlighter registers every lexer
 // and style as it loads, and weaver loads on every agent hook.
 package markdown
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,22 +31,27 @@ import (
 
 // Style is the colours text is set in, as SGR sequences: Text for prose,
 // Strong for emphasis, headings and code, Faint for what frames it (bullets,
-// quotes' bars, rules), Good for a ticked task; Off ends any.
+// quotes' bars, rules), Good for a ticked task, Bad for an alert to heed;
+// Off ends any.
 type Style struct {
-	Text, Strong, Faint, Good, Off string
+	Text, Strong, Faint, Good, Bad, Off string
 }
 
 const (
+	bold   = "\x1b[1m"
 	italic = "\x1b[3m"
 	struck = "\x1b[9m"
+	// nbsp joins a link's brackets to its words, so a line never breaks
+	// inside them.
+	nbsp = "\u00a0"
 )
 
-var md = goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList))
+var md = goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.Linkify))
 
 // Render is src rendered to width columns.
 func Render(src string, width int, st Style) string {
 	b := []byte(strings.ReplaceAll(src, "\r", ""))
-	r := renderer{src: b, st: st}
+	r := renderer{src: b, st: st, h2: new(int)}
 	ls := r.blocks(md.Parser().Parse(text.NewReader(b)), max(width, 10))
 	return strings.Join(ls, "\n")
 }
@@ -46,6 +59,7 @@ func Render(src string, width int, st Style) string {
 type renderer struct {
 	src []byte
 	st  Style
+	h2  *int // the sections so far, for their index
 }
 
 // span is a run of inline text in one style.
@@ -83,31 +97,24 @@ func (r *renderer) block(n ast.Node, w int) []string {
 	case *ast.Paragraph, *ast.TextBlock:
 		return wrap(r.inline(n, st.Text), w, st)
 	case *ast.Heading:
-		sp := r.inline(n, st.Strong)
-		for i := range sp {
-			sp[i].text = strings.ToUpper(sp[i].text)
-			sp[i].style = st.Strong
-		}
-		return wrap(sp, w, st)
+		return r.heading(n, w)
 	case *ast.List:
 		return r.list(n, w)
 	case *ast.Blockquote:
+		if kind, ok := alertKind(n, r.src); ok {
+			return r.alert(n, kind, w)
+		}
+		// Its own voice: a rail, and italics.
+		q := renderer{src: r.src, h2: r.h2, st: Style{Text: italic + st.Text, Strong: italic + st.Strong, Faint: st.Faint, Good: st.Good, Bad: st.Bad, Off: st.Off}}
 		var out []string
-		for _, l := range r.blocks(n, w-2) {
-			out = append(out, st.Faint+"│"+st.Off+" "+l)
+		for _, l := range q.blocks(n, w-2) {
+			out = append(out, st.Text+"│"+st.Off+" "+l)
 		}
 		return out
 	case *ast.FencedCodeBlock, *ast.CodeBlock:
-		var out []string
-		lines := n.Lines()
-		for i := 0; i < lines.Len(); i++ {
-			s := lines.At(i)
-			l := strings.TrimRight(strings.ReplaceAll(string(s.Value(r.src)), "\t", "  "), "\n")
-			out = append(out, "  "+st.Strong+cut(l, w-2)+st.Off)
-		}
-		return out
+		return r.code(n, w)
 	case *ast.ThematicBreak:
-		return []string{st.Faint + strings.Repeat("─", min(w, 6)) + st.Off}
+		return []string{st.Faint + strings.Repeat("─", w) + st.Off}
 	case *ast.HTMLBlock:
 		// Its text, without its tags: a <details>'s summary, say.
 		var b strings.Builder
@@ -129,6 +136,127 @@ func (r *renderer) block(n ast.Node, w int) []string {
 
 var reTag = regexp.MustCompile(`<[^>]*>`)
 
+// heading is a heading as Micrographics sets one: a section (h2) under a
+// faint rule, its index (01, 02 ...) before it, in bold capitals; the title
+// (h1) in bold capitals; h3 in bold; h4 to h6 as grey capitals, labels.
+func (r *renderer) heading(n *ast.Heading, w int) []string {
+	st := r.st
+	style, upper := bold+st.Strong, true
+	switch n.Level {
+	case 3:
+		upper = false
+	case 4, 5, 6:
+		style = st.Text
+	}
+	sp := r.inline(n, style)
+	for i := range sp {
+		if upper {
+			sp[i].text = strings.ToUpper(sp[i].text)
+		}
+		sp[i].style = style
+	}
+	if n.Level != 2 {
+		return wrap(sp, w, st)
+	}
+	*r.h2++
+	idx := fmt.Sprintf("%02d", *r.h2)
+	out := []string{st.Faint + strings.Repeat("─", w) + st.Off}
+	for i, l := range wrap(sp, w-len(idx)-2, st) {
+		if i == 0 {
+			out = append(out, st.Faint+idx+st.Off+"  "+l)
+		} else {
+			out = append(out, strings.Repeat(" ", len(idx)+2)+l)
+		}
+	}
+	return out
+}
+
+// code is a code block in crop corners, its language at the top right.
+func (r *renderer) code(n ast.Node, w int) []string {
+	st := r.st
+	lang := ""
+	if f, ok := n.(*ast.FencedCodeBlock); ok {
+		lang = strings.ToUpper(string(f.Language(r.src)))
+	}
+	top := st.Faint + "┌" + st.Off
+	if lang != "" && utf8.RuneCountInString(lang)+3 <= w {
+		top += strings.Repeat(" ", w-1-utf8.RuneCountInString(lang)) + st.Faint + lang + st.Off
+	}
+	out := []string{top}
+	lines := n.Lines()
+	for i := 0; i < lines.Len(); i++ {
+		s := lines.At(i)
+		l := strings.TrimRight(strings.ReplaceAll(string(s.Value(r.src)), "\t", "  "), "\n")
+		out = append(out, "  "+st.Strong+cut(l, w-4)+st.Off)
+	}
+	return append(out, strings.Repeat(" ", max(w-1, 0))+st.Faint+"┘"+st.Off)
+}
+
+var reAlert = regexp.MustCompile(`^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]`)
+
+// alertKind is a GitHub alert's kind (> [!NOTE] ...), if the quote is one.
+func alertKind(q *ast.Blockquote, src []byte) (string, bool) {
+	p := q.FirstChild()
+	if p == nil || p.Lines().Len() == 0 {
+		return "", false
+	}
+	l := p.Lines().At(0)
+	if m := reAlert.FindStringSubmatch(strings.TrimSpace(string(l.Value(src)))); m != nil {
+		return m[1], true
+	}
+	return "", false
+}
+
+// alert is a GitHub alert as a Micrographics callout: an ink stripe over
+// it, its kind as a label in brackets (one to heed in red), its text.
+func (r *renderer) alert(q *ast.Blockquote, kind string, w int) []string {
+	st := r.st
+	label := st.Faint
+	if kind == "WARNING" || kind == "CAUTION" || kind == "IMPORTANT" {
+		label = st.Bad
+	}
+	out := []string{st.Strong + strings.Repeat("━", w) + st.Off, label + "[ " + kind + " ]" + st.Off}
+	first := true
+	for c := q.FirstChild(); c != nil; c = c.NextSibling() {
+		var ls []string
+		if first {
+			// The marker goes; what follows it on its line is the text.
+			ls = wrap(dropMarker(r.inline(c, st.Text), "[!"+kind+"]"), w, st)
+			first = false
+		} else {
+			ls = r.block(c, w)
+		}
+		if len(ls) > 0 && len(out) > 2 {
+			out = append(out, "")
+		}
+		out = append(out, ls...)
+	}
+	return out
+}
+
+// dropMarker is sp without its first len(marker) characters, and the break
+// or spaces after them.
+func dropMarker(sp []span, marker string) []span {
+	n := utf8.RuneCountInString(marker)
+	for len(sp) > 0 && n > 0 {
+		rs := []rune(sp[0].text)
+		if len(rs) <= n {
+			n -= len(rs)
+			sp = sp[1:]
+			continue
+		}
+		sp[0].text = string(rs[n:])
+		n = 0
+	}
+	for len(sp) > 0 && (sp[0].brk || strings.TrimSpace(sp[0].text) == "") {
+		sp = sp[1:]
+	}
+	if len(sp) > 0 {
+		sp[0].text = strings.TrimLeft(sp[0].text, " ")
+	}
+	return sp
+}
+
 // list is a list's items, each under its marker: a bullet, a number, or a
 // task's box.
 func (r *renderer) list(n *ast.List, w int) []string {
@@ -141,10 +269,11 @@ func (r *renderer) list(n *ast.List, w int) []string {
 			mark = st.Faint + strconv.Itoa(num) + "." + st.Off + " "
 			num++
 		}
+		// A task's box is a cell, as weaver's states are: [x] done.
 		if box := taskBox(c); box != nil {
-			mark = st.Faint + "○" + st.Off + " "
+			mark = st.Faint + "[ ]" + st.Off + " "
 			if box.IsChecked {
-				mark = st.Good + "✓" + st.Off + " "
+				mark = st.Faint + "[" + st.Off + st.Good + "x" + st.Off + st.Faint + "]" + st.Off + " "
 			}
 		}
 		mw := visible(mark)
@@ -177,7 +306,7 @@ func taskBox(item ast.Node) *east.TaskCheckBox {
 }
 
 // table is a table, its columns as wide as their widest cell, or narrowed
-// to fit.
+// to fit, apart by space alone; its header in faint capitals over a rule.
 func (r *renderer) table(n *east.Table, w int) []string {
 	st := r.st
 	var rows [][]string
@@ -233,19 +362,15 @@ func (r *renderer) table(n *east.Table, w int) []string {
 			c = cut(c, ws[j])
 			c += strings.Repeat(" ", ws[j]-utf8.RuneCountInString(c))
 			if i < head {
-				c = st.Strong + c + st.Off
+				c = st.Faint + strings.ToUpper(c) + st.Off
 			} else {
 				c = st.Text + c + st.Off
 			}
 			parts = append(parts, c)
 		}
-		out = append(out, strings.TrimRight(strings.Join(parts, " "+st.Faint+"│"+st.Off+" "), " "))
+		out = append(out, strings.TrimRight(strings.Join(parts, "   "), " "))
 		if i == head-1 {
-			var rule []string
-			for _, cw := range ws {
-				rule = append(rule, strings.Repeat("─", cw))
-			}
-			out = append(out, st.Faint+strings.Join(rule, "─┼─")+st.Off)
+			out = append(out, st.Faint+strings.Repeat("─", total(ws)+3*(cols-1))+st.Off)
 		}
 	}
 	return out
@@ -287,21 +412,27 @@ func (r *renderer) inline(n ast.Node, style string) []span {
 		case *ast.Emphasis:
 			s := italic + style
 			if c.Level >= 2 {
-				s = st.Strong
+				s = bold + st.Strong
 			}
 			out = append(out, r.inline(c, s)...)
 		case *east.Strikethrough:
 			out = append(out, r.inline(c, struck+style)...)
 		case *ast.Link:
+			// [ SRC: its text ]
+			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint})
 			out = append(out, r.inline(c, st.Strong)...)
+			out = append(out, span{text: nbsp + "]", style: st.Faint})
 		case *ast.AutoLink:
-			out = append(out, span{text: string(c.Label(r.src)), style: st.Faint})
+			u := strings.TrimPrefix(strings.TrimPrefix(string(c.Label(r.src)), "https://"), "http://")
+			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint}, span{text: cut(u, 48), style: st.Text},
+				span{text: nbsp + "]", style: st.Faint})
 		case *ast.Image:
 			alt := "image"
 			if t := r.inline(c, ""); len(t) > 0 && strings.TrimSpace(t[0].text) != "" {
 				alt = t[0].text
 			}
-			out = append(out, span{text: "[" + alt + "]", style: st.Faint})
+			out = append(out, span{text: "[" + nbsp + "IMG:" + nbsp, style: st.Faint}, span{text: alt, style: st.Text},
+				span{text: nbsp + "]", style: st.Faint})
 		case *ast.RawHTML:
 			var b strings.Builder
 			for i := 0; i < c.Segments.Len(); i++ {
