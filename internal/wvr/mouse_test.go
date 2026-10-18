@@ -95,9 +95,9 @@ func TestWelcomeClicks(t *testing.T) {
 // runs past its edges.
 func TestPopupSize(t *testing.T) {
 	for _, c := range []struct{ cw, ch, w, h int }{
-		{200, 56, 124, 34},  // a share
-		{100, 30, 96, 20},   // at least the least it needs
-		{400, 120, 160, 48}, // at most what is worth reading
+		{200, 56, 124, 22},  // a share of the width, its own height
+		{100, 30, 96, 22},   // at least the least it needs
+		{400, 120, 160, 22}, // at most what is worth reading
 		{90, 20, 86, 18},    // inside a small terminal
 	} {
 		if w, h := formSize.of(c.cw, c.ch); w != c.w || h != c.h {

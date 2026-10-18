@@ -494,11 +494,14 @@ to get back) and changes one thing at a time:
   empty one between.
 - **Toggles say where they go:** `s` reads CARD while the screen shows, `?`
   CARD while the help does.
-- **Room:** a dialog takes a share of the terminal within bounds
-  (`popupSize`: the form 62% of each side, 96 x 20 to 160 x 48; a card
-  half by 40%, 80 x 12 to 120 x 28), Alt N's through `wvr _popup new` too.
-  In it, with room, the form and pickers have a margin (`--padding 1,2`)
-  and a blank line between rows (`--gap --no-gap-line`). The empty board
+- **Room:** a dialog takes a share of the terminal's width within bounds
+  and the height its content needs (`popupSize`: the form 62% wide, 96 to
+  160, 22 tall; a card half as wide, 80 to 120, 14 tall), so its keys stay
+  near what they act on; Alt N's goes through `wvr _popup new` too. With
+  room, the form and pickers have a margin (`--padding 1,2`). Rows stay
+  dense: the form's are grouped by what they are about (start; from and
+  mode; repo, where, branch and base; agent), a blank line (`gapN` rows,
+  which the cursor passes over) between groups only. The empty board
   is a welcome, centred a third of the way down, its key lines buttons
   (`click-header`, `wvr _click title`). weaver's fzf runs without
   `$FZF_DEFAULT_OPTS` (`fzfCmd`), so your settings change neither its look

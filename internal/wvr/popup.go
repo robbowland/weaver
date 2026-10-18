@@ -25,10 +25,12 @@ type popupSize struct {
 }
 
 var (
-	// The new-thread form and its pickers.
-	formSize = popupSize{0.62, 96, 160, 0.62, 20, 48}
+	// The new-thread form and its pickers: wide where there is room (paths
+	// are long), as tall as its rows and a picker's need, so its keys stay
+	// near what they act on.
+	formSize = popupSize{0.62, 96, 160, 0, 22, 22}
 	// A card: closing a thread, forgetting a lost one.
-	cardSize = popupSize{0.5, 80, 120, 0.4, 12, 28}
+	cardSize = popupSize{0.5, 80, 120, 0, 14, 14}
 )
 
 // of is the size on a terminal cw x ch (never past its edges).

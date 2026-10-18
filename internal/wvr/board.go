@@ -748,12 +748,7 @@ func welcome(cols, lines int, views bool) (string, []string) {
 	text := []string{CBold + CInk + "No threads yet" + COff, CGrey + about + COff, ""}
 	acts := []string{"", "", ""}
 	w := max(rlen(about), rlen(note))
-	// A line between the keys, where there is room for it.
-	roomy := lines >= 30
-	for i, r := range rows {
-		if i > 0 && roomy {
-			text, acts = append(text, ""), append(acts, "")
-		}
+	for _, r := range rows {
 		text = append(text, CInk+fmt.Sprintf("%-8s", r.key)+COff+CGrey+r.what+COff)
 		acts = append(acts, r.act)
 		w = max(w, 8+rlen(r.what))

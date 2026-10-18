@@ -318,13 +318,41 @@ func formGhost(fm form) string {
 }
 
 // FormRows are the form's rows for fzf: id, then what it shows.
+// The form's rows are dense, grouped by what they are about with a blank
+// line between groups only (what it starts from, where it works, who works):
+// nearness says what belongs together, and a terminal's least gap is a
+// whole line, twice a row's height.
+var formGroup = map[string]int{"from": 1, "mode": 1, "repo": 2, "where": 2, "branch": 2, "base": 2, "agent": 3}
+
 func (e *Env) FormRows(sf, task string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "start\t%s%6s%s  %s\n", CBold+CInk, "start", COff, formStart(loadForm(sf), task))
+	last := 0
 	for _, f := range e.formFields(sf, task) {
+		if g := formGroup[f.id]; g != last {
+			fmt.Fprintf(&b, "gap%d\t \n", g)
+			last = g
+		}
 		fmt.Fprintf(&b, "%s\t%s%6s%s  %s\n", f.id, CGrey, f.label, COff, f.col)
 	}
 	return b.String()
+}
+
+// formFocus is what the form does as its cursor lands on row id: its keys
+// in the footer, or, on a gap between groups, on in the direction it was
+// going ($FZF_ACTION).
+func formFocus(id string) string {
+	if !strings.HasPrefix(id, "gap") {
+		if a, ok := fzfAct("change-footer", formRowFooter(id)); ok {
+			return a + "\n"
+		}
+		return ""
+	}
+	switch a := os.Getenv("FZF_ACTION"); {
+	case a == "up", a == "page-up", a == "half-page-up", a == "scroll-up", strings.HasPrefix(a, "prev"), a == "first":
+		return "up\n"
+	}
+	return "down\n"
 }
 
 // formKeys are each row's key, for the footer: the row's action from
@@ -802,13 +830,13 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			// row. Typing is for the task, and puts the cursor on start.
 			"--delimiter", "\t", "--with-nth", "2..", "--cycle",
 			"--bind", "change:bg-cancel+bg-transform-header("+hd+")+reload("+rows+")+first",
-			"--bind", "focus:transform-footer("+q+" _form footer {1})",
+			"--bind", "focus:transform("+q+" _form focus {1})",
 			"--bind", "tab:down,btab:up",
 			"--bind", "enter,left-click:transform("+q+" _form keys {1} "+qs+")",
 			"--bind", "double-click:ignore",
 			"--bind", "click-footer:transform("+q+" _click form {1})",
 			"--bind", "load:transform("+q+" _form land "+qs+" {q})")
-		args = append(args, roomy(len(e.formFields(sf, query))+1)...)
+		args = append(args, roomy()...)
 		for id, k := range formKeys {
 			args = append(args, "--bind", strings.Replace(k, "^", "ctrl-", 1)+":"+formAct(q, qs, id))
 		}
@@ -866,6 +894,9 @@ func (e *Env) Form(op, sf, q string) {
 	switch op {
 	case "footer":
 		fmt.Print(formRowFooter(sf))
+		return
+	case "focus":
+		fmt.Print(formFocus(sf))
 		return
 	case "keys":
 		// What enter (or a click) on row sf does: start the thread, change
@@ -984,7 +1015,7 @@ func (e *Env) Form(op, sf, q string) {
 		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD › BRANCH"), "--prompt", formPrompt("branch"), "--query", br, "--ghost", "branch name",
 			"--color", FzfColors, "--header", "        "+CGrey+"names the branch and its worktree; an existing branch continues"+COff,
 			"--footer", CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff, "--bind", "enter:print-query")
-		args = append(args, roomy(1)...)
+		args = append(args, roomy()...)
 		c := fzfCmd(args, "SHELL=/bin/sh")
 		c.Stderr = os.Stderr
 		b, err := c.Output()
@@ -1084,7 +1115,7 @@ func (e *Env) pick(items, label, prompt, ghost, cur string) string {
 	if at > 0 {
 		args = append(args, "--bind", "start:pos("+strconv.Itoa(at)+")")
 	}
-	args = append(args, roomy(n)...)
+	args = append(args, roomy()...)
 	c := fzfCmd(args, "SHELL=/bin/sh")
 	c.Stdin = strings.NewReader(b.String())
 	c.Stderr = os.Stderr
@@ -1117,24 +1148,13 @@ func baseValue(fm form) string {
 	return fm.Base
 }
 
-// roomy is fzf's layout for a dialog of rows rows when the terminal has
-// room: a margin inside its border, and a line between rows while they
-// still fit with it. Small terminals keep it tight.
-func roomy(rows int) []string {
-	lines, cols, ok := ttySize()
-	if !ok {
-		return nil
+// roomy is fzf's layout for a dialog when the terminal has room: a margin
+// inside its border. Rows stay dense (groups have their own gaps).
+func roomy() []string {
+	if lines, cols, ok := ttySize(); ok && lines >= 20 && cols >= 100 {
+		return []string{"--padding", "1,2"}
 	}
-	var out []string
-	if lines >= 24 && cols >= 100 {
-		out = append(out, "--padding", "1,2")
-	}
-	// The rows with a line between, the prompt, the header's line, the
-	// footer, the borders and the padding.
-	if lines >= 2*rows+8 {
-		out = append(out, "--gap", "--no-gap-line")
-	}
-	return out
+	return nil
 }
 
 // pickValue is a pick's value: the picked item's, else the query typed.

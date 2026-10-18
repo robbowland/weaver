@@ -449,6 +449,18 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Dense rows, grouped (Rob, on the form with a blank line
+  between every row: "I'm not sure the spacing between the lines actually
+  makes this more readable ... the cognitive effort to read and find the
+  right information has increased"). Nearness is what says things belong
+  together (Gestalt proximity), so even spacing says nothing and makes the
+  eye travel further; in a terminal the least gap is a whole line, twice a
+  row (a GUI's "relaxed" row is a fifth taller); and people reading
+  technical detail scan, which dense aligned columns serve. The form's
+  rows are dense now, a blank line between groups only (what it starts
+  from; where it works; who works); its popup is as tall as it needs,
+  so its keys sit under its rows; the welcome's keys are dense too. The
+  width stays a share of the terminal: paths are long.
 - 2026-10-18: Room, and a form that holds still (Rob: "I don't think we
   should be afraid to use more space ... there's no reason to be cramped
   when we have loads of space"; "The new thread does jump around a bit
