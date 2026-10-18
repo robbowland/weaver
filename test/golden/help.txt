@@ -6,7 +6,8 @@ KEYS
   x           close the thread, its nvim and its window
               (and offers to remove a merged worktree)
   v  e  ^e    jump and open its nvim (Alt v anywhere)
-  s  tab      the card ↔ the agent's screen
+  s           the card ↔ the agent's screen
+  tab  ⇧tab   the next, previous view (THREADS, GITHUB, LINEAR)
   ^r          reload
   ?           this help (? again: back)
   q  esc      back to your thread

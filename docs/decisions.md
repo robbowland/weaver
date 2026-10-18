@@ -449,6 +449,16 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Tab between views, and a footer that holds still (Rob: "I
+  feel like tab is more natural than alt + y for view shifting"; on the
+  form's Tab, "it just seems like the footer jumps"). The strip is a tab
+  bar, and Tab is a tab bar's key: on home and in a view, Tab and
+  Shift-Tab are the next and previous view, round (Alt y stays, from a
+  thread, where Tab is the agent's and nvim's). `s` alone keeps the card
+  or screen, and a view's kind. The form's footer said what enter does on
+  the row first, so every hint after it moved as the cursor did, and ^e
+  went off start: its hints now keep their places, enter's slot as wide as
+  its widest, ^e on every row.
 - 2026-10-18: Descriptions in ink, and links that open (Rob: "should the
   descriptions be grey or white and the dominant (not sure how to express
   code)", "if the links can become command clickable"). Micrographics'

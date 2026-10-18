@@ -376,7 +376,7 @@ func readOnly(kind string) string {
 // itemHints are the view's keys: browsing, or searching.
 func (e *Env) itemHints(src itemSource) []choice {
 	if searching() {
-		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}}
+		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}, {"tab", "VIEWS"}}
 	}
 	hs := []choice{{"⏎", "THREAD"}, {"Alt R", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
@@ -386,7 +386,7 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".help") {
 		help = "CARD"
 	}
-	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"?", help})
+	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"tab", "VIEWS"}, choice{"?", help})
 }
 
 // itemFooter is the view's footer: its hints, each a button.
@@ -518,8 +518,9 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("o", "open it in "+src.service(), "") +
 		key("/", "search", "(esc: back)")
 	if len(src.kinds()) > 1 {
-		out += key("s  tab", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
+		out += key("s", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
 	}
+	out += key("tab  ⇧tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)")
 	out += key("^r", "ask "+src.service()+" again", "(it does every 5 minutes)") +
 		key("?", "this help", "(? again: back)") +
 		key("q  esc", "back to your thread", "") +
@@ -704,10 +705,12 @@ func (e *Env) itemsView(src itemSource) error {
 			"--bind", "right-click:execute-silent(" + me + " menu {1})",
 		}
 		if len(src.kinds()) > 1 {
-			args = append(args, "--bind", "s,tab:execute-silent("+me+" switch)+"+reload+"+first")
+			args = append(args, "--bind", "s:execute-silent("+me+" switch)+"+reload+"+first")
 		} else {
-			args = append(args, "--bind", "s,tab:ignore")
+			args = append(args, "--bind", "s:ignore")
 		}
+		// Tab and shift-tab: the next and previous view, as on home.
+		args = append(args, "--bind", "tab:execute-silent("+q+" go next)", "--bind", "btab:execute-silent("+q+" go prev)")
 		c := fzfCmd(args, "WEAVER_VIEW_SOCK="+sock)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr

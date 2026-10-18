@@ -109,7 +109,8 @@ func Help() string {
 		"  " + g + "x" + o + "           close the thread, its nvim and its window\n" +
 		"              " + d + "(and offers to remove a merged worktree)" + o + "\n" +
 		"  " + g + "v  e  ^e" + o + "    jump and open its nvim " + d + "(Alt v anywhere)" + o + "\n" +
-		"  " + g + "s  tab" + o + "      the card ↔ the agent's screen\n" +
+		"  " + g + "s" + o + "           the card ↔ the agent's screen\n" +
+		"  " + g + "tab  ⇧tab" + o + "   the next, previous view " + d + "(THREADS, GITHUB, LINEAR)" + o + "\n" +
 		"  " + g + "^r" + o + "          reload\n" +
 		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
 		"  " + g + "q  esc" + o + "      back to your thread\n" +

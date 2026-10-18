@@ -106,6 +106,20 @@ func (e *Env) toHome(cur tab, home tmux.WindowID) {
 	}
 }
 
+// GoView is `wvr go next|prev` (tab and shift-tab on home and in a view):
+// the next or previous of home and the views, round as a tab bar goes.
+func (e *Env) GoView(step int) {
+	order := append([]string{"home"}, e.viewNames()...)
+	_, cur, _ := e.where()
+	at := 0
+	for i, n := range order {
+		if n == cur.view {
+			at = i
+		}
+	}
+	e.statusClick(order[((at+step)%len(order)+len(order))%len(order)])
+}
+
 // selectHome shows home (window home), made again first if it was closed.
 func (e *Env) selectHome(home tmux.WindowID) {
 	if home == "" {

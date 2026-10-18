@@ -680,8 +680,8 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last.
 func boardHints() []choice {
-	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|^q QUIT"
-	search := "⏎ JUMP|esc BACK|tab SCREEN|^e NVIM"
+	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|^q QUIT"
+	search := "⏎ JUMP|esc BACK|^e NVIM|tab VIEWS"
 	// A toggle says where it goes next: s from the screen (or the card
 	// hidden) to the card, ? from the help back to it.
 	showing := ""
@@ -690,7 +690,6 @@ func boardHints() []choice {
 	}
 	if pl := os.Getenv("FZF_PREVIEW_LINES"); showing == "screen" || sockBase() != "" && files.Exists(sockBase()+".tight") && (pl == "" || pl == "0") {
 		browse = strings.Replace(browse, "s SCREEN", "s CARD", 1)
-		search = strings.Replace(search, "tab SCREEN", "tab CARD", 1)
 	}
 	helpWhat := "HELP"
 	if showing == "help" {

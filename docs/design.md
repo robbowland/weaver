@@ -453,7 +453,9 @@ header: what to do on an empty board), `.room` and `.tight` (the card's
 
 Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
 `1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `e`
-(`ctrl-e`) jump and open nvim, `s` (`tab`) card or screen, `?` keys,
+(`ctrl-e`) jump and open nvim, `s` card or screen, `tab` / `shift-tab` the
+next / previous view (`wvr go next|prev`, round home and the views as a
+tab bar; a view's the same), `?` keys,
 `ctrl-r` reload, `q` and `esc` close. `/` shows the input and unbinds the
 letters; `esc` clears the query, hides it and binds them again. The footer is
 recomputed (`wvr _footer`) on every load and mode change, from the width

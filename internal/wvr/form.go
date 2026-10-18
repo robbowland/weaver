@@ -368,21 +368,35 @@ func keyName(k string) string {
 	return k
 }
 
-// formHints are the form's footer with the cursor on row id: what enter
-// (or a click) does there, then how to move.
-func formHints(id string) []choice {
-	does := map[string]string{"repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
-		"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
-	var hs []choice
+// formDoes is what enter does on each of the form's rows that has a
+// choice (start starts).
+var formDoes = map[string]string{"repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
+	"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
+
+// formEnter is what enter does on row id, with the key that does it from
+// anywhere ("" on a row with nothing to do).
+func formEnter(id string) string {
 	switch {
 	case id == "start" || id == "":
-		hs = []choice{{"⏎", "START"}, {"↑↓", "FIELDS"}, {"^e", "WRITE IT IN $EDITOR"}}
-	case does[id] != "":
-		hs = []choice{{"⏎", does[id] + " (" + keyName(formKeys[id]) + ")"}, {"↑↓", "FIELDS"}}
-	default:
-		hs = []choice{{"↑↓", "FIELDS"}}
+		return "START"
+	case formDoes[id] != "":
+		return formDoes[id] + " (" + keyName(formKeys[id]) + ")"
 	}
-	return append(hs, choice{"esc", "CANCEL"})
+	return ""
+}
+
+// formHints are the form's footer with the cursor on row id: what enter
+// does there, then how to move, the editor and cancelling. The same hints
+// in the same places on every row, enter's slot as wide as its widest, so
+// nothing in it moves as the cursor does: only what enter does changes.
+func formHints(id string) []choice {
+	w := rlen(formEnter("start"))
+	for f := range formDoes {
+		w = max(w, rlen(formEnter(f)))
+	}
+	what := formEnter(id)
+	what += strings.Repeat(" ", w-rlen(what))
+	return []choice{{"⏎", what}, {"↑↓", "FIELDS"}, {"^e", "TASK IN $EDITOR"}, {"esc", "CANCEL"}}
 }
 
 // formRowFooter is the form's footer on row id: its hints, each a button.

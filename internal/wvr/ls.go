@@ -185,7 +185,9 @@ func (e *Env) Ls() error {
 			// Its card in a popup over the board, as the menus open it.
 			"--bind", "x:transform:case {1} in a*) echo 'execute-silent("+q+" _popup close {2})' ;; l*) echo 'execute-silent("+q+" _popup forget {2})' ;; esac",
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
-			"--bind", "s,tab:transform("+q+" _view screen)",
+			"--bind", "s:transform("+q+" _view screen)",
+			// Tab and shift-tab: the next and previous view, as a tab bar.
+			"--bind", "tab:execute-silent("+q+" go next)", "--bind", "btab:execute-silent("+q+" go prev)",
 			"--bind", "?:transform("+q+" _view help)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform("+q+" _click board)",

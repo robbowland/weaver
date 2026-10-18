@@ -106,6 +106,7 @@ Agents you start by hand in any tmux session report to weaver as well, and
 | `Alt j` / `Alt k` | The next / previous window, so the threads in their numbers' order (home included, the views not) |
 | `Alt h` / `Alt l` | The pane to the left / right |
 | `Alt y` | Home, then each view (GITHUB, LINEAR), then back to where you came from |
+| `Tab` / `Shift Tab` | On home or in a view: the next / previous view, round as a tab bar goes (THREADS, GITHUB, LINEAR) |
 | `Alt 1` | Jump to the agent that has needed you longest, then the one that finished longest ago and you haven't seen; press again for the next, round and round |
 | `Alt v` | Open, or jump back to, the nvim beside the focused agent |
 | `Alt V` | The same, fullscreen |
@@ -198,7 +199,7 @@ When the agent exits its pane stays; enter there resumes its conversation
 
 Beside home are two views: **GITHUB**, your pull requests and issues, and
 **LINEAR**, your Linear issues. `Alt y` steps from a thread to home, on through them,
-and back; the status line shows the strip of them on every window, a tab bar
+and back; `Tab` and `Shift Tab` step between them as tabs; the status line shows the strip of them on every window, a tab bar
 (`THREADS   GITHUB   LINEAR`). A view not set up yet has a dot
 (`LINEAR ·`): its window says what it needs (gh installed and signed in, a
 Linear API key), and enter does that, after which it is the view. `h` there hides it

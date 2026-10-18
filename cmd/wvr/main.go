@@ -144,8 +144,12 @@ var commands = map[string]command{
 			e.GoHome()
 		case "back":
 			e.GoBack()
+		case "next":
+			e.GoView(1)
+		case "prev":
+			e.GoView(-1)
 		default:
-			return errors.New("usage: wvr go home|back")
+			return errors.New("usage: wvr go home|back|next|prev")
 		}
 		return nil
 	}},

@@ -509,6 +509,16 @@ ok "...each a button: GITHUB" "$(where | cut -d ' ' -f 1)" "900"
 click 3 50
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 ok "...THREADS: home" "$(where | cut -d ' ' -f 1)" "0"
+seen=""
+for k in 09 09 09 1b5b5a; do # tab, tab, tab, shift-tab
+	key $k
+	sleep 0.8
+	seen="$seen$(where | cut -d ' ' -f 1) "
+done
+ok "tab: the next view, round as a tab bar goes; shift-tab the previous" "$seen" "900 901 0 901 "
+key 09
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+
 
 # A review of the pull request: on its head, read-only, its nvim on the review.
 tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
