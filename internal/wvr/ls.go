@@ -20,6 +20,16 @@ const FzfColors = "fg:-1,bg:-1,hl:-1:underline,fg+:#000000:strip,bg+:#ffffff,hl+
 	"pointer:#000000,marker:#ffffff,header:-1,footer:#616161,border:#616161,preview-border:#616161,query:#ffffff," +
 	"prompt:#999999,info:#616161,ghost:#616161,spinner:#616161,separator:#616161,label:#999999,scrollbar:#616161"
 
+// fzfCmd is fzf with args and weaver's settings only: yours
+// ($FZF_DEFAULT_OPTS, or its file) would change how weaver's lists look
+// and what their keys do. env is more for its environment.
+func fzfCmd(args []string, env ...string) *exec.Cmd {
+	// No gutter column (fzf's draws a bar down the left).
+	c := exec.Command("fzf", append([]string{"--gutter", " "}, args...)...)
+	c.Env = append(os.Environ(), append([]string{"FZF_DEFAULT_OPTS=", "FZF_DEFAULT_OPTS_FILE="}, env...)...)
+	return c
+}
+
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
 const lsKeys = "j,k,g,G,n,x,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
@@ -179,11 +189,12 @@ func (e *Env) Ls() error {
 			"--bind", "?:transform("+q+" _view help)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform("+q+" _click board)",
+			"--bind", "click-header:transform("+q+" _click title)",
 			"--bind", "right-click:execute-silent("+q+" _menu board {1})",
 			"--bind", "ctrl-r:reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)
-		c := exec.Command("fzf", args...)
+		c := fzfCmd(args)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr
 		outb, err := c.Output()

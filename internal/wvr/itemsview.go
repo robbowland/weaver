@@ -706,8 +706,7 @@ func (e *Env) itemsView(src itemSource) error {
 		} else {
 			args = append(args, "--bind", "s,tab:ignore")
 		}
-		c := exec.Command("fzf", args...)
-		c.Env = append(os.Environ(), "WEAVER_VIEW_SOCK="+sock)
+		c := fzfCmd(args, "WEAVER_VIEW_SOCK="+sock)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr
 		err := c.Run()

@@ -494,6 +494,23 @@ to get back) and changes one thing at a time:
   empty one between.
 - **Toggles say where they go:** `s` reads CARD while the screen shows, `?`
   CARD while the help does.
+- **Room:** a dialog takes a share of the terminal within bounds
+  (`popupSize`: the form 62% of each side, 96 x 20 to 160 x 48; a card
+  half by 40%, 80 x 12 to 120 x 28), Alt N's through `wvr _popup new` too.
+  In it, with room, the form and pickers have a margin (`--padding 1,2`)
+  and a blank line between rows (`--gap --no-gap-line`). The empty board
+  is a welcome, centred a third of the way down, its key lines buttons
+  (`click-header`, `wvr _click title`). weaver's fzf runs without
+  `$FZF_DEFAULT_OPTS` (`fzfCmd`), so your settings change neither its look
+  nor its keys.
+- **The form holds still:** a choice leaves the cursor where it was (on the
+  row acted on, or the one its key was pressed on: `.at`, then `_form land`
+  on the reload's load), never moved on to start; its rows are always the
+  same (where a checkout is picked, branch and base stay, saying why they
+  do not apply); its header keeps its line when it says nothing, so a
+  message never pushes the rows; a picker keeps the form's grid (its
+  prompt ending where the labels do, its rows under the values, the same
+  line between) and opens on the value chosen now.
 
 ### Mouse
 

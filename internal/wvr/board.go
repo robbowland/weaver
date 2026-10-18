@@ -495,12 +495,8 @@ func (e *Env) rows(plain bool) string {
 			bestEffort(files.Put(base+".label", " "+tl+gap+tc+" "))
 			out := ""
 			if n == 0 {
-				out = grey + "No threads yet." + off + " " + COff + "n" + grey + " starts one here, " + COff + "Alt N" + grey +
-					" from anywhere;" + off + "\n" + grey + "or start claude or codex in any pane." + off
-				if len(e.viewNames()) > 0 {
-					out += "\n" + COff + "Alt y" + grey + " shows your pull requests and issues: " + COff + "Alt N" + grey +
-						" on one starts its thread." + off
-				}
+				c, l := lsSize()
+				out, _ = welcome(c, l, len(e.viewNames()) > 0)
 			}
 			bestEffort(files.Put(base+".title", out))
 			if n == 0 {
@@ -736,6 +732,66 @@ func boardHints() []choice {
 
 // Footer is the dashboard's footer: its hints, each a button.
 func Footer() string { return hintLine(boardHints(), 2) + "\n" }
+
+// welcome is the empty board's header: what to do, centred in the room
+// the list has on a terminal cols x lines (a third of the way down, as a
+// card sits), and for each of its lines (from 1) what a click on it does,
+// "" for none: each key line is its key's button.
+func welcome(cols, lines int, views bool) (string, []string) {
+	type row struct{ key, what, act string }
+	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"Alt N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"}}
+	if views {
+		rows = append(rows, row{"Alt y", "your pull requests and issues", "execute-silent(tmux send-keys -K M-y)"})
+	}
+	about := "a thread is a task, its worktree, and an agent beside its nvim"
+	note := "or start claude or codex in any pane: weaver follows it"
+	text := []string{CBold + CInk + "No threads yet" + COff, CGrey + about + COff, ""}
+	acts := []string{"", "", ""}
+	w := max(rlen(about), rlen(note))
+	// A line between the keys, where there is room for it.
+	roomy := lines >= 30
+	for i, r := range rows {
+		if i > 0 && roomy {
+			text, acts = append(text, ""), append(acts, "")
+		}
+		text = append(text, CInk+fmt.Sprintf("%-8s", r.key)+COff+CGrey+r.what+COff)
+		acts = append(acts, r.act)
+		w = max(w, 8+rlen(r.what))
+	}
+	text = append(text, "", CDim+note+COff)
+	acts = append(acts, "", "")
+	// The room (no card beside an empty list): less the borders and the
+	// gutter.
+	pad := strings.Repeat(" ", max((cols-4-w)/2, 0))
+	top := max((lines-4-len(text))/3, 0)
+	var b strings.Builder
+	for range top {
+		b.WriteString("\n")
+	}
+	for i, t := range text {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if t != "" {
+			b.WriteString(pad + t)
+		}
+	}
+	return b.String(), append(make([]string, top), acts...)
+}
+
+// welcomeClick is the action for a click on line (from 1) of the empty
+// board's welcome, when it shows.
+func welcomeClick(views bool) string {
+	if t, _ := files.ReadTrim(sockBase() + ".title"); t == "" {
+		return ""
+	}
+	line, _ := cli.EnvInt("FZF_CLICK_HEADER_LINE")
+	c, l := lsSize()
+	if _, acts := welcome(c, l, views); line >= 1 && line <= len(acts) && acts[line-1] != "" {
+		return acts[line-1] + "\n"
+	}
+	return ""
+}
 
 // Title is the dashboard's header: with no agents,
 // what to do; else a blank line while browsing, whose place the search input

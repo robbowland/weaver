@@ -80,12 +80,15 @@ func footClick(hs []choice, gap int) string {
 }
 
 // Click is `wvr _click WHAT`: what a click does. On a footer (board, pick,
-// form ROW), fzf's action for the hint clicked; on the status line (status
-// RANGE, the range clicked), it goes there.
+// form ROW), fzf's action for the hint clicked; on the empty board's
+// welcome (title), its key line's; on the status line (status RANGE, the
+// range clicked), it goes there.
 func (e *Env) Click(args []string) {
 	switch firstArg(args) {
 	case "board":
 		fmt.Print(footClick(boardHints(), 2))
+	case "title":
+		fmt.Print(welcomeClick(len(e.viewNames()) > 0))
 	case "pick":
 		fmt.Print(footClick(pickHints, 3))
 	case "form":

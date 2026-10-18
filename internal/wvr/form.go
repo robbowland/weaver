@@ -201,6 +201,11 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			b.WriteString("        " + CGrey + "+" + strconv.Itoa(lines) + " more lines" + COff + CDim + " (^e)" + COff + "\n")
 		}
 	}
+	// Its line stays when it says nothing, so a message coming or going
+	// never moves the rows.
+	if b.Len() == 0 {
+		return " \n"
+	}
 	return b.String()
 }
 
@@ -236,6 +241,10 @@ func (e *Env) formFields(sf, task string) []formField {
 		}
 		t := formPath(fm.Here)
 		add("where", "where", cur+"  "+t, cur+"  "+CGrey+t+COff)
+		// The rows stay, so nothing below moves: they say why they do not
+		// apply, and choosing one makes it a new worktree again.
+		add("branch", "branch", cur+"  the checkout's", cur+"  "+CGrey+"the checkout's"+COff)
+		add("base", "base", "-  it works where it is", CDim+"-"+COff+"  "+CGrey+"it works where it is"+COff)
 	} else {
 		add("where", "where", "new worktree", "new worktree")
 		br := fm.Branch
@@ -256,6 +265,7 @@ func (e *Env) formFields(sf, task string) []formField {
 				return rm != "" && m.Has("refs/remotes/"+rm+"/"+br)
 			}()):
 			add("branch", "branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff)
+			add("base", "base", "-  it carries on from the branch", CDim+"-"+COff+"  "+CGrey+"it carries on from the branch"+COff)
 		default:
 			add("branch", "branch", br, br)
 			e.baseRow(fm, m, add)
@@ -377,6 +387,7 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 		return
 	}
 	if fm.Repo == "" {
+		add("base", "base", "-  no repository", CDim+"-"+COff+"  "+CGrey+"no repository"+COff)
 		return
 	}
 	v, note := "", ""
@@ -785,7 +796,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 		// The task is the query; the rows are what enter (or a click) acts
 		// on: start, first, then each choice, which ↑↓, tab and the mouse
 		// move between. After a choice, the cursor is back on start.
-		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", "    task  ", "--ghost", formGhost(loadForm(sf)),
+		args = append(args, "--border-label", newFormLabel(loadForm(sf)), "--prompt", formPrompt("task"), "--ghost", formGhost(loadForm(sf)),
 			"--query", query, "--header", h, "--footer", formRowFooter("start"), "--color", FzfColors,
 			// No --track: fzf would hold keys while a reload looked for the
 			// row. Typing is for the task, and puts the cursor on start.
@@ -795,15 +806,16 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			"--bind", "tab:down,btab:up",
 			"--bind", "enter,left-click:transform("+q+" _form keys {1} "+qs+")",
 			"--bind", "double-click:ignore",
-			"--bind", "click-footer:transform("+q+" _click form {1})")
+			"--bind", "click-footer:transform("+q+" _click form {1})",
+			"--bind", "load:transform("+q+" _form land "+qs+" {q})")
+		args = append(args, roomy(len(e.formFields(sf, query))+1)...)
 		for id, k := range formKeys {
 			args = append(args, "--bind", strings.Replace(k, "^", "ctrl-", 1)+":"+formAct(q, qs, id))
 		}
 		args = append(args,
 			"--bind", "ctrl-e:execute("+q+" _form editor "+qs+" {q})+transform-query("+q+" _form query "+qs+" {q})+transform-header("+hd+")+reload("+rows+")")
 
-		c := exec.Command("fzf", args...)
-		c.Env = append(os.Environ(), "SHELL=/bin/sh")
+		c := fzfCmd(args, "SHELL=/bin/sh")
 		c.Stdin = strings.NewReader(e.FormRows(sf, query))
 		c.Stderr = os.Stderr
 		out, err := c.Output()
@@ -836,14 +848,16 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 
 // formAct is the action that changes the form's row id (a picker, which
 // needs the terminal, or a switch, which does not), then shows the rows
-// again with the cursor back on start.
+// again with the cursor where it was (the row acted on, or the one its key
+// was pressed on): never moved on for you. The row is kept beside the form
+// (.at) for the reload's load to land on (_form land).
 func formAct(q, qs, id string) string {
 	ex := "execute"
 	if id == "agent" || id == "mode" {
 		ex = "execute-silent"
 	}
-	return ex + "(" + q + " _form " + id + " " + qs + " {q})+reload(" + q + " _form rows " + qs + " {q})" +
-		"+transform-header(" + q + " _form header " + qs + " {q})+transform-border-label(" + q + " _form label " + qs + ")+first"
+	return "execute-silent(printf '%s' {1} >" + qs + ".at)+" + ex + "(" + q + " _form " + id + " " + qs + " {q})+reload(" + q + " _form rows " + qs + " {q})" +
+		"+transform-header(" + q + " _form header " + qs + " {q})+transform-border-label(" + q + " _form label " + qs + ")"
 }
 
 // Form is `wvr _form OP FILE [QUERY]`: what the form's keys do, run by fzf;
@@ -870,6 +884,18 @@ func (e *Env) Form(op, sf, q string) {
 		fmt.Print(e.FormHeader(sf, q, ""))
 	case "rows":
 		fmt.Print(e.FormRows(sf, q))
+	case "land":
+		// After a choice: the cursor back on the row it was on.
+		at, err := files.FirstLine(sf + ".at")
+		os.Remove(sf + ".at")
+		if err != nil || at == "" {
+			return
+		}
+		for i, l := range strings.Split(e.FormRows(sf, q), "\n") {
+			if id, _, _ := strings.Cut(l, "\t"); id == at {
+				fmt.Printf("pos(%d)\n", i+1)
+			}
+		}
 	case "fields":
 		// The choices as text, as the form shows them.
 		for _, f := range e.formFields(sf, q) {
@@ -882,7 +908,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 			return
 		}
-		out := e.pick(e.formWheres(fm), formLabel("WEAVER", "NEW THREAD › WHERE"), "     where  ", "a new worktree, or a checkout that is there")
+		out := e.pick(e.formWheres(fm), formLabel("WEAVER", "NEW THREAD › WHERE"), formPrompt("where"), "a new worktree, or a checkout that is there", whereValue(fm))
 		d := pickValue(out)
 		switch d {
 		case "":
@@ -928,7 +954,7 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.Repo == "" {
 			return
 		}
-		out := e.pick(e.formBases(fm), formLabel("WEAVER", "NEW THREAD › BASE"), "      base  ", "where the new branch starts")
+		out := e.pick(e.formBases(fm), formLabel("WEAVER", "NEW THREAD › BASE"), formPrompt("base"), "where the new branch starts", baseValue(fm))
 		if out == "" {
 			return
 		}
@@ -955,11 +981,11 @@ func (e *Env) Form(op, sf, q string) {
 			br = items.Slugify(q)
 		}
 		args := append([]string{"--disabled", "--reverse"}, formFzf...)
-		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD › BRANCH"), "--prompt", "    branch  ", "--query", br, "--ghost", "branch name",
+		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD › BRANCH"), "--prompt", formPrompt("branch"), "--query", br, "--ghost", "branch name",
 			"--color", FzfColors, "--header", "        "+CGrey+"names the branch and its worktree; an existing branch continues"+COff,
 			"--footer", CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff, "--bind", "enter:print-query")
-		c := exec.Command("fzf", args...)
-		c.Env = append(os.Environ(), "SHELL=/bin/sh")
+		args = append(args, roomy(1)...)
+		c := fzfCmd(args, "SHELL=/bin/sh")
 		c.Stderr = os.Stderr
 		b, err := c.Output()
 		if err != nil {
@@ -974,7 +1000,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 		}
 	case "repo":
-		out := e.pick(e.recentRepos(fm.Repo), formLabel("WEAVER", "NEW THREAD › REPOSITORY"), "      repo  ", "a repository, or a path")
+		out := e.pick(e.recentRepos(fm.Repo), formLabel("WEAVER", "NEW THREAD › REPOSITORY"), formPrompt("repo"), "a repository, or a path", fm.Repo)
 		if out == "" {
 			return
 		}
@@ -1035,20 +1061,80 @@ func (e *Env) Form(op, sf, q string) {
 }
 
 // pick runs a picker over items ("value<TAB>display" lines): fzf's output
-// (the query, then the pick).
-func (e *Env) pick(items, label, prompt, ghost string) string {
-	args := append([]string{"--reverse"}, formFzf...)
+// (the query, then the pick). It keeps the form's grid (its prompt where
+// the form's labels end, its rows under the form's values, a line between
+// them as the form has) and opens on cur, the value chosen now.
+func (e *Env) pick(items, label, prompt, ghost, cur string) string {
+	var b strings.Builder
+	at, n := 0, 0
+	for _, l := range strings.Split(strings.TrimRight(items, "\n"), "\n") {
+		v, d, _ := strings.Cut(l, "\t")
+		n++
+		if at == 0 && cur != "" && (v == cur || strings.HasPrefix(v, "~/") && os.Getenv("HOME")+v[1:] == cur) {
+			at = n
+		}
+		b.WriteString(v + "\t" + formIndent + d + "\n")
+	}
+	args := append([]string{"--reverse", "--sync"}, formFzf...)
 	args = append(args, "--border-label", label, "--delimiter", "\t", "--with-nth", "2", "--print-query", "--prompt", prompt,
-		"--ghost", ghost, "--color", FzfColors, "--footer", pickFooter,
+		"--ghost", ghost, "--color", FzfColors, "--footer", pickFooter, "--header", "",
 		// A menu: a click picks, as on the form's rows; the footer's hints
 		// are buttons.
 		"--bind", "left-click:accept", "--bind", "click-footer:transform("+session.Quote(e.Self)+" _click pick)")
-	c := exec.Command("fzf", args...)
-	c.Env = append(os.Environ(), "SHELL=/bin/sh")
-	c.Stdin = strings.NewReader(items)
+	if at > 0 {
+		args = append(args, "--bind", "start:pos("+strconv.Itoa(at)+")")
+	}
+	args = append(args, roomy(n)...)
+	c := fzfCmd(args, "SHELL=/bin/sh")
+	c.Stdin = strings.NewReader(b.String())
 	c.Stderr = os.Stderr
-	b, _ := c.Output()
-	return strings.TrimRight(string(b), "\n")
+	out, _ := c.Output()
+	return strings.TrimRight(string(out), "\n")
+}
+
+// formIndent puts a picker's rows under the form's values (its labels'
+// column, six wide, and two spaces).
+const formIndent = "        "
+
+// formPrompt is a prompt that ends where the form's labels do, so what is
+// typed starts under the form's values.
+func formPrompt(label string) string { return fmt.Sprintf("%8s  ", label) }
+
+// whereValue is the where picker's value for what is chosen now.
+func whereValue(fm form) string {
+	if fm.Where == WhereHere {
+		return fm.Here
+	}
+	return "new"
+}
+
+// baseValue is the base picker's value for what is chosen now ("=": the
+// default branch).
+func baseValue(fm form) string {
+	if fm.Base == "" {
+		return "="
+	}
+	return fm.Base
+}
+
+// roomy is fzf's layout for a dialog of rows rows when the terminal has
+// room: a margin inside its border, and a line between rows while they
+// still fit with it. Small terminals keep it tight.
+func roomy(rows int) []string {
+	lines, cols, ok := ttySize()
+	if !ok {
+		return nil
+	}
+	var out []string
+	if lines >= 24 && cols >= 100 {
+		out = append(out, "--padding", "1,2")
+	}
+	// The rows with a line between, the prompt, the header's line, the
+	// footer, the borders and the padding.
+	if lines >= 2*rows+8 {
+		out = append(out, "--gap", "--no-gap-line")
+	}
+	return out
 }
 
 // pickValue is a pick's value: the picked item's, else the query typed.

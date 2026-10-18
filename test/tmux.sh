@@ -284,6 +284,8 @@ key 0d
 waitfor '[ "$(jq -r .where "$FORM")" = here ]'
 ok "form: alt-w picks where it works: here, the main checkout" "$(jq -r .where "$FORM")|$(wvr _form fields "$FORM" x | awk '$1 == "where" { print $2 }')" \
 	"here|main"
+ok "...and its rows stay (branch and base say why they do not apply), so none moves" \
+	"$(wvr _form fields "$FORM" x | awk '{ print $1 }' | tr '\n' ' ')" "repo where branch base agent "
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "

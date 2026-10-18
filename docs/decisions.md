@@ -449,6 +449,29 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Room, and a form that holds still (Rob: "I don't think we
+  should be afraid to use more space ... there's no reason to be cramped
+  when we have loads of space"; "The new thread does jump around a bit
+  with selections").
+  - Dialogs were fixed boxes (the form 96 x 20) in the middle of a large
+    terminal: they take a share of it now, within bounds, and the form
+    and its pickers breathe (a margin, a line between rows) when there is
+    room. The empty board, three lines at the top left, is a centred
+    welcome whose keys are buttons.
+  - The form moved the cursor back to start after every choice: the
+    auto-advance that GOV.UK's testing and WebAIM find users trip on, and
+    what WCAG 3.2.2 means by an unexpected change of focus. Focus now
+    stays (or returns, after a picker, to what opened it).
+  - Rows came and went as choices changed (a checkout's thread had no
+    branch or base; a task naming an existing branch dropped base): every
+    row stays, saying why it does not apply. A message's line is kept
+    when it is empty, as validation messages reserve their space, so
+    none pushes the rows.
+  - Pickers sat two columns right and a line up from the form's grid, and
+    opened on their first item: they keep the grid and open on the value
+    chosen now.
+  - weaver's fzf took your `$FZF_DEFAULT_OPTS` (its style, its keys):
+    it runs with weaver's settings only.
 - 2026-10-18: Transitions (Rob: "is the flow clear to a user or does
   changing a view result in jarring jumps and inconsistencies that
   increase mental fatigue"). Held to: orientation (where am I, how did I

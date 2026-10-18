@@ -15,43 +15,72 @@ import (
 // looks and lands the same however it was asked for (a key, a click, a
 // menu, a view), and what you were looking at stays behind it.
 
-const (
-	// The new-thread form and its pickers (Alt N's binding says the same).
-	formPopupW, formPopupH = 96, 20
+// popupSize is how big a kind of dialog is on a terminal: a share of it,
+// within bounds (the least it needs, the most worth reading).
+type popupSize struct {
+	share      float64
+	minW, maxW int
+	hShare     float64
+	minH, maxH int
+}
+
+var (
+	// The new-thread form and its pickers.
+	formSize = popupSize{0.62, 96, 160, 0.62, 20, 48}
 	// A card: closing a thread, forgetting a lost one.
-	cardPopupW, cardPopupH = 80, 12
+	cardSize = popupSize{0.5, 80, 120, 0.4, 12, 28}
 )
+
+// of is the size on a terminal cw x ch (never past its edges).
+func (z popupSize) of(cw, ch int) (int, int) {
+	w := min(max(int(float64(cw)*z.share), z.minW), z.maxW)
+	h := min(max(int(float64(ch)*z.hShare), z.minH), z.maxH)
+	if cw > 4 {
+		w = min(w, cw-4)
+	}
+	if ch > 4 {
+		h = min(h, ch-2)
+	}
+	return w, h
+}
 
 // formPopup opens `wvr ARGS` (the form) in a popup, in dir; the form draws
 // its own border.
 func (e *Env) formPopup(dir string, args ...string) error {
-	return e.popup("the form", []string{"-B", "-w", strconv.Itoa(formPopupW), "-h", strconv.Itoa(formPopupH), "-d", dir}, args)
+	return e.popup("the form", formSize, []string{"-B", "-d", dir}, args)
 }
 
 // cardPopup opens `wvr ARGS` (a card) in a popup with tmux's border.
 func (e *Env) cardPopup(args ...string) error {
-	return e.popup("the card", []string{"-w", strconv.Itoa(cardPopupW), "-h", strconv.Itoa(cardPopupH)}, args)
+	return e.popup("the card", cardSize, nil, args)
 }
 
-// popup opens wvr with args (what it shows) in a popup (opts: its place
-// and border) on the client looking at the session, from a process of its
-// own, so whatever asked (a list, waiting on its command) goes on at once.
-func (e *Env) popup(what string, opts, args []string) error {
+// popup opens wvr with args (what it shows) in a popup of size z (opts:
+// its border, its directory) on the client looking at the session, from a
+// process of its own, so whatever asked (a list, waiting on its command)
+// goes on at once.
+func (e *Env) popup(what string, z popupSize, opts, args []string) error {
 	argv := []string{"display-popup"}
-	// The client looking at this session: what asked may have none
-	// (tmux's run-shell).
-	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name}"); err == nil {
-		best, at := "", ""
+	// The client looking at this session (what asked may have none: tmux's
+	// run-shell), and its size.
+	cw, ch := 0, 0
+	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name} #{client_width} #{client_height}"); err == nil {
+		at := ""
+		best := []string(nil)
 		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if t, c, ok := strings.Cut(l, " "); ok && t >= at {
-				best, at = c, t
+			if f := strings.Fields(l); len(f) == 4 && f[0] >= at {
+				best, at = f, f[0]
 			}
 		}
-		if best != "" {
-			argv = append(argv, "-c", best)
+		if best != nil {
+			argv = append(argv, "-c", best[1])
+			cw, _ = strconv.Atoi(best[2])
+			ch, _ = strconv.Atoi(best[3])
 		}
 	}
-	argv = append(append(append(argv, "-E"), opts...), "--", e.Self)
+	w, h := z.of(cw, ch)
+	argv = append(argv, "-E", "-w", strconv.Itoa(w), "-h", strconv.Itoa(h))
+	argv = append(append(argv, opts...), "--", e.Self)
 	argv = append(argv, args...)
 	if !e.InTmux {
 		argv = append(append([]string{}, e.TSock...), argv...)

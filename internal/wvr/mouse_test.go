@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -61,5 +62,46 @@ func TestBoardMenu(t *testing.T) {
 	t.Setenv("FZF_INPUT_STATE", "enabled")
 	if got := whats(boardMenu("l2")); len(got) != 1 || got[0] != "resume:Enter" {
 		t.Fatalf("lost row, searching: %q", got)
+	}
+}
+
+// Each of the welcome's key lines is the button for its key; no other
+// line does anything.
+func TestWelcomeClicks(t *testing.T) {
+	text, acts := welcome(200, 56, true)
+	lines := strings.Split(text, "\n")
+	if len(lines) != len(acts) {
+		t.Fatalf("%d lines, %d actions", len(lines), len(acts))
+	}
+	got := map[string]string{}
+	for i, l := range lines {
+		if acts[i] != "" {
+			key := strings.TrimSpace(reSGR.ReplaceAllString(l, ""))[:5]
+			got[strings.TrimSpace(key)] = acts[i]
+		}
+	}
+	want := map[string]string{"n": "trigger(n)", "Alt N": "execute-silent(tmux send-keys -K M-N)", "Alt y": "execute-silent(tmux send-keys -K M-y)"}
+	if len(got) != len(want) {
+		t.Fatalf("buttons %q, want %q", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%q: %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+// A dialog takes a share of the terminal within its bounds, and never
+// runs past its edges.
+func TestPopupSize(t *testing.T) {
+	for _, c := range []struct{ cw, ch, w, h int }{
+		{200, 56, 124, 34},  // a share
+		{100, 30, 96, 20},   // at least the least it needs
+		{400, 120, 160, 48}, // at most what is worth reading
+		{90, 20, 86, 18},    // inside a small terminal
+	} {
+		if w, h := formSize.of(c.cw, c.ch); w != c.w || h != c.h {
+			t.Errorf("form on %dx%d: %dx%d, want %dx%d", c.cw, c.ch, w, h, c.w, c.h)
+		}
 	}
 }
