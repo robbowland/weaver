@@ -449,6 +449,17 @@ can supersede an earlier one, and says so.
     their insides to each other and give no boundary a reader could use.
   - golangci-lint runs in CI on new code, with a complexity ceiling that
     comes down as the big functions split (115, from 130).
+- 2026-10-18: Descriptions in ink, and links that open (Rob: "should the
+  descriptions be grey or white and the dominant (not sure how to express
+  code)", "if the links can become command clickable"). Micrographics'
+  own reading text is ink; grey (60%) is its metadata and faint (38%) its
+  frames, Material's emphasis levels; its "soft" reading mode is the grey
+  the cards had. The description is what a card is for, so its prose is
+  ink, quotes and minor headings grey. Code then needs its own mark:
+  faint backticks, the theme's way of showing a token (as `[ SRC: ]`),
+  rather than a fill it never uses. Links are OSC 8 hyperlinks, as is the
+  card's title, marked by their `[ SRC: ]` token alone (Rob: "I hate
+  underlines").
 - 2026-10-18: Cards' markdown in the Micrographics style (Rob: "push the
   markdown rendering even further in terms of the way different elements
   are displayed in the micrographics style"). The vault theme's own

@@ -725,10 +725,16 @@ rendered from markdown by `internal/markdown` (goldmark's parser, with
 GitHub's tables, strikethrough, task lists and bare links; no HTML or
 link targets), set as the vault's Micrographics theme sets a note: a
 section (h2) under a faint rule with its index (`01  SUMMARY`), h3 bold,
-h4 to h6 grey capitals; links `[ SRC: text ]`, images `[ IMG: alt ]`;
+h4 to h6 grey capitals; prose in ink (the theme's reading text, the card's
+point), strong in bold, code in ink between faint backticks (in a
+terminal all is monospace, so the token marks it, as the theme shows a
+link's); links `[ SRC: text ]` (the token marks them; no underline) and
+hyperlinks (OSC 8, which
+fzf's preview and tmux pass on: Cmd and a click opens one in Ghostty), as
+is the card's title, to the item; images `[ IMG: alt ]`;
 code in crop corners with its language at the top right; a GitHub alert
 (`> [!WARNING]`) under an ink stripe, its kind a `[ LABEL ]` (red for one
-to heed); task boxes as cells (`[x]`, `[ ]`); a quote on a rail in
+to heed); task boxes as cells (`[x]`, `[ ]`); a quote on a rail in grey
 italics; tables with a faint capitals header over a rule, columns apart
 by space; rules the card's width. Not glamour, whose highlighter
 registers every lexer as it loads, which costs every hook 6 ms.

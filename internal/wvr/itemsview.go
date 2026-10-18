@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/markdown"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -478,7 +479,8 @@ func (e *Env) itemCard(src itemSource, ref string) string {
 	}
 	w := previewCols()
 	now := time.Now()
-	ls := []string{CBold + oneline.Line(it.title) + COff, CDim + it.sub + " · " + age(int64(now.Sub(it.updated).Seconds())) + COff, ""}
+	// Its title a link to it (a click opens it, as o does).
+	ls := []string{markdown.Link(it.url, CBold+oneline.Line(it.title)+COff), CDim + it.sub + " · " + age(int64(now.Sub(it.updated).Seconds())) + COff, ""}
 	if t, ok := threadOf(e.itemThreads(), it); ok {
 		ls = append(ls, CDim+oneline.Cut("thread           ", 11)+COff+fmt.Sprintf("%02d %s %s", t.num, t.cell(), t.word())+
 			CDim+" · "+age(now.Unix()-t.since)+" · ⏎ goes there"+COff)

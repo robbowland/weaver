@@ -8,7 +8,7 @@ import (
 
 var plain = Style{}
 
-var reSGRTest = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+var reSGRTest = regexp.MustCompile(`\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\`)
 
 func TestRender(t *testing.T) {
 	src := "## Summary\n\nFixes the **flaky** test in `ci.yml`, see [the run](https://example.com/run).\n\n" +
@@ -21,7 +21,7 @@ func TestRender(t *testing.T) {
 		strings.Repeat("─", 40),
 		"01  SUMMARY",
 		"",
-		"Fixes the flaky test in ci.yml, see",
+		"Fixes the flaky test in `ci.yml`, see",
 		"[ SRC: the run ].",
 		"",
 		"[x] wrote it",
@@ -78,5 +78,23 @@ func TestRenderWraps(t *testing.T) {
 	}
 	if !strings.Contains(got, "\x1b[1mbold\x1b[0m") {
 		t.Errorf("bold lost: %q", got)
+	}
+}
+
+// A link's every word (and its brackets) opens it on a click, however the
+// lines break.
+func TestRenderLinks(t *testing.T) {
+	got := Render("see [the long run](https://example.com/run) and https://x.io/a", 12, Style{Off: "\x1b[0m"})
+	open := "\x1b]8;;https://example.com/run\x1b\\"
+	for _, w := range []string{"the", "long", "run"} {
+		if !strings.Contains(got, open+w) {
+			t.Errorf("%q is not a link: %q", w, got)
+		}
+	}
+	if !strings.Contains(got, "\x1b]8;;https://x.io/a\x1b\\") {
+		t.Errorf("a bare URL is not a link: %q", got)
+	}
+	if strings.Count(got, "\x1b]8;;\x1b\\") != strings.Count(got, "\x1b]8;;h") {
+		t.Errorf("a link left open: %q", got)
 	}
 }

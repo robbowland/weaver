@@ -1,8 +1,8 @@
 // Package markdown renders markdown (a pull request's description, a Linear
 // issue's) for a terminal card: wrapped to a width, in the colours it is
 // given, its structure kept (headings, lists and task lists, quotes and
-// GitHub's alerts, code, tables) and its noise left out (HTML, link
-// targets). Parsed by goldmark, with GitHub's extensions.
+// GitHub's alerts, code, tables, links a click opens) and its noise left
+// out (HTML). Parsed by goldmark, with GitHub's extensions.
 //
 // Set as Micrographics sets a note (the vault's theme), in a terminal's
 // terms: a section (h2) under a faint rule with its index (01) before it in
@@ -29,12 +29,13 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// Style is the colours text is set in, as SGR sequences: Text for prose,
-// Strong for emphasis, headings and code, Faint for what frames it (bullets,
-// quotes' bars, rules), Good for a ticked task, Bad for an alert to heed;
-// Off ends any.
+// Style is the colours text is set in, as SGR sequences: Text for prose
+// (what the card is for, so ink), Strong for emphasis, headings and code,
+// Muted for what speaks aside (quotes, minor headings), Faint for what
+// frames it (bullets, rules, tokens), Good for a ticked task, Bad for an
+// alert to heed; Off ends any.
 type Style struct {
-	Text, Strong, Faint, Good, Bad, Off string
+	Text, Strong, Muted, Faint, Good, Bad, Off string
 }
 
 const (
@@ -62,10 +63,10 @@ type renderer struct {
 	h2  *int // the sections so far, for their index
 }
 
-// span is a run of inline text in one style.
+// span is a run of inline text in one style, a link's to its url.
 type span struct {
-	text, style string
-	brk         bool // a hard line break
+	text, style, url string
+	brk              bool // a hard line break
 }
 
 // blocks renders n's children, a blank line between each (none in a tight
@@ -105,10 +106,10 @@ func (r *renderer) block(n ast.Node, w int) []string {
 			return r.alert(n, kind, w)
 		}
 		// Its own voice: a rail, and italics.
-		q := renderer{src: r.src, h2: r.h2, st: Style{Text: italic + st.Text, Strong: italic + st.Strong, Faint: st.Faint, Good: st.Good, Bad: st.Bad, Off: st.Off}}
+		q := renderer{src: r.src, h2: r.h2, st: Style{Text: italic + st.Muted, Strong: italic + st.Strong, Muted: italic + st.Muted, Faint: st.Faint, Good: st.Good, Bad: st.Bad, Off: st.Off}}
 		var out []string
 		for _, l := range q.blocks(n, w-2) {
-			out = append(out, st.Text+"│"+st.Off+" "+l)
+			out = append(out, st.Muted+"│"+st.Off+" "+l)
 		}
 		return out
 	case *ast.FencedCodeBlock, *ast.CodeBlock:
@@ -146,7 +147,7 @@ func (r *renderer) heading(n *ast.Heading, w int) []string {
 	case 3:
 		upper = false
 	case 4, 5, 6:
-		style = st.Text
+		style = st.Muted
 	}
 	sp := r.inline(n, style)
 	for i := range sp {
@@ -408,7 +409,10 @@ func (r *renderer) inline(n ast.Node, style string) []span {
 					b.Write(s.Segment.Value(r.src))
 				}
 			}
-			out = append(out, span{text: b.String(), style: st.Strong})
+			// Code in ink between faint backticks: in a terminal all is
+			// monospace, so the token says it is code, as Micrographics
+			// shows a link's.
+			out = append(out, span{text: "`", style: st.Faint}, span{text: b.String(), style: st.Strong}, span{text: "`", style: st.Faint})
 		case *ast.Emphasis:
 			s := italic + style
 			if c.Level >= 2 {
@@ -418,21 +422,28 @@ func (r *renderer) inline(n ast.Node, style string) []span {
 		case *east.Strikethrough:
 			out = append(out, r.inline(c, struck+style)...)
 		case *ast.Link:
-			// [ SRC: its text ]
-			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint})
-			out = append(out, r.inline(c, st.Strong)...)
-			out = append(out, span{text: nbsp + "]", style: st.Faint})
+			// [ SRC: its text ]: the faint token marks it (no underline),
+			// and it is a link (OSC 8) a click opens.
+			u := string(c.Destination)
+			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint, url: u})
+			for _, l := range r.inline(c, st.Text) {
+				l.url = u
+				out = append(out, l)
+			}
+			out = append(out, span{text: nbsp + "]", style: st.Faint, url: u})
 		case *ast.AutoLink:
-			u := strings.TrimPrefix(strings.TrimPrefix(string(c.Label(r.src)), "https://"), "http://")
-			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint}, span{text: cut(u, 48), style: st.Text},
-				span{text: nbsp + "]", style: st.Faint})
+			u := string(c.URL(r.src))
+			shown := strings.TrimPrefix(strings.TrimPrefix(string(c.Label(r.src)), "https://"), "http://")
+			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint, url: u}, span{text: cut(shown, 48), style: st.Text, url: u},
+				span{text: nbsp + "]", style: st.Faint, url: u})
 		case *ast.Image:
 			alt := "image"
 			if t := r.inline(c, ""); len(t) > 0 && strings.TrimSpace(t[0].text) != "" {
 				alt = t[0].text
 			}
-			out = append(out, span{text: "[" + nbsp + "IMG:" + nbsp, style: st.Faint}, span{text: alt, style: st.Text},
-				span{text: nbsp + "]", style: st.Faint})
+			u := string(c.Destination)
+			out = append(out, span{text: "[" + nbsp + "IMG:" + nbsp, style: st.Faint, url: u}, span{text: alt, style: st.Muted, url: u},
+				span{text: nbsp + "]", style: st.Faint, url: u})
 		case *ast.RawHTML:
 			var b strings.Builder
 			for i := 0; i < c.Segments.Len(); i++ {
@@ -452,8 +463,23 @@ func (r *renderer) inline(n ast.Node, style string) []span {
 }
 
 // part is a word's text in one style (a word may change style midway:
-// **bold**ing).
-type part struct{ style, text string }
+// **bold**ing), a link's with its url.
+type part struct{ style, text, url string }
+
+// Link is s as a hyperlink to url (OSC 8), which a terminal opens on a
+// click (Cmd or Ctrl and a click, as it has it); s alone with no url.
+func Link(url, s string) string {
+	url = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, url)
+	if url == "" {
+		return s
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + s + "\x1b]8;;\x1b\\"
+}
 
 // wrap is spans set in lines of w columns, each line in the style's text
 // colour, each span's style where it is.
@@ -493,12 +519,12 @@ func wrap(sp []span, w int, st Style) []string {
 					continue
 				}
 				k := w - n
-				line.WriteString(p.style + string(rs[:k]) + st.Off)
+				line.WriteString(Link(p.url, p.style+string(rs[:k])+st.Off))
 				n += k
 				rs = rs[k:]
 				flush()
 			}
-			line.WriteString(p.style + string(rs) + st.Off)
+			line.WriteString(Link(p.url, p.style+string(rs)+st.Off))
 			n += len(rs)
 		}
 		pend, pendN, space = nil, 0, false
@@ -521,7 +547,7 @@ func wrap(sp []span, w int, st Style) []string {
 			if f == "" {
 				continue
 			}
-			pend = append(pend, part{style, f})
+			pend = append(pend, part{style, f, s.url})
 			pendN += utf8.RuneCountInString(f)
 		}
 	}

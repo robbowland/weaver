@@ -19,7 +19,7 @@ func renderMarkdown(md string, w int) string {
 	if strings.TrimSpace(md) == "" {
 		return ""
 	}
-	out := markdown.Render(md, w, markdown.Style{Text: CGrey, Strong: CInk, Faint: CDim, Good: CGreen, Bad: CRed, Off: COff})
+	out := markdown.Render(md, w, markdown.Style{Text: CInk, Strong: CInk, Muted: CGrey, Faint: CDim, Good: CGreen, Bad: CRed, Off: COff})
 	if ls := strings.Split(out, "\n"); len(ls) > markdownLines {
 		out = strings.Join(ls[:markdownLines], "\n") + "\n" + CDim + "…" + COff
 	}
