@@ -333,9 +333,10 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   (`AgentRows`, `GC`), `retire` keeps them as lost when the agent has a
   thread record and a session id, its `end_reason` is not `prompt_input_exit`,
   `logout` or `clear` (ended on purpose), and its session has gone since its
-  last event: the tmux server no longer has a session of its name, or has one
-  on another server (the state's `server`, its pid) or, for older states,
-  one created after the agent's last event `ts`. Anything else is forgotten as
+  last event: the machine has started since its last event `ts`
+  (`kern.boottime`), or the tmux server no longer has a session of its name,
+  or has one on another server (the state's `server`, its pid) or, for older
+  states, one created after `ts`. Anything else is forgotten as
   before; a pane closed while its session runs on is not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps

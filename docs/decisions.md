@@ -334,6 +334,11 @@ can supersede an earlier one, and says so.
   waiting on you): its thread comes back, but the turn under way, and the
   command it runs, stop. Otherwise it quits at once: a question asked every
   time becomes a reflex and protects nothing (Raskin).
+- 2026-10-19: An agent whose last event came before the machine started
+  lost its session, whatever tmux says. A server's pid tells servers apart
+  within one boot, not across two: after a restart, a weaver server that
+  happened to get its old server's pid would have had every thread
+  forgotten. The boot time is the kernel's, so the check is free.
 
 ## The weaver session
 

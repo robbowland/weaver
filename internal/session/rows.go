@@ -287,6 +287,16 @@ func ProcStarts(pids []int) map[int]string {
 	return m
 }
 
+// BootTime is when the machine started (epoch s), from the kernel; 0 when
+// it does not say.
+func BootTime() int64 {
+	tv, err := unix.SysctlTimeval("kern.boottime")
+	if err != nil {
+		return 0
+	}
+	return tv.Sec
+}
+
 // AgentAlive: is process pid (started at start, as ps prints it, if known)
 // still running? kill -0 alone would trust a reused pid.
 func AgentAlive(pid, start string, starts map[int]string) bool {
@@ -396,12 +406,17 @@ func (e *Env) LostCheck(f string) bool {
 
 // serverLost: did session key skey's session go since ts (epoch s), the
 // agent having run on tmux server srv (its pid, when its state says)? A tmux
-// session: when its server no longer has it, or has one of its name made
-// since: another server, or (older states) a session made after ts. Any
-// other key (zellij's, from before weaver ran on tmux) never is.
+// session: when the machine has started since ts (no server outlives that,
+// and one started since may have the old one's pid), or its server no
+// longer has it, or has one of its name made since: another server, or
+// (older states) a session made after ts. Any other key (zellij's, from
+// before weaver ran on tmux) never is.
 func (e *Env) serverLost(skey string, ts float64, srv string) bool {
 	if !strings.HasPrefix(skey, "tmux-") {
 		return false
+	}
+	if b := BootTime(); b > 0 && ts < float64(b) {
+		return true
 	}
 	out, _ := e.Tmux("list-sessions", "-F", "#S #{session_created} #{pid}")
 	for _, l := range strings.Split(string(out), "\n") {
