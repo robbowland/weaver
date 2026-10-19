@@ -42,13 +42,17 @@ the prefix is down, or `[CPY]` in copy mode.
 tmux's own keys work behind its prefix, `Ctrl b`: `Ctrl b d` detaches, and
 `Ctrl b [` scrolls back.
 
-`Cmd D` and `Cmd Shift D` split the pane right and down. Ghostty needs to send
-them as tmux expects:
+To split a pane in weaver's tmux, bind keys in your terminal to send
+`ESC [ 100 ; 9 ~` (split right) and `ESC [ 100 ; 10 ~` (split down). In
+Ghostty, for example, this keeps `Cmd D` for Ghostty's own splits and gives
+weaver `Cmd Alt D`:
 
 ```
-keybind = super+d=csi:100;9~
-keybind = super+shift+d=csi:100;10~
+keybind = super+alt+d=csi:100;9~
+keybind = super+alt+shift+d=csi:100;10~
 ```
+
+Outside weaver's tmux, those keys do nothing.
 
 Agents you start by hand in any tmux session also report to weaver, and `wvr`
 inside such a session opens a board of that session's agents.
@@ -564,7 +568,7 @@ python3:
 - `test/tmux.sh`: weaver on tmux end to end. `wvr` starts its session on a
   throwaway tmux server in a pseudo-terminal, and the tests press its keys:
   threads, hooks and their late async events, `Alt y`, `Alt v`, `Alt 1`,
-  `Cmd D`, `Alt N`, the board, crashes and their threads resumed, adopting
+  split keys, `Alt N`, the board, crashes and their threads resumed, adopting
   and renaming,
   `Ctrl q`, and threads from pull requests and issues in the views (with a
   fake gh, Keychain and Linear API).

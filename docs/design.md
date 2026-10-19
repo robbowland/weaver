@@ -721,8 +721,9 @@ else weaver's.
   that run weaver use `run-shell -b` with their output discarded (tmux shows a
   run-shell's output over the pane), passing `#{pane_id}`; Alt N is a
   `display-popup -B -E` 96 x 18, tall enough for the form's pickers, since a
-  popup cannot be resized. Cmd+D and Cmd+Shift+D arrive as `ESC [ 100 ; 9 ~`
-  and `ESC [ 100 ; 10 ~` (Ghostty's `csi:100;9~`), caught as `user-keys`.
+  popup cannot be resized. Pane splits arrive as `ESC [ 100 ; 9 ~` and
+  `ESC [ 100 ; 10 ~`, sent by whatever keys the terminal binds to them
+  (Ghostty's `csi:100;9~`), caught as `user-keys`.
 - **Config:** `config/tmux.conf`, then `~/.config/weaver/tmux.conf`; read with
   `-f` as the server starts and again (`source-file`) each time `wvr`
   starts or attaches a session, so an install reaches a running server. Every
