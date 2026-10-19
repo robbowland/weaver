@@ -245,6 +245,19 @@ type claudeSession struct {
 	Status          string     `json:"status"`          // busy, waiting, idle
 	StatusUpdatedAt float64    `json:"statusUpdatedAt"` // epoch ms
 	WaitingFor      string     `json:"waitingFor"`
+	ProcStart       string     `json:"procStart"`
+}
+
+// ClaudeRunning are the conversations Claude Code runs on this machine,
+// anywhere: the pid of the process in each, by session id.
+func (e *Env) ClaudeRunning() map[string]string {
+	m := map[string]string{}
+	for pid, c := range e.claudeLive() {
+		if c.SessionID != "" && AgentAlive(pid, c.ProcStart, nil) {
+			m[c.SessionID] = pid
+		}
+	}
+	return m
 }
 
 // claudeLive are the Claude Code sessions running on this machine, from

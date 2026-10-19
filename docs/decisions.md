@@ -339,6 +339,18 @@ can supersede an earlier one, and says so.
   within one boot, not across two: after a restart, a weaver server that
   happened to get its old server's pid would have had every thread
   forgotten. The boot time is the kernel's, so the check is free.
+- 2026-10-19: A conversation weaver did not start becomes a thread when you
+  adopt it (`wvr adopt`, the board's `a`), never by itself (Rob, choosing
+  between adopting by hand, every agent in the weaver session, and every
+  agent anywhere). The 2026-10-15 reason for keeping only threads stands:
+  keeping every agent would fill the board with one-off ones. What it missed
+  showed on 2026-10-19: a restart kept the threads, but the long
+  conversation that mattered had been started by hand outside tmux, and
+  nothing could bring it in. An agent adopted where it runs is never
+  restarted: `break-pane` moves its pane, process and all, so a turn under
+  way goes on. One that runs nowhere is resumed through the lost-thread path,
+  from a record its transcript gives. One running elsewhere is refused, not
+  resumed beside it: two processes would interleave one conversation.
 
 ## The weaver session
 

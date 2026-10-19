@@ -32,7 +32,7 @@ func fzfCmd(args []string, env ...string) *exec.Cmd {
 
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
-const lsKeys = "j,k,g,G,n,x,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
+const lsKeys = "j,k,g,G,n,x,a,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
@@ -184,6 +184,9 @@ func (e *Env) Ls() error {
 			"--bind", "n:"+newAct,
 			// Its card in a popup over the board, as the menus open it.
 			"--bind", "x:transform:case {1} in a*) echo 'execute-silent("+q+" _popup close {2})' ;; l*) echo 'execute-silent("+q+" _popup forget {2})' ;; esac",
+			// An agent you started by hand, adopted; else the picker of
+			// conversations (on an empty board too, as n's field is made).
+			"--bind", "a:transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent("+q+" _popup adopt)'; else printf '%s2})\\n' 'execute-silent("+q+" _popup adopt {'; fi",
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s:transform("+q+" _view screen)",
 			// Tab and shift-tab: the next and previous view, as a tab bar.

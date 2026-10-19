@@ -80,7 +80,8 @@ func TestWelcomeClicks(t *testing.T) {
 			got[strings.TrimSpace(key)] = acts[i]
 		}
 	}
-	want := map[string]string{"n": "trigger(n)", "Alt N": "execute-silent(tmux send-keys -K M-N)", "Alt y": "execute-silent(tmux send-keys -K M-y)"}
+	want := map[string]string{"n": "trigger(n)", "Alt N": "execute-silent(tmux send-keys -K M-N)", "a": "trigger(a)",
+		"Alt y": "execute-silent(tmux send-keys -K M-y)"}
 	if len(got) != len(want) {
 		t.Fatalf("buttons %q, want %q", got, want)
 	}

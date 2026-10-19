@@ -5,6 +5,8 @@ KEYS
   n           new thread (wvr new)
   x           close the thread, its nvim and its window
               (and offers to remove a merged worktree)
+  a           adopt: an agent you started by hand becomes a thread;
+              elsewhere, pick a conversation to resume as one
   v  e  ^e    jump and open its nvim (Alt v anywhere)
   s           the card ↔ the agent's screen
   tab  ⇧tab   the next, previous view (THREADS, GITHUB, LINEAR)

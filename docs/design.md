@@ -264,6 +264,43 @@ The window's current name is tmux's; in the weaver session weaver labels it
 A task's slug: its first line in lowercase ASCII letters and digits, every
 other run of characters one `-`, at most 48 characters, cut at a `-`.
 
+### Adopting
+
+`wvr adopt [PANE | SESSION-ID]` makes a conversation weaver did not start a
+thread. PANE is `%N` or up to three digits; anything else is a session id or
+its first 4+ characters. Alone, it adopts the agent in its own pane when it
+has one (so `! wvr adopt` inside an agent), else opens the picker.
+
+- **In place** (an agent weaver follows, without a thread record): refused
+  when its agent has ended, is not one weaver can resume, or has not said
+  its session id. Under the numbering lock (so two adopts never both number
+  it) it writes the record: `num` the lowest free, `name` the slug of its
+  title (else its prompt, else its branch), `repo` and `branch` of its
+  `root`, `worktree` its `root`, `here` true, `worktree_created` false (so
+  close never offers to remove it), `cmd` the agent's command, `pane`,
+  `session_id`. In the weaver session its window becomes the thread's: kept
+  when the agent has it to itself (with its bound nvim at most) and it is
+  neither home nor a view, else `break-pane` takes the agent (its process
+  untouched) to a window of its own at its number (tmux's choice when that
+  index is taken), named with its label; `-d` unless the agent's is the pane
+  adopt runs in. An agent with no bound nvim gets one on its left
+  (`splitNvim`, as a new thread's).
+- **By session id:** a lost thread's is resumed (`threadRestore`); an agent
+  of this session running it is adopted in place; else its transcript,
+  `<claude dir>/projects/*/<id>.jsonl`, must be the only match, and no live
+  Claude Code process may be in it (`~/.claude/sessions/<pid>.json`, its pid
+  and `procStart` checked). Its record is made as a lost one's would be and
+  opened through `threadReopen`: `start_cwd` and the thread's `worktree` its
+  first `cwd` (Claude Code finds a conversation from where it started),
+  `cwd` and `root` its last, `branch` its last `gitBranch`, `title` its last
+  `customTitle`, else `aiTitle`, else `agentName`, else its first prompt you
+  typed. The first 64 KB and last 256 KB are read, never the whole file.
+- **Picker:** the newest 80 transcripts named by a session id that have a
+  title and are not a thread of this session (by the records' and states'
+  session ids), newest first: title, repo/branch, age, and `running` when a
+  process is in it. Errors go to the status line too, since the popup
+  closes.
+
 ### Work items
 
 `wvr new --pr REF` and `--issue REF` (with `--review`, read-only) start a
@@ -453,7 +490,10 @@ header: what to do on an empty board), `.room` and `.tight` (the card's
 ### Keys
 
 Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
-`1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `e`
+`1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `a`
+adopt (`wvr _popup adopt <pane>`: an agent row that is no thread is adopted
+where it runs, said on the status line; anything else, the empty board
+included, opens the picker of conversations in the form's popup), `e`
 (`ctrl-e`) jump and open nvim, `s` card or screen, `tab` / `shift-tab` the
 next / previous view (`wvr go next|prev`, round home and the views as a
 tab bar; a view's the same), `?` keys,

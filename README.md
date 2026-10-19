@@ -246,9 +246,9 @@ k1-c), with thanks.
 
 ### When the session goes
 
-A thread lasts until you close it. If the session's tmux server crashes, or
-you quit the session, while a thread's agent runs, the
-thread is kept as lost rather than forgotten:
+A thread lasts until you close it. If the session's tmux server crashes,
+you quit the session, or the machine restarts, while a thread's agent runs,
+the thread is kept as lost rather than forgotten:
 
 - `wvr` brings the `weaver` session back with its threads, each in its
   window, its number kept, its agent resuming its conversation beside a bound
@@ -260,7 +260,23 @@ thread is kept as lost rather than forgotten:
 
 An agent you ended yourself (`/exit`), or whose window you closed while the
 session ran on, is not lost. Agents you started by hand, outside a thread, are not
-kept: `claude --resume` finds them.
+kept until you adopt them.
+
+### Adopting a conversation
+
+A conversation weaver did not start can become a thread, kept and brought
+back as any thread is:
+
+- **An agent you started by hand**, in a pane weaver follows: `a` on its row,
+  or `wvr adopt` (`! wvr adopt` from inside it), makes it a thread where it
+  runs. In the weaver session it moves to a window of its own at its number,
+  with an nvim on its left; nothing restarts, so a turn under way goes on.
+- **A conversation that runs nowhere** (one you ran outside tmux before a
+  restart, say): `a` anywhere else on the board lists Claude Code's recent
+  conversations, and enter resumes one as a thread in the directory it
+  started in. `wvr adopt SESSION-ID` (or its first 4+ characters) does the
+  same from a shell. One still running elsewhere is marked `running`: `/exit`
+  it there first.
 
 So quitting everything is safe: `Ctrl q` (from any pane) quits the session
 with every agent and nvim in it, and `wvr` brings its threads back next
@@ -340,7 +356,9 @@ worktree, so their per-turn diffs mix.
 The cursor never rests on a heading, and stays on its agent as the board
 reloads by itself. The keys: `enter` jumps, `1`-`9` jump to that row,
 `j`/`k`/`g`/`G` move, `/` searches (`esc` back), `n` starts a thread
-(`wvr new`), `x` closes one (`wvr close`), `v` (or `e`) jumps and opens its
+(`wvr new`), `x` closes one (`wvr close`), `a` adopts an agent you started
+by hand, or picks a conversation to resume as a thread (`wvr adopt`, [Adopting
+a conversation](#adopting-a-conversation)), `v` (or `e`) jumps and opens its
 nvim, `s` (or `tab`) swaps the resume card for the agent's screen, `?` lists
 them all and the keys that work anywhere, `q` or `esc` goes back to your
 thread, and `Ctrl q` quits the session. With no

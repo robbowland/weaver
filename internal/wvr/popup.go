@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/files"
 )
 
 // Dialogs open as popups over where you are, each kind one size, so one
@@ -107,6 +108,19 @@ func (e *Env) Popup(args []string) error {
 		return e.cardPopup(args...)
 	case "forget":
 		return e.cardPopup(append([]string{"resume", "--forget"}, args[1:]...)...)
+	case "adopt":
+		// An agent you started by hand becomes a thread where it is, said on
+		// the status line; anything else opens the picker of conversations.
+		if p, ok := paneArg(arg(args, 1)); ok && files.Exists(e.StateFile(p)) && !files.Exists(e.ThreadFile(p)) {
+			msg, err := e.adoptPane(p)
+			if err != nil {
+				msg = "weaver: " + err.Error()
+			}
+			e.Tmux("display-message", "-d", "3000", msg)
+			return nil
+		}
+		dir, _ := os.Getwd()
+		return e.formPopup(dir, "adopt")
 	}
-	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD")
+	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE]")
 }

@@ -133,6 +133,7 @@ var commands = map[string]command{
 	"send":   {session: true, run: (*wvr.Env).Send},
 	"view":   {session: true, run: (*wvr.Env).View},
 	"resume": {run: helped((*wvr.Env).Resume)},
+	"adopt":  {session: true, run: helped((*wvr.Env).Adopt)},
 	"quit":   {run: helped((*wvr.Env).Quit)},
 	"next":   {session: true, run: done(func(e *wvr.Env, _ []string) { e.Next() })},
 	"go": {run: func(e *wvr.Env, args []string) error {

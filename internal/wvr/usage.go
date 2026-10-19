@@ -58,6 +58,11 @@ const Usage = `usage: wvr [command]
                                alone, list them; with a name, number or session id, bring
                                that one back in a new window resuming its conversation;
                                --all, every one. --forget [--yes] which: drop one
+  adopt [pane-id | session-id] make a conversation weaver did not start a thread, kept
+                               and brought back as threads are: the agent in this pane
+                               (or pane-id) where it runs, or conversation session-id
+                               resumed in a new window; alone, pick one of Claude Code's
+                               recent conversations
   send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
                                it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with

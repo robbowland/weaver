@@ -738,7 +738,8 @@ func Footer() string { return hintLine(boardHints(), 2) + "\n" }
 // "" for none: each key line is its key's button.
 func welcome(cols, lines int, views bool) (string, []string) {
 	type row struct{ key, what, act string }
-	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"Alt N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"}}
+	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"Alt N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"},
+		{"a", "resume a conversation as a thread", "trigger(a)"}}
 	if views {
 		rows = append(rows, row{"Alt y", "your pull requests and issues", "execute-silent(tmux send-keys -K M-y)"})
 	}

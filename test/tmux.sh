@@ -6,7 +6,8 @@
 # Cmd+D (as Ghostty sends it), Alt N, the mouse (a hint's click, the status
 # line's buttons, right-click menus), the server crashing and its threads
 # resumed (by the board's enter, and by themselves), the board's x, Ctrl q,
-# and threads from work items in the GITHUB and LINEAR views. Its own socket,
+# agents and conversations adopted as threads, and threads from work items
+# in the GITHUB and LINEAR views. Its own socket,
 # session name, state, Claude Code dir, nvim config and PATH, with fake
 # agents, gh, Keychain and Linear API: never your tmux, agents, keys or
 # accounts.
@@ -443,6 +444,45 @@ tx run-shell -b -t "%$AG" "wvr close --yes $AG >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 1 " ]'
 ok "...closing the thread you are in: home, not the window tmux showed before" "$(where | cut -d ' ' -f 1)" "0"
 tx run-shell -b -t "%$AG1" "wvr close --yes $AG1 >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 " ]'
+
+# --- adopt: an agent you started by hand (here, beside home's board) becomes
+# a thread where it runs: a window of its own at its number, an nvim beside
+# it, never restarted; kept as threads are. A conversation that runs nowhere
+# is resumed as one, in the directory it started in.
+HA=$(tx split-window -d -P -F '#{pane_id}' -t "=$S:0" -c "$AT/repo" "$AT/bin/claude" | tr -d %)
+waitfor '[ -f "$AT/args.$HA" ]'
+hookj "$HA" "$(printf '{"session_id":"sid-h","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"SessionStart","source":"startup"}' "$AT/repo")"
+pid=$(tx display -p -t "%$HA" '#{pane_pid}')
+tx run-shell -t "=$S:" "wvr adopt $HA >'$AT/adopt.out' 2>&1"
+waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+ok "adopt: out of home into window 1, an nvim on its left, the agent never restarted" \
+	"$(windows)|$(panes 0 | wc -l | tr -d ' ')|$(pane_at 1 1)|$(tx display -p -t "%$HA" '#{pane_pid}')" "0 1 |1|$HA|$pid" ||
+	sed 's/^/  adopt: /' "$AT/adopt.out"
+ok "...its record: thread 1, in the checkout it runs in, its conversation known" \
+	"$(jq -r '"\(.num) \(.here) \(.worktree_created) \(.session_id) \(.pane)"' "$SD/tmux-${S}_$HA.thread" 2>/dev/null)" "1 true false sid-h $HA"
+tx run-shell -t "=$S:" "wvr adopt $HA >'$AT/adopt.out' 2>&1"
+ok "...adopted again: it says it is a thread already" "$(grep -c 'is thread 1 already' "$AT/adopt.out")" "1"
+crash
+attach
+waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+AG=$(pane_at 1 1)
+waitfor '[ -f "$AT/args.$AG" ]'
+ok "...the session goes: it comes back as threads do, its conversation resumed" \
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)" "0 1 |--resume sid-h "
+CID=0f0f0f0f-1111-4222-8333-444444444444
+mkdir -p "$AT/claude/projects/-repo"
+printf '%s\n' '{"type":"user","cwd":"'"$AT/repo"'","gitBranch":"main","message":{"role":"user","content":"tidy the parser"}}' \
+	'{"type":"ai-title","aiTitle":"Tidy the parser"}' >"$AT/claude/projects/-repo/$CID.jsonl"
+tx run-shell -t "=$S:" "wvr adopt 0f0f0f0f >'$AT/adopt.out' 2>&1"
+waitfor '[ "$(panes 2 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+AG2=$(pane_at 2 1)
+waitfor '[ -f "$AT/args.$AG2" ]'
+ok "adopt: a conversation that runs nowhere, resumed as thread 2 where it started" \
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(tx display -p -t "%$AG2" '#{pane_current_path}')|$(jq -r '"\(.num) \(.name)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)" \
+	"0 1 2 |--resume $CID |$(cd "$AT/repo" && pwd -P)|2 tidy-the-parser" ||
+	sed 's/^/  adopt: /' "$AT/adopt.out"
+for a in "$AG" "$AG2"; do tx run-shell -t "=$S:" "wvr close --yes $a >/dev/null 2>&1"; done
 waitfor '[ "$(windows)" = "0 " ]'
 
 # --- work items and views: a pull request's review and thread, an issue
