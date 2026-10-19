@@ -78,7 +78,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed |
-| `focus` | `root`, `file` (may be `""`) | `wvr edit` (Alt v, Alt V, dashboard ctrl-e): go there now unless that would take over typing, a diff review or unsaved changes |
+| `focus` | `root`, `file` (may be `""`) | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): go there now unless that would take over typing, a diff review or unsaved changes |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
 `AgentFollow(root, file)` and `AgentChecktime()` remain as aliases for one
@@ -313,7 +313,7 @@ the numbering lock its other writers take, then relabels the windows and
 reloads the boards. Without NAME it asks on the terminal (fzf, the query the
 current name); an empty NAME clears it. The board's `r` on a thread's row
 opens that prompt in a popup (`_popup rename PANE`, 8 lines), on an agent
-that is no thread says to adopt it first; in Alt y's popover it is left for
+that is no thread says to adopt it first; in alt+y's popover it is left for
 once the popover has closed (`peekChoice`).
 
 ### Work items
@@ -435,7 +435,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   id is `l<session id>` and field 2 the session id. Enter resumes one
   (`wvr resume`), x forgets it (`wvr resume --forget`), and the preview
   shows its card (`wvr _preview <session id>`).
-- **Quit:** `Ctrl q` kills the session, and the threads come back as above.
+- **Quit:** `ctrl+q` kills the session, and the threads come back as above.
   While an agent is mid-turn (the session option `@weaver-busy`, needs-you
   plus working, set with the counts), tmux asks first (`confirm-before`).
   `wvr quit [--yes]` kills the session you are in (outside tmux,
@@ -469,7 +469,7 @@ to start one, with nothing to select.
 | WORKING | `[/]` grey | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
 | IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted | most recent first |
 
-So the headings' counts are the status bar's, and the order is the one Alt 1
+So the headings' counts are the status bar's, and the order is the one alt+1
 visits. A row: its number (1-9), glyph, name (Claude Code's title, else the
 thread's task, else the last prompt; at most 40 columns), one fact (what it
 waits on; for a finished turn, the files it changed and its last reply;
@@ -543,7 +543,7 @@ to get back) and changes one thing at a time:
   never the board replaced by a full-screen one, nor fzf's `execute`,
   which shows the pane's own screen between.
 - **Back where you were:** going home from a thread (THREADS, a menu) puts
-  the boards' cursor on its row (`_pos`, posted to each board), and Alt y's
+  the boards' cursor on its row (`_pos`, posted to each board), and alt+y's
   popover over a thread opens with its cursor there;
   closing the thread you are in lands home, not on whichever window tmux
   showed before.
@@ -556,7 +556,7 @@ to get back) and changes one thing at a time:
 - **Room:** a dialog takes a share of the terminal's width within bounds
   and the height its content needs (`popupSize`: the form 62% wide, 96 to
   160, 22 tall; a card half as wide, 80 to 120, 14 tall), so its keys stay
-  near what they act on; Alt N's goes through `wvr _popup new` too. With
+  near what they act on; alt+N's goes through `wvr _popup new` too. With
   room, the form and pickers have a margin (`--padding 1,2`). Rows stay
   dense: the form's are grouped by what they are about (start; from and
   mode; repo, where, branch and base; agent), a blank line (`gapN` rows,
@@ -586,7 +586,7 @@ Whatever shows a key is its button, and every mouse action has its key.
   C-q` (tmux's binding, which asks mid-turn), nothing for `1-9` and `↑↓`.
 - **Status line:** `MouseUp1Status` (on the release: a second click soon
   after the first is tmux's double click, never its `MouseDown`) runs `wvr
-  _click status <range>`: `home` goes home (`toHome`, not Alt y's cycle),
+  _click status <range>`: `home` goes home (`toHome`, not alt+y's cycle),
   `next` is `wvr next`, a view's name opens it.
 - **Right click:** `MouseDown3Pane`, on a program that takes the mouse,
   sets the pane option `@weaver-mouse` to `<client> <x> <y>` (the click,
@@ -600,7 +600,7 @@ Whatever shows a key is its button, and every mouse action has its key.
   click, or over it with no room below. A row's items send the row's keys
   to its list (searching, only those that do not type); the others run
   weaver's commands (`nvim`, `close thread` in an 80 x 12 popup, the
-  views, `next`, Alt N and Ctrl q as `send-keys -K`). tmux's own menus,
+  views, `next`, alt+N and ctrl+q as `send-keys -K`). tmux's own menus,
   whose Kill and Respawn would end an agent behind weaver's back, stay on
   Alt and a right click.
 - **Scrolling back:** `pane-scrollbars modal` (tmux 3.6 and on): a
@@ -646,7 +646,7 @@ else weaver's.
 - **Home:** `wvr home`, in window 0, is the dashboard at full size that
   never ends: enter, digits and `e` go to a thread and leave it running, `n`
   runs `wvr new` inside it (also on an empty board), `q` and `esc` go back
-  to the window you came from, as Alt y does. It outlives installs of weaver,
+  to the window you came from, as alt+y does. It outlives installs of weaver,
   so it touches `<skey>.fzf.<pid>.born` as it starts; the first reload after a
   newer weaver is installed runs that weaver's `_rows` and `_chrome`, and
   `_chrome`, seeing the binary newer than `.born`, aborts the board, which
@@ -654,7 +654,7 @@ else weaver's.
   and process. Its old keys never meet rows they do not know. The PR and
   issue Inbox, when it comes, is a second window beside home, out of the
   thread numbering.
-- **Alt y:** `wvr go home` (run in the pane's directory). From a thread, a
+- **alt+y:** `wvr go home` (run in the pane's directory). From a thread, a
   popover over it (`peek`): `display-popup -B -E` at 90% of the client,
   running `wvr _peek FILE AGENT`, whose pages are the board (`ls` with its
   socket named `.fzf.p<pid>`, so hooks reload it, and its cursor on AGENT's
@@ -664,9 +664,9 @@ else weaver's.
   (`peekChoice`, `peekItemChoice`) written to FILE, one wvr command a line,
   its words tab-separated; `go home`, which waits for the popover to close,
   then runs them: a jump (`_goto`), `edit`, `resume`, `_popup new|close|
-  forget|adopt`, `_items NAME from REF [--review]`, or `next` (Alt 1).
-  `esc`, `q` and Alt y close it with nothing to run; right clicks do
-  nothing in it. Without a client to show it on, Alt y goes home as from
+  forget|adopt`, `_items NAME from REF [--review]`, or `next` (alt+1).
+  `esc`, `q` and alt+y close it with nothing to run; right clicks do
+  nothing in it. Without a client to show it on, alt+y goes home as from
   anywhere else. From home, on to each view in turn, and from the last back
   to the thread's window home was left from (`$STATE_DIR/<skey>.last`, or
   home when it has gone); from anywhere else home, made again if it was
@@ -674,7 +674,7 @@ else weaver's.
 - **Views:** see [Views](#views).
 - **Threads:** `new-window -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
   `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
-  shell), the nvim pane titled `nvim: <dir>`, the agent active. `Alt v`'s nvim is a
+  shell), the nvim pane titled `nvim: <dir>`, the agent active. `alt+v`'s nvim is a
   `split-window -h -b -l 80%` on the agent's left.
 - **Focus:** `select-window` and `select-pane` work from anywhere, and the
   focused pane (in a popup or `run-shell`) is the session's active pane.
@@ -692,9 +692,9 @@ else weaver's.
   flags its window (`@weaver-unseen`). tmux's `pane-focus-in` hook, on a
   flagged window, runs `wvr _seen <window>` 1.5 s later, which marks its
   done agents seen only if the window is still the session's current one:
-  passing through with Alt j/k leaves them new. (A thread that finishes while
+  passing through with alt+j/k leaves them new. (A thread that finishes while
   you are on it is seen at once: the counts see the clients' panes.)
-- **Alt 1** says where it landed in tmux's message line: `[2/3] 02 name ·
+- **alt+1** says where it landed in tmux's message line: `[2/3] 02 name ·
   needs you · what it waits on`.
 - **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
   its repository, lines, the version a review shows them in, the lines' text,
@@ -719,7 +719,7 @@ else weaver's.
   like Shift+Enter in the form they read.
 - **Keys:** `config/tmux.conf` binds them without a prefix (`bind -n`). Those
   that run weaver use `run-shell -b` with their output discarded (tmux shows a
-  run-shell's output over the pane), passing `#{pane_id}`; Alt N is a
+  run-shell's output over the pane), passing `#{pane_id}`; alt+N is a
   `display-popup -B -E` 96 x 18, tall enough for the form's pickers, since a
   popup cannot be resized. Pane splits arrive as `ESC [ 100 ; 9 ~` and
   `ESC [ 100 ; 10 ~`, sent by whatever keys the terminal binds to them
@@ -764,7 +764,7 @@ and `$STATE_DIR/linear-auth`. One not ready shows in the strip with a faint
 dot, and its window runs `wvr _viewsetup NAME`: what it needs, and a key
 that runs the fix (`brew install gh`, `gh auth login`, `wvr linear login`);
 once ready, the window becomes the view. The home board's start-up
-(`_boot`) starts the ready ones detached, so the first Alt y to one finds it
+(`_boot`) starts the ready ones detached, so the first alt+y to one finds it
 ready; one that quits is started again on the next. Each window has the
 window option `@weaver-view` (its name).
 
@@ -812,7 +812,7 @@ italics; tables with a faint capitals header over a rule, columns apart
 by space; rules the card's width. Not glamour, whose highlighter
 registers every lexer as it loads, which costs every hook 6 ms.
 
-- **Alt N / Alt R** in a view: a thread from the item under the cursor, or a
+- **alt+N / alt+r** in a view: a thread from the item under the cursor, or a
   read-only review of it. tmux passes the key to the view, whose fzf (also
   enter) runs `wvr _items NAME from REF [--review]`, which runs `wvr _from
   github pr|issue <owner/name> <number>` or `wvr _from linear <ID>`. `_from`
@@ -824,6 +824,6 @@ registers every lexer as it loads, which costs every hook 6 ms.
   shows it on every window. Each is a tmux user range
   (`#[range=user|home]`, `|github`, `|linear`), as `@weaver-counts`' counts
   are (`|next` for needs you and done, `|home` for working).
-- **Alt j / Alt k** step past the views (`next-window` again while
+- **alt+j / alt+k** step past the views (`next-window` again while
   `@weaver-view` is set), so they cycle threads and home only.
 

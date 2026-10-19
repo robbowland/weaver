@@ -52,7 +52,7 @@ type itemSource interface {
 type viewGuide struct {
 	queue, mine, watch string
 	red, green, faint  string
-	readOnly           string // what Alt R starts
+	readOnly           string // what alt+r starts
 }
 
 // itemData is what a service said: when, what went wrong, and its
@@ -378,7 +378,7 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if searching() {
 		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}, {"tab", "VIEWS"}}
 	}
-	hs := []choice{{"⏎", "THREAD"}, {"Alt R", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
+	hs := []choice{{"⏎", "THREAD"}, {"alt+r", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
 		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
@@ -386,7 +386,7 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".help") {
 		help = "CARD"
 	}
-	return append(hs, choice{"/", "SEARCH"}, choice{"^r", "REFRESH"}, choice{"tab", "VIEWS"}, choice{"?", help})
+	return append(hs, choice{"/", "SEARCH"}, choice{"ctrl+r", "REFRESH"}, choice{"tab", "VIEWS"}, choice{"?", help})
 }
 
 // itemFooter is the view's footer: its hints, each a button.
@@ -397,7 +397,7 @@ func (e *Env) itemFooter(src itemSource) string { return hintLine(e.itemHints(sr
 func (e *Env) itemMenu(src itemSource, k string) []menuItem {
 	var ms []menuItem
 	if strings.HasPrefix(k, "i") {
-		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "R", "M-R"}}
+		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "r", "M-r"}}
 		if !searching() {
 			ms = append(ms, menuItem{"open in the browser", "o", "o"})
 		}
@@ -503,25 +503,19 @@ func (e *Env) itemCard(src itemSource, ref string) string {
 // itemHelp is a view's ? card: its keys, its sections and its rows.
 func (e *Env) itemHelp(src itemSource) string {
 	d, g, o := CDim, CGrey, COff
-	key := func(k, what, note string) string {
-		s := "  " + g + k + o + strings.Repeat(" ", max(12-rlen(k), 1)) + what
-		if note != "" {
-			s += " " + d + note + o
-		}
-		return s + "\n"
-	}
+	key := helpRow
 	gd := src.guide()
 	out := g + "KEYS" + o + "\n" +
-		key("⏎  Alt N", "a thread from it", "(or to the one it has)") +
-		key("Alt R", "a read-only thread:", d+gd.readOnly+o) +
+		key("⏎  alt+N", "a thread from it", "(or to the one it has)") +
+		key("alt+r", "a read-only thread:", gd.readOnly) +
 		key("j k  g G", "move; first, last", "") +
 		key("o", "open it in "+src.service(), "") +
 		key("/", "search", "(esc: back)")
 	if len(src.kinds()) > 1 {
 		out += key("s", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
 	}
-	out += key("tab  ⇧tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)")
-	out += key("^r", "ask "+src.service()+" again", "(it does every 5 minutes)") +
+	out += key("tab  shift+tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)")
+	out += key("ctrl+r", "ask "+src.service()+" again", "(it does every 5 minutes)") +
 		key("?", "this help", "(? again: back)") +
 		key("q  esc", "back to your thread", "") +
 		"\n" + g + "SECTIONS" + o + "\n" +

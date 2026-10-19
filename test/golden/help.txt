@@ -1,21 +1,21 @@
 KEYS
-  ⏎  1-9      jump to the thread (1-9: that row)
-  j k  g G    move; first, last
-  /           search (esc: back)
-  n           new thread (wvr new)
-  x           close the thread, its nvim and its window
-              (and offers to remove a merged worktree)
-  a           adopt: an agent you started by hand becomes a thread;
-              elsewhere, pick a conversation to resume as one
-  r           rename the thread (empty: its agent's title)
-  v  e  ^e    jump and open its nvim (Alt v anywhere)
-  s           the card ↔ the agent's screen
-  tab  ⇧tab   the next, previous view (THREADS, GITHUB, LINEAR)
-  ^r          reload
-  ?           this help (? again: back)
-  q  esc      back to your thread
-  ^q          quit the session, every agent and nvim (the threads
-              come back as wvr starts; mid-turn, it asks first)
+  ⏎  1-9          jump to the thread (1-9: that row)
+  j k  g G        move; first, last
+  /               search (esc: back)
+  n               new thread (wvr new)
+  x               close the thread, its nvim and its window
+                  (and offers to remove a merged worktree)
+  a               adopt: an agent you started by hand becomes a thread;
+                  elsewhere, pick a conversation to resume as one
+  r               rename the thread (empty: its agent's title)
+  v  e  ctrl+e    jump and open its nvim (alt+v anywhere)
+  s               the card ↔ the agent's screen
+  tab  shift+tab  the next, previous view (THREADS, GITHUB, LINEAR)
+  ctrl+r          reload
+  ?               this help (? again: back)
+  q  esc          back to your thread
+  ctrl+q          quit the session, every agent and nvim (the threads
+                  come back as wvr starts; mid-turn, it asks first)
 
 THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working
@@ -24,21 +24,21 @@ THREADS
   ×2  two agents share the worktree: their turn diffs mix
 
 LOST (its session went: a crash, or quit)
-  ⏎           resume it in a new window (wvr resume)
-  x           forget it (its worktree goes once nothing in it is unsaved)
+  ⏎               resume it in a new window (wvr resume)
+  x               forget it (its worktree goes once nothing in it is unsaved)
 
 ANYWHERE
-  Alt y       in a thread: the board over it (tab: the views);
-              on home: each view, then back where you were
-  Alt N       new thread (in a view: from the item)
-  Alt 1       the thread that has waited on you longest (row 1)
-  Alt v  V    the thread's nvim; full screen
-  Alt j  k    next, previous window (past the views)
-  Alt h  l    the pane left, right
+  alt+y           in a thread: the board over it (tab: the views);
+                  on home: each view, then back where you were
+  alt+N           new thread (in a view: from the item)
+  alt+1           the thread that has waited on you longest (row 1)
+  alt+v  alt+V    the thread's nvim; full screen
+  alt+j  alt+k    next, previous window (past the views)
+  alt+h  alt+l    the pane left, right
 
 MOUSE
-  click       a row; a key shown, as if pressed
-  click twice the row, as ⏎
-  right click a menu of what can be done there
-  wheel       scroll (a pane: back through it)
-  status line THREADS, a view or a count: go there
+  click           a row; a key shown, as if pressed
+  click twice     the row, as ⏎
+  right click     a menu of what can be done there
+  wheel           scroll (a pane: back through it)
+  status line     THREADS, a view or a count: go there

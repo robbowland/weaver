@@ -198,7 +198,7 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 			n++
 		}
 		if lines := n - 1; first == task && lines > 0 {
-			b.WriteString("        " + CGrey + "+" + strconv.Itoa(lines) + " more lines" + COff + CDim + " (^e)" + COff + "\n")
+			b.WriteString("        " + CGrey + "+" + strconv.Itoa(lines) + " more lines" + COff + CDim + " (ctrl+e)" + COff + "\n")
 		}
 	}
 	// Its line stays when it says nothing, so a message coming or going
@@ -357,16 +357,7 @@ func formFocus(id string) string {
 
 // formKeys are each row's key, for the footer: the row's action from
 // anywhere in the form.
-var formKeys = map[string]string{"repo": "^r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
-
-// keyName is fzf's name for a key as weaver writes keys: alt-w is Alt w,
-// as in the help and the README (^r stays).
-func keyName(k string) string {
-	if rest, ok := strings.CutPrefix(k, "alt-"); ok {
-		return "Alt " + rest
-	}
-	return k
-}
+var formKeys = map[string]string{"repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
 
 // formDoes is what enter does on each of the form's rows that has a
 // choice (start starts).
@@ -380,7 +371,7 @@ func formEnter(id string) string {
 	case id == "start" || id == "":
 		return "START"
 	case formDoes[id] != "":
-		return formDoes[id] + " (" + keyName(formKeys[id]) + ")"
+		return formDoes[id] + " (" + keyLabel(formKeys[id]) + ")"
 	}
 	return ""
 }
@@ -396,7 +387,7 @@ func formHints(id string) []choice {
 	}
 	what := formEnter(id)
 	what += strings.Repeat(" ", w-rlen(what))
-	return []choice{{"⏎", what}, {"↑↓", "FIELDS"}, {"^e", "TASK IN $EDITOR"}, {"esc", "CANCEL"}}
+	return []choice{{"⏎", what}, {"↑↓", "FIELDS"}, {"ctrl+e", "TASK IN $EDITOR"}, {"esc", "CANCEL"}}
 }
 
 // formRowFooter is the form's footer on row id: its hints, each a button.
@@ -515,7 +506,7 @@ func checkThread(task string, fm form) string {
 	}
 	switch {
 	case br == "":
-		return "name the branch (alt-b): the task has no letters to name it after"
+		return "name the branch (alt+b): the task has no letters to name it after"
 	case exec.Command("git", "check-ref-format", "--branch", br).Run() != nil:
 		return "not a valid branch name: " + br
 	}
@@ -583,7 +574,7 @@ func (e *Env) New(args []string) error {
 		}
 	}
 	if e.Session == "" {
-		return errors.New("not inside tmux: start it with `wvr`, then Alt N (or wvr new) there")
+		return errors.New("not inside tmux: start it with `wvr`, then alt+N (or wvr new) there")
 	}
 	kind, ok := agent.ParseKind(agentArg)
 	if !ok {
@@ -669,7 +660,7 @@ func (e *Env) New(args []string) error {
 					fm.Repo, fm.Here = c, c
 				} else {
 					fm.Repo = ""
-					repoErr = "no checkout of " + r.Repo + " known: pick it (^r)"
+					repoErr = "no checkout of " + r.Repo + " known: pick it (ctrl+r)"
 				}
 			}
 		}
@@ -852,7 +843,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			"--bind", "load:transform("+q+" _form land "+qs+" {q})")
 		args = append(args, roomy()...)
 		for id, k := range formKeys {
-			args = append(args, "--bind", strings.Replace(k, "^", "ctrl-", 1)+":"+formAct(q, qs, id))
+			args = append(args, "--bind", k+":"+formAct(q, qs, id))
 		}
 		args = append(args,
 			"--bind", "ctrl-e:execute("+q+" _form editor "+qs+" {q})+transform-query("+q+" _form query "+qs+" {q})+transform-header("+hd+")+reload("+rows+")")

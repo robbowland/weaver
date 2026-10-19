@@ -101,24 +101,25 @@ func titleLine(t string) string {
 func Help() string {
 	d, g, o := CDim, CGrey, COff
 	p := func(cell, c string) string { return paint(cell, c, CDim, COff) }
+	more := strings.Repeat(" ", 2+helpCol)
 	return g + "KEYS" + o + "\n" +
-		"  " + g + "⏎  1-9" + o + "      jump to the thread " + d + "(1-9: that row)" + o + "\n" +
-		"  " + g + "j k  g G" + o + "    move; first, last\n" +
-		"  " + g + "/" + o + "           search " + d + "(esc: back)" + o + "\n" +
-		"  " + g + "n" + o + "           new thread " + d + "(wvr new)" + o + "\n" +
-		"  " + g + "x" + o + "           close the thread, its nvim and its window\n" +
-		"              " + d + "(and offers to remove a merged worktree)" + o + "\n" +
-		"  " + g + "a" + o + "           adopt: an agent you started by hand becomes a thread;\n" +
-		"              " + d + "elsewhere, pick a conversation to resume as one" + o + "\n" +
-		"  " + g + "r" + o + "           rename the thread " + d + "(empty: its agent's title)" + o + "\n" +
-		"  " + g + "v  e  ^e" + o + "    jump and open its nvim " + d + "(Alt v anywhere)" + o + "\n" +
-		"  " + g + "s" + o + "           the card ↔ the agent's screen\n" +
-		"  " + g + "tab  ⇧tab" + o + "   the next, previous view " + d + "(THREADS, GITHUB, LINEAR)" + o + "\n" +
-		"  " + g + "^r" + o + "          reload\n" +
-		"  " + g + "?" + o + "           this help " + d + "(? again: back)" + o + "\n" +
-		"  " + g + "q  esc" + o + "      back to your thread\n" +
-		"  " + g + "^q" + o + "          quit the session, every agent and nvim " + d + "(the threads" + o + "\n" +
-		"              " + d + "come back as wvr starts; mid-turn, it asks first)" + o + "\n" +
+		helpRow("⏎  1-9", "jump to the thread", "(1-9: that row)") +
+		helpRow("j k  g G", "move; first, last", "") +
+		helpRow("/", "search", "(esc: back)") +
+		helpRow("n", "new thread", "(wvr new)") +
+		helpRow("x", "close the thread, its nvim and its window", "") +
+		more + d + "(and offers to remove a merged worktree)" + o + "\n" +
+		helpRow("a", "adopt: an agent you started by hand becomes a thread;", "") +
+		more + d + "elsewhere, pick a conversation to resume as one" + o + "\n" +
+		helpRow("r", "rename the thread", "(empty: its agent's title)") +
+		helpRow("v  e  ctrl+e", "jump and open its nvim", "(alt+v anywhere)") +
+		helpRow("s", "the card ↔ the agent's screen", "") +
+		helpRow("tab  shift+tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)") +
+		helpRow("ctrl+r", "reload", "") +
+		helpRow("?", "this help", "(? again: back)") +
+		helpRow("q  esc", "back to your thread", "") +
+		helpRow("ctrl+q", "quit the session, every agent and nvim", "(the threads") +
+		more + d + "come back as wvr starts; mid-turn, it asks first)" + o + "\n" +
 		"\n" +
 		g + "THREADS" + o + "\n" +
 		"  " + p(GNeed, CRed) + "  needs you    " + p(GDone, CGreen) + "  done, not yet seen    " + p(GWork, g) + "  working\n" +
@@ -127,33 +128,42 @@ func Help() string {
 		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
-		"  " + g + "⏎" + o + "           resume it in a new window " + d + "(wvr resume)" + o + "\n" +
-		"  " + g + "x" + o + "           forget it " + d + "(its worktree goes once nothing in it is unsaved)" + o + "\n" +
+		helpRow("⏎", "resume it in a new window", "(wvr resume)") +
+		helpRow("x", "forget it", "(its worktree goes once nothing in it is unsaved)") +
 		"\n" +
 		g + "ANYWHERE" + o + "\n" +
-		"  " + g + "Alt y" + o + "       in a thread: the board over it " + d + "(tab: the views)" + o + ";\n" +
-		"              on home: each view, then back where you were\n" +
-		"  " + g + "Alt N" + o + "       new thread " + d + "(in a view: from the item)" + o + "\n" +
-		"  " + g + "Alt 1" + o + "       the thread that has waited on you longest " + d + "(row 1)" + o + "\n" +
-		"  " + g + "Alt v  V" + o + "    the thread's nvim; full screen\n" +
-		"  " + g + "Alt j  k" + o + "    next, previous window " + d + "(past the views)" + o + "\n" +
-		"  " + g + "Alt h  l" + o + "    the pane left, right\n" +
+		helpRow("alt+y", "in a thread: the board over it", "(tab: the views);") +
+		more + "on home: each view, then back where you were\n" +
+		helpRow("alt+N", "new thread", "(in a view: from the item)") +
+		helpRow("alt+1", "the thread that has waited on you longest", "(row 1)") +
+		helpRow("alt+v  alt+V", "the thread's nvim; full screen", "") +
+		helpRow("alt+j  alt+k", "next, previous window", "(past the views)") +
+		helpRow("alt+h  alt+l", "the pane left, right", "") +
 		"\n" + mouseHelp()
+}
+
+// helpCol is how wide the help cards' key column is: the widest key,
+// `tab  shift+tab`, and two spaces.
+const helpCol = 16
+
+// helpRow is a help card's line: key k, what it does, and a dim note.
+func helpRow(k, what, note string) string {
+	s := "  " + CGrey + k + COff + strings.Repeat(" ", max(helpCol-rlen(k), 1)) + what
+	if note != "" {
+		s += " " + CDim + note + COff
+	}
+	return s + "\n"
 }
 
 // mouseHelp is what the mouse does, for the help cards: what the keys do,
 // where they are shown.
 func mouseHelp() string {
-	g, o := CGrey, COff
-	row := func(k, what string) string {
-		return "  " + g + k + o + strings.Repeat(" ", max(12-rlen(k), 1)) + what + "\n"
-	}
-	return g + "MOUSE" + o + "\n" +
-		row("click", "a row; a key shown, as if pressed") +
-		row("click twice", "the row, as ⏎") +
-		row("right click", "a menu of what can be done there") +
-		row("wheel", "scroll (a pane: back through it)") +
-		row("status line", "THREADS, a view or a count: go there")
+	return CGrey + "MOUSE" + COff + "\n" +
+		helpRow("click", "a row; a key shown, as if pressed", "") +
+		helpRow("click twice", "the row, as ⏎", "") +
+		helpRow("right click", "a menu of what can be done there", "") +
+		helpRow("wheel", "scroll (a pane: back through it)", "") +
+		helpRow("status line", "THREADS, a view or a count: go there", "")
 }
 
 // Intro is the card of an empty dashboard.
@@ -162,8 +172,8 @@ func Intro() string {
 	return "No agents in this session yet.\n\n" +
 		g + "n" + o + "       start a thread: a task, its worktree, and a window with\n" +
 		"        nvim and the agent " + d + "(wvr new)" + o + "\n" +
-		g + "Alt N" + o + "   the same from anywhere in the session\n" +
-		g + "Alt y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +
+		g + "alt+N" + o + "   the same from anywhere in the session\n" +
+		g + "alt+y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +
 		"        dot is not set up yet: going there sets it up)" + o + "\n\n" +
 		d + "Or start claude or codex in any pane: weaver follows it\n" +
 		"through its hooks." + o + "\n"

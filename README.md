@@ -38,7 +38,7 @@ threads come back after tmux crashes or the machine restarts.
 
 - **See every agent at once.** The board groups threads by what they need
   from you, with what each is waiting on or doing.
-- **Go straight to the one that's waiting.** `Alt 1` jumps to the agent that
+- **Go straight to the one that's waiting.** `alt+1` jumps to the agent that
   has needed you longest; press it again for the next.
 - **Review as it works.** The Neovim beside each agent follows its edits,
   shows each turn's diff, and sends your line notes back to the agent.
@@ -81,18 +81,18 @@ The command is `wvr`. `brew upgrade` keeps it current.
    use it). Restart any Claude Code session that was already running so it
    picks them up.
 
-2. **Start a thread.** Press `Alt N`, type what the agent should do, and press
+2. **Start a thread.** Press `alt+N`, type what the agent should do, and press
    `enter`. weaver creates a worktree on a new branch named after the task,
    opens a window with Neovim on the left and the agent on the right, and
    gives the agent your task as its first prompt.
 
-3. **Check on your threads.** Press `Alt y`: the board opens over the thread
+3. **Check on your threads.** Press `alt+y`: the board opens over the thread
    you are in. Each thread is a row showing its state, what it is doing or
    waiting on, and for how long. Press `enter` on a row, or its number, to
    jump to it, or `esc` to close the board.
 
 4. **Answer whoever is waiting.** When an agent needs you (a permission
-   prompt, a question), the board moves it to the top and `Alt 1` takes you
+   prompt, a question), the board moves it to the top and `alt+1` takes you
    to it.
 
 5. **Close it when you're done.** On the board, `x` closes a thread: its
@@ -101,7 +101,7 @@ The command is `wvr`. `brew upgrade` keeps it current.
    stays.
 
 Closing the terminal only detaches you: the session keeps running, and `wvr`
-reattaches. `Ctrl q` quits the session and every agent in it; your threads
+reattaches. `ctrl+q` quits the session and every agent in it; your threads
 come back the next time you run `wvr`.
 
 ## How it works
@@ -117,8 +117,8 @@ board shows the selected thread's last prompt, what it is waiting on, what it
 last said and its task list.
 
 **Views.** Beside home are GITHUB (your pull requests and issues) and LINEAR
-(your Linear issues). `Alt N` on an item opens the new-thread form filled in
-for it, and `Alt R` starts a read-only review or investigation of it.
+(your Linear issues). `alt+N` on an item opens the new-thread form filled in
+for it, and `alt+r` starts a read-only review or investigation of it.
 
 **States.** weaver follows each agent through its hooks and shows its state
 as a cell that reads without colour:
@@ -136,27 +136,30 @@ weaver`), so it never touches your own tmux sessions or config.
 
 ## Keys
 
+Keys are written as you press them: `alt+r` is Alt and R, and `alt+R` is Alt,
+Shift and R.
+
 | Key | Does |
 | --- | --- |
-| `Alt N` | Start a thread (in a view: a thread on the selected item) |
-| `Alt y` | In a thread: the board over it (`Tab`: the views; `esc` or `Alt y`: close). On home: each view, then back |
-| `Alt 1` | The agent that has needed you longest; press again for the next |
-| `Alt j` / `Alt k` | The next / previous window, in thread order |
-| `Alt h` / `Alt l` | The pane to the left / right |
-| `Alt v` / `Alt V` | The focused agent's Neovim / the same, full screen |
-| `Alt R` | In a view: a read-only review of the selected item |
-| `Tab` / `Shift Tab` | On home or in a view: the next / previous view |
-| `Ctrl q` | Quit the session (it asks first while an agent is mid-turn) |
+| `alt+N` | Start a thread (in a view: a thread on the selected item) |
+| `alt+y` | In a thread: the board over it (`tab`: the views; `esc` or `alt+y`: close). On home: each view, then back |
+| `alt+1` | The agent that has needed you longest; press again for the next |
+| `alt+j` / `alt+k` | The next / previous window, in thread order |
+| `alt+h` / `alt+l` | The pane to the left / right |
+| `alt+v` / `alt+V` | The focused agent's Neovim / the same, full screen |
+| `alt+r` | In a view: a read-only review of the selected item |
+| `tab` / `shift+tab` | On home or in a view: the next / previous view |
+| `ctrl+q` | Quit the session (it asks first while an agent is mid-turn) |
 
 On the board, `enter` or `1`–`9` jumps to a thread, `n` starts one, `x`
 closes one, `r` renames one, `a` adopts one (below), `v` opens its Neovim, `s` swaps the card
 for the agent's screen, `/` searches, and `?` lists every key. Everything can
 be clicked too: the hints under a list are buttons, and a right click opens a
-menu. tmux's own keys work behind its prefix, `Ctrl b`.
+menu. tmux's own keys work behind its prefix, `ctrl+b`.
 
 ## Threads survive crashes and restarts
 
-A thread lasts until you close it. If tmux crashes, you quit with `Ctrl q`, or
+A thread lasts until you close it. If tmux crashes, you quit with `ctrl+q`, or
 the machine restarts while its agent runs, `wvr` brings the session back with
 each thread in its window and each agent resuming its conversation. A thread
 weaver can't bring back by itself waits on the board under LOST, where `enter`

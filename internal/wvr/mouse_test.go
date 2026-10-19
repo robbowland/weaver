@@ -11,15 +11,15 @@ var reSGR = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 // A click anywhere on a hint, its key or what it does, is that hint;
 // between hints, none.
 func TestHintAt(t *testing.T) {
-	hs := []choice{{"⏎", "JUMP"}, {"1-9", ""}, {"n", "NEW"}, {"^q", "QUIT"}}
+	hs := []choice{{"⏎", "JUMP"}, {"1-9", ""}, {"n", "NEW"}, {"ctrl+q", "QUIT"}}
 	line := reSGR.ReplaceAllString(hintLine(hs, 2), "")
-	if want := "⏎ JUMP  1-9  n NEW  ^q QUIT"; line != want {
+	if want := "⏎ JUMP  1-9  n NEW  ctrl+q QUIT"; line != want {
 		t.Fatalf("hintLine = %q, want %q", line, want)
 	}
 	for _, c := range []struct {
 		col  int
 		want string
-	}{{1, "⏎"}, {6, "⏎"}, {7, ""}, {9, "1-9"}, {14, "n"}, {18, "n"}, {19, ""}, {21, "^q"}, {27, "^q"}, {28, ""}} {
+	}{{1, "⏎"}, {6, "⏎"}, {7, ""}, {9, "1-9"}, {14, "n"}, {18, "n"}, {19, ""}, {21, "ctrl+q"}, {31, "ctrl+q"}, {32, ""}} {
 		if h, _ := hintAt(hs, 2, c.col); h.key != c.want {
 			t.Errorf("col %d: %q, want %q", c.col, h.key, c.want)
 		}
@@ -29,8 +29,8 @@ func TestHintAt(t *testing.T) {
 func TestHintAct(t *testing.T) {
 	for key, want := range map[string]string{
 		"⏎": "trigger(enter)", "esc": "trigger(esc)", "?": "trigger(?)", "n": "trigger(n)",
-		"^r": "trigger(ctrl-r)", "^e": "trigger(ctrl-e)", "Alt R": "trigger(alt-R)", "Alt B": "trigger(alt-B)",
-		"^q": "execute-silent(tmux send-keys -K C-q)", "1-9": "", "↑↓": "",
+		"ctrl+r": "trigger(ctrl-r)", "ctrl+e": "trigger(ctrl-e)", "alt+r": "trigger(alt-r)", "alt+B": "trigger(alt-B)",
+		"shift+tab": "trigger(btab)", "ctrl+q": "execute-silent(tmux send-keys -K C-q)", "1-9": "", "↑↓": "",
 	} {
 		if got := hintAct(key); got != want {
 			t.Errorf("hintAct(%q) = %q, want %q", key, got, want)
@@ -80,8 +80,8 @@ func TestWelcomeClicks(t *testing.T) {
 			got[strings.TrimSpace(key)] = acts[i]
 		}
 	}
-	want := map[string]string{"n": "trigger(n)", "Alt N": "execute-silent(tmux send-keys -K M-N)", "a": "trigger(a)",
-		"Alt y": "execute-silent(tmux send-keys -K M-y)"}
+	want := map[string]string{"n": "trigger(n)", "alt+N": "execute-silent(tmux send-keys -K M-N)", "a": "trigger(a)",
+		"alt+y": "execute-silent(tmux send-keys -K M-y)"}
 	if len(got) != len(want) {
 		t.Fatalf("buttons %q, want %q", got, want)
 	}

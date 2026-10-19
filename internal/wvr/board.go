@@ -680,8 +680,8 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last.
 func boardHints() []choice {
-	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|^q QUIT"
-	search := "⏎ JUMP|esc BACK|^e NVIM|tab VIEWS"
+	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|ctrl+q QUIT"
+	search := "⏎ JUMP|esc BACK|ctrl+e NVIM|tab VIEWS"
 	// A toggle says where it goes next: s from the screen (or the card
 	// hidden) to the card, ? from the help back to it.
 	showing := ""
@@ -706,9 +706,9 @@ func boardHints() []choice {
 		items = strings.Split(search, "|")
 	case os.Getenv("LS_EMPTY") == "1" || total == "0":
 		if os.Getenv("LS_HOME") != "" {
-			items = []string{"n NEW THREAD", "^q QUIT"}
+			items = []string{"n NEW THREAD", "ctrl+q QUIT"}
 		} else {
-			items = []string{"n NEW THREAD", "q BACK", "^q QUIT"}
+			items = []string{"n NEW THREAD", "q BACK", "ctrl+q QUIT"}
 		}
 	default:
 		items = strings.Split(browse, "|")
@@ -738,10 +738,10 @@ func Footer() string { return hintLine(boardHints(), 2) + "\n" }
 // "" for none: each key line is its key's button.
 func welcome(cols, lines int, views bool) (string, []string) {
 	type row struct{ key, what, act string }
-	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"Alt N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"},
+	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"alt+N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"},
 		{"a", "resume a conversation as a thread", "trigger(a)"}}
 	if views {
-		rows = append(rows, row{"Alt y", "your pull requests and issues", "execute-silent(tmux send-keys -K M-y)"})
+		rows = append(rows, row{"alt+y", "your pull requests and issues", "execute-silent(tmux send-keys -K M-y)"})
 	}
 	about := "a thread is a task, its worktree, and an agent beside its nvim"
 	note := "or start claude or codex in any pane: weaver follows it"

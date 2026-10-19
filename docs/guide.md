@@ -39,13 +39,13 @@ with its repository and branch, the counts of agents in each state, the strip
 of views (`THREADS   GITHUB   LINEAR`), and tmux's mode: `[NRM]`, `[PFX]` while
 the prefix is down, or `[CPY]` in copy mode.
 
-tmux's own keys work behind its prefix, `Ctrl b`: `Ctrl b d` detaches, and
-`Ctrl b [` scrolls back.
+tmux's own keys work behind its prefix, `ctrl+b`: `ctrl+b d` detaches, and
+`ctrl+b [` scrolls back.
 
 To split a pane in weaver's tmux, bind keys in your terminal to send
 `ESC [ 100 ; 9 ~` (split right) and `ESC [ 100 ; 10 ~` (split down). In
-Ghostty, for example, this keeps `Cmd D` for Ghostty's own splits and gives
-weaver `Cmd Alt D`:
+Ghostty, for example, this keeps `cmd+d` for Ghostty's own splits and gives
+weaver `cmd+alt+d`:
 
 ```
 keybind = super+alt+d=csi:100;9~
@@ -67,7 +67,7 @@ opening a thread puts you on its agent.
 
 ### Starting a thread
 
-`Alt N`, `wvr new`, or `n` on the board opens the new-thread form, in the
+`alt+N`, `wvr new`, or `n` on the board opens the new-thread form, in the
 repository of the pane you were on (else the one you used last).
 
 You type the task at the top. Under it, each choice has a row, with `start`
@@ -79,13 +79,13 @@ where you are. Each choice also has a key that changes it from anywhere:
 | Row | Key | Does |
 | --- | --- | --- |
 | `start` | `enter` | Start the thread (the row says what it would start) |
-| `repo` | `ctrl-r` | Choose another repository: recent ones, any zoxide knows, or a path |
-| `where` | `alt-w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
-| `branch` | `alt-b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
-| `base` | `alt-B` | Where a new branch starts: the remote's default branch, freshly fetched (the default); `@`, the HEAD of the checkout you are in; or any branch |
-| `agent` | `alt-a` | Claude Code or Codex |
-| `mode` | `alt-r` | Work, or read-only: a review, or an investigation of a pull request or issue |
-|  | `ctrl-e` | Write a long task in `$EDITOR` |
+| `repo` | `ctrl+r` | Choose another repository: recent ones, any zoxide knows, or a path |
+| `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
+| `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
+| `base` | `alt+B` | Where a new branch starts: the remote's default branch, freshly fetched (the default); `@`, the HEAD of the checkout you are in; or any branch |
+| `agent` | `alt+a` | Claude Code or Codex |
+| `mode` | `alt+r` | Work, or read-only: a review, or an investigation of a pull request or issue |
+|  | `ctrl+e` | Write a long task in `$EDITOR` |
 |  | `esc` | Cancel |
 
 From a shell, `wvr new "fix the flaky test"` does the same. Its options are
@@ -110,7 +110,7 @@ says so.
 
 The Neovim on the left belongs to the thread's agent: it follows the agent's
 edits, shows its state and reviews its turns ([Neovim](#neovim)). If you quit
-it, `Alt v` brings it back on the left, with the agent at its usual width,
+it, `alt+v` brings it back on the left, with the agent at its usual width,
 as long as nothing else is in the window.
 
 When the agent exits, its pane stays. Press `enter` there to resume the same
@@ -139,9 +139,9 @@ remove`. The branch always stays.
 ## Pull requests and issues
 
 Beside home are two views: **GITHUB**, your pull requests and issues, and
-**LINEAR**, your Linear issues. `Tab` and `Shift Tab` step between home and
-the views like tabs, both in their windows and in `Alt y`'s popover over a
-thread ([The board](#the-board)). On home, `Alt y` steps on through the
+**LINEAR**, your Linear issues. `tab` and `shift+tab` step between home and
+the views like tabs, both in their windows and in `alt+y`'s popover over a
+thread ([The board](#the-board)). On home, `alt+y` steps on through the
 views, then back to the thread you came from.
 
 A view that is not set up yet shows a dot on the status line (`LINEAR ·`).
@@ -160,15 +160,15 @@ A row shows the one thing to know about an item (changes requested, a check
 failing, draft, approved; for an issue, urgent or its state) and the thread
 it has, if any. The card says what `enter` does, then the item's fields and
 description. In a view, `s` switches GITHUB between pull requests and issues,
-`o` opens the item in the browser, `/` searches, and `^r` asks again. Each
+`o` opens the item in the browser, `/` searches, and `ctrl+r` asks again. Each
 view refreshes every 5 minutes and shows what it last heard straight away.
 
 ### A thread from an item
 
-On a pull request or an issue, `Alt N` opens the new-thread form filled in for
+On a pull request or an issue, `alt+N` opens the new-thread form filled in for
 it: its branch (the pull request's own, `12-fix-the-flaky-test` for a GitHub
 issue, or Linear's branch name for a Linear issue) and the repository's
-checkout, if weaver knows one (`^r` to choose one when it doesn't). A thread
+checkout, if weaver knows one (`ctrl+r` to choose one when it doesn't). A thread
 from a Linear issue starts in the repository you used last. If the branch
 already has a thread, weaver goes to that thread instead.
 
@@ -183,11 +183,11 @@ The task is yours to write:
 With `WEAVER_ITEM_TASK=1`, weaver writes a task in for you (`Address the
 review on #45`, `Implement #12`).
 
-`Alt R` is the read-only version. On a pull request, it starts a thread on the
+`alt+r` is the read-only version. On a pull request, it starts a thread on the
 pull request's branch whose Neovim opens on a review against the branch it
 merges into, and whose agent reviews without changing files (Claude Code in
 plan mode, Codex in a read-only sandbox). On an issue, it starts an
-investigation that ends in a plan for you to approve. The form's `alt-r`
+investigation that ends in a plan for you to approve. The form's `alt+r`
 switches between work and read-only.
 
 From a shell: `wvr new --pr 45` (or `owner/name#45`, or the pull request's
@@ -199,16 +199,16 @@ for the read-only version.
 The board is home's main content, and `wvr` opens it in any other tmux session
 too. The [README](../README.md) shows what it looks like.
 
-In a thread, `Alt y` opens the board in a popover over the thread, covering
+In a thread, `alt+y` opens the board in a popover over the thread, covering
 most of the screen, with its cursor on the thread you are in. Its keys work
-as they do on home; `Tab` and `Shift Tab` step to the views inside it, and
-`esc`, `q` or `Alt y` close it, leaving you where you were. Choosing
+as they do on home; `tab` and `shift+tab` step to the views inside it, and
+`esc`, `q` or `alt+y` close it, leaving you where you were. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
-the home window itself, click THREADS on the status line, or use `Alt j` and
-`Alt k`.
+the home window itself, click THREADS on the status line, or use `alt+j` and
+`alt+k`.
 
-Agents are grouped under these headings, in the order `Alt 1` visits them:
+Agents are grouped under these headings, in the order `alt+1` visits them:
 
 - **NEEDS YOU**: waiting on you;
 - **DONE**: finished, and you haven't looked yet;
@@ -236,13 +236,13 @@ heading, and stays on its agent as the board reloads itself.
 | `x` | Close the thread (`wvr close`); on a lost thread, forget it |
 | `r` | Rename the thread ([Renaming a thread](#renaming-a-thread)) |
 | `a` | Adopt the agent, if you started it by hand; elsewhere, pick a conversation to resume as a thread ([Adopting](#adopting-a-conversation)) |
-| `v`, `e`, `ctrl-e` | Jump to the thread and open its Neovim |
+| `v`, `e`, `ctrl+e` | Jump to the thread and open its Neovim |
 | `s` | Swap the card for the agent's screen, and back |
-| `tab`, `shift-tab` | The next, previous view |
-| `ctrl-r` | Reload |
+| `tab`, `shift+tab` | The next, previous view |
+| `ctrl+r` | Reload |
 | `?` | Every key, including those that work anywhere (`?` again to go back) |
 | `q`, `esc` | Back to your thread |
-| `ctrl-q` | Quit the session |
+| `ctrl+q` | Quit the session |
 
 The card shows what the agent was asked, what it waits on or runs, what it
 last said, its tasks, subagents and files, and its worktree's git status. It
@@ -294,10 +294,10 @@ there before adopting it, so that two processes don't share one conversation.
 
 ### Quitting
 
-Because threads come back, quitting everything is safe. `Ctrl q`, from any
+Because threads come back, quitting everything is safe. `ctrl+q`, from any
 pane, quits the session with every agent and Neovim in it, and `wvr` brings
 the threads back next time. While an agent is mid-turn (working, or waiting
-on you), quitting would stop that turn, so `Ctrl q` asks first.
+on you), quitting would stop that turn, so `ctrl+q` asks first.
 
 `wvr quit` quits after asking, and says what would stop: turns in progress,
 and unsaved buffers in the agents' Neovims. From outside the session it quits
@@ -563,16 +563,16 @@ python3:
   to a directory holding `diffview-plus.nvim` if lazy.nvim's plugin directory
   doesn't have it;
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
-  state machine and its robustness, `Alt 1`, the status counts, subagents,
+  state machine and its robustness, `alt+1`, the status counts, subagents,
   per-turn snapshots, other agents' events, the installer and the board's
   renderings. They run on a throwaway tmux server with three fake agents and
   a client attached; `test/hooks.sh SUITE` runs one;
 - `test/tmux.sh`: weaver on tmux end to end. `wvr` starts its session on a
   throwaway tmux server in a pseudo-terminal, and the tests press its keys:
-  threads, hooks and their late async events, `Alt y`, `Alt v`, `Alt 1`,
-  split keys, `Alt N`, the board, crashes and their threads resumed, adopting
+  threads, hooks and their late async events, `alt+y`, `alt+v`, `alt+1`,
+  split keys, `alt+N`, the board, crashes and their threads resumed, adopting
   and renaming,
-  `Ctrl q`, and threads from pull requests and issues in the views (with a
+  `ctrl+q`, and threads from pull requests and issues in the views (with a
   fake gh, Keychain and Linear API).
 
 `test/soak/nvim-exit.sh` is a long run to start by hand: Neovims weaver

@@ -51,22 +51,16 @@ func hintAt(hs []choice, gap, col int) (choice, bool) {
 }
 
 // hintAct is what fzf does for a click on a hint: what its key does ("" for
-// a hint that is no one key, as 1-9 and ↑↓ are). ^q is tmux's (quit), the
-// rest fzf's own.
+// a hint that is no one key, as 1-9 and ↑↓ are). ctrl+q is tmux's (quit),
+// the rest fzf's own.
 func hintAct(key string) string {
-	switch {
-	case key == "1-9", key == "↑↓":
+	switch key {
+	case "1-9", "↑↓":
 		return ""
-	case key == "⏎":
-		return "trigger(enter)"
-	case key == "^q":
+	case "ctrl+q":
 		return "execute-silent(tmux send-keys -K C-q)"
-	case strings.HasPrefix(key, "^"):
-		return "trigger(ctrl-" + strings.ToLower(key[1:]) + ")"
-	case strings.HasPrefix(key, "Alt "):
-		return "trigger(alt-" + key[4:] + ")"
 	}
-	return "trigger(" + key + ")"
+	return "trigger(" + fzfKey(key) + ")"
 }
 
 // footClick is the action for a click on footer hs (gap apart), at fzf's

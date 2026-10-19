@@ -210,6 +210,16 @@ can supersede an earlier one, and says so.
   reloads run the installed binary) under the old weaver's keys, which did
   not know them: enter and x did nothing. Bindings live in the long-running
   board, so the board, not each key, follows the install.
+- 2026-10-19: Keys are written one way everywhere weaver shows them:
+  lowercase modifiers joined with `+`, then the key as typed, so a capital
+  is Shift's (`alt+r`, `alt+R`, `ctrl+q`, `shift+tab`). Before, the views
+  said Alt R, their menu R, the form alt-r (fzf's spelling, where alt-b and
+  alt-B are different keys) and the footers ^q, and Rob could not tell
+  whether Alt R wanted Shift (Rob: "lowercase modifiers and +... makes
+  things much clearer"). One pair of functions (`keyLabel`, `fzfKey`)
+  turns fzf's names into labels and a clicked label back into fzf's name.
+  Alt R in a view, bound with and without Shift, is written `alt+r`, as the
+  form's read-only switch is.
 
 ## Threads
 
