@@ -257,6 +257,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `pane` | int | the agent's pane |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
 | `mode` | string | `review`: read-only (its `cmd` carries the flags); absent otherwise |
+| `title` | string | the name you gave it (`wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 The window's current name is tmux's; in the weaver session weaver labels it
 (`threadTabLabels`).
@@ -271,7 +272,7 @@ thread. PANE is `%N` or up to three digits; anything else is a session id or
 its first 4+ characters. Alone, it adopts the agent in its own pane when it
 has one (so `! wvr adopt` inside an agent), else opens the picker. Outside
 tmux it acts on the weaver session (`$WEAVER_SESSION`, else `weaver`) on
-weaver's own server, as `wvr resume` and `wvr quit` do
+weaver's own server, as `wvr resume`, `wvr rename` and `wvr quit` do
 (`toWeaverSession`), and says so when that is not running.
 
 - **In place** (an agent weaver follows, without a thread record): refused
@@ -303,6 +304,17 @@ weaver's own server, as `wvr resume` and `wvr quit` do
   session ids), newest first: title, repo/branch, age, and `running` when a
   process is in it. Errors go to the status line too, since the popup
   closes.
+
+### Renaming
+
+`wvr rename [PANE] [NAME...]` sets the thread record's `title` (PANE: as for
+adopt; else the agent this pane belongs to, its own or its nvim's), under
+the numbering lock its other writers take, then relabels the windows and
+reloads the boards. Without NAME it asks on the terminal (fzf, the query the
+current name); an empty NAME clears it. The board's `r` on a thread's row
+opens that prompt in a popup (`_popup rename PANE`, 8 lines), on an agent
+that is no thread says to adopt it first; in Alt y's popover it is left for
+once the popover has closed (`peekChoice`).
 
 ### Work items
 

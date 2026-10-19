@@ -351,11 +351,17 @@ can supersede an earlier one, and says so.
   way goes on. One that runs nowhere is resumed through the lost-thread path,
   from a record its transcript gives. One running elsewhere is refused, not
   resumed beside it: two processes would interleave one conversation.
-- 2026-10-19: `wvr adopt SESSION-ID` (and `resume`) work from a
+- 2026-10-19: `wvr adopt SESSION-ID` (and `resume`, and `rename`) work from a
   terminal outside tmux, into the weaver session, as `wvr quit` already did.
   Rob found adopting by session id did not work: the id is copied from
   wherever the conversation ran, usually a plain terminal, and adopt refused
   to run outside tmux.
+- 2026-10-19: A thread can be renamed (`wvr rename`, the board's `r`; Rob:
+  "there should be a way to rename the thread from weaver"). The name is
+  weaver's, kept in the thread record and shown in place of the agent's
+  title, not sent to the agent: Claude Code retitles a conversation as it
+  goes, which would undo it, and typing into an agent's prompt while it
+  works is not weaver's to do.
 
 ## The weaver session
 

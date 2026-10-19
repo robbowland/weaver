@@ -32,6 +32,8 @@ var (
 	formSize = popupSize{0.62, 96, 160, 0, 22, 22}
 	// A card: closing a thread, forgetting a lost one.
 	cardSize = popupSize{0.5, 80, 120, 0, 14, 14}
+	// A thread's new name: one line to type it on, with what it does.
+	nameSize = popupSize{0.5, 72, 120, 0, 8, 8}
 	// Alt y's popover over a thread: the board, most of the terminal, the
 	// thread still there around it.
 	peekSize = popupSize{0.9, 60, 1 << 16, 0.9, 16, 1 << 16}
@@ -133,6 +135,14 @@ func (e *Env) Popup(args []string) error {
 		}
 		dir, _ := os.Getwd()
 		return e.formPopup(dir, "adopt")
+	case "rename":
+		// Only a thread has a name to give it.
+		p, ok := paneArg(arg(args, 1))
+		if !ok || !files.Exists(e.ThreadFile(p)) {
+			e.Tmux("display-message", "-d", "3000", "weaver: only a thread can be renamed: adopt it first (a)")
+			return nil
+		}
+		return e.popup("the prompt", nameSize, []string{"-B"}, []string{"rename", string(p)})
 	}
-	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE]")
+	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE] | rename PANE")
 }

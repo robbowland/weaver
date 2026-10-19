@@ -113,6 +113,15 @@ When the agent exits, its pane stays. Press `enter` there to resume the same
 conversation (`claude --resume`, `codex resume`); the task is never sent
 twice.
 
+### Renaming a thread
+
+A thread is called by the title its agent gives it (Claude Code names its
+conversations as they go), else by its task. `r` on the board, or `wvr rename
+[PANE] [NAME]`, gives it a name of your own instead, on the board, its card,
+its window and the status line; with no name, it asks. An empty name gives
+the agent's title back. The name stays with the thread when it is lost and
+resumed.
+
 ### Closing a thread
 
 `x` on the board, or `wvr close`, closes a thread's agent, its Neovim and its
@@ -221,6 +230,7 @@ heading, and stays on its agent as the board reloads itself.
 | `/` | Search (`esc` to go back) |
 | `n` | Start a thread (`wvr new`) |
 | `x` | Close the thread (`wvr close`); on a lost thread, forget it |
+| `r` | Rename the thread ([Renaming a thread](#renaming-a-thread)) |
 | `a` | Adopt the agent, if you started it by hand; elsewhere, pick a conversation to resume as a thread ([Adopting](#adopting-a-conversation)) |
 | `v`, `e`, `ctrl-e` | Jump to the thread and open its Neovim |
 | `s` | Swap the card for the agent's screen, and back |
@@ -554,7 +564,8 @@ python3:
 - `test/tmux.sh`: weaver on tmux end to end. `wvr` starts its session on a
   throwaway tmux server in a pseudo-terminal, and the tests press its keys:
   threads, hooks and their late async events, `Alt y`, `Alt v`, `Alt 1`,
-  `Cmd D`, `Alt N`, the board, crashes and their threads resumed, adopting,
+  `Cmd D`, `Alt N`, the board, crashes and their threads resumed, adopting
+  and renaming,
   `Ctrl q`, and threads from pull requests and issues in the views (with a
   fake gh, Keychain and Linear API).
 

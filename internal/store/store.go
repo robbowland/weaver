@@ -38,6 +38,9 @@ type Thread struct {
 	Mode            string      `json:"mode,omitempty"`
 	Pane            *jsonx.Int  `json:"pane,omitempty"`
 	SessionID       string      `json:"session_id,omitempty"`
+	// Title is the name you gave it (wvr rename), shown in place of the
+	// title its agent gives it.
+	Title string `json:"title,omitempty"`
 }
 
 // About is what the thread is about, for its label: its task, else (one

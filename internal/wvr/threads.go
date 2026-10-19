@@ -712,7 +712,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	unlock()
 	wname := nm
 	if e.WeaverSession() {
-		t := oneline.Line(st.Title)
+		t := oneline.Line(cmp.Or(th.Title, st.Title))
 		if t == "" {
 			t = oneline.Line(th.About())
 		}

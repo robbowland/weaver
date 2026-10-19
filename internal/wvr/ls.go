@@ -33,7 +33,7 @@ func fzfCmd(args []string, env ...string) *exec.Cmd {
 
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
-const lsKeys = "j,k,g,G,n,x,a,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
+const lsKeys = "j,k,g,G,n,x,a,r,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
@@ -105,9 +105,11 @@ func (e *Env) ls(peek, at string) (string, error) {
 	// An agent you started by hand, adopted; else the picker of
 	// conversations (on an empty board too, as n's field is made).
 	adoptAct := "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent(" + q + " _popup adopt)'; else printf '%s2})\\n' 'execute-silent(" + q + " _popup adopt {'; fi"
+	renameAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " _popup rename {2})' ;; esac"
 	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+q+" _menu board {1})"
 	if peek != "" {
 		closeAct = "transform:case {1} in a*|l*) echo 'print(close)+accept' ;; esac"
+		renameAct = "transform:case {1} in a*) echo 'print(rename)+accept' ;; esac"
 		adoptAct, nextAct, prevAct, menuAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept", "ignore"
 	}
 	os.Setenv("LS_JUMP", jumpAct)
@@ -209,6 +211,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			// Its card in a popup over the board, as the menus open it.
 			"--bind", "x:"+closeAct,
 			"--bind", "a:"+adoptAct,
+			"--bind", "r:"+renameAct,
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s:transform("+q+" _view screen)",
 			// Tab and shift-tab: the next and previous view, as a tab bar.
@@ -363,6 +366,10 @@ func peekChoice(key, sel string) (string, [][]string) {
 			return "", [][]string{{"_popup", "adopt", id}}
 		}
 		return "", [][]string{{"_popup", "adopt"}}
+	case "rename":
+		if agentRow {
+			return "", [][]string{{"_popup", "rename", id}}
+		}
 	case "close":
 		switch {
 		case agentRow:

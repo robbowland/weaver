@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"encoding/json"
 	"math"
 	"os"
@@ -156,7 +157,8 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			r.Waiting = oneline.Line(s.Waiting)
 		}
 		r.Bg = s.Background
-		r.Title = oneline.Line(s.Title)
+		// The name you gave the thread, else its agent's title.
+		r.Title = oneline.Line(cmp.Or(t.Title, s.Title))
 		r.Nsub = len(s.Subagents)
 		r.Pid = oneline.Line(string(s.Pid))
 		r.Pstart = oneline.Line(s.ProcStart)
@@ -211,7 +213,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num})
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title)})
 	}
 	starts := ProcStarts(pids)
 	for _, g := range gones {
@@ -367,7 +369,8 @@ func (e *Env) LostRows() []LostRow {
 		}
 		r := LostRow{File: f, Sid: oneline.Line(st.SessionID), Name: oneline.Line(lo.Thread.Name), Num: num,
 			Dir: oneline.Line(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: oneline.Line(lo.Key()),
-			Task: oneline.Line(lo.Task()), Title: oneline.Line(st.Title)}
+			// Named as you renamed it, else as asked.
+			Task: oneline.Line(cmp.Or(lo.Thread.Title, lo.Task())), Title: oneline.Line(cmp.Or(lo.Thread.Title, st.Title))}
 		r.lost, _ = strconv.ParseFloat(r.Lost, 64)
 		rs = append(rs, r)
 	}

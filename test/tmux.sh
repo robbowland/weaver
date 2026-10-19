@@ -491,6 +491,16 @@ ok "adopt: a conversation that runs nowhere, from outside tmux, resumed as threa
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(tx display -p -t "%$AG2" '#{pane_current_path}')|$(jq -r '"\(.num) \(.name)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)" \
 	"0 1 2 |--resume $CID |$(cd "$AT/repo" && pwd -P)|2 tidy-the-parser" ||
 	sed 's/^/  adopt: /' "$AT/adopt.out"
+label2() { tx display -p -t "=$S:2" '#{window_name}'; }
+waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
+outside wvr rename "$AG2" Parser cleanup >"$AT/rename.out" 2>&1
+waitfor '[ "$(label2)" = "02 Parser cleanup · repo/main" ]'
+ok "rename: the thread's window, and its record, take the name you give it" \
+	"$(label2)|$(jq -r .title "$SD/tmux-${S}_$AG2.thread")" "02 Parser cleanup · repo/main|Parser cleanup" ||
+	sed 's/^/  rename: /' "$AT/rename.out"
+outside wvr rename "$AG2" "" >/dev/null 2>&1
+waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
+ok "...an empty name gives its agent's title back" "$(label2)" "02 Tidy the parser · repo/main"
 for a in "$AG" "$AG2"; do tx run-shell -t "=$S:" "wvr close --yes $a >/dev/null 2>&1"; done
 waitfor '[ "$(windows)" = "0 " ]'
 

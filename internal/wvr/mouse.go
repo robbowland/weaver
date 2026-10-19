@@ -201,6 +201,7 @@ func (e *Env) threadMenu(a tmux.PaneID) []menuItem {
 	}
 	return []menuItem{
 		{"nvim", "v", e.menuRun("edit", a.Target())},
+		{"rename thread", "r", e.menuRun("_popup", "rename", a.Target())},
 		{"close thread", "x", e.menuRun("_popup", "close", a.Target())},
 	}
 }
@@ -282,7 +283,7 @@ func boardMenu(kind string) []menuItem {
 	case strings.HasPrefix(kind, "a"):
 		ms = []menuItem{{"jump to it", "", "Enter"}, {"nvim", "v", "C-e"}}
 		if !searching() {
-			ms = append(ms, menuItem{"close", "x", "x"})
+			ms = append(ms, menuItem{"rename", "r", "r"}, menuItem{"close", "x", "x"})
 		}
 	case strings.HasPrefix(kind, "l"):
 		ms = []menuItem{{"resume", "", "Enter"}}
