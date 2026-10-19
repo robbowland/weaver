@@ -86,9 +86,10 @@ The command is `wvr`. `brew upgrade` keeps it current.
    opens a window with Neovim on the left and the agent on the right, and
    gives the agent your task as its first prompt.
 
-3. **Check on your threads.** Press `Alt y` to go home. Each thread is a row
-   showing its state, what it is doing or waiting on, and for how long. Press
-   `enter` on a row, or its number, to jump to it.
+3. **Check on your threads.** Press `Alt y`: the board opens over the thread
+   you are in. Each thread is a row showing its state, what it is doing or
+   waiting on, and for how long. Press `enter` on a row, or its number, to
+   jump to it, or `esc` to close the board.
 
 4. **Answer whoever is waiting.** When an agent needs you (a permission
    prompt, a question), the board moves it to the top and `Alt 1` takes you
@@ -138,7 +139,7 @@ weaver`), so it never touches your own tmux sessions or config.
 | Key | Does |
 | --- | --- |
 | `Alt N` | Start a thread (in a view: a thread on the selected item) |
-| `Alt y` | Home, then each view, then back to where you were |
+| `Alt y` | In a thread: the board over it (`Tab`: the views; `esc` or `Alt y`: close). On home: each view, then back |
 | `Alt 1` | The agent that has needed you longest; press again for the next |
 | `Alt j` / `Alt k` | The next / previous window, in thread order |
 | `Alt h` / `Alt l` | The pane to the left / right |

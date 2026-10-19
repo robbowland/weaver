@@ -211,6 +211,7 @@ var commands = map[string]command{
 	"_click": {run: done((*wvr.Env).Click)},
 	"_menu":  {run: done((*wvr.Env).Menu)},
 	"_popup": {session: true, run: (*wvr.Env).Popup},
+	"_peek":  {session: true, run: (*wvr.Env).Peek},
 
 	// tmux's hooks.
 	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},

@@ -126,9 +126,10 @@ remove`. The branch always stays.
 ## Pull requests and issues
 
 Beside home are two views: **GITHUB**, your pull requests and issues, and
-**LINEAR**, your Linear issues. `Alt y` steps from a thread to home, on
-through the views, and back to the thread. `Tab` and `Shift Tab` step between
-home and the views like tabs.
+**LINEAR**, your Linear issues. `Tab` and `Shift Tab` step between home and
+the views like tabs, both in their windows and in `Alt y`'s popover over a
+thread ([The board](#the-board)). On home, `Alt y` steps on through the
+views, then back to the thread you came from.
 
 A view that is not set up yet shows a dot on the status line (`LINEAR ·`).
 Its window says what it needs, such as gh installed and signed in, or a Linear
@@ -184,6 +185,15 @@ for the read-only version.
 
 The board is home's main content, and `wvr` opens it in any other tmux session
 too. The [README](../README.md) shows what it looks like.
+
+In a thread, `Alt y` opens the board in a popover over the thread, covering
+most of the screen, with its cursor on the thread you are in. Its keys work
+as they do on home; `Tab` and `Shift Tab` step to the views inside it, and
+`esc`, `q` or `Alt y` close it, leaving you where you were. Choosing
+something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
+`enter` on a pull request) closes the popover first, then does it. To go to
+the home window itself, click THREADS on the status line, or use `Alt j` and
+`Alt k`.
 
 Agents are grouped under these headings, in the order `Alt 1` visits them:
 

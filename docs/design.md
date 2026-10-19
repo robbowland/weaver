@@ -527,8 +527,9 @@ to get back) and changes one thing at a time:
   you are, the same size whichever key, click or menu asks (`popup.go`);
   never the board replaced by a full-screen one, nor fzf's `execute`,
   which shows the pane's own screen between.
-- **Back where you were:** going home from a thread (Alt y, THREADS, a
-  menu) puts the boards' cursor on its row (`_pos`, posted to each board);
+- **Back where you were:** going home from a thread (THREADS, a menu) puts
+  the boards' cursor on its row (`_pos`, posted to each board), and Alt y's
+  popover over a thread opens with its cursor there;
   closing the thread you are in lands home, not on whichever window tmux
   showed before.
 - **No shifts:** search takes the header's line on the board and in the
@@ -638,9 +639,22 @@ else weaver's.
   and process. Its old keys never meet rows they do not know. The PR and
   issue Inbox, when it comes, is a second window beside home, out of the
   thread numbering.
-- **Alt y:** `wvr go home`: from a thread to home, remembering the window
-  in `$STATE_DIR/<skey>.last`; from home on to each view in turn, and from the
-  last back to it (or home, when it has gone); home is made again if it was
+- **Alt y:** `wvr go home` (run in the pane's directory). From a thread, a
+  popover over it (`peek`): `display-popup -B -E` at 90% of the client,
+  running `wvr _peek FILE AGENT`, whose pages are the board (`ls` with its
+  socket named `.fzf.p<pid>`, so hooks reload it, and its cursor on AGENT's
+  row) and each view that is set up (`itemsView`), `tab` and `shift-tab`
+  going round them. A popup cannot open over a popup, so a key there that
+  would open a dialog or go elsewhere ends the popover with its choice
+  (`peekChoice`, `peekItemChoice`) written to FILE, one wvr command a line,
+  its words tab-separated; `go home`, which waits for the popover to close,
+  then runs them: a jump (`_goto`), `edit`, `resume`, `_popup new|close|
+  forget|adopt`, `_items NAME from REF [--review]`, or `next` (Alt 1).
+  `esc`, `q` and Alt y close it with nothing to run; right clicks do
+  nothing in it. Without a client to show it on, Alt y goes home as from
+  anywhere else. From home, on to each view in turn, and from the last back
+  to the thread's window home was left from (`$STATE_DIR/<skey>.last`, or
+  home when it has gone); from anywhere else home, made again if it was
   closed.
 - **Views:** see [Views](#views).
 - **Threads:** `new-window -n LABEL -c DIR 'weaver _agent TOK KIND'`, then

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -60,10 +61,19 @@ func (e *Env) Home() error {
 // the board as text. The home board ($LS_HOME) stays: its keys act and it
 // carries on; any other ends with a key, and acts.
 func (e *Env) Ls() error {
+	_, err := e.ls("", "")
+	return err
+}
+
+// ls is the dashboard. In Alt y's popover (`wvr _peek`), peek is the file
+// for what is chosen there (peekChoice) and at the pane whose row the
+// cursor starts on; it ends with a key, and says which way tab and
+// shift-tab went ("next", "prev"), else "".
+func (e *Env) ls(peek, at string) (string, error) {
 	home := os.Getenv("LS_HOME") != ""
 	if _, err := exec.LookPath("fzf"); err != nil || !cli.IsTTY(1) {
 		fmt.Print(e.PlainRows())
-		return nil
+		return "", nil
 	}
 	q := session.Quote(e.Self)
 	sh := "/bin/sh"
@@ -89,6 +99,17 @@ func (e *Env) Ls() error {
 		jumpAct, editAct, newAct, quitAct, resumeAct = "print(jump)+accept", "print(ctrl-e)+accept", "print(new)+accept",
 			"abort", "print(resume)+accept"
 	}
+	// x, a, tab and a right click open dialogs or go to other windows: in
+	// the popover, which is in the way of both, they end it and say so.
+	closeAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " _popup close {2})' ;; l*) echo 'execute-silent(" + q + " _popup forget {2})' ;; esac"
+	// An agent you started by hand, adopted; else the picker of
+	// conversations (on an empty board too, as n's field is made).
+	adoptAct := "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent(" + q + " _popup adopt)'; else printf '%s2})\\n' 'execute-silent(" + q + " _popup adopt {'; fi"
+	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+q+" _menu board {1})"
+	if peek != "" {
+		closeAct = "transform:case {1} in a*|l*) echo 'print(close)+accept' ;; esac"
+		adoptAct, nextAct, prevAct, menuAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept", "ignore"
+	}
 	os.Setenv("LS_JUMP", jumpAct)
 	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
 		os.MkdirAll(e.SockDir, 0o700)
@@ -97,6 +118,9 @@ func (e *Env) Ls() error {
 	// Hooks reload this dashboard through its socket as agents change; its
 	// files go with it, also when its pane is closed under it.
 	base := e.SockDir + "/" + e.SKey + ".fzf." + strconv.Itoa(os.Getpid())
+	if peek != "" {
+		base = e.SockDir + "/" + e.SKey + ".fzf.p" + strconv.Itoa(os.Getpid())
+	}
 	sock := base + ".sock"
 	side := []string{sock, base + ".keys", base + ".view", base + ".title", base + ".label", base + ".room",
 		base + ".shown", base + ".tight", base + ".vp"}
@@ -183,22 +207,28 @@ func (e *Env) Ls() error {
 		args = append(args,
 			"--bind", "n:"+newAct,
 			// Its card in a popup over the board, as the menus open it.
-			"--bind", "x:transform:case {1} in a*) echo 'execute-silent("+q+" _popup close {2})' ;; l*) echo 'execute-silent("+q+" _popup forget {2})' ;; esac",
-			// An agent you started by hand, adopted; else the picker of
-			// conversations (on an empty board too, as n's field is made).
-			"--bind", "a:transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent("+q+" _popup adopt)'; else printf '%s2})\\n' 'execute-silent("+q+" _popup adopt {'; fi",
+			"--bind", "x:"+closeAct,
+			"--bind", "a:"+adoptAct,
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s:transform("+q+" _view screen)",
 			// Tab and shift-tab: the next and previous view, as a tab bar.
-			"--bind", "tab:execute-silent("+q+" go next)", "--bind", "btab:execute-silent("+q+" go prev)",
+			"--bind", "tab:"+nextAct, "--bind", "btab:"+prevAct,
 			"--bind", "?:transform("+q+" _view help)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform("+q+" _click board)",
 			"--bind", "click-header:transform("+q+" _click title)",
-			"--bind", "right-click:execute-silent("+q+" _menu board {1})",
+			"--bind", "right-click:"+menuAct,
 			"--bind", "ctrl-r:reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)
+		if peek != "" {
+			// Alt y again closes it, as a toggle; Alt N and Alt 1 work in it
+			// as they do anywhere. It opens on the thread it is over.
+			args = append(args, "--bind", "alt-y:abort", "--bind", "alt-N,alt-n:"+newAct, "--bind", "alt-1:print(alt-1)+accept")
+			if i := rowOf(rows, "a"+at); at != "" && i > 0 {
+				args = append(args, "--sync", "--bind", "start:pos("+strconv.Itoa(i)+")")
+			}
+		}
 		c := fzfCmd(args)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr
@@ -213,11 +243,11 @@ func (e *Env) Ls() error {
 			// The home board does not end: ctrl-c starts it again. Not
 			// without its terminal (the pane or the session closed).
 			if rc == 2 {
-				return nil
+				return "", nil
 			}
 			t, err := os.Open("/dev/tty")
 			if err != nil {
-				return nil
+				return "", nil
 			}
 			t.Close()
 			// A newer weaver is installed (_chrome ended the board for it):
@@ -230,17 +260,21 @@ func (e *Env) Ls() error {
 			continue
 		}
 		if out == "" {
-			return nil
+			return "", nil
 		}
 		// A key fzf printed (print), then the item; the key alone on an
 		// empty board; a bare item when fzf accepted on its own.
 		key, sel := "", ""
 		if k, s, ok := strings.Cut(out, "\n"); ok {
 			key, sel = k, s
-		} else if out == "new" || out == "jump" || out == "ctrl-e" {
+		} else if slices.Contains(boardKeys, out) {
 			key = out
 		} else {
 			key, sel = "jump", out
+		}
+		if peek != "" {
+			step, cmds := peekChoice(key, sel)
+			return step, writePeek(peek, cmds)
 		}
 		pane, tab := "", ""
 		if sel != "" && (sel[0] == 'a' || sel[0] == 'l') {
@@ -258,7 +292,7 @@ func (e *Env) Ls() error {
 			if pane != "" {
 				exec.Command(e.Self, "resume", pane).Run()
 			}
-			return nil
+			return "", nil
 		case "new":
 			a := []string{"new"}
 			if pane != "" {
@@ -272,7 +306,7 @@ func (e *Env) Ls() error {
 				rc = x.ExitCode()
 			}
 			if rc == 0 {
-				return nil
+				return "", nil
 			}
 			if rc != 130 {
 				time.Sleep(1500 * time.Millisecond)
@@ -280,12 +314,83 @@ func (e *Env) Ls() error {
 			continue
 		}
 		if pane == "" {
-			return nil
+			return "", nil
 		}
 		exec.Command(e.Self, "_goto", pane, tab).Run()
 		if key == "ctrl-e" {
 			syscall.Exec(e.Self, []string{e.Self, "edit", pane}, os.Environ())
 		}
-		return nil
+		return "", nil
 	}
+}
+
+// boardKeys are the keys a board prints alone, on an empty board.
+var boardKeys = []string{"new", "jump", "ctrl-e", "adopt", "next", "prev", "alt-1"}
+
+// rowOf is the line (from 1) of the board's rows whose item id is id; 0
+// when none is.
+func rowOf(rows, id string) int {
+	for i, l := range strings.Split(rows, "\n") {
+		if f, _, _ := strings.Cut(l, "\t"); f == id {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// peekChoice is what key, pressed on the board's line sel ("" on an empty
+// board) in Alt y's popover, asks for: tab and shift-tab's step to the
+// views beside it ("next", "prev"), or the wvr commands to run once the
+// popover has closed, which it would be in the way of.
+func peekChoice(key, sel string) (string, [][]string) {
+	kind, id, tab := "", "", ""
+	if f := strings.Split(sel, "\t"); sel != "" && len(f) > 2 {
+		kind, id, tab = sel[:1], f[1], f[2]
+	}
+	agentRow, lost := kind == "a", kind == "l"
+	switch key {
+	case "next", "prev":
+		return key, nil
+	case "alt-1":
+		return "", [][]string{{"next"}}
+	case "new":
+		if agentRow {
+			return "", [][]string{{"_popup", "new", "--from", id}}
+		}
+		return "", [][]string{{"_popup", "new"}}
+	case "adopt":
+		if agentRow {
+			return "", [][]string{{"_popup", "adopt", id}}
+		}
+		return "", [][]string{{"_popup", "adopt"}}
+	case "close":
+		switch {
+		case agentRow:
+			return "", [][]string{{"_popup", "close", id}}
+		case lost:
+			return "", [][]string{{"_popup", "forget", id}}
+		}
+	case "ctrl-e":
+		if agentRow {
+			return "", [][]string{{"_goto", id, tab}, {"edit", id}}
+		}
+	case "jump", "resume":
+		switch {
+		case agentRow:
+			return "", [][]string{{"_goto", id, tab}}
+		case lost:
+			return "", [][]string{{"resume", id}}
+		}
+	}
+	return "", nil
+}
+
+// writePeek writes cmds to the popover's file f, one a line, its words
+// tab-separated.
+func writePeek(f string, cmds [][]string) error {
+	var b strings.Builder
+	for _, c := range cmds {
+		b.WriteString(strings.Join(c, "\t") + "\n")
+	}
+	return os.WriteFile(f, []byte(b.String()), 0o600)
 }

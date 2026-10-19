@@ -130,7 +130,8 @@ func Help() string {
 		"  " + g + "x" + o + "           forget it " + d + "(its worktree goes once nothing in it is unsaved)" + o + "\n" +
 		"\n" +
 		g + "ANYWHERE" + o + "\n" +
-		"  " + g + "Alt y" + o + "       home, then each view, then back where you were\n" +
+		"  " + g + "Alt y" + o + "       in a thread: the board over it " + d + "(tab: the views)" + o + ";\n" +
+		"              on home: each view, then back where you were\n" +
 		"  " + g + "Alt N" + o + "       new thread " + d + "(in a view: from the item)" + o + "\n" +
 		"  " + g + "Alt 1" + o + "       the thread that has waited on you longest " + d + "(row 1)" + o + "\n" +
 		"  " + g + "Alt v  V" + o + "    the thread's nvim; full screen\n" +

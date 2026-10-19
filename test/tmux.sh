@@ -102,6 +102,8 @@ attach() {
 	sleep 0.5
 }
 board() { ls /tmp/weaver-$(id -u)/tmux-$S.fzf.*.sock 2>/dev/null | head -n 1; }
+# Alt y's popover over a thread: its board's socket, while it shows.
+peeking() { ls /tmp/weaver-$(id -u)/tmux-$S.fzf.p*.sock 2>/dev/null | head -n 1; }
 windows() { tx list-windows -t "=$S" -F '#{window_index}' | tr '\n' ' '; }
 where() { tx display -p -t "=$S:" '#{window_index} #{pane_id}'; }
 panes() { tx list-panes -t "=$S:$1" -F '#{pane_index} #{pane_id} #{pane_width} #{pane_start_command}'; }
@@ -205,12 +207,13 @@ ok "send: the notes at the agent's prompt, entered" \
 # --- the keys
 tx select-window -t "=$S:1" \; select-pane -t "%$AG"
 key 1b79 # Alt y
-waitfor '[ "$(where)" = "0 %$(pane_at 0 0)" ]'
-ok "Alt y: home" "$(where | cut -d ' ' -f 1)" "0"
+waitfor '[ -n "$(peeking)" ]'
+ok "Alt y in a thread: the board in a popover over it, the thread still there" \
+	"$([ -n "$(peeking)" ] && echo popover)|$(where)" "popover|1 %$AG"
 key 1b79
-waitfor '[ "$(where)" = "1 %$AG" ]'
-ok "Alt y again: back where you were" "$(where)" "1 %$AG"
-key 1b79
+waitfor '[ -z "$(peeking)" ]'
+ok "Alt y again: the popover closes, where you were" "$([ -z "$(peeking)" ] && echo closed)|$(where)" "closed|1 %$AG"
+tx select-window -t "=$S:0"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 key 31 # 1, on the board
 waitfor '[ "$(where)" = "1 %$AG" ]'
@@ -231,7 +234,7 @@ sleep 0.5
 ok "send: not while it waits on a dialog" \
 	"$(tr '\n' '|' <"$AT/send.out")|$(tx capture-pane -p -t "%$AG" | grep -c 'a dialog answer')" \
 	"weaver: the agent waits on a dialog: answer it first (or --force)|1||0"
-key 1b79
+tx select-window -t "=$S:0"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 n=$(grep -c 'weaver: \[1/1\] 01 say hello · needs you' "$AT/screen.log")
 key 1b31 # Alt 1
@@ -427,16 +430,20 @@ ok "resume: its worktree gone, from its repository" \
 tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here --no-focus 'one more' >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 1 2 " ]'
 AG1=$(pane_at 1 1)
-cursor() { curl -s -m 2 --unix-socket "$(board)" http://localhost | jq -r .current.text | cut -f 1; }
+cursor() { curl -s -m 2 --unix-socket "${1:-$(board)}" http://localhost | jq -r .current.text | cut -f 1; }
 for w in 1 2; do
 	tx select-window -t "=$S:$w"
 	waitfor '[ "$(where | cut -d " " -f 1)" = '"$w"' ]'
-	key 1b79 # Alt y
-	waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 	a=$AG
 	[ $w = 1 ] && a=$AG1
-	waitfor '[ "$(cursor)" = "a'"$a"'" ]'
-	ok "transitions: Alt y from thread $w, the board's cursor on its row" "$(cursor)" "a$a"
+	key 1b79 # Alt y
+	waitfor '[ -n "$(peeking)" ] && [ "$(cursor "$(peeking)")" = "a'"$a"'" ]'
+	ok "transitions: Alt y from thread $w, the popover's cursor on its row" "$(where | cut -d ' ' -f 1)|$(cursor "$(peeking)")" "$w|a$a"
+	key 1b # esc
+	waitfor '[ -z "$(peeking)" ]'
+	tx run-shell -t "=$S:" "wvr _click status home >/dev/null 2>&1"
+	waitfor '[ "$(where | cut -d " " -f 1)" = 0 ] && [ "$(cursor)" = "a'"$a"'" ]'
+	ok "...THREADS on the status line: home, the board's cursor on its row" "$(where | cut -d ' ' -f 1)|$(cursor)" "0|a$a"
 done
 tx select-window -t "=$S:2"
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
@@ -589,28 +596,52 @@ ok "issue --review: N-title branch, plan mode, investigate" \
 	"$(git -C "$(tx display -p -t "%$AG2" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(sed -n 2p "$AT/args.$AG2")|$(grep -c 'without changing any files' "$AT/args.$AG2")" \
 	"12-fix-the-flaky-test|plan|1"
 
-# Alt y: a thread, home, each view, and back; Alt j and Alt k pass the views.
+# Alt y in a thread: a popover, where tab steps through the board and the
+# views; enter on an item there closes it, then does what it says. On home,
+# Alt y goes through the views and back. Alt j and Alt k pass the views.
 tx select-window -t "=$S:2"
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+vsocks() { ls /tmp/weaver-$(id -u)/tmux-$S.view.$1.*.sock 2>/dev/null | wc -l | tr -d ' '; }
+key 1b79 # Alt y
+waitfor '[ -n "$(peeking)" ]' && seq="board "
+key 09 # tab
+waitfor '[ "$(vsocks github)" = 2 ]' && seq="${seq}github "
+key 09
+waitfor '[ "$(vsocks linear)" = 2 ]' && seq="${seq}linear "
+key 09
+waitfor '[ -n "$(peeking)" ]' && seq="${seq}board "
+ok "Alt y's popover: tab steps through the board and the views, over the thread" "$seq|$(where | cut -d ' ' -f 1)" "board github linear board |2"
+key 09 # tab: GITHUB
+waitfor '[ "$(vsocks github)" = 2 ]'
+sleep 0.5
+key 0d # enter, on the pull request (whose thread is 1)
+waitfor '[ "$(vsocks github)" = 1 ] && [ "$(where | cut -d " " -f 1)" = 1 ]'
+ok "...enter on a pull request in it: the popover closes, and you go to its thread" \
+	"$(vsocks github)|$(where | cut -d ' ' -f 1)" "1|1"
+tx select-window -t "=$S:2"
+waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+tx run-shell -t "=$S:" "wvr _click status home >/dev/null 2>&1"
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 seq=""
-for i in 1 2 3 4; do
+for i in 1 2 3; do
 	key 1b79
 	sleep 0.4
 	seq="$seq$(where | cut -d ' ' -f 1) "
 done
-ok "Alt y: home, GITHUB, LINEAR, back to the thread" "$seq" "0 900 901 2 "
+ok "Alt y on home: GITHUB, LINEAR, back to the thread" "$seq" "900 901 2 "
 key 1b6a # Alt j, from the last thread
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 ok "Alt j: past the views, round to home" "$(where | cut -d ' ' -f 1)" "0"
 key 1b6b # Alt k
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
 ok "Alt k: back past them" "$(where | cut -d ' ' -f 1)" "2"
-key 1b79 # Alt y: home
+tx run-shell -t "=$S:" "wvr _click status home >/dev/null 2>&1"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 sleep 0.5
 key 71 # q
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
 ok "home's q: back to the thread, not on to the views" "$(where | cut -d ' ' -f 1)" "2"
-key 1b79
+tx run-shell -t "=$S:" "wvr _click status home >/dev/null 2>&1"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 key 1b79
 waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'

@@ -1,8 +1,10 @@
 package wvr
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -64,9 +66,11 @@ func (e *Env) tabs() []tab {
 	return ts
 }
 
-// GoHome is `wvr go home` (Alt y): from a thread (or anywhere else) to
-// home, made again first if it was closed; from home on through the views
-// (THREADS, GITHUB, LINEAR), and from the last back to where you came from.
+// GoHome is `wvr go home` (Alt y): from a thread, the board in a popover
+// over it (peek), where tab goes on to the views; from home on through the
+// views (THREADS, GITHUB, LINEAR), and from the last back to where you came
+// from; from anywhere else (or with no terminal to show a popover on) home,
+// made again first if it was closed.
 func (e *Env) GoHome() {
 	ts, cur, home := e.where()
 	back := func() { e.goBack(ts, cur, home) }
@@ -88,8 +92,83 @@ func (e *Env) GoHome() {
 		}
 		back()
 		return
+	case cur.id != "" && cur.view == "" && e.peek(cur):
+		return
 	}
 	e.toHome(cur, home)
+}
+
+// peek shows Alt y's popover over thread window cur (`wvr _peek`): the
+// board, most of the terminal, its cursor on cur's thread, and on tab the
+// views. It waits for the popover to close, then runs what was chosen there
+// that the popover would have been in the way of: a jump, or a dialog (tmux
+// shows one popup at a time). False when no terminal looks at the session.
+func (e *Env) peek(cur tab) bool {
+	if os.MkdirAll(e.SockDir, 0o700) != nil {
+		return false
+	}
+	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())
+	os.Remove(f)
+	defer os.Remove(f)
+	c, ok := e.popupCmd(peekSize, []string{"-B"}, []string{"_peek", f, string(e.agentIn(cur.id))})
+	if !ok || c.Run() != nil {
+		return false
+	}
+	b, _ := os.ReadFile(f)
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		if l != "" {
+			bestEffort(exec.Command(e.Self, strings.Split(l, "\t")...).Run())
+		}
+	}
+	return true
+}
+
+// Peek is `wvr _peek FILE [PANE]`, Alt y's popover over a thread: the
+// board, its cursor on PANE's row, and on tab and shift-tab the views set
+// up beside it, round as a tab bar goes. What is chosen there that needs
+// the popover gone is written to FILE (writePeek), for `wvr go home` to run
+// once it has closed.
+func (e *Env) Peek(args []string) error {
+	file, at := arg(args, 0), arg(args, 1)
+	if file == "" {
+		return errors.New("usage: wvr _peek FILE [PANE]")
+	}
+	pages := []string{"home"}
+	for _, n := range e.viewNames() {
+		if e.viewNeeds(n).state == viewReady {
+			pages = append(pages, n)
+		}
+	}
+	i := 0
+	for {
+		step, err := "", error(nil)
+		if src, ok := itemSourceOf(pages[i]); ok {
+			step, err = e.itemsView(src, file)
+		} else {
+			step, err = e.ls(file, at)
+		}
+		switch {
+		case err != nil:
+			return err
+		case step == "next":
+			i = (i + 1) % len(pages)
+		case step == "prev":
+			i = (i + len(pages) - 1) % len(pages)
+		default:
+			return nil
+		}
+	}
+}
+
+// agentIn is the agent of window w's thread; "" when it has none.
+func (e *Env) agentIn(w tmux.WindowID) tmux.PaneID {
+	panes, _ := e.Panes()
+	for _, p := range panes {
+		if p.Tab == w && e.agentOf(p.ID) == p.ID {
+			return p.ID
+		}
+	}
+	return ""
 }
 
 // toHome goes home from window cur (kept, when a thread's, for going back
@@ -134,30 +213,22 @@ func (e *Env) selectHome(home tmux.WindowID) {
 // boardOn puts the boards' cursors on the thread whose window is w (its
 // row, as the board's own rows place it: _pos).
 func (e *Env) boardOn(w tmux.WindowID) {
-	panes, ok := e.Panes()
-	if !ok {
+	p := e.agentIn(w)
+	if p == "" {
 		return
 	}
-	for _, p := range panes {
-		if p.Tab != w || e.agentOf(p.ID) != p.ID {
-			continue
-		}
-		q := session.Quote(e.Self)
-		socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
-		for _, s := range socks {
-			session.FzfPost(s, "transform("+q+" _pos "+string(p.ID)+")")
-		}
-		return
+	q := session.Quote(e.Self)
+	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
+	for _, s := range socks {
+		session.FzfPost(s, "transform("+q+" _pos "+string(p)+")")
 	}
 }
 
 // Pos is `wvr _pos PANE`, in a board's fzf: the action that puts its
 // cursor on PANE's row (nothing when it has none).
 func (e *Env) Pos(pane string) string {
-	for i, l := range strings.Split(e.Rows(), "\n") {
-		if id, _, _ := strings.Cut(l, "\t"); id == "a"+pane {
-			return "pos(" + strconv.Itoa(i+1) + ")\n"
-		}
+	if i := rowOf(e.Rows(), "a"+pane); i > 0 {
+		return "pos(" + strconv.Itoa(i) + ")\n"
 	}
 	return ""
 }

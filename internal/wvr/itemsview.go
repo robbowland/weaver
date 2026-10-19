@@ -569,13 +569,8 @@ const itemKeys = "j,k,g,G,o,s,q,?"
 // service said last at once, and asks again behind it when that is more
 // than 2 minutes old, and every 5 minutes it is open.
 func (e *Env) Items(args []string) error {
-	var src itemSource
-	switch firstArg(args) {
-	case "github":
-		src = githubSource{}
-	case "linear":
-		src = linearSource{}
-	default:
+	src, ok := itemSourceOf(firstArg(args))
+	if !ok {
 		return fmt.Errorf("usage: wvr _items github|linear [...]")
 	}
 	args = args[1:]
@@ -631,13 +626,27 @@ func (e *Env) Items(args []string) error {
 	default:
 		return fmt.Errorf("no _items %s %s", src.name(), sub)
 	}
-	return e.itemsView(src)
+	_, err := e.itemsView(src, "")
+	return err
 }
 
-// itemsView is the view itself.
-func (e *Env) itemsView(src itemSource) error {
+// itemSourceOf is view name's source of items.
+func itemSourceOf(name string) (itemSource, bool) {
+	switch name {
+	case "github":
+		return githubSource{}, true
+	case "linear":
+		return linearSource{}, true
+	}
+	return nil, false
+}
+
+// itemsView is the view itself. In Alt y's popover (`wvr _peek`), peek is
+// the file for what is chosen there (peekItemChoice); it ends with a key,
+// and says which way tab and shift-tab went ("next", "prev"), else "".
+func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	if _, err := exec.LookPath("fzf"); err != nil {
-		return err
+		return "", err
 	}
 	bestEffort(os.MkdirAll(e.SockDir, 0o700))
 	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
@@ -668,6 +677,15 @@ func (e *Env) itemsView(src itemSource) error {
 	act := func(cmd string) string {
 		return "transform:case {1} in i*) echo 'execute-silent(" + me + " " + cmd + " {2})' ;; esac"
 	}
+	fromAct, reviewAct := act("from"), "transform:case {1} in i*) echo 'execute-silent("+me+" from {2} --review)' ;; esac"
+	backAct := "execute-silent(" + q + " go back)"
+	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+me+" menu {1})"
+	if peek != "" {
+		// In the popover, what opens a dialog or goes elsewhere ends it.
+		fromAct = "transform:case {1} in i*) echo 'print(from)+accept' ;; esac"
+		reviewAct = "transform:case {1} in i*) echo 'print(review)+accept' ;; esac"
+		backAct, nextAct, prevAct, menuAct = "abort", "print(next)+accept", "print(prev)+accept", "ignore"
+	}
 	for {
 		rows := e.itemRows(src)
 		// The cursor on the first item, not its section's heading.
@@ -691,18 +709,21 @@ func (e *Env) itemsView(src itemSource) error {
 			"--bind", "load:transform(" + me + " chrome)",
 			"--bind", `focus:transform:case {1} in i*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last",
-			"--bind", "enter,double-click,alt-N,alt-n:" + act("from"),
-			"--bind", "alt-R,alt-r:transform:case {1} in i*) echo 'execute-silent(" + me + " from {2} --review)' ;; esac",
+			"--bind", "enter,double-click,alt-N,alt-n:" + fromAct,
+			"--bind", "alt-R,alt-r:" + reviewAct,
 			"--bind", "o:" + act("open"),
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			// q and esc: back to your thread, as on home.
-			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo 'execute-silent(` + q + ` go back)'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
-			"--bind", "q:execute-silent(" + q + " go back)",
+			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '` + backAct + `'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
+			"--bind", "q:" + backAct,
 			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform(" + me + " click)",
-			"--bind", "right-click:execute-silent(" + me + " menu {1})",
+			"--bind", "right-click:" + menuAct,
+		}
+		if peek != "" {
+			args = append(args, "--bind", "alt-y:abort", "--bind", "alt-1:print(alt-1)+accept")
 		}
 		if len(src.kinds()) > 1 {
 			args = append(args, "--bind", "s:execute-silent("+me+" switch)+"+reload+"+first")
@@ -710,22 +731,50 @@ func (e *Env) itemsView(src itemSource) error {
 			args = append(args, "--bind", "s:ignore")
 		}
 		// Tab and shift-tab: the next and previous view, as on home.
-		args = append(args, "--bind", "tab:execute-silent("+q+" go next)", "--bind", "btab:execute-silent("+q+" go prev)")
+		args = append(args, "--bind", "tab:"+nextAct, "--bind", "btab:"+prevAct)
 		c := fzfCmd(args, "WEAVER_VIEW_SOCK="+sock)
 		c.Stdin = strings.NewReader(rows)
 		c.Stderr = os.Stderr
+		if peek != "" {
+			out, _ := c.Output()
+			key, sel, _ := strings.Cut(strings.TrimRight(string(out), "\n"), "\n")
+			step, cmds := peekItemChoice(src.name(), key, sel)
+			return step, writePeek(peek, cmds)
+		}
 		err := c.Run()
 		// ctrl-c ends fzf: the view carries on, not without its terminal.
 		if x, ok := err.(*exec.ExitError); ok && x.ExitCode() == 2 {
-			return nil
+			return "", nil
 		}
 		t, err := os.Open("/dev/tty")
 		if err != nil {
-			return nil
+			return "", nil
 		}
 		_ = t.Close() // opened only to see that there is one
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// peekItemChoice is what key, pressed on view name's line sel in Alt y's
+// popover, asks for: tab and shift-tab's step ("next", "prev"), or the wvr
+// commands to run once the popover has closed (the new-thread form for the
+// item, read-only for a review; Alt 1's jump).
+func peekItemChoice(name, key, sel string) (string, [][]string) {
+	ref := ""
+	if f := strings.Split(sel, "\t"); strings.HasPrefix(sel, "i") && len(f) > 1 {
+		ref = f[1]
+	}
+	switch {
+	case key == "next" || key == "prev":
+		return key, nil
+	case key == "alt-1":
+		return "", [][]string{{"next"}}
+	case key == "from" && ref != "":
+		return "", [][]string{{"_items", name, "from", ref}}
+	case key == "review" && ref != "":
+		return "", [][]string{{"_items", name, "from", ref, "--review"}}
+	}
+	return "", nil
 }
 
 func firstArg(args []string) string {

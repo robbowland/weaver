@@ -27,7 +27,8 @@ LOST (its session went: a crash, or quit)
   x           forget it (its worktree goes once nothing in it is unsaved)
 
 ANYWHERE
-  Alt y       home, then each view, then back where you were
+  Alt y       in a thread: the board over it (tab: the views);
+              on home: each view, then back where you were
   Alt N       new thread (in a view: from the item)
   Alt 1       the thread that has waited on you longest (row 1)
   Alt v  V    the thread's nvim; full screen

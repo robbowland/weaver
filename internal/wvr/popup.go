@@ -32,6 +32,9 @@ var (
 	formSize = popupSize{0.62, 96, 160, 0, 22, 22}
 	// A card: closing a thread, forgetting a lost one.
 	cardSize = popupSize{0.5, 80, 120, 0, 14, 14}
+	// Alt y's popover over a thread: the board, most of the terminal, the
+	// thread still there around it.
+	peekSize = popupSize{0.9, 60, 1 << 16, 0.9, 16, 1 << 16}
 )
 
 // of is the size on a terminal cw x ch (never past its edges).
@@ -63,10 +66,24 @@ func (e *Env) cardPopup(args ...string) error {
 // process of its own, so whatever asked (a list, waiting on its command)
 // goes on at once.
 func (e *Env) popup(what string, z popupSize, opts, args []string) error {
+	c, _ := e.popupCmd(z, opts, args)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := c.Start(); err != nil {
+		e.Tmux("display-message", "-d", "2500", "weaver: could not open "+what)
+		return cli.ErrSaid
+	}
+	return nil
+}
+
+// popupCmd is tmux showing wvr with args in a popup of size z (opts: its
+// border, its directory) on the client looking at the session; tmux's
+// command returns when the popup closes. False when no client looks at the
+// session (what asked may have none: tmux's run-shell), so the popup goes
+// wherever tmux puts it, at the smallest size.
+func (e *Env) popupCmd(z popupSize, opts, args []string) (*exec.Cmd, bool) {
 	argv := []string{"display-popup"}
-	// The client looking at this session (what asked may have none: tmux's
-	// run-shell), and its size.
 	cw, ch := 0, 0
+	client := false
 	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name} #{client_width} #{client_height}"); err == nil {
 		at := ""
 		best := []string(nil)
@@ -79,6 +96,7 @@ func (e *Env) popup(what string, z popupSize, opts, args []string) error {
 			argv = append(argv, "-c", best[1])
 			cw, _ = strconv.Atoi(best[2])
 			ch, _ = strconv.Atoi(best[3])
+			client = true
 		}
 	}
 	w, h := z.of(cw, ch)
@@ -88,13 +106,7 @@ func (e *Env) popup(what string, z popupSize, opts, args []string) error {
 	if !e.InTmux {
 		argv = append(append([]string{}, e.TSock...), argv...)
 	}
-	c := exec.Command("tmux", argv...)
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := c.Start(); err != nil {
-		e.Tmux("display-message", "-d", "2500", "weaver: could not open "+what)
-		return cli.ErrSaid
-	}
-	return nil
+	return exec.Command("tmux", argv...), client
 }
 
 // Popup is `wvr _popup new|close|forget ...`: the board's n, x on a thread,

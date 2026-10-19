@@ -375,6 +375,17 @@ can supersede an earlier one, and says so.
   [workmux's](https://workmux.raine.dev/guide/sidebar/)) was built and then
   turned off in daily use: home on Alt y already shows every thread when you
   want it. Thread windows are nvim and the agent.
+- 2026-10-19: Alt y from a thread shows the board in a popover over it, most
+  of the terminal, rather than switching to home (Rob: a popover "would be
+  less jarring"; of a popover from a thread, only for the views, or for
+  everything, he chose from a thread). The thread stays around it, so a
+  look at the board and back moves nothing; Tab steps to the views inside
+  it, as on home. Home stays the window you land on as the session starts
+  or you attach. tmux shows one popup at a time and none over another, so
+  what in the popover would open a dialog or go elsewhere ends it, and the
+  `go home` that opened it, waiting on tmux's popup to close, then does it:
+  a file between them carries the choice as wvr commands, which keeps each
+  key's meaning the board's own.
 
 ## Performance and packaging
 
