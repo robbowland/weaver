@@ -62,7 +62,7 @@ const Usage = `usage: wvr [command]
                                and brought back as threads are: the agent in this pane
                                (or pane-id) where it runs, or conversation session-id
                                resumed in a new window; alone, pick one of Claude Code's
-                               recent conversations
+                               recent conversations. Outside tmux, into the weaver session
   send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
                                it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with

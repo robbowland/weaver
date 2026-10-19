@@ -269,7 +269,10 @@ other run of characters one `-`, at most 48 characters, cut at a `-`.
 `wvr adopt [PANE | SESSION-ID]` makes a conversation weaver did not start a
 thread. PANE is `%N` or up to three digits; anything else is a session id or
 its first 4+ characters. Alone, it adopts the agent in its own pane when it
-has one (so `! wvr adopt` inside an agent), else opens the picker.
+has one (so `! wvr adopt` inside an agent), else opens the picker. Outside
+tmux it acts on the weaver session (`$WEAVER_SESSION`, else `weaver`) on
+weaver's own server, as `wvr resume` and `wvr quit` do
+(`toWeaverSession`), and says so when that is not running.
 
 - **In place** (an agent weaver follows, without a thread record): refused
   when its agent has ended, is not one weaver can resume, or has not said

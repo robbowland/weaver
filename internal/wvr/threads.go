@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -850,8 +851,9 @@ func (e *Env) Resume(args []string) error {
 		}
 		return nil
 	}
-	if e.Session == "" {
-		return errors.New("not inside a tmux session (start one with `wvr`)")
+	// From a terminal outside tmux, into the weaver session.
+	if err := e.toWeaverSession(); err != nil {
+		return err
 	}
 	failed := 0
 	for _, f := range match {
@@ -1344,6 +1346,20 @@ func (e *Env) Send(args []string) error {
 	return nil
 }
 
+// toWeaverSession makes the session acted on, outside tmux, weaver's
+// ($WEAVER_SESSION, else weaver) on weaver's own tmux server; inside tmux it
+// is the one you are in. An error when it is not running.
+func (e *Env) toWeaverSession() error {
+	if e.Session == "" {
+		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
+		e.Session, e.SKey = name, "tmux-"+strings.ReplaceAll(name, "/", "_")
+	}
+	if _, err := e.Tmux("has-session", "-t", "="+e.Session); err != nil {
+		return errors.New("no tmux session " + e.Session + " is running (start it with `wvr`)")
+	}
+	return nil
+}
+
 // Quit is `wvr quit [--yes]`: quit the session (outside one, the weaver
 // session) with every agent and nvim in it, after asking. Its threads are
 // kept: they come back as the weaver session starts again.
@@ -1357,17 +1373,10 @@ func (e *Env) Quit(args []string) error {
 			return errors.New("usage: wvr quit [--yes]")
 		}
 	}
-	name := e.Session
-	if name == "" {
-		name = os.Getenv("WEAVER_SESSION")
+	if err := e.toWeaverSession(); err != nil {
+		return err
 	}
-	if name == "" {
-		name = "weaver"
-	}
-	if _, err := e.Tmux("has-session", "-t", "="+name); err != nil {
-		return errors.New("no tmux session " + name + " is running")
-	}
-	skey := "tmux-" + strings.ReplaceAll(name, "/", "_")
+	name, skey := e.Session, e.SKey
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {

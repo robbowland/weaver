@@ -351,6 +351,11 @@ can supersede an earlier one, and says so.
   way goes on. One that runs nowhere is resumed through the lost-thread path,
   from a record its transcript gives. One running elsewhere is refused, not
   resumed beside it: two processes would interleave one conversation.
+- 2026-10-19: `wvr adopt SESSION-ID` (and `resume`) work from a
+  terminal outside tmux, into the weaver session, as `wvr quit` already did.
+  Rob found adopting by session id did not work: the id is copied from
+  wherever the conversation ran, usually a plain terminal, and adopt refused
+  to run outside tmux.
 
 ## The weaver session
 

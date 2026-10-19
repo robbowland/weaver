@@ -31,10 +31,15 @@ const adoptUsage = "usage: wvr adopt [pane-id | session-id]"
 // Adopt is `wvr adopt [PANE | SESSION-ID]`: the agent in PANE, else the
 // one in this pane, made a thread where it runs; conversation SESSION-ID
 // (or its first 4+ characters) resumed as a thread; with neither, a picker
-// of Claude Code's recent conversations.
+// of Claude Code's recent conversations. Outside tmux, into the weaver
+// session.
 func (e *Env) Adopt(args []string) error {
 	if len(args) > 1 || len(args) == 1 && strings.HasPrefix(args[0], "-") {
 		return errors.New(adoptUsage)
+	}
+	// From a terminal outside tmux, into the weaver session.
+	if err := e.toWeaverSession(); err != nil {
+		return err
 	}
 	which := firstArg(args)
 	var msg string

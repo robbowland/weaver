@@ -481,11 +481,13 @@ CID=0f0f0f0f-1111-4222-8333-444444444444
 mkdir -p "$AT/claude/projects/-repo"
 printf '%s\n' '{"type":"user","cwd":"'"$AT/repo"'","gitBranch":"main","message":{"role":"user","content":"tidy the parser"}}' \
 	'{"type":"ai-title","aiTitle":"Tidy the parser"}' >"$AT/claude/projects/-repo/$CID.jsonl"
-tx run-shell -t "=$S:" "wvr adopt 0f0f0f0f >'$AT/adopt.out' 2>&1"
+# From a terminal outside tmux, as from a shell beside it.
+outside() { env -u TMUX -u TMUX_PANE -u WEAVER_TMUX_SESSION "$@"; }
+outside wvr adopt 0f0f0f0f >"$AT/adopt.out" 2>&1
 waitfor '[ "$(panes 2 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
 AG2=$(pane_at 2 1)
 waitfor '[ -f "$AT/args.$AG2" ]'
-ok "adopt: a conversation that runs nowhere, resumed as thread 2 where it started" \
+ok "adopt: a conversation that runs nowhere, from outside tmux, resumed as thread 2 where it started" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(tx display -p -t "%$AG2" '#{pane_current_path}')|$(jq -r '"\(.num) \(.name)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)" \
 	"0 1 2 |--resume $CID |$(cd "$AT/repo" && pwd -P)|2 tidy-the-parser" ||
 	sed 's/^/  adopt: /' "$AT/adopt.out"
