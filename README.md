@@ -2,6 +2,8 @@
 
 **Pick up whichever thread needs you.**
 
+> Slop readme, will update eventually
+
 Run several coding agents side by side in tmux and weaver keeps track of them:
 which are working, which are done, and which are waiting on you. One key shows
 them all, another jumps to whoever has waited longest, and a neovim bound to
