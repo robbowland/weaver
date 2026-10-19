@@ -127,22 +127,32 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	if !ok {
 		total = 200
 	}
+	if !e.splitNvim(agentPane, dir, total, nvimEnv...) {
+		e.Tmux("kill-window", "-t", tab.Target())
+		return "", false
+	}
+	return tab, true
+}
+
+// splitNvim opens the agent's nvim (`wvr nvim --fresh AGENT`) on the left
+// of agentPane, in dir, nvimEnv in its environment, the agent keeping its
+// width of the total columns; bound to the agent before this returns.
+func (e *Env) splitNvim(agentPane tmux.PaneID, dir string, total int, nvimEnv ...string) bool {
 	nvCols := max(total-agentCols(total)-1, 1)
 	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.Target(),
 		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION=" + e.Session}
 	for _, v := range nvimEnv {
 		sw = append(sw, "-e", v)
 	}
-	out, err = e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agentPane))...)
-	f = strings.Fields(string(out))
+	out, err := e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agentPane))...)
+	f := strings.Fields(string(out))
 	if err != nil || len(f) < 2 {
-		e.Tmux("kill-window", "-t", tab.Target())
-		return "", false
+		return false
 	}
 	nv, _ := tmux.ParsePane(f[0])
 	e.bindNvim(agentPane, nv, f[1])
 	e.Tmux("select-pane", "-t", nv.Target(), "-T", "nvim: "+filepath.Base(dir))
-	return tab, true
+	return true
 }
 
 // bindNvim records nvim pane nv (process pid) as agent's:
@@ -612,29 +622,40 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	return run("resume", "--last")
 }
 
-// threadRestore brings lost thread lf back: a window like `wvr new`
-// makes, in the directory its agent started in, whose agent resumes its
-// conversation. It keeps its number when free; its state carries on.
+// threadRestore brings lost thread lf back (threadReopen), its record
+// claimed first, so of two restores at once one takes it; put back when it
+// cannot be.
 func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	tok := token()
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return "", fmt.Errorf("cannot create %s", d)
 	}
-	// Claim it: of two restores at once, one takes the record.
 	if os.Rename(lf, d+"/lost.json") != nil {
 		os.RemoveAll(d)
 		return "", fmt.Errorf("%s: already resumed", filepath.Base(lf))
 	}
-	back := func() {
-		os.Rename(d+"/lost.json", lf)
-		os.RemoveAll(d)
-	}
 	lo, err := store.ReadLost(d + "/lost.json")
 	if err != nil {
-		back()
-		return "", fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
+		err = fmt.Errorf("%s: unreadable: %v", filepath.Base(lf), err)
+	} else {
+		var msg string
+		if msg, err = e.threadReopen(tok, lo, nofocus); err == nil {
+			os.Remove(d + "/lost.json")
+			return msg, nil
+		}
 	}
+	os.Rename(d+"/lost.json", lf)
+	os.RemoveAll(d)
+	return "", err
+}
+
+// threadReopen opens thread lo in a window like `wvr new` makes (its
+// records in the meeting place new/<skey>_<tok>, made by the caller), in
+// the directory its agent started in, whose agent resumes its conversation.
+// It keeps its number when free; its state carries on.
+func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, error) {
+	d := e.threadsNew() + "/" + e.SKey + "_" + tok
 	st, th := lo.State, lo.Thread
 	sid := oneline.Line(st.SessionID)
 	kind := th.Agent
@@ -660,7 +681,6 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		kind = agent.Claude
 	}
 	if s, err := os.Stat(dir); sid == "" || err != nil || !s.IsDir() {
-		back()
 		t := tildify(dir)
 		if t != "" {
 			t += " "
@@ -686,7 +706,6 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 		store.Write(d+"/state.json", s2) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		unlock()
-		back()
 		return "", fmt.Errorf("%s: cannot write its records", nm)
 	}
 	unlock()
@@ -703,10 +722,8 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	}
 	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
-		back()
 		return "", fmt.Errorf("%s: tmux could not open its window", nm)
 	}
-	os.Remove(d + "/lost.json")
 	e.threadPlace(tab, n)
 	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
 }
