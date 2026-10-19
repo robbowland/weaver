@@ -118,6 +118,31 @@ function M.tab_for(root)
   end
 end
 
+-- Start screens: a buffer of one of these, unnamed, is a tab with nothing
+-- in it.
+local start_screens = { snacks_dashboard = true, dashboard = true, alpha = true, ministarter = true, starter = true }
+
+-- A tab with nothing in it: one window (floats aside) on a start screen, or
+-- on an empty, unnamed, unchanged buffer (a worktree's tab before its first
+-- file). A new worktree takes it rather than leaving it in the tab line.
+local function blank_tab()
+  for _, tab in ipairs(api.nvim_list_tabpages()) do
+    local wins = vim.tbl_filter(function(w)
+      return api.nvim_win_get_config(w).relative == ''
+    end, api.nvim_tabpage_list_wins(tab))
+    if #wins == 1 and not util.diffview_view(tab) then
+      local buf = api.nvim_win_get_buf(wins[1])
+      local b = vim.bo[buf]
+      local empty = b.buftype == ''
+        and api.nvim_buf_line_count(buf) == 1
+        and api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ''
+      if api.nvim_buf_get_name(buf) == '' and not b.modified and (start_screens[b.filetype] or empty) then
+        return tab
+      end
+    end
+  end
+end
+
 -- What going to TARGET means, decided before anything changes. One of
 --   { kind = 'new_tab' }                       its worktree has no tab yet
 --   { kind = 'tab', tab, show = Show or nil }  that tab (nil show: root only)
@@ -260,7 +285,12 @@ local function go(target, by)
     return false
   end
   if p.kind == 'new_tab' then
-    vim.cmd('tabnew')
+    local blank = blank_tab()
+    if blank then
+      api.nvim_set_current_tabpage(blank)
+    else
+      vim.cmd('tabnew')
+    end
     vim.cmd('silent tcd ' .. fn.fnameescape(target.root))
     return not target.file or show_file(api.nvim_get_current_win(), target)
   end

@@ -183,5 +183,26 @@ T.run(function()
   C.event({ ev = 'root', root = R.main, seq = 9e12 + 4 })
   T.ok('removed worktree: its tab closed', C.wait_for(1000, "return vim.fn.tabpagenr('$')", 1), 1)
 
+  -- The start screen, left in a tab of its own, is taken by the next
+  -- worktree's tab rather than left in the tab line; so is a worktree's tab
+  -- still empty.
+  local tabs = "return vim.fn.tabpagenr('$') .. '|' .. vim.fn.tabpagenr() .. '|' .. vim.fn.fnamemodify(vim.fn.getcwd(), ':t') .. '|' .. vim.fn.expand('%:t')"
+  C.cmd('only!')
+  C.cmd('enew')
+  C.lua("vim.bo.buftype = 'nofile'; vim.bo.filetype = 'snacks_dashboard'")
+  C.cmd('tabnew')
+  C.cmd('edit ' .. readme)
+  idle()
+  C.event({ ev = 'edit', root = R.a, file = R.a .. '/src/app.txt', seq = 9e12 + 5 })
+  T.ok('start screen: the new worktree takes its tab', C.wait_for(1500, tabs, '2|1|wt-a|app.txt'), '2|1|wt-a|app.txt')
+  local c = R.base .. '/wt-c'
+  T.git(R.main, { 'worktree', 'add', '-q', '-b', 'feat-c', c })
+  C.cmd('tablast')
+  C.cmd('tabnew')
+  C.cmd('tabprevious')
+  idle()
+  C.event({ ev = 'edit', root = c, file = c .. '/src/app.txt', seq = 9e12 + 6 })
+  T.ok('...and an empty tab', C.wait_for(1500, tabs, '3|3|wt-c|app.txt'), '3|3|wt-c|app.txt')
+
   C.close()
 end)

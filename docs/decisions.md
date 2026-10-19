@@ -133,6 +133,12 @@ can supersede an earlier one, and says so.
   for a busy nvim. weaver's nvims now, with no UI left (and not
   `--headless`), write ShaDa themselves with errors silenced, skip nvim's own
   write, and end once the exit autocommands have run: none in 48 hung.
+- 2026-10-19: A new worktree's tab takes a blank one (a start screen, or an
+  empty unnamed buffer, alone in its tab) before it opens another. Rob found
+  the tab line pointless: nvim's start screen stayed as tab 1, `[Scratch]`,
+  once the agent's edits had opened worktree tabs beside it, and a
+  worktree's tab opened for a `root` event stayed `[No Name]` until a file
+  came.
 
 ## Dashboard
 

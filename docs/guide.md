@@ -371,7 +371,9 @@ The Neovim weaver opens for an agent loads your own config, then:
   never types into Neovim, and never replaces a buffer with unsaved changes,
   a terminal, quickfix or a git window. It brings other tabs up to date
   without switching to them.
-- **gives each worktree its own tab**, closed when the worktree is removed.
+- **gives each worktree its own tab**, closed when the worktree is removed. A
+  new worktree takes a tab with nothing in it (the start screen, or an empty
+  one) before it opens another.
 - **reloads files** as soon as they change on disk, never over unsaved
   changes.
 - **shows the agent at the top of each file window**: its state, turn, task
