@@ -578,6 +578,21 @@ ok "tab: the next view, round as a tab bar goes; shift-tab the previous" "$seen"
 key 09
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 
+# Alt R on a pull request in the view: the form, filled in for its review.
+tx select-window -t "=$S:900"
+waitfor '[ "$(where | cut -d " " -f 1)" = 900 ] && tx capture-pane -p -t "=$S:900" | grep -q "Add a flag"'
+rm -f "$SD"/form.*
+key 1b52 # Alt R
+waitfor '[ -n "$(ls "$SD"/form.* 2>/dev/null)" ]'
+FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.[a-z]*$' | head -n 1)
+[ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
+waitfor '[ "$(jq -r .mode "$FORM" 2>/dev/null)" = review ]'
+ok "GITHUB: Alt R on a pull request, the form for its review" "$(jq -r '"\(.mode) \(.branch)"' "$FORM" 2>/dev/null)" "review add-flag" ||
+	{ ls "$SD"/form.* | sed 's/^/  form: /'; cat "$FORM" 2>/dev/null | sed 's/^/  form: /'; }
+key 1b # esc: no thread
+waitfor '[ -z "$(ls "$SD"/form.* 2>/dev/null)" ]'
+tx select-window -t "=$S:0"
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 
 # A review of the pull request: on its head, read-only, its nvim on the review.
 tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --pr 45 'Review #45' >$AT/new.out 2>&1"
@@ -632,6 +647,24 @@ ok "...enter on a pull request in it: the popover closes, and you go to its thre
 	"$(vsocks github)|$(where | cut -d ' ' -f 1)" "1|1"
 tx select-window -t "=$S:2"
 waitfor '[ "$(where | cut -d " " -f 1)" = 2 ]'
+key 1b79 # Alt y
+waitfor '[ -n "$(peeking)" ]'
+key 09
+waitfor '[ "$(vsocks github)" = 2 ]'
+key 09 # LINEAR, whose issue has no thread
+waitfor '[ "$(vsocks linear)" = 2 ]'
+sleep 0.5
+rm -f "$SD"/form.*
+key 1b52 # Alt R
+waitfor '[ -n "$(ls "$SD"/form.* 2>/dev/null)" ]' 80
+FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.[a-z]*$' | head -n 1)
+[ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
+waitfor '[ "$(jq -r .mode "$FORM" 2>/dev/null)" = review ]'
+ok "...Alt R on an issue in it: the popover closes, and the form for its investigation opens" \
+	"$(vsocks linear)|$(jq -r .mode "$FORM" 2>/dev/null)" "1|review" ||
+	tx show-messages | tail -5 | sed 's/^/  tmux: /'
+key 1b # esc: no thread
+waitfor '[ -z "$(ls "$SD"/form.* 2>/dev/null)" ]'
 tx run-shell -t "=$S:" "wvr _click status home >/dev/null 2>&1"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 seq=""
