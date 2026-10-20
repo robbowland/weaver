@@ -1,7 +1,7 @@
 """A fake Linear GraphQL API for the tmux suite: key lin_fake signs in as Rob
 at Acme; the Queue section finds ENG-42, the other sections nothing. Writes
 its port to the file named, then serves until killed."""
-import json, sys
+import json, socketserver, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 ISSUE = {
@@ -38,7 +38,15 @@ class H(BaseHTTPRequestHandler):
         return self.answer(200, {"data": {"issues": {"nodes": nodes}}})
 
 
-s = HTTPServer(("127.0.0.1", 0), H)
+class Server(HTTPServer):
+    # HTTPServer names itself with socket.getfqdn, a reverse DNS lookup that
+    # can take longer than the suite waits (GitHub's macOS runners).
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+
+
+s = Server(("127.0.0.1", 0), H)
 with open(sys.argv[1], "w") as f:
     f.write(str(s.server_address[1]))
 s.serve_forever()

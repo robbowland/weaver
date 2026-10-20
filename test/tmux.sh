@@ -572,7 +572,7 @@ echo lin_fake >"$AT/linear-key"
 # Linear's API: ENG-42 assigned to you.
 python3 -I "$HERE/fake_linear.py" "$AT/linear-port" &
 linear=$!
-waitfor '[ -s "$AT/linear-port" ]'
+waitfor '[ -s "$AT/linear-port" ]' 100 || echo "fake Linear API: no port after 10s"
 export WEAVER_LINEAR_URL=http://127.0.0.1:$(cat "$AT/linear-port")/graphql
 chmod +x "$AT/bin/gh" "$AT/bin/security"
 printf '%s\n' "$(cd "$AT/r" && pwd -P)" >"$SD/repos"
