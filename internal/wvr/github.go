@@ -28,7 +28,8 @@ func (githubSource) service() string { return "GitHub" }
 
 func (githubSource) guide() viewGuide {
 	return viewGuide{
-		queue:    "yours to do: your review asked for, or assigned to you",
+		queue:    "yours to do: your review asked of you, or assigned to you",
+		team:     "your teams' to do: a review asked of a team you are in",
 		mine:     "yours: opened by you",
 		watch:    "what involves you otherwise",
 		red:      "changes requested, or a check failing",

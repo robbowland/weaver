@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,24 +31,42 @@ const (
 )
 
 // Section is one search: its title, and its filters (GitHub's search
-// syntax, without is:pr or is:issue).
+// syntax, without is:pr or is:issue); Also, a second search whose items it
+// shows too (GitHub's search has no OR between qualifiers); and how many
+// it shows at most (0: Limit).
 type Section struct {
 	Title   string `json:"title"`
 	Filters string `json:"filters"`
+	Also    string `json:"also,omitempty"`
+	Max     int    `json:"max,omitempty"`
+}
+
+// limit is how many items section s shows at most.
+func (s Section) limit() int {
+	if s.Max > 0 {
+		return s.Max
+	}
+	return Limit
 }
 
 // Sections are weaver's: what waits on you, what is yours, and what you
-// take part in.
+// take part in. A review asked of a team you are in counts as asked of you
+// (review-requested:@me), and in a busy organisation those outnumber your
+// own many times: so pull requests waiting on you alone (asked of you, or
+// assigned to you; drafts too) are Queue, shown whole, and those waiting
+// on your teams Team.
 var Sections = map[Kind][]Section{
 	PRs: {
-		{"Queue", "is:open review-requested:@me draft:false sort:updated-desc"},
-		{"Mine", "is:open author:@me sort:updated-desc"},
-		{"Watch", "is:open involves:@me -author:@me -assignee:@me sort:updated-desc"},
+		{Title: "Queue", Filters: "is:open user-review-requested:@me sort:updated-desc",
+			Also: "is:open assignee:@me -author:@me sort:updated-desc", Max: 100},
+		{Title: "Team", Filters: "is:open review-requested:@me -user-review-requested:@me draft:false sort:updated-desc", Max: 50},
+		{Title: "Mine", Filters: "is:open author:@me sort:updated-desc"},
+		{Title: "Watch", Filters: "is:open involves:@me -author:@me -assignee:@me sort:updated-desc"},
 	},
 	Issues: {
-		{"Queue", "is:open assignee:@me sort:updated-desc"},
-		{"Mine", "is:open author:@me sort:updated-desc"},
-		{"Watch", "is:open involves:@me -assignee:@me -author:@me sort:updated-desc"},
+		{Title: "Queue", Filters: "is:open assignee:@me sort:updated-desc"},
+		{Title: "Mine", Filters: "is:open author:@me sort:updated-desc"},
+		{Title: "Watch", Filters: "is:open involves:@me -assignee:@me -author:@me sort:updated-desc"},
 	},
 }
 
@@ -131,8 +151,16 @@ func Query(k Kind, i int) string {
 	if k == Issues {
 		is, frag, fields = "is:issue", "issue", issueFields
 	}
-	q, _ := json.Marshal(is + " archived:false " + Sections[k][i].Filters)
-	return fmt.Sprintf("query {\n  s: search(type: ISSUE, first: %d, query: %s) { issueCount nodes { ...%s } }\n}\n%s\n", Limit, q, frag, fields)
+	s := Sections[k][i]
+	search := func(alias, filters string) string {
+		q, _ := json.Marshal(is + " archived:false " + filters)
+		return fmt.Sprintf("  %s: search(type: ISSUE, first: %d, query: %s) { issueCount nodes { ...%s } }\n", alias, s.limit(), q, frag)
+	}
+	body := search("s", s.Filters)
+	if s.Also != "" {
+		body += search("t", s.Also)
+	}
+	return "query {\n" + body + "}\n" + fields + "\n"
 }
 
 type login struct {
@@ -240,12 +268,14 @@ func (n node) item(k Kind) Item {
 // Parse reads the response to Query(k, i): that section's result.
 func Parse(k Kind, i int, b []byte) (Result, error) {
 	r := Result{Section: Sections[k][i]}
+	type search struct {
+		IssueCount int    `json:"issueCount"`
+		Nodes      []node `json:"nodes"`
+	}
 	var resp struct {
 		Data struct {
-			S *struct {
-				IssueCount int    `json:"issueCount"`
-				Nodes      []node `json:"nodes"`
-			} `json:"s"`
+			S *search `json:"s"`
+			T *search `json:"t"`
 		} `json:"data"`
 		Errors []struct {
 			Message string `json:"message"`
@@ -260,11 +290,30 @@ func Parse(k Kind, i int, b []byte) (Result, error) {
 		}
 		return r, errors.New("github: no search in the answer")
 	}
-	r.Total = resp.Data.S.IssueCount
-	for _, n := range resp.Data.S.Nodes {
-		if n.Number > 0 {
+	// The section's own search, then its second one's items it has not got
+	// (an item can match both), most recently updated first; the total, as
+	// many as both match, less those both returned.
+	seen := map[string]bool{}
+	for _, s := range []*search{resp.Data.S, resp.Data.T} {
+		if s == nil {
+			continue
+		}
+		r.Total += s.IssueCount
+		for _, n := range s.Nodes {
+			id := n.Repository.NameWithOwner + "#" + strconv.Itoa(n.Number)
+			if n.Number <= 0 {
+				continue
+			}
+			if seen[id] {
+				r.Total--
+				continue
+			}
+			seen[id] = true
 			r.Items = append(r.Items, n.item(k))
 		}
+	}
+	if resp.Data.T != nil {
+		sort.SliceStable(r.Items, func(a, b int) bool { return r.Items[a].UpdatedAt.After(r.Items[b].UpdatedAt) })
 	}
 	return r, nil
 }

@@ -541,6 +541,7 @@ case "$1 $2" in
 "pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
 "api graphql")
 	case "$*" in
+	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
 	*'search(type: ISSUE'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
@@ -573,7 +574,8 @@ attach WEAVER_VIEWS="github linear"
 waitfor '[ "$(windows)" = "0 900 901 " ]'
 ok "views: GITHUB and LINEAR beside home, out of the thread numbers" \
 	"$(tx list-windows -t "=$S" -F '#{window_index}:#{window_name}:#{@weaver-view}' | tr '\n' ' ')" "0:home: 900:GITHUB:github 901:LINEAR:linear "
-waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "Add a flag"'
+# Its row, then its card beside it.
+waitfor '[ "$(tx capture-pane -p -t "=$S:900" | grep -c "Add a flag")" = 2 ]' 100
 ok "GITHUB: weaver's own, what GitHub finds for you, a section under its heading" \
 	"$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')|$(tx capture-pane -p -t "=$S:900" | grep -c 'Add a flag')|$(tx capture-pane -p -t "=$S:900" | grep -c 'none yet: ⏎ starts one on add-flag')" "1|2|1" ||
 	{ tx capture-pane -p -t "=$S:900" | sed 's/^/  github: /' | head -20; tx display -p -t "=$S:900" '#{pane_start_command} #{pane_dead}' | sed 's/^/  pane: /'; }

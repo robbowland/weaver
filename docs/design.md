@@ -797,7 +797,14 @@ someone else) and Watch (what you follow).
 - GITHUB: pull requests and issues, each section a search through `gh api
   graphql` (`internal/github`; the searches and the fields they read are
   gh-dash's, MIT, credited there), kept in `$STATE_DIR/github.json`. Which
-  kind it shows (`s`) is kept in `$STATE_DIR/<skey>.github-kind`.
+  kind it shows (`s`) is kept in `$STATE_DIR/<skey>.github-kind`. Pull
+  requests have a fourth section, Team: Queue is reviews asked of you
+  (`user-review-requested:@me`, drafts too) and, as a second search in the
+  same request merged into it (GitHub's search has no OR), pull requests
+  assigned to you, at most 100, most recently updated first; Team is
+  reviews asked only of your teams (`review-requested:@me
+  -user-review-requested:@me draft:false`), at most 50. Every other section
+  shows at most 20.
 - LINEAR: issues, each section an `issues(filter:)` query of Linear's
   GraphQL API, filtered on `isMe` so no request for the viewer comes first
   (Queue: assigned, unstarted or started; Mine: created, assigned to

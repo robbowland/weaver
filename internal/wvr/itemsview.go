@@ -43,16 +43,17 @@ type itemSource interface {
 	fetch(e *Env)
 	// service is where the items live: GitHub, Linear.
 	service() string
-	// guide is what its ? card says of its sections (Queue, Mine, Watch)
-	// and its rows' signals (red, green, faint).
+	// guide is what its ? card says of its sections (Queue, Team, Mine,
+	// Watch) and its rows' signals (red, green, faint).
 	guide() viewGuide
 }
 
-// viewGuide is a source's words for its ? card.
+// viewGuide is a source's words for its ? card; team is "" for a source
+// without that section.
 type viewGuide struct {
-	queue, mine, watch string
-	red, green, faint  string
-	readOnly           string // what alt+r starts
+	queue, team, mine, watch string
+	red, green, faint        string
+	readOnly                 string // what alt+r starts
 }
 
 // itemData is what a service said: when, what went wrong, and its
@@ -359,7 +360,7 @@ func (e *Env) itemFresh(src itemSource) string {
 	}
 	if n == 0 {
 		// Nothing to show: say so, not an empty list.
-		t += CDim + " · nothing for you in Queue, Mine or Watch" + COff
+		t += CDim + " · nothing for you in any section" + COff
 	}
 	return t
 }
@@ -519,8 +520,11 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("?", "this help", "(? again: back)") +
 		key("q  esc", "back to your thread", "") +
 		"\n" + g + "SECTIONS" + o + "\n" +
-		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n" +
-		"  " + g + "MINE" + o + "    " + gd.mine + "\n" +
+		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n"
+	if gd.team != "" {
+		out += "  " + g + "TEAM" + o + "    " + gd.team + "\n"
+	}
+	out += "  " + g + "MINE" + o + "    " + gd.mine + "\n" +
 		"  " + g + "WATCH" + o + "   " + gd.watch + "\n" +
 		"\n" + g + "ROWS" + o + "\n" +
 		"  " + d + "01" + o + " " + paint(GWork, CGrey, CDim, COff) + "  the thread it has, as on the board\n"

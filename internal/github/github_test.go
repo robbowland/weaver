@@ -1,19 +1,46 @@
 package github
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
 
 func TestQuery(t *testing.T) {
 	q := Query(PRs, 0)
-	for _, want := range []string{`query: "is:pr archived:false is:open review-requested:@me`, "...pr", "fragment pr on PullRequest", "statusCheckRollup"} {
+	for _, want := range []string{`s: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open user-review-requested:@me`,
+		`t: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open assignee:@me -author:@me`,
+		"...pr", "fragment pr on PullRequest", "statusCheckRollup"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("PR query lacks %q", want)
 		}
 	}
+	if q := Query(PRs, 1); !strings.Contains(q, `first: 50, query: "is:pr archived:false is:open review-requested:@me -user-review-requested:@me draft:false`) || strings.Contains(q, "t: search") {
+		t.Errorf("Team query: %s", q)
+	}
 	if q := Query(Issues, 1); !strings.Contains(q, `"is:issue archived:false is:open author:@me`) || !strings.Contains(q, "fragment issue on Issue") {
 		t.Errorf("issue query: %s", q)
+	}
+}
+
+// A section with a second search shows the items of both once each, most
+// recently updated first, and counts each once.
+func TestParseMerges(t *testing.T) {
+	pr := func(n int, at string) string {
+		return `{"number":` + strconv.Itoa(n) + `,"updatedAt":"` + at + `","repository":{"nameWithOwner":"o/r"}}`
+	}
+	answer := `{"data":{"s":{"issueCount":2,"nodes":[` + pr(1, "2026-10-16T10:00:00Z") + `,` + pr(2, "2026-10-16T09:00:00Z") +
+		`]},"t":{"issueCount":2,"nodes":[` + pr(2, "2026-10-16T09:00:00Z") + `,` + pr(3, "2026-10-16T11:00:00Z") + `]}}}`
+	r, err := Parse(PRs, 0, []byte(answer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, it := range r.Items {
+		refs = append(refs, it.Ref())
+	}
+	if got := strings.Join(refs, " "); got != "o/r#3 o/r#1 o/r#2" || r.Total != 3 {
+		t.Errorf("items %s, total %d; want o/r#3 o/r#1 o/r#2, 3", got, r.Total)
 	}
 }
 

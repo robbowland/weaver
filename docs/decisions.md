@@ -325,7 +325,13 @@ can supersede an earlier one, and says so.
   configured, not as `git remote -v` shows it: an `insteadOf` rewrite is how
   it is reached, not what it is (and the tests reach a local bare repository
   for github.com/o/r that way).
-
+- 2026-10-20: GITHUB's Queue is reviews asked of you and pull requests
+  assigned to you, shown whole; reviews asked of your teams are a section
+  of their own, Team (Rob: "I still seem to be missing some PRs"). GitHub
+  counts a review asked of any team you are in as asked of you
+  (`review-requested:@me`), and a busy team's can far outnumber your own.
+  Queue showed the 20 most recently updated, so one asked of you directly
+  could sit past them and never show.
 ## Lost threads
 
 - 2026-10-15: Threads survive their multiplexer's server crashing: a thread
