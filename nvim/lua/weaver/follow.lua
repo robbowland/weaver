@@ -225,14 +225,69 @@ local function place_cursor(win, path, root)
   end)
 end
 
+-- The buffers following opened, each with when it last showed it, until it
+-- is yours (you typed in it). Of those out of sight only the newest few stay
+-- loaded (g:weaver_follow_keep, 10): an agent that edits files across
+-- worktrees for a day would otherwise keep every one, and a language server
+-- for every root they are in. One left serving no buffer stops: nvim does
+-- not stop it.
+local function keep_count()
+  return tonumber(vim.g.weaver_follow_keep) or 10
+end
+
+-- Was PATH's buffer, before following showed it, one you had open?
+local function yours(path)
+  local buf = fn.bufnr(path)
+  return buf > 0 and api.nvim_buf_is_loaded(buf) and not vim.b[buf].weaver_followed
+end
+
+local function mark(buf)
+  vim.b[buf].weaver_followed = uv.hrtime()
+end
+
+function M.trim()
+  local hidden = {}
+  for _, buf in ipairs(api.nvim_list_bufs()) do
+    local at = vim.b[buf].weaver_followed
+    if at and api.nvim_buf_is_loaded(buf) and not vim.bo[buf].modified and #fn.win_findbuf(buf) == 0 then
+      hidden[#hidden + 1] = { buf = buf, at = at }
+    end
+  end
+  table.sort(hidden, function(a, b) return a.at > b.at end)
+  local servers = {}
+  for i = keep_count() + 1, #hidden do
+    local buf = hidden[i].buf
+    for _, c in ipairs(vim.lsp.get_clients({ bufnr = buf })) do
+      servers[c.id] = c
+    end
+    pcall(api.nvim_buf_delete, buf, {})
+  end
+  if next(servers) then
+    vim.defer_fn(function()
+      for _, c in pairs(servers) do
+        if next(c.attached_buffers) == nil then
+          pcall(function() c:stop() end)
+        end
+      end
+    end, 200)
+  end
+end
+
 -- Show TARGET's file in WIN, at the change. Returns whether it is shown.
 local function show_file(win, target)
   if not util.same_path(api.nvim_buf_get_name(api.nvim_win_get_buf(win)), target.file) then
+    local was = yours(target.file)
     local ok, err = edit_in(win, target.file)
     if not ok then
       util.msg(tostring(err), util.WARN)
       return false
     end
+    if not was then
+      mark(api.nvim_win_get_buf(win))
+    end
+    vim.schedule(M.trim)
+  elseif vim.b[api.nvim_win_get_buf(win)].weaver_followed then
+    mark(api.nvim_win_get_buf(win))
   end
   place_cursor(win, target.file, target.root)
   return true
@@ -240,6 +295,7 @@ end
 
 -- A window beside WIN for TARGET's file.
 local function split_beside(win, target)
+  local was = yours(target.file)
   local buf = fn.bufadd(target.file)
   vim.bo[buf].buflisted = true
   local ok, new = pcall(api.nvim_open_win, buf, false, { split = 'left', win = win })
@@ -248,6 +304,10 @@ local function split_beside(win, target)
     return nil
   end
   pcall(api.nvim_win_call, new, function() vim.cmd('silent! edit') end)
+  if not was then
+    mark(buf)
+  end
+  vim.schedule(M.trim)
   return new
 end
 
@@ -439,6 +499,15 @@ function M.setup()
   vim.on_key(function()
     last_input = uv.now()
   end, ns)
+  -- A buffer you type in is yours: following never unloads it.
+  api.nvim_create_autocmd({ 'InsertEnter', 'BufModifiedSet' }, {
+    group = util.group,
+    callback = function(a)
+      if vim.b[a.buf].weaver_followed and (a.event == 'InsertEnter' or vim.bo[a.buf].modified) then
+        vim.b[a.buf].weaver_followed = nil
+      end
+    end,
+  })
   api.nvim_create_autocmd({ 'TabEnter', 'FocusGained' }, {
     group = util.group,
     callback = function() vim.schedule(M.prune_tabs) end,

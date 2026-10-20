@@ -204,5 +204,30 @@ T.run(function()
   C.event({ ev = 'edit', root = c, file = c .. '/src/app.txt', seq = 9e12 + 6 })
   T.ok('...and an empty tab', C.wait_for(1500, tabs, '3|3|wt-c|app.txt'), '3|3|wt-c|app.txt')
 
+  -- The buffers it opened: of those out of sight only the newest stay loaded
+  -- (g:weaver_follow_keep), and never one you typed in.
+  C.cmd('tabonly!')
+  C.cmd('only!')
+  C.cmd('let g:weaver_follow_keep = 1')
+  local f = {}
+  for i = 1, 4 do
+    f[i] = R.main .. '/f' .. i .. '.txt'
+    T.write(f[i], { 'f' .. i })
+  end
+  local function follow(i)
+    idle()
+    C.event({ ev = 'edit', root = R.main, file = f[i], seq = 9e12 + 6 + i })
+    wait_file('f' .. i .. '.txt')
+  end
+  follow(1)
+  C.input('ix<Esc>')
+  C.cmd('write')
+  follow(2)
+  follow(3)
+  follow(4)
+  local loaded = "return table.concat(vim.tbl_map(function(p) return vim.fn.bufloaded(p) end, "
+    .. vim.inspect(f) .. "), '')"
+  T.ok('followed buffers out of sight: only the newest stays; the one you typed in stays', C.wait_for(1500, loaded, '1011'), '1011')
+
   C.close()
 end)

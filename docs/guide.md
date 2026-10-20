@@ -390,7 +390,11 @@ The Neovim weaver opens for an agent loads your own config, then:
   then the bar shows it as `→ file`, and `<leader>aj` goes there at once. It
   never types into Neovim, and never replaces a buffer with unsaved changes,
   a terminal, quickfix or a git window. It brings other tabs up to date
-  without switching to them.
+  without switching to them. Of the files it opened that are out of sight,
+  it keeps the ten most recent loaded (`vim.g.weaver_follow_keep`); older
+  ones are unloaded, unless you typed in them, and a language server left
+  serving none of your buffers is stopped, so a long thread's Neovim doesn't
+  grow without end.
 - **gives each worktree its own tab**, closed when the worktree is removed. A
   new worktree takes a tab with nothing in it (the start screen, or an empty
   one) before it opens another.
