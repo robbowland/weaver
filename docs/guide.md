@@ -113,9 +113,15 @@ edits, shows its state and reviews its turns ([Neovim](#neovim)). If you quit
 it, `alt+v` brings it back on the left, with the agent at its usual width,
 as long as nothing else is in the window.
 
-When the agent exits, its pane stays. Press `enter` there to resume the same
-conversation (`claude --resume`, `codex resume`); the task is never sent
-twice.
+### Restarting an agent
+
+After you update Claude Code or Codex, running agents carry on with the old
+version. `R` on the board, or `wvr restart`, starts a thread's agent again in
+its own pane, resuming the same conversation (`claude --resume`, `codex
+resume`): its window, Neovim and number stay, and the task is never sent
+twice. `wvr restart --all` restarts every thread's agent, from any shell. An
+agent that is working, or waiting on you, is left alone, since restarting it
+would stop its turn; `--force` restarts it all the same.
 
 ### Renaming a thread
 
@@ -235,6 +241,7 @@ heading, and stays on its agent as the board reloads itself.
 | `n` | Start a thread (`wvr new`) |
 | `x` | Close the thread (`wvr close`); on a lost thread, forget it |
 | `r` | Rename the thread ([Renaming a thread](#renaming-a-thread)) |
+| `R` | Restart its agent, resuming its conversation ([Restarting an agent](#restarting-an-agent)) |
 | `a` | Adopt the agent, if you started it by hand; elsewhere, pick a conversation to resume as a thread ([Adopting](#adopting-a-conversation)) |
 | `v`, `e`, `ctrl+e` | Jump to the thread and open its Neovim |
 | `s` | Swap the card for the agent's screen, and back |

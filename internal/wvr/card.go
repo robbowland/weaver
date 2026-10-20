@@ -112,6 +112,7 @@ func Help() string {
 		helpRow("a", "adopt: an agent you started by hand becomes a thread;", "") +
 		more + d + "elsewhere, pick a conversation to resume as one" + o + "\n" +
 		helpRow("r", "rename the thread", "(empty: its agent's title)") +
+		helpRow("R", "restart its agent, resuming its conversation", "(after an update)") +
 		helpRow("v  e  ctrl+e", "jump and open its nvim", "(alt+v anywhere)") +
 		helpRow("s", "the card ↔ the agent's screen", "") +
 		helpRow("tab  shift+tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)") +

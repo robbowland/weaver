@@ -378,6 +378,15 @@ can supersede an earlier one, and says so.
   title, not sent to the agent: Claude Code retitles a conversation as it
   goes, which would undo it, and typing into an agent's prompt while it
   works is not weaver's to do.
+- 2026-10-20: A thread's agent can be restarted in place (`wvr restart`, the
+  board's `R`) so an updated Claude Code or Codex takes over (Rob: after an
+  update "I need to close and re-open the session but there's no good way
+  to do that"). The pane runs with `remain-on-exit` off, so an agent that
+  exits takes its pane with it: the old "enter resumes it" was zellij's.
+  tmux's `respawn-pane -k` ends the agent and runs the pane's own command
+  again in one step, so the pane, window, nvim and number stay, and the
+  agent resumes through the same meeting place a restored thread's does.
+  An agent mid-turn is left unless forced: restarting stops the turn.
 
 ## The weaver session
 

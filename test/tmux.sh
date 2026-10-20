@@ -501,6 +501,23 @@ ok "rename: the thread's window, and its record, take the name you give it" \
 outside wvr rename "$AG2" "" >/dev/null 2>&1
 waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
 ok "...an empty name gives its agent's title back" "$(label2)" "02 Tidy the parser · repo/main"
+
+# --- restart: a thread's agent started again in its own pane (an updated
+# harness), resuming its conversation; one mid-turn is left unless forced
+rm -f "$AT/args.$AG2"
+outside wvr restart "$AG2" >"$AT/restart.out" 2>&1
+waitfor '[ -f "$AT/args.$AG2" ]'
+ok "restart: the agent starts again in its pane, resuming its conversation, beside its nvim" \
+	"$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(pane_at 2 1)|$(panes 2 | wc -l | tr -d ' ')|$(jq -r .num "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)" \
+	"--resume $CID |$AG2|2|2" ||
+	sed 's/^/  restart: /' "$AT/restart.out"
+hookj "$AG2" "$(printf '{"session_id":"%s","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt_id":"p1","prompt":"go on"}' "$CID" "$AT/repo")"
+rm -f "$AT/args.$AG2"
+outside wvr restart --all >"$AT/restart.out" 2>&1
+sleep 1
+ok "...--all: one mid-turn is left, and said so" \
+	"$(grep -c 'left 02 mid-turn' "$AT/restart.out")|$([ -f "$AT/args.$AG2" ] && echo restarted || echo left)" "1|left" ||
+	sed 's/^/  restart: /' "$AT/restart.out"
 for a in "$AG" "$AG2"; do tx run-shell -t "=$S:" "wvr close --yes $a >/dev/null 2>&1"; done
 waitfor '[ "$(windows)" = "0 " ]'
 

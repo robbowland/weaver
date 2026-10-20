@@ -152,7 +152,8 @@ Shift and R.
 | `ctrl+q` | Quit the session (it asks first while an agent is mid-turn) |
 
 On the board, `enter` or `1`–`9` jumps to a thread, `n` starts one, `x`
-closes one, `r` renames one, `a` adopts one (below), `v` opens its Neovim, `s` swaps the card
+closes one, `r` renames one, `R` restarts its agent after an update, `a`
+adopts one (below), `v` opens its Neovim, `s` swaps the card
 for the agent's screen, `/` searches, and `?` lists every key. Everything can
 be clicked too: the hints under a list are buttons, and a right click opens a
 menu. tmux's own keys work behind its prefix, `ctrl+b`.

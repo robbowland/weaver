@@ -50,7 +50,7 @@ func TestBoardMenu(t *testing.T) {
 	}
 	t.Setenv("FZF_INPUT_STATE", "hidden")
 	got := whats(boardMenu("a1"))
-	want := []string{"jump to it:Enter", "nvim:C-e", "rename:r", "close:x", ":", "new thread:n", "help:?"}
+	want := []string{"jump to it:Enter", "nvim:C-e", "rename:r", "restart agent:R", "close:x", ":", "new thread:n", "help:?"}
 	if len(got) != len(want) {
 		t.Fatalf("thread row: %q, want %q", got, want)
 	}

@@ -31,6 +31,8 @@ func TestPeekChoice(t *testing.T) {
 		{"alt-1", "", "", [][]string{{"next"}}},
 		{"rename", agent, "", [][]string{{"_popup", "rename", "7"}}},
 		{"rename", lost, "", nil},
+		{"restart", agent, "", [][]string{{"restart", "7"}}},
+		{"restart", lost, "", nil},
 		{"ctrl-e", lost, "", nil},
 	} {
 		step, cmds := peekChoice(c.key, c.sel)

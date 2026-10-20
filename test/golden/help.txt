@@ -8,6 +8,7 @@ KEYS
   a               adopt: an agent you started by hand becomes a thread;
                   elsewhere, pick a conversation to resume as one
   r               rename the thread (empty: its agent's title)
+  R               restart its agent, resuming its conversation (after an update)
   v  e  ctrl+e    jump and open its nvim (alt+v anywhere)
   s               the card ↔ the agent's screen
   tab  shift+tab  the next, previous view (THREADS, GITHUB, LINEAR)

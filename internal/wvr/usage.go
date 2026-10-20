@@ -66,6 +66,10 @@ const Usage = `usage: wvr [command]
   rename [pane-id] [name]      call a thread name on the board and its window, in place of
                                its agent's title; with no name, ask; an empty one gives the
                                agent's title back
+  restart [--all] [--force] [pane-id]
+                               start a thread's agent again where it is (after an update),
+                               resuming its conversation; --all, every thread's; one
+                               mid-turn is left unless --force
   send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
                                it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with

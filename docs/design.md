@@ -316,6 +316,24 @@ opens that prompt in a popup (`_popup rename PANE`, 8 lines), on an agent
 that is no thread says to adopt it first; in alt+y's popover it is left for
 once the popover has closed (`peekChoice`).
 
+### Restarting
+
+`wvr restart [--all] [--force] [PANE]` starts a thread's agent again in its
+own pane, resuming its conversation, for an updated harness to take over
+(PANE as for rename; `--all`, every thread record of the session; outside
+tmux, the weaver session). A thread whose state is `working` or `needs-you`
+is left unless `--force`, and one whose agent has not said its session id
+cannot be. For each: its record (`pane` cleared), its state as a restored
+thread's carries on (`writeResume`: idle, seen, without its process's
+fields) and `resume` (its session id) go to `new/<skey>_<token>/`, then
+`respawn-pane -k -t PANE -c DIR 'wvr _agent TOKEN KIND'` ends the agent and
+runs the pane's command again, which takes them as a restored thread's pane
+does and resumes (`claude --resume`, `codex resume`). DIR is where a lost
+thread would resume (`Lost.Dir`). The pane id, its window, nvim and number
+stay. It says what it did (restarted, left mid-turn, failed) on stdout and
+on the status line, since the board's `R` and the popover run it out of
+sight.
+
 ### Work items
 
 `wvr new --pr REF` and `--issue REF` (with `--review`, read-only) start a
