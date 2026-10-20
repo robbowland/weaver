@@ -44,9 +44,10 @@ type Row struct {
 	Tabname, Agent, Bgtasks, Ttask, Tname                             string
 	Since                                                             int64 // epoch s
 	Seen                                                              bool
-	Bg, Nsub, Turn                                                    int // background tasks, subagents
-	Tdone, Ttotal                                                     int // its tasks
-	Tnum                                                              int // its thread's number; 0 for none
+	Bg, Nsub, Turn                                                    int  // background tasks, subagents
+	Tdone, Ttotal                                                     int  // its tasks
+	Tnum                                                              int  // its thread's number; 0 for none
+	Review                                                            bool // its thread is read-only: a review, an investigation
 	Troots                                                            []string
 	Doing                                                             string // the command it runs now
 }
@@ -159,6 +160,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Bg = s.Background
 		// The name you gave the thread, else its agent's title.
 		r.Title = oneline.Line(cmp.Or(t.Title, s.Title))
+		r.Review = t.Mode == "review"
 		r.Nsub = len(s.Subagents)
 		r.Pid = oneline.Line(string(s.Pid))
 		r.Pstart = oneline.Line(s.ProcStart)
@@ -213,7 +215,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title)})
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == "review"})
 	}
 	starts := ProcStarts(pids)
 	for _, g := range gones {

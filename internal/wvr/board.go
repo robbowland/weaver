@@ -159,7 +159,15 @@ func cardRoom(items, cols, lines int) string {
 	return pw
 }
 
-var heads = [5]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "LOST"}
+// The board's groups: by state, then read-only threads (reviews,
+// investigations: not ones you watch closely) in a group of their own, then
+// the threads lost with their session.
+var heads = [6]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "REVIEWS", "LOST"}
+
+const (
+	groupReviews = 4
+	groupLost    = 5
+)
 
 type boardRow struct {
 	group                                    int
@@ -199,7 +207,8 @@ func (e *Env) rows(plain bool) string {
 	}
 	agents, now := e.AgentRows()
 	var rs []boardRow
-	counts := [5]int{}
+	counts := [6]int{}
+	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts
 	wn, wf, ww, numw := 0, 0, 0, 2
 	nums := false
 	for _, a := range agents {
@@ -316,8 +325,16 @@ func (e *Env) rows(plain bool) string {
 		if g == 3 {
 			k = 10000000000 - since
 		}
+		if g < 3 {
+			states[g]++
+		}
+		// A read-only thread: in its own group, by state there.
+		key := fmt.Sprintf("%d%011d", g, k)
+		if a.Review {
+			g, key = groupReviews, strconv.Itoa(groupReviews)+key
+		}
 		pn, _ := strconv.Atoi(string(a.Pane))
-		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, k, pn), pane: string(a.Pane), tab: string(a.Tab), glyph: glyph,
+		r := boardRow{group: g, key: fmt.Sprintf("%s%08d", key, pn), pane: string(a.Pane), tab: string(a.Tab), glyph: glyph,
 			name: name, fact: fact, where: where, age: age(now - since), root: a.Root}
 		r.label = name + " · " + where + " · turn " + strconv.Itoa(a.Turn)
 		if a.Tnum > 0 {
@@ -354,10 +371,10 @@ func (e *Env) rows(plain bool) string {
 		if w.Branch != "" {
 			where += "/" + w.Branch
 		}
-		r := boardRow{group: 4, key: fmt.Sprintf("%d%011d%08d", 4, 10000000000-since, len(rs)), pane: l.Sid,
+		r := boardRow{group: groupLost, key: fmt.Sprintf("%d%011d%08d", groupLost, 10000000000-since, len(rs)), pane: l.Sid,
 			glyph: paint(GEnd, grey, dim, off), lost: true, name: name, fact: fact, where: where,
 			age: age(now - since), root: l.Dir, label: name + " · " + where + " · lost"}
-		counts[4]++
+		counts[groupLost]++
 		wn = max(wn, rlen(name))
 		wf = max(wf, rlen(fact))
 		rs = append(rs, r)
@@ -391,7 +408,7 @@ func (e *Env) rows(plain bool) string {
 	lsCols, lsLines := 0, 0
 	if !plain {
 		pre, sep = numw+6, " \t"
-		for g := 0; g < 5; g++ {
+		for g := range counts {
 			if counts[g] > 0 {
 				groups++
 			}
@@ -461,7 +478,7 @@ func (e *Env) rows(plain bool) string {
 	}
 	titleR, tc := "", ""
 	for g := 0; g < 3; g++ {
-		if counts[g] == 0 {
+		if states[g] == 0 {
 			continue
 		}
 		shown, c := GWork, grey
@@ -471,8 +488,8 @@ func (e *Env) rows(plain bool) string {
 		case 1:
 			shown, c = GDone, green
 		}
-		titleR += shown + " " + strconv.Itoa(counts[g]) + "  "
-		tc += paint(shown, c, dim, off) + " " + grey + strconv.Itoa(counts[g]) + off + "  "
+		titleR += shown + " " + strconv.Itoa(states[g]) + "  "
+		tc += paint(shown, c, dim, off) + " " + grey + strconv.Itoa(states[g]) + off + "  "
 	}
 	titleR, tc = strings.TrimSuffix(titleR, "  "), strings.TrimSuffix(tc, "  ")
 	// Home is in the weaver session, whose status line shows the counts.

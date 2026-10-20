@@ -1,0 +1,10 @@
+[ WEAVER :: THREADS ] 3                                          [!] 1  [x] 1  [/] 1
+
+NEEDS YOU · 1
+[!]  Add a CLI flag        Bash: python app.py --name rob           dash/flag     4m
+
+WORKING · 1
+[/]  Refine the dashboard  2 subagents                              dash/main    10m
+
+REVIEWS · 1
+[x]  Add a README          2 files · Wrote README.md and GUIDE.md.  dash/readme   1m

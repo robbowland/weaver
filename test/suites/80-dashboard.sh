@@ -57,6 +57,12 @@ done
 # agents around it (the cursor skips to them), the card's title, the row (a
 # TAB after the glyph: search sees only what follows).
 golden items-120.txt "$(FZF_COLUMNS=120 FZF_LINES=40 FZF_INPUT_STATE=hidden wvr _rows | strip)"
+# A read-only thread (a review): in REVIEWS, below the rest, by its state
+# there; the title's counts are by state still.
+jq -nc --arg w "$T/dash-readme" '{name: "readme", task: "review the README", worktree: $w, agent: "claude", mode: "review"}' \
+	>"$SD/${SK}_1.thread"
+golden rows-review-120.txt "$(LS_MODE=plain COLUMNS=120 wvr _rows)"
+rm -f "$SD/${SK}_1.thread"
 for p in 0 1 2; do
 	golden "card-$p-60.txt" "$(FZF_PREVIEW_COLUMNS=60 wvr _preview $p "$(FZF_COLUMNS=120 wvr _rows | awk -F '\t' -v id=a$p '$1 == id { print $6 }')" | strip)"
 done

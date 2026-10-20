@@ -505,9 +505,11 @@ to start one, with nothing to select.
 | DONE | `[x]` green | done, not yet seen | finished longest ago first |
 | WORKING | `[/]` grey | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
 | IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted | most recent first |
+| REVIEWS | as its state | a read-only thread's agent (`mode` `review`), in any state | by state as above, then as that group orders |
 
 So the headings' counts are the status bar's, and the order is the one alt+1
-visits. A row: its number (1-9), glyph, name (Claude Code's title, else the
+visits, but for read-only threads: REVIEWS holds them whatever their state
+(the title's counts, by state, still include them). A row: its number (1-9), glyph, name (Claude Code's title, else the
 thread's task, else the last prompt; at most 40 columns), one fact (what it
 waits on; for a finished turn, the files it changed and its last reply;
 the command it runs (`running npm test`), background tasks, subagents, task

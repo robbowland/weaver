@@ -222,12 +222,15 @@ something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 the home window itself, click THREADS on the status line, or use `alt+j` and
 `alt+k`.
 
-Agents are grouped under these headings, in the order `alt+1` visits them:
+Agents are grouped under these headings:
 
 - **NEEDS YOU**: waiting on you;
 - **DONE**: finished, and you haven't looked yet;
 - **WORKING**: running a turn;
 - **IDLE**: idle or interrupted, or finished and seen;
+- **REVIEWS**: read-only threads (reviews and investigations), whatever
+  their state, since you watch them less closely; each row's cell still
+  shows its state, and `alt+1` still goes to one that needs you;
 - **LOST**: threads whose session went, and that weaver hasn't brought back
   ([Keeping threads](#keeping-threads)).
 
