@@ -53,7 +53,7 @@ type itemSource interface {
 type viewGuide struct {
 	queue, team, mine, watch string
 	red, green, faint        string
-	readOnly                 string // what alt+r starts
+	readOnly                 string // what alt+m starts
 }
 
 // itemData is what a service said: when, what went wrong, and its
@@ -379,7 +379,7 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if searching() {
 		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}, {"tab", "VIEWS"}}
 	}
-	hs := []choice{{"⏎", "THREAD"}, {"alt+r", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
+	hs := []choice{{"⏎", "THREAD"}, {"alt+m", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
 		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
@@ -398,7 +398,7 @@ func (e *Env) itemFooter(src itemSource) string { return hintLine(e.itemHints(sr
 func (e *Env) itemMenu(src itemSource, k string) []menuItem {
 	var ms []menuItem
 	if strings.HasPrefix(k, "i") {
-		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "r", "M-r"}}
+		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "m", "M-m"}}
 		if !searching() {
 			ms = append(ms, menuItem{"open in the browser", "o", "o"})
 		}
@@ -508,7 +508,7 @@ func (e *Env) itemHelp(src itemSource) string {
 	gd := src.guide()
 	out := g + "KEYS" + o + "\n" +
 		key("⏎  alt+N", "a thread from it", "(or to the one it has)") +
-		key("alt+r", "a read-only thread:", gd.readOnly) +
+		key("alt+m", "a read-only thread:", gd.readOnly) +
 		key("j k  g G", "move; first, last", "") +
 		key("o", "open it in "+src.service(), "") +
 		key("/", "search", "(esc: back)")
@@ -708,7 +708,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--bind", `focus:transform:case {1} in i*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last",
 			"--bind", "enter,double-click,alt-N,alt-n:" + fromAct,
-			"--bind", "alt-R,alt-r:" + reviewAct,
+			"--bind", "alt-m:" + reviewAct,
 			"--bind", "o:" + act("open"),
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",

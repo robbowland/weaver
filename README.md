@@ -118,7 +118,7 @@ last said and its task list.
 
 **Views.** Beside home are GITHUB (your pull requests and issues) and LINEAR
 (your Linear issues). `alt+N` on an item opens the new-thread form filled in
-for it, and `alt+r` starts a read-only review or investigation of it.
+for it, and `alt+m` starts a read-only review or investigation of it.
 
 **States.** weaver follows each agent through its hooks and shows its state
 as a cell that reads without colour:
@@ -136,8 +136,8 @@ weaver`), so it never touches your own tmux sessions or config.
 
 ## Keys
 
-Keys are written as you press them: `alt+r` is Alt and R, and `alt+R` is Alt,
-Shift and R.
+Keys are written as you press them: `alt+v` is Alt and V, and `alt+V` is Alt,
+Shift and V.
 
 | Key | Does |
 | --- | --- |
@@ -147,7 +147,7 @@ Shift and R.
 | `alt+j` / `alt+k` | The next / previous window, in thread order |
 | `alt+h` / `alt+l` | The pane to the left / right |
 | `alt+v` / `alt+V` | The focused agent's Neovim / the same, full screen |
-| `alt+r` | In a view: a read-only review of the selected item |
+| `alt+m` | In a view: a read-only review of the selected item |
 | `tab` / `shift+tab` | On home or in a view: the next / previous view |
 | `ctrl+q` | Quit the session (it asks first while an agent is mid-turn) |
 

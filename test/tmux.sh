@@ -601,7 +601,7 @@ waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 tx select-window -t "=$S:900"
 waitfor '[ "$(where | cut -d " " -f 1)" = 900 ] && tx capture-pane -p -t "=$S:900" | grep -q "Add a flag"'
 rm -f "$SD"/form.*
-key 1b52 # Alt R
+key 1b6d # alt+m
 waitfor '[ -n "$(ls "$SD"/form.* 2>/dev/null)" ]'
 FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.[a-z]*$' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
@@ -674,7 +674,7 @@ key 09 # LINEAR, whose issue has no thread
 waitfor '[ "$(vsocks linear)" = 2 ]'
 sleep 0.5
 rm -f "$SD"/form.*
-key 1b52 # Alt R
+key 1b6d # alt+m
 waitfor '[ -n "$(ls "$SD"/form.* 2>/dev/null)" ]' 80
 FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.[a-z]*$' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)

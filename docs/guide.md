@@ -83,8 +83,8 @@ where you are. Each choice also has a key that changes it from anywhere:
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
 | `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
 | `base` | `alt+B` | Where a new branch starts: the remote's default branch, freshly fetched (the default); `@`, the HEAD of the checkout you are in; or any branch |
-| `agent` | `alt+a` | Claude Code or Codex |
-| `mode` | `alt+r` | Work, or read-only: a review, or an investigation of a pull request or issue |
+| `agent` | `alt+c` | Claude Code or Codex |
+| `mode` | `alt+m` | Work, or read-only: a review, or an investigation of a pull request or issue |
 |  | `ctrl+e` | Write a long task in `$EDITOR` |
 |  | `esc` | Cancel |
 
@@ -189,11 +189,11 @@ The task is yours to write:
 With `WEAVER_ITEM_TASK=1`, weaver writes a task in for you (`Address the
 review on #45`, `Implement #12`).
 
-`alt+r` is the read-only version. On a pull request, it starts a thread on the
+`alt+m` is the read-only version. On a pull request, it starts a thread on the
 pull request's branch whose Neovim opens on a review against the branch it
 merges into, and whose agent reviews without changing files (Claude Code in
 plan mode, Codex in a read-only sandbox). On an issue, it starts an
-investigation that ends in a plan for you to approve. The form's `alt+r`
+investigation that ends in a plan for you to approve. The form's `alt+m`
 switches between work and read-only.
 
 From a shell: `wvr new --pr 45` (or `owner/name#45`, or the pull request's

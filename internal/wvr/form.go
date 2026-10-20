@@ -357,7 +357,7 @@ func formFocus(id string) string {
 
 // formKeys are each row's key, for the footer: the row's action from
 // anywhere in the form.
-var formKeys = map[string]string{"repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-a", "mode": "alt-r"}
+var formKeys = map[string]string{"repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-c", "mode": "alt-m"}
 
 // formDoes is what enter does on each of the form's rows that has a
 // choice (start starts).

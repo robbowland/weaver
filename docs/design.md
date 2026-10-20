@@ -837,7 +837,7 @@ italics; tables with a faint capitals header over a rule, columns apart
 by space; rules the card's width. Not glamour, whose highlighter
 registers every lexer as it loads, which costs every hook 6 ms.
 
-- **alt+N / alt+r** in a view: a thread from the item under the cursor, or a
+- **alt+N / alt+m** in a view: a thread from the item under the cursor, or a
   read-only review of it. tmux passes the key to the view, whose fzf (also
   enter) runs `wvr _items NAME from REF [--review]`, which runs `wvr _from
   github pr|issue <owner/name> <number>` or `wvr _from linear <ID>`. `_from`

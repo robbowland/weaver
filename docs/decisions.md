@@ -332,6 +332,13 @@ can supersede an earlier one, and says so.
   (`review-requested:@me`), and a busy team's can far outnumber your own.
   Queue showed the 20 most recently updated, so one asked of you directly
   could sit past them and never show.
+- 2026-10-20: A read-only thread from a view is alt+m (the form's "mode"
+  row), not alt+r, and the form's agent switch alt+c, not alt+a: Rob's skhd
+  takes alt+r and alt+R (yabai's rotate) and alt+a (space 1) for the whole
+  system, so those never reached weaver, which is why Alt R seemed broken.
+  Keys a window manager is likely to hold (alt with a, s, d, f, g, q, e, r,
+  z here) stay out of weaver's.
+
 ## Lost threads
 
 - 2026-10-15: Threads survive their multiplexer's server crashing: a thread
