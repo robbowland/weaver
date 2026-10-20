@@ -695,19 +695,9 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	}
 	t2 := th
 	t2.Cmd, t2.Num, t2.Pane = agentCmd(kind), n, nil
-	// Its state carries on, idle, without what belonged to its old process
-	// and pane.
-	s2 := st
-	now := time.Now().Unix()
-	s2.Pid, s2.ProcStart, s2.NvimPane, s2.EndReason = "", "", nil, ""
-	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
-	s2.State, s2.TS, s2.Since, s2.Seen = agent.StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
-	s2.Subagents, s2.Background, s2.BackgroundTasks = []agent.Subagent{}, 0, ""
-	if store.Write(d+"/thread.json", t2) != nil ||
-		store.Write(d+"/state.json", s2) != nil ||
-		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
+	if err := writeResume(d, t2, st, sid); err != nil {
 		unlock()
-		return "", fmt.Errorf("%s: cannot write its records", nm)
+		return "", fmt.Errorf("%s: %v", nm, err)
 	}
 	unlock()
 	wname := nm
@@ -727,6 +717,25 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	}
 	e.threadPlace(tab, n)
 	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
+}
+
+// writeResume leaves thread th's records in meeting place d for its agent's
+// pane (AgentPane) to take as it resumes conversation sid: the record, its
+// state carrying on, idle, without what belonged to its old process and
+// pane, and the session id.
+func writeResume(d string, th store.Thread, st agent.Record, sid string) error {
+	s2 := st
+	now := time.Now().Unix()
+	s2.Pid, s2.ProcStart, s2.NvimPane, s2.EndReason = "", "", nil, ""
+	s2.Waiting, s2.Pending, s2.Marker, s2.MarkedRoot = "", "", "", ""
+	s2.State, s2.TS, s2.Since, s2.Seen = agent.StateIdle, now, json.Number(strconv.FormatInt(now, 10)), true
+	s2.Subagents, s2.Background, s2.BackgroundTasks = []agent.Subagent{}, 0, ""
+	if store.Write(d+"/thread.json", th) != nil ||
+		store.Write(d+"/state.json", s2) != nil ||
+		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
+		return errors.New("cannot write its records")
+	}
+	return nil
 }
 
 // ResumeSession brings every thread this session lost back, in their
