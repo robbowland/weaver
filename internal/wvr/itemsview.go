@@ -581,6 +581,12 @@ func (e *Env) Items(args []string) error {
 		fmt.Print(e.itemRows(src))
 		return nil
 	case "chrome":
+		// A newer weaver installed since the view started: it ends, for the
+		// view to start again in that weaver, as the home board does.
+		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".born") && newer(e.Self, s+".born") {
+			fmt.Print("abort\n")
+			return nil
+		}
 		fmt.Print(e.itemChrome(src))
 		return nil
 	case "card":
@@ -650,13 +656,20 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
 	defer os.Remove(sock)
 	defer os.Remove(sock + ".help")
+	defer os.Remove(sock + ".born")
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
 	go func() {
 		<-sig
 		os.Remove(sock)
+		os.Remove(sock + ".born")
 		os.Exit(129)
 	}()
+	// The view outlives installs of weaver: when it started, for chrome to
+	// tell that a newer weaver is installed under it.
+	if peek == "" {
+		bestEffort(os.WriteFile(sock+".born", nil, 0o600))
+	}
 	refresh := func() {
 		src.fetch(e)
 		e.reloadItems(src)
@@ -749,6 +762,13 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			return "", nil
 		}
 		_ = t.Close() // opened only to see that there is one
+		// A newer weaver is installed (chrome ended the view for it): the
+		// view starts again in it, asking as it asks.
+		if newer(e.Self, sock+".born") {
+			os.Remove(sock)
+			os.Remove(sock + ".born")
+			return "", syscall.Exec(e.Self, []string{e.Self, "_items", src.name()}, os.Environ())
+		}
 		time.Sleep(200 * time.Millisecond)
 	}
 }

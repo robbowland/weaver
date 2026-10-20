@@ -817,7 +817,11 @@ someone else) and Watch (what you follow).
 A view (fzf on `$SOCK_DIR/<skey>.view.<name>.<pid>.sock`) shows what its
 source said last at once, asks again behind it when that is over 2 minutes
 old and every 5 minutes after (`^r` now), and reloads when a thread changes
-(the status push) or is made. A section's requests go at once, and one that
+(the status push) or is made. Like home, it outlives installs of weaver:
+it touches `<sock>.born` as it starts, and the first reload after a newer
+weaver is installed (`_items NAME chrome`, seeing the binary newer) aborts
+its fzf, and the view execs the new weaver's `_items NAME` in the same pane
+and process, which asks as that weaver asks. A section's requests go at once, and one that
 fails keeps what it had. A row shows the thread the item has: its item's
 ref, else its branch (a pull request's head; a GitHub issue's `N-…`;
 Linear's branch name). The card is the thread first (the one it has, or

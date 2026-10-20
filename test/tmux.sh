@@ -587,6 +587,15 @@ waitfor '[ "$(tx capture-pane -p -t "=$S:900" | grep -c "Add a flag")" = 2 ]' 10
 ok "GITHUB: weaver's own, what GitHub finds for you, a section under its heading" \
 	"$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')|$(tx capture-pane -p -t "=$S:900" | grep -c 'Add a flag')|$(tx capture-pane -p -t "=$S:900" | grep -c 'none yet: ⏎ starts one on add-flag')" "1|2|1" ||
 	{ tx capture-pane -p -t "=$S:900" | sed 's/^/  github: /' | head -20; tx display -p -t "=$S:900" '#{pane_start_command} #{pane_dead}' | sed 's/^/  pane: /'; }
+# A newer weaver installed under the running view: at its next reload it
+# starts again in it (exec: the same process, a new fzf).
+vfzf() { pgrep -f -- "--listen /tmp/weaver-$(id -u)/tmux-$S.view.$1." | head -n 1; }
+old=$(vfzf github)
+touch "$AT/bin/wvr"
+tx run-shell -t "=$S:" "wvr _items github fetch >/dev/null 2>&1"
+waitfor '[ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ]' 100
+ok "GITHUB: a newer weaver installed, the view starts again in it at its next reload" \
+	"$([ -n "$old" ] && [ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ] && echo again)|$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "again|1"
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
 	" #[range=user|home]#[fg=#ffffff]THREADS#[norange]   #[range=user|github]#[fg=#616161]GITHUB#[norange]   #[range=user|linear]#[fg=#616161]LINEAR#[norange]"
 click 14 50 # GITHUB, on the status line
