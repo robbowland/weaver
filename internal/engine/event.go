@@ -68,6 +68,19 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	if h.Event == "" {
 		return nil
 	}
+	// Codex's hooks run in its shared app server, with the environment of
+	// another session's pane (codexPane).
+	if adapter == "codex" {
+		if p, ap, ok := codexPane(e, tmux.PaneID(pane), strip(n.Session), strip(n.Cwd)); ok {
+			pane = string(p)
+			if ap != "" {
+				pid = ap
+			}
+		}
+		if h.Event == "SessionEnd" {
+			defer forgetCodexSession(e, strip(n.Session))
+		}
+	}
 	mode := "sync"
 	if h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent") {
 		mode = "async"

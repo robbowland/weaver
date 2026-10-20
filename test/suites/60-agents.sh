@@ -65,4 +65,23 @@ ok "codex: Stop" "$(st 1 state)|$(st 1 last_message)|$(st 1 turn)" "done|All gre
 cx "{$cb,\"hook_event_name\":\"SessionEnd\",\"reason\":\"other\"}"
 ok "codex: SessionEnd" "$(st 1 state)" "ended"
 kill "$CX"
+
+# --- Codex runs every session's hooks in its app server, with the
+# environment of whichever session started it: a hook from outside the pane
+# its TMUX_PANE names finds its pane by its session, bound from then on.
+fresh
+printf 'package main\n\nimport "time"\n\nfunc main() { time.Sleep(time.Hour) }\n' >"$AT/codex.go"
+go build -o "$AT/codex" "$AT/codex.go"
+CXP=$(tmux -S "$TSOCK" split-window -d -P -F '#{pane_id}' -t %0 -c "$T/repo-wt-b" -- "$AT/codex" | tr -d '%')
+sleep 0.3
+cd2() { printf '%s' "{\"session_id\":\"cx-2\",\"cwd\":\"$1\",$2}" | as_pane 1 wvr adapt codex; }
+cd2 "$T/repo-wt-b" '"hook_event_name":"SessionStart","source":"startup"'
+ok "codex in its app server: the event goes to its session's pane, its agent that pane's codex, not the pane its environment names" \
+	"$(st "$CXP" state)|$(st "$CXP" agent)|$(st "$CXP" pid)|$([ -f "$SD/${SK}_1.json" ] && echo pane-1 || echo none)" \
+	"idle|codex|$(tmux -S "$TSOCK" display -p -t "%$CXP" '#{pane_pid}')|none"
+cd2 "$T/repo" '"turn_id":"t1","hook_event_name":"UserPromptSubmit","prompt":"look around"'
+ok "...bound to its session: an event from elsewhere goes there too" "$(st "$CXP" state)|$(st "$CXP" turn)" "working|1"
+cd2 "$T/repo" '"hook_event_name":"SessionEnd","reason":"other"'
+ok "...and the binding goes with the session" "$(st "$CXP" state)|$([ -f "$SD/codex/cx-2" ] && echo kept || echo gone)" "ended|gone"
+tmux -S "$TSOCK" kill-pane -t "%$CXP"
 done_suite

@@ -175,6 +175,17 @@ hook input into it (`wvr adapt codex`). `--bell` rings the terminal bell on
 `/dev/tty` when the agent starts needing you or finishes, for agents that
 cannot ring through their hook output.
 
+Codex runs its hooks in its app server, a daemon every Codex session shares,
+with the environment of whichever session started it: `$TMUX_PANE` there is
+that session's pane, closed perhaps. So a Codex hook not run from inside
+the pane `$TMUX_PANE` names (that pane's process is not its ancestor) finds
+its pane by its session (`engine.codexPane`): the pane bound to it in
+`$STATE_DIR/codex/<session>`, else the one pane running `codex` whose
+directory is the session's `cwd` (of two, the one no other session is bound
+to), bound to it from then on; its `pid` is that pane's process, not the
+daemon. A SessionEnd drops the binding, and GC old ones after a month.
+Neither found, `$TMUX_PANE` is all it goes by.
+
 | Field | For | Meaning |
 | --- | --- | --- |
 | `agent` | all, required | `codex`, `gemini`, `pi`, ... (lowercase letters, digits, `_`, `-`; anything else is ignored): the state's `agent` |
