@@ -38,8 +38,8 @@ type Thread struct {
 	Mode            string      `json:"mode,omitempty"`
 	Pane            *jsonx.Int  `json:"pane,omitempty"`
 	SessionID       string      `json:"session_id,omitempty"`
-	// Title is the name you gave it (wvr rename), shown in place of the
-	// title its agent gives it.
+	// Title is the name you gave it (wvr new --name, the form's name,
+	// wvr rename), shown in place of the title its agent gives it.
 	Title string `json:"title,omitempty"`
 }
 
@@ -50,11 +50,7 @@ func (t Thread) About() string {
 	if strings.TrimSpace(t.Task) != "" || t.Item == nil {
 		return t.Task
 	}
-	ref := t.Item.Ref
-	if i := strings.LastIndexByte(ref, '#'); i >= 0 {
-		ref = ref[i:]
-	}
-	return strings.TrimSpace(ref + " " + t.Item.Title)
+	return t.Item.Name()
 }
 
 // ThreadItem is the work item a thread started from.
@@ -63,6 +59,15 @@ type ThreadItem struct {
 	Ref   string `json:"ref"`
 	URL   string `json:"url"`
 	Title string `json:"title"`
+}
+
+// Name is the item as a thread's name: "#45 Add a flag", "ENG-42 Fix it".
+func (it ThreadItem) Name() string {
+	ref := it.Ref
+	if i := strings.LastIndexByte(ref, '#'); i >= 0 {
+		ref = ref[i:]
+	}
+	return strings.TrimSpace(ref + " " + it.Title)
 }
 
 // Lost is a thread lost with its session (docs/design.md, Lost threads):

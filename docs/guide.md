@@ -79,6 +79,7 @@ where you are. Each choice also has a key that changes it from anywhere:
 | Row | Key | Does |
 | --- | --- | --- |
 | `start` | `enter` | Start the thread (the row says what it would start) |
+| `name` | `alt+n` | What the board and its window call it: by default a pull request's or issue's number and title, else the title its agent gives it |
 | `repo` | `ctrl+r` | Choose another repository: recent ones, any zoxide knows, or a path |
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
 | `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
@@ -89,7 +90,7 @@ where you are. Each choice also has a key that changes it from anywhere:
 |  | `esc` | Cancel |
 
 From a shell, `wvr new "fix the flaky test"` does the same. Its options are
-`--repo DIR`, `--branch NAME`, `--base REF`, `--here` (the current checkout),
+`--name NAME`, `--repo DIR`, `--branch NAME`, `--base REF`, `--here` (the current checkout),
 `--agent codex`, `--edit` (write the task in `$EDITOR`) and `--no-focus`.
 
 ### Worktrees and branches
@@ -125,11 +126,13 @@ would stop its turn; `--force` restarts it all the same.
 
 ### Renaming a thread
 
-A thread is called by the title its agent gives it (Claude Code names its
-conversations as they go), else by its task. `r` on the board, or `wvr rename
-[PANE] [NAME]`, gives it a name of your own instead, on the board, its card,
-its window and the status line; with no name, it asks. An empty name gives
-the agent's title back. The name stays with the thread when it is lost and
+A thread is called by the name it started with: the form's `name` row (or
+`wvr new --name`), which for a pull request or issue is its number and title
+(`#45 Add a flag`) unless you change it. With none, it is called by the title
+its agent gives it (Claude Code names its conversations as they go), else by
+its task. `r` on the board, or `wvr rename [PANE] [NAME]`, gives it a name of
+your own later, on the board, its card, its window and the status line; with
+no name, it asks. An empty name gives the agent's title back. The name stays with the thread when it is lost and
 resumed.
 
 ### Closing a thread

@@ -362,6 +362,15 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 	return p, true, base, true
 }
 
+// threadItem is work item it as its thread's record keeps it (nil for
+// none).
+func threadItem(it items.Item) *store.ThreadItem {
+	if it == nil {
+		return nil
+	}
+	return &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
+}
+
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
 func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
@@ -370,18 +379,17 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		it = fm.Item.Item
 	}
 	pr, isPR := it.(items.PullRequest)
-	var ti *store.ThreadItem
-	if it != nil {
-		ti = &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
-	}
-	// What names the thread: its task, else (an item's, told nothing) the
-	// item.
-	label := store.Thread{Task: task, Item: ti}.About()
+	ti := threadItem(it)
+	// What names its branch: its task, else (an item's, told nothing) the
+	// item. Its window: its name, else that.
+	about := store.Thread{Task: task, Item: ti}.About()
+	title := formName(fm)
+	label := cmp.Or(title, about)
 	var dir, name, branch, base string
 	created := false
 	if fm.Where == WhereHere {
 		dir = fm.Here
-		name = items.Slugify(label)
+		name = items.Slugify(about)
 		if name == "" {
 			name = "thread-" + time.Now().Format("150405")
 		}
@@ -389,7 +397,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	} else {
 		branch = fm.Branch
 		if branch == "" {
-			branch = items.Slugify(label)
+			branch = items.Slugify(about)
 		}
 		// The checkout of the repository that @ means: the one you are in
 		// when it belongs to it, else the main one.
@@ -466,7 +474,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 	}
 	rec := store.Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
-		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base}
+		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base, Title: title}
 	rec.Item = ti
 	if review {
 		rec.Mode = "review"

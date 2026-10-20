@@ -277,9 +277,17 @@ FORM=$(ls "$SD"/form.* 2>/dev/null | grep -v '\.' | head -n 1)
 [ -n "$FORM" ] || FORM=$(ls "$SD"/form.* 2>/dev/null | head -n 1)
 ok "form: its fields, from the focused thread's checkout" "$(jq -r '"\(.repo) \(.where) \(.agent)"' "$FORM" 2>/dev/null)" "$(cd "$AT/repo" && pwd -P) worktree claude"
 hdr=$(wvr _form fields "$FORM" "Fix the flaky test!")
-ok "form: the header names the repo, a new worktree, the branch from the task, its base and the agent" \
-	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test$')" \
-	"repo where branch base agent |1"
+ok "form: its rows name the thread (its agent's title), the repo, a new worktree, the branch from the task, its base and the agent" \
+	"$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')|$(printf '%s\n' "$hdr" | grep -c "name  its agent's title$")|$(printf '%s\n' "$hdr" | grep -c 'branch  fix-the-flaky-test$')" \
+	"name repo where branch base agent |1|1"
+key 1b6e # alt-n: its name, typed
+waitfor '[ "$(grep -c "what the board and its window call it" "$AT/screen.log")" -gt 0 ]'
+key 466c616b79204d6f6e64617973 # Flaky Mondays
+sleep 0.3
+key 0d
+waitfor '[ "$(jq -r .name "$FORM")" = "Flaky Mondays" ]'
+ok "form: alt-n names the thread, on its own row" "$(jq -r .name "$FORM")|$(wvr _form fields "$FORM" x | awk '$1 == "name"')" \
+	"Flaky Mondays|  name  Flaky Mondays"
 key 1b77 # alt-w: where it works, picked
 waitfor '[ "$(grep -c "a checkout that is there" "$AT/screen.log")" -gt 0 ]'
 key 6d61696e # main
@@ -289,7 +297,7 @@ waitfor '[ "$(jq -r .where "$FORM")" = here ]'
 ok "form: alt-w picks where it works: here, the main checkout" "$(jq -r .where "$FORM")|$(wvr _form fields "$FORM" x | awk '$1 == "where" { print $2 }')" \
 	"here|main"
 ok "...and its rows stay (branch and base say why they do not apply), so none moves" \
-	"$(wvr _form fields "$FORM" x | awk '{ print $1 }' | tr '\n' ' ')" "repo where branch base agent "
+	"$(wvr _form fields "$FORM" x | awk '{ print $1 }' | tr '\n' ' ')" "name repo where branch base agent "
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "
@@ -626,6 +634,8 @@ ok "...its prompt: the task, read-only, the open review comment fenced, not the 
 	"1|1|1|0|1"
 ok "...its record and its base for reviews" "$(jq -r '"\(.item.ref) \(.mode)"' "$SD/tmux-${S}_$AG.thread")|$(git -C "$AT/r" config branch.add-flag.weaverbase)" \
 	"o/r#45 review|origin/main"
+ok "...named for the pull request, not the task" "$(jq -r .title "$SD/tmux-${S}_$AG.thread")|$(tx display -p -t "=$S:1" '#{window_name}')" \
+	"#45 Add a flag|01 #45 Add a flag · r/add-flag"
 NS=/tmp/weaver-$(id -u)/tmux-${S}_$AG.sock
 waitfor '[ "$(nvim --server "$NS" --remote-expr "tabpagenr(\"\$\")" 2>/dev/null)" = 2 ]' 100
 ok "...its nvim opens on the review" "$(nvim --server "$NS" --remote-expr 'tabpagenr("$")' 2>/dev/null)" "2"
@@ -634,13 +644,14 @@ ok "pr: its branch already has a thread: to it" "$(cat "$AT/new.out")|$(windows)
 	"weaver: o/r#45 already has a thread (add-flag): went to it|0 1 900 901 "
 
 # An issue investigated: its own branch, plan mode.
-tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --issue o/r#12 'Look into #12' >$AT/new.out 2>&1"
+tx run-shell -t "=$S:" "cd '$AT/r' && wvr new --no-focus --review --name 'Flaky Mondays' --issue o/r#12 'Look into #12' >$AT/new.out 2>&1"
 waitfor '[ "$(windows)" = "0 1 2 900 901 " ]'
 AG2=$(pane_at 2 1)
 waitfor '[ -f "$AT/args.$AG2" ]'
 ok "issue --review: N-title branch, plan mode, investigate" \
 	"$(git -C "$(tx display -p -t "%$AG2" '#{pane_current_path}')" symbolic-ref --short HEAD)|$(sed -n 2p "$AT/args.$AG2")|$(grep -c 'without changing any files' "$AT/args.$AG2")" \
 	"12-fix-the-flaky-test|plan|1"
+ok "...--name: its name, not the issue's" "$(jq -r .title "$SD/tmux-${S}_$AG2.thread")" "Flaky Mondays"
 
 # Alt y in a thread: a popover, where tab steps through the board and the
 # views; enter on an item there closes it, then does what it says. On home,
@@ -741,7 +752,7 @@ FORM=$SD/$(ls "$SD" | grep -E '^form\.[^.]+$' | head -n 1)
 hdr=$(wvr _form fields "$FORM" x)
 ok "...enter, the form for the issue, in the repository used last" \
 	"$(jq -r '"\(.repo) \(.branch) \(.item.linear.id) "' "$FORM")|$(printf '%s\n' "$hdr" | awk '{ print $1 }' | tr '\n' ' ')" \
-	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |from mode repo where branch base agent "
+	"$(cd "$AT/r" && pwd -P) t/eng-42-fix-it ENG-42 |name from mode repo where branch base agent "
 waitfor '[ "$(grep -c "nothing: it waits for you" "$AT/screen.log")" -gt 0 ]'
 ok "...no task written for you" "$(grep -c 'Implement ENG-42' "$AT/screen.log")" "0"
 key 0d # enter

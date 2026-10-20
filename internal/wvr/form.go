@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -29,12 +30,14 @@ import (
 // open its fields live in a file, as JSON (form); a long task written in
 // $EDITOR in FILE.task.
 
-// form is the thread the form would start: the repository (its main
-// checkout; empty: not in one), Here (the checkout "this checkout" means),
-// the branch as you edited it (empty: from the task), Where (worktree |
-// here), the agent (claude | codex), the base (empty: the default), Mode
-// (review: read-only; empty: work) and the work item it starts from.
+// form is the thread the form would start: its name as you edited it
+// (empty: formName's), the repository (its main checkout; empty: not in
+// one), Here (the checkout "this checkout" means), the branch as you edited
+// it (empty: from the task), Where (worktree | here), the agent (claude |
+// codex), the base (empty: the default), Mode (review: read-only; empty:
+// work) and the work item it starts from.
 type form struct {
+	Name   string     `json:"name,omitempty"`
 	Repo   string     `json:"repo"`
 	Here   string     `json:"here"`
 	Branch string     `json:"branch"`
@@ -43,6 +46,15 @@ type form struct {
 	Base   string     `json:"base"`
 	Mode   items.Mode `json:"mode,omitempty"`
 	Item   *items.Box `json:"item,omitempty"`
+}
+
+// formName is the name the thread starts with: the form's, else (one from
+// an item) the item's, "#45 Add a flag"; "" for its agent's title.
+func formName(fm form) string {
+	if fm.Name != "" || fm.Item == nil {
+		return fm.Name
+	}
+	return threadItem(fm.Item.Item).Name()
 }
 
 func loadForm(f string) form {
@@ -215,6 +227,14 @@ func (e *Env) formFields(sf, task string) []formField {
 	fm := loadForm(sf)
 	var fs []formField
 	add := func(id, l, p, c string) { fs = append(fs, formField{id, l, p, c}) }
+	if n := formName(fm); n != "" {
+		if rlen(n) > 56 {
+			n = oneline.Cut(n, 55) + "…"
+		}
+		add("name", "name", n, n)
+	} else {
+		add("name", "name", "its agent's title", CGrey+"its agent's title"+COff)
+	}
 	if fm.Item != nil {
 		it := fm.Item.Item
 		title := it.Content().Title
@@ -319,10 +339,10 @@ func formGhost(fm form) string {
 
 // FormRows are the form's rows for fzf: id, then what it shows.
 // The form's rows are dense, grouped by what they are about with a blank
-// line between groups only (what it starts from, where it works, who works):
+// line between groups only (what it is, where it works, who works):
 // nearness says what belongs together, and a terminal's least gap is a
 // whole line, twice a row's height.
-var formGroup = map[string]int{"from": 1, "mode": 1, "repo": 2, "where": 2, "branch": 2, "base": 2, "agent": 3}
+var formGroup = map[string]int{"name": 1, "from": 1, "mode": 1, "repo": 2, "where": 2, "branch": 2, "base": 2, "agent": 3}
 
 func (e *Env) FormRows(sf, task string) string {
 	var b strings.Builder
@@ -357,11 +377,11 @@ func formFocus(id string) string {
 
 // formKeys are each row's key, for the footer: the row's action from
 // anywhere in the form.
-var formKeys = map[string]string{"repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-c", "mode": "alt-m"}
+var formKeys = map[string]string{"name": "alt-n", "repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-c", "mode": "alt-m"}
 
 // formDoes is what enter does on each of the form's rows that has a
 // choice (start starts).
-var formDoes = map[string]string{"repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
+var formDoes = map[string]string{"name": "NAME THE THREAD", "repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
 	"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
 
 // formEnter is what enter does on row id, with the key that does it from
@@ -521,7 +541,7 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) error {
-	var repoArg, branch, base, agentArg, itemArg string
+	var nameArg, repoArg, branch, base, agentArg, itemArg string
 	var from tmux.PaneID
 	var where Where
 	var itemKind items.GitHubKind
@@ -531,12 +551,14 @@ func (e *Env) New(args []string) error {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
-		case "--repo", "--from", "--branch", "-b", "--base", "--agent", "--pr", "--issue":
+		case "--name", "--repo", "--from", "--branch", "-b", "--base", "--agent", "--pr", "--issue":
 			if i+1 >= len(args) {
 				return errors.New(a + " needs a value")
 			}
 			v := args[i+1]
 			switch a {
+			case "--name":
+				nameArg = oneline.Line(strings.TrimSpace(v))
 			case "--repo":
 				repoArg = v
 			case "--from":
@@ -609,7 +631,7 @@ func (e *Env) New(args []string) error {
 	if where == "" {
 		where = WhereWorktree
 	}
-	fm := form{Branch: branch, Where: where, Agent: kind, Base: base}
+	fm := form{Name: nameArg, Branch: branch, Where: where, Agent: kind, Base: base}
 	fm.Mode = mode
 	if r, c, ok := git.RepoOf(start); ok {
 		fm.Repo, fm.Here = r, c
@@ -1006,6 +1028,22 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.Base == "" {
 			e.fetchStart(fm.Repo, sf)
 		}
+	case "name":
+		// The name it would start with, to edit; the default left as it
+		// is stays the default.
+		def, empty := formName(form{Item: fm.Item}), "the item's"
+		if def == "" {
+			empty = "its agent's title"
+		}
+		n, ok := askName(formLabel("WEAVER", "NEW THREAD › NAME"), formName(fm), cmp.Or(def, empty), empty,
+			CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff)
+		if !ok {
+			return
+		}
+		if fm.Name = oneline.Line(strings.TrimSpace(n)); fm.Name == def {
+			fm.Name = ""
+		}
+		fm.save(sf)
 	case "branch":
 		// A branch means a new worktree.
 		if fm.Where == WhereHere {

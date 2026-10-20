@@ -257,7 +257,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `pane` | int | the agent's pane |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
 | `mode` | string | `review`: read-only (its `cmd` carries the flags); absent otherwise |
-| `title` | string | the name you gave it (`wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
+| `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 The window's current name is tmux's; in the weaver session weaver labels it
 (`threadTabLabels`).
@@ -361,8 +361,10 @@ merges into.
 
 The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
 and an item's thread may start without one: its agent then runs with no
-prompt, and the thread is named for the item (`store.Thread.About`: `#45 Add
-a flag`, `ENG-42 Fix it`) until the agent's first title. With a task, the
+prompt. Either way the thread is named for the item (`ThreadItem.Name`:
+`#45 Add a flag`, `ENG-42 Fix it`) unless its `name` row (`--name`) says
+otherwise, and keeps that name (its record's `title`) over the agent's
+titles; its branch still comes from the task, else the item. With a task, the
 agent is sent the task, a line on what to do in this worktree, and the
 item's text (description, unresolved review comments with file:line,
 comments, the latest kept within 48 KB) between two marker lines carrying a
@@ -576,8 +578,8 @@ to get back) and changes one thing at a time:
   160, 22 tall; a card half as wide, 80 to 120, 14 tall), so its keys stay
   near what they act on; alt+N's goes through `wvr _popup new` too. With
   room, the form and pickers have a margin (`--padding 1,2`). Rows stay
-  dense: the form's are grouped by what they are about (start; from and
-  mode; repo, where, branch and base; agent), a blank line (`gapN` rows,
+  dense: the form's are grouped by what they are about (start; name, from
+  and mode; repo, where, branch and base; agent), a blank line (`gapN` rows,
   which the cursor passes over) between groups only. The empty board
   is a welcome, centred a third of the way down, its key lines buttons
   (`click-header`, `wvr _click title`). weaver's fzf runs without

@@ -43,7 +43,8 @@ func (e *Env) Rename(args []string) error {
 			st, _ := store.ReadState(e.StateFile(p))
 			cur = st.Title
 		}
-		n, ok := askName(cur)
+		n, ok := askName(formLabel("WEAVER", "RENAME"), cur, "its agent's title", "its agent's title",
+			CGrey+"⏎"+COff+" "+CDim+"RENAME"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"CANCEL"+COff)
 		if !ok {
 			return cli.ErrCancelled
 		}
@@ -71,15 +72,15 @@ func (e *Env) retitle(p tmux.PaneID, title string) error {
 	return nil
 }
 
-// askName asks for a thread's name on the terminal, starting from cur:
-// what was typed, and false when cancelled.
-func askName(cur string) (string, bool) {
+// askName asks for a thread's name on the terminal, under border label l,
+// starting from cur; ghost shows when it is empty, and empty says what
+// that gives: what was typed, and false when cancelled.
+func askName(l, cur, ghost, empty, footer string) (string, bool) {
 	args := append([]string{"--disabled", "--reverse"}, formFzf...)
-	args = append(args, "--border-label", formLabel("WEAVER", "RENAME"), "--prompt", formPrompt("name"), "--query", cur,
-		"--ghost", "its agent's title", "--color", FzfColors,
-		"--header", "        "+CGrey+"what the board and its window call it; empty, its agent's title"+COff,
-		"--footer", CGrey+"⏎"+COff+" "+CDim+"RENAME"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"CANCEL"+COff,
-		"--bind", "enter:print-query")
+	args = append(args, "--border-label", l, "--prompt", formPrompt("name"), "--query", cur,
+		"--ghost", ghost, "--color", FzfColors,
+		"--header", "        "+CGrey+"what the board and its window call it; empty, "+empty+COff,
+		"--footer", footer, "--bind", "enter:print-query")
 	c := fzfCmd(args, "SHELL=/bin/sh")
 	c.Stderr = os.Stderr
 	b, err := c.Output()

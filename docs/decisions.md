@@ -338,6 +338,15 @@ can supersede an earlier one, and says so.
   system, so those never reached weaver, which is why Alt R seemed broken.
   Keys a window manager is likely to hold (alt with a, s, d, f, g, q, e, r,
   z here) stay out of weaver's.
+- 2026-10-20: A thread's name is a field of its own in the form (`name`,
+  alt+n; `wvr new --name`), kept as its record's `title`, not something
+  derived from the task or set by a rename afterwards. A thread from a pull
+  request or issue is named for it by default (`#45 Add a flag`), so a
+  review is called by the pull request's title, not by "Review #45" or the
+  agent's paraphrase (Rob: "it should take the PRs title not the task
+  written"). A plain task's default stays its agent's title, which
+  summarises it better than its first line; the branch still comes from the
+  task.
 
 ## Lost threads
 

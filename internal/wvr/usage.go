@@ -42,7 +42,8 @@ const Usage = `usage: wvr [command]
   start [session]              the same, for another session
   new [task...]                start a thread: a new window with nvim and an agent, in a new
                                worktree whose branch starts from the remote's default
-                               branch, fetched; with no task, a form. Options: --repo DIR,
+                               branch, fetched; with no task, a form. Options: --name NAME
+                               (else an item's, or its agent's title), --repo DIR,
                                --branch NAME, --base REF (@: this checkout's HEAD),
                                --here (the current checkout),
                                --agent claude|codex, --edit (write the task in $EDITOR),
