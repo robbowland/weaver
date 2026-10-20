@@ -38,10 +38,15 @@ func (e *Env) Rename(args []string) error {
 	}
 	name := strings.Join(args, " ")
 	if len(args) == 0 {
+		// What the board calls it now: your name, its agent's title, else
+		// its task (or the item it started from).
 		cur := th.Title
 		if cur == "" {
 			st, _ := store.ReadState(e.StateFile(p))
 			cur = st.Title
+		}
+		if cur == "" {
+			cur = oneline.Line(strings.SplitN(th.About(), "\n", 2)[0])
 		}
 		n, ok := askName(formLabel("WEAVER", "RENAME"), cur, "its agent's title", "its agent's title",
 			CGrey+"⏎"+COff+" "+CDim+"RENAME"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"CANCEL"+COff)
