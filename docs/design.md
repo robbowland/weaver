@@ -257,7 +257,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `pane` | int | the agent's pane |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
 | `mode` | string | `review`: read-only (its `cmd` carries the flags); absent otherwise |
-| `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
+| `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 The window's current name is tmux's; in the weaver session weaver labels it
 (`threadTabLabels`).
@@ -362,7 +362,8 @@ merges into.
 The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
 and an item's thread may start without one: its agent then runs with no
 prompt. Either way the thread is named for the item (`ThreadItem.Name`:
-`#45 Add a flag`, `ENG-42 Fix it`) unless its `name` row (`--name`) says
+`#45 Add a flag`, `ENG-42 Fix it`; read-only, after `review :: `, `formName`)
+unless its `name` row (`--name`) says
 otherwise, and keeps that name (its record's `title`) over the agent's
 titles; its branch still comes from the task, else the item. With a task, the
 agent is sent the task, a line on what to do in this worktree, and the

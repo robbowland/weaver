@@ -79,7 +79,7 @@ where you are. Each choice also has a key that changes it from anywhere:
 | Row | Key | Does |
 | --- | --- | --- |
 | `start` | `enter` | Start the thread (the row says what it would start) |
-| `name` | `alt+n` | What the board and its window call it: by default a pull request's or issue's number and title, else the title its agent gives it |
+| `name` | `alt+n` | What the board and its window call it: by default a pull request's or issue's number and title (read-only, after `review :: `), else the title its agent gives it |
 | `repo` | `ctrl+r` | Choose another repository: recent ones, any zoxide knows, or a path |
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
 | `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
@@ -128,7 +128,8 @@ would stop its turn; `--force` restarts it all the same.
 
 A thread is called by the name it started with: the form's `name` row (or
 `wvr new --name`), which for a pull request or issue is its number and title
-(`#45 Add a flag`) unless you change it. With none, it is called by the title
+(`#45 Add a flag`, or `review :: #45 Add a flag` read-only) unless you change
+it. With none, it is called by the title
 its agent gives it (Claude Code names its conversations as they go), else by
 its task. `r` on the board, or `wvr rename [PANE] [NAME]`, gives it a name of
 your own later, on the board, its card, its window and the status line; with

@@ -634,8 +634,8 @@ ok "...its prompt: the task, read-only, the open review comment fenced, not the 
 	"1|1|1|0|1"
 ok "...its record and its base for reviews" "$(jq -r '"\(.item.ref) \(.mode)"' "$SD/tmux-${S}_$AG.thread")|$(git -C "$AT/r" config branch.add-flag.weaverbase)" \
 	"o/r#45 review|origin/main"
-ok "...named for the pull request, not the task" "$(jq -r .title "$SD/tmux-${S}_$AG.thread")|$(tx display -p -t "=$S:1" '#{window_name}')" \
-	"#45 Add a flag|01 #45 Add a flag · r/add-flag"
+ok "...named for the pull request, as a review, not for the task" "$(jq -r .title "$SD/tmux-${S}_$AG.thread")|$(tx display -p -t "=$S:1" '#{window_name}')" \
+	"review :: #45 Add a flag|01 review :: #45 Add a flag · r/add-flag"
 NS=/tmp/weaver-$(id -u)/tmux-${S}_$AG.sock
 waitfor '[ "$(nvim --server "$NS" --remote-expr "tabpagenr(\"\$\")" 2>/dev/null)" = 2 ]' 100
 ok "...its nvim opens on the review" "$(nvim --server "$NS" --remote-expr 'tabpagenr("$")' 2>/dev/null)" "2"

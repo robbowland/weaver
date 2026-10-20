@@ -49,12 +49,17 @@ type form struct {
 }
 
 // formName is the name the thread starts with: the form's, else (one from
-// an item) the item's, "#45 Add a flag"; "" for its agent's title.
+// an item) the item's, "#45 Add a flag", or read-only "review :: #45 Add a
+// flag"; "" for its agent's title.
 func formName(fm form) string {
 	if fm.Name != "" || fm.Item == nil {
 		return fm.Name
 	}
-	return threadItem(fm.Item.Item).Name()
+	n := threadItem(fm.Item.Item).Name()
+	if fm.Mode == items.ModeReview {
+		n = "review :: " + n
+	}
+	return n
 }
 
 func loadForm(f string) form {
@@ -1031,7 +1036,7 @@ func (e *Env) Form(op, sf, q string) {
 	case "name":
 		// The name it would start with, to edit; the default left as it
 		// is stays the default.
-		def, empty := formName(form{Item: fm.Item}), "the item's"
+		def, empty := formName(form{Item: fm.Item, Mode: fm.Mode}), "the item's"
 		if def == "" {
 			empty = "its agent's title"
 		}

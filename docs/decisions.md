@@ -346,7 +346,11 @@ can supersede an earlier one, and says so.
   agent's paraphrase (Rob: "it should take the PRs title not the task
   written"). A plain task's default stays its agent's title, which
   summarises it better than its first line; the branch still comes from the
-  task.
+  task. A read-only thread's default is `review :: #45 Add a flag` (Rob:
+  "titles for review threads should be prefixed with review", with "::" to
+  match weaver's labels, `WEAVER :: THREADS`), so a review and work on the
+  same item read apart on the board; the name row shows the prefix, so it
+  is yours to keep or drop.
 
 ## Lost threads
 
