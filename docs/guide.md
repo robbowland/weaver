@@ -170,7 +170,9 @@ A row shows the one thing to know about an item (changes requested, a check
 failing, draft, approved; for an issue, urgent or its state) and the thread
 it has, if any. The card says what `enter` does, then the item's fields and
 description. In a view, `s` switches GITHUB between pull requests and issues,
-`o` opens the item in the browser, `/` searches, and `ctrl+r` asks again. Each
+`o` opens the item in the browser, `/` searches what the view holds (its
+number, whole title, author, repository, branch and labels; for Linear, its
+team and people), best match first, and `ctrl+r` asks again. Each
 view refreshes every 5 minutes and shows what it last heard straight away;
 after you upgrade weaver, it restarts in the new version at its next
 refresh, as home does.

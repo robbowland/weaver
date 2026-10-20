@@ -601,6 +601,17 @@ ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:
 click 14 50 # GITHUB, on the status line
 waitfor '[ "$(where | cut -d " " -f 1)" = 900 ]'
 ok "...each a button: GITHUB" "$(where | cut -d ' ' -f 1)" "900"
+# / searches: the best match first, on a line with the whole title and what
+# it goes by (number, author, repository, branch); the headings go.
+key 2f # /
+sleep 0.5
+key 3435 # 45
+waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "#45  Add a flag  @alice · o/r · add-flag"'
+ok "GITHUB: / searches the number, the whole title, author, repository and branch, without the headings" \
+	"$(tx capture-pane -p -t "=$S:900" | grep -c '#45  Add a flag  @alice · o/r · add-flag')|$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE')" "1|0"
+key 1b # esc: the sections again
+waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "QUEUE · 1"'
+ok "...esc: the sections again" "$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "1"
 click 3 50
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 ok "...THREADS: home" "$(where | cut -d ' ' -f 1)" "0"

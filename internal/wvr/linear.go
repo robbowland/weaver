@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,7 +131,10 @@ func linItem(it linear.Issue) viewItem {
 		branch:  it.BranchName,
 		startOn: it.BranchName,
 		body:    it.Description,
+		key:     it.Identifier,
+		terms:   append([]string{it.Team.Name, who(it.Assignee), who(it.Creator), it.BranchName}, it.Labels...),
 	}
+	v.terms = slices.DeleteFunc(v.terms, func(s string) bool { return s == "" })
 	f := func(label, text, colour string) {
 		if text != "" {
 			v.fields = append(v.fields, cardField{label, text, colour, 1})

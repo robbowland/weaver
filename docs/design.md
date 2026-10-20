@@ -817,7 +817,13 @@ someone else) and Watch (what you follow).
 A view (fzf on `$SOCK_DIR/<skey>.view.<name>.<pid>.sock`) shows what its
 source said last at once, asks again behind it when that is over 2 minutes
 old and every 5 minutes after (`^r` now), and reloads when a thread changes
-(the status push) or is made. Like home, it outlives installs of weaver:
+(the status push) or is made. Each row carries a second line for search
+(`id ref prev next display search`): the item's number (`#45`, `ENG-42`),
+its whole title and its terms (author, repository, head branch, labels;
+Linear's team, people and branch); a heading's and a gap's is empty. A
+query switches fzf to it (`change-with-nth(6)`, back to 5 when empty) and
+ranks the matches (`--tiebreak index`: ties in the rows' order), so the
+headings go and nothing cut to fit is missed. Like home, it outlives installs of weaver:
 it touches `<sock>.born` as it starts, and the first reload after a newer
 weaver is installed (`_items NAME chrome`, seeing the binary newer) aborts
 its fzf, and the view execs the new weaver's `_items NAME` in the same pane

@@ -91,6 +91,10 @@ type viewItem struct {
 	repo         string
 	fields       []cardField
 	body         string // markdown
+	// key and terms are what a search goes by, besides the whole title:
+	// its number ("#45", "ENG-42"), then who, where, its branch, labels.
+	key   string
+	terms []string
 }
 
 // cardField is one of the card's labelled lines.
@@ -259,16 +263,18 @@ func (e *Env) reloadItems(src itemSource) {
 }
 
 // itemRows are the view's lines for fzf, a section at a time under its
-// heading: id ref prev next display. Headings and the gaps between are not
-// items (prev and next are the items around them, for the cursor to step
-// over them).
+// heading: id ref prev next display search. Headings and the gaps between
+// are not items (prev and next are the items around them, for the cursor to
+// step over them). search is the line a search shows and matches: the
+// item's number, its whole title and its terms, none of it cut to fit; a
+// heading's and a gap's is empty, so they go while you search.
 func (e *Env) itemRows(src itemSource) string {
 	d := src.read(e)
 	ts := e.itemThreads()
 	cols, _ := lsSize()
 	// Less the border, fzf's gutter and the card's.
 	w := lsWidth(cols) - 8
-	type line struct{ id, ref, text string }
+	type line struct{ id, ref, text, search string }
 	var ls []line
 	now := time.Now()
 	sections := d.sections[e.itemKind(src)]
@@ -300,7 +306,9 @@ func (e *Env) itemRows(src itemSource) string {
 			}
 			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + fitAnsi(it.fact, wf) + "  " +
 				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
-			ls = append(ls, line{id: "i" + strconv.Itoa(len(ls)), ref: it.ref, text: text})
+			search := CDim + num + COff + " " + cell + "  " + it.key + "  " + oneline.Line(it.title) + "  " +
+				CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
+			ls = append(ls, line{id: "i" + strconv.Itoa(len(ls)), ref: it.ref, text: text, search: search})
 		}
 	}
 	var b strings.Builder
@@ -320,7 +328,7 @@ func (e *Env) itemRows(src itemSource) string {
 				}
 			}
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\n", l.id, l.ref, prev, next, l.text)
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\t%s\n", l.id, l.ref, prev, next, l.text, l.search)
 	}
 	return b.String()
 }
@@ -710,8 +718,11 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		pw := itemCardRoom(strings.Count(rows, "\n"))
 		args := []string{"--listen", sock, "--with-shell", "/bin/sh -c",
 			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
-			"--delimiter", "\t", "--with-nth", "5..", "--tabstop", "1",
-			"--no-sort", "--ansi", "--layout", "reverse", "--no-input",
+			"--delimiter", "\t", "--with-nth", "5", "--tabstop", "1",
+			// Browsing, the rows as they come; searching, the best match
+			// first (ties as they come), on the search line.
+			"--tiebreak", "index", "--ansi", "--layout", "reverse", "--no-input",
+			"--bind", `change:transform:[ -n "$FZF_QUERY" ] && echo 'change-with-nth(6)' || echo 'change-with-nth(5)'`,
 			"--header", e.itemFresh(src), "--header-first", "--footer", e.itemFooter(src), "--footer-border", "none",
 			"--border", "sharp", "--border-label", e.itemLabel(src), "--border-label-pos", "3", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
 			"--scrollbar", "│", "--color", FzfColors,
@@ -726,7 +737,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			// q and esc: back to your thread, as on home.
-			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '` + backAct + `'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
+			"--bind", `esc:clear-query+change-with-nth(5)+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '` + backAct + `'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
 			"--bind", "q:" + backAct,
 			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.

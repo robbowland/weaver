@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -105,7 +106,10 @@ func ghItem(it github.Item) viewItem {
 		url:     it.URL,
 		repo:    it.Repo,
 		body:    it.Body,
+		key:     "#" + strconv.Itoa(it.Number),
+		terms:   append([]string{"@" + it.Author, it.Repo, it.Head}, it.Labels...),
 	}
+	v.terms = slices.DeleteFunc(v.terms, func(s string) bool { return s == "" || s == "@" })
 	f := func(label, text, colour string, lines int) {
 		if text != "" {
 			v.fields = append(v.fields, cardField{label, text, colour, lines})
