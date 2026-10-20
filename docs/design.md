@@ -442,8 +442,24 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 - **Sweeping:** `GC` (also on every SessionStart hook) ends weaver's nvims
   whose parent has gone (`--listen` in the socket dir, parent pid 1 or a
   systemd subreaper: a server that crashed or was killed left them, with
-  their language servers) and removes sockets in the socket dir nothing
-  accepts on, a day after they were made. `$STATE_DIR/worktrees` lists the
+  their language servers), ends what agents left running in panes that
+  have gone (`SweepLeftovers`, below), and removes sockets in the socket
+  dir nothing accepts on, a day after they were made.
+- **Leftovers:** a process tree launchd adopted (parent 1, yours) that a
+  weaver pane started (`WEAVER_TMUX_SESSION`, `TMUX` and `TMUX_PANE` in
+  the environment of a process in it, read from `kern.procargs2`; macOS
+  hides that of its own programs, `/bin/sh`'s, so the root may not say),
+  whose pane has gone (or whose server has: another `#{pid}`, or none), and
+  that runs from the checkout it was started in (`PWD`'s top level): a
+  process in it has its program, argv[0] or the script argv[1], under it,
+  as run (a virtualenv's python is a link elsewhere). A server put in the
+  background goes; a daemon a tool started on the way (Codex's app server,
+  gpg-agent) runs from elsewhere and stays. Each tree is sent TERM, then
+  KILL after 2 s, and said in `$STATE_DIR/gc.log`; GC says how many on the
+  status line. `wvr close` has `wvr _leftovers SHELL...` do it once the
+  panes' shells have gone, in a process of its own, so closing never waits.
+  `wvr gc --dry-run` lists them, with their memory as top counts it, and
+  ends nothing. `$STATE_DIR/worktrees` lists the
   worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
   before the list join it as they are seen); `SweepWorktrees` (at `_boot`,
   and `wvr gc`) removes one an hour or more old that no open or lost thread

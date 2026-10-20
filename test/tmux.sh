@@ -356,12 +356,25 @@ ok "new: a worktree for the task's branch, made by weaver, its window 2" \
 	"$(jq -r '"\(.branch) \(.worktree_created) \(.here) \(.num)"' "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)|$(git -C "$WT2" symbolic-ref --short HEAD 2>/dev/null)|$(windows)" \
 	"fix-the-flaky-test true false 2|fix-the-flaky-test|0 1 2 " ||
 	sed 's/^/  new: /' "$AT/new2.out"
+# Its agent puts a server built in its worktree in the background, and
+# starts a daemon whose program lives elsewhere (as Codex's app server
+# does). Built here: macOS hides the environment of its own programs.
+printf 'srv\n' >>"$AT/repo/.git/info/exclude"
+printf 'package main\n\nimport "time"\n\nfunc main() { time.Sleep(time.Hour) }\n' >"$AT/sleeper.go"
+go build -o "$WT2/srv" "$AT/sleeper.go" && cp "$WT2/srv" "$AT/bin/daemon"
+tx send-keys -t "%$AG2" "nohup '$WT2/srv' >/dev/null 2>&1 & echo \$! >'$AT/srv.pid'; nohup daemon >/dev/null 2>&1 & echo \$! >'$AT/daemon.pid'" Enter
+waitfor '[ -s "$AT/srv.pid" ] && [ -s "$AT/daemon.pid" ]'
 tx run-shell -t "=$S:" "wvr close --yes --remove-worktree $AG2 >'$AT/close2.out' 2>&1"
 waitfor '[ "$(windows)" = "0 1 " ] && [ ! -d "$WT2" ]' 100
 ok "close: its window, its files and its worktree go; its branch stays" \
 	"$(windows)|$(ls "$SD" | grep -c "^tmux-${S}_$AG2\.")|$([ -d "$WT2" ] && echo kept || echo gone)|$(git -C "$AT/repo" branch --list fix-the-flaky-test | tr -d ' *')" \
 	"0 1 |0|gone|fix-the-flaky-test" ||
 	sed 's/^/  close: /' "$AT/close2.out"
+waitfor '! kill -0 "$(cat "$AT/srv.pid")" 2>/dev/null' 60
+ok "...what its agent left running from its worktree ends with it; a daemon from elsewhere stays" \
+	"$(kill -0 "$(cat "$AT/srv.pid")" 2>/dev/null && echo running || echo ended)|$(kill -0 "$(cat "$AT/daemon.pid")" 2>/dev/null && echo running || echo ended)|$(grep -c "ended $(cat "$AT/srv.pid") " "$SD/gc.log")" \
+	"ended|running|1"
+kill "$(cat "$AT/daemon.pid")" 2>/dev/null
 
 # --- the server crashes: the board lists the lost thread, and enter resumes it
 crash

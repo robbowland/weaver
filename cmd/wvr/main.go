@@ -163,7 +163,7 @@ var commands = map[string]command{
 			fmt.Println(e.StatusText())
 		}
 	})},
-	"gc": {run: done(func(e *wvr.Env, _ []string) { e.Sweep() })},
+	"gc": {run: done(func(e *wvr.Env, a []string) { e.Sweep(a) })},
 	"doctor": {run: func(e *wvr.Env, args []string) error {
 		switch arg(args, 0) {
 		case "":
@@ -243,6 +243,7 @@ var commands = map[string]command{
 	"_github":    {session: true, run: func(e *wvr.Env, args []string) error { return e.Items(append([]string{"github"}, args...)) }},
 	"linear":     {run: (*wvr.Env).Linear},
 	"_close":     {session: true, run: (*wvr.Env).CloseTail},
+	"_leftovers": {session: true, run: (*wvr.Env).EndLeftovers},
 }
 
 // start starts (or attaches to) a weaver session, named as given; inside

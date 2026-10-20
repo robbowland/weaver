@@ -145,6 +145,10 @@ func (e *Env) GC() {
 	old(e.LostDir, "*.json", month, false)
 	old(e.StateDir+"/turns", "*", month, false)
 	e.sweepOrphans()
+	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
+		e.Tmux("display-message", "-d", "4000", "-t", "="+e.Session+":",
+			"weaver: ended "+Processes(n)+" left running by threads that have gone (gc.log)")
+	}
 	e.sweepSockets(day)
 }
 

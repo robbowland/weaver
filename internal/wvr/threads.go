@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1261,6 +1262,15 @@ func (e *Env) CloseTail(a []string) error {
 			}
 		}
 	}
+	// Their shells, so that what they left running is launchd's (below).
+	var shells []int
+	for _, p := range []tmux.PaneID{agent, nv} {
+		if out, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{pane_pid}"); p != "" && err == nil {
+			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n > 1 {
+				shells = append(shells, n)
+			}
+		}
+	}
 	e.Tmux("kill-pane", "-t", agent.Target())
 	if nv != "" {
 		e.Tmux("kill-pane", "-t", nv.Target())
@@ -1283,6 +1293,9 @@ func (e *Env) CloseTail(a []string) error {
 		os.Remove(b + ".nvim")
 		os.Remove(b + ".thread")
 	}
+	// What its agent left running from its worktree (a server put in the
+	// background) ends with it, behind: closing does not wait.
+	e.sweepLeftoversAfter(shells)
 	var rc error
 	if remove == "1" {
 		t := tildify(dir)
@@ -1299,6 +1312,38 @@ func (e *Env) CloseTail(a []string) error {
 	}
 	e.PushStatus()
 	return rc
+}
+
+// sweepLeftoversAfter has `wvr _leftovers PID...` end what the panes
+// whose shells are pids left running, once those shells have gone, in a
+// process of its own.
+func (e *Env) sweepLeftoversAfter(pids []int) {
+	args := []string{"_leftovers"}
+	for _, p := range pids {
+		args = append(args, strconv.Itoa(p))
+	}
+	c := exec.Command(e.Self, args...)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	bestEffort(c.Start())
+}
+
+// EndLeftovers is `wvr _leftovers [PID...]`: once processes pids (the shells
+// of panes just closed) have gone, or after 3 s, the leftovers of panes that
+// have gone end, said on the status line.
+func (e *Env) EndLeftovers(args []string) error {
+	var pids []int
+	for _, a := range args {
+		if n, err := strconv.Atoi(a); err == nil && n > 1 {
+			pids = append(pids, n)
+		}
+	}
+	for i := 0; i < 30 && slices.ContainsFunc(pids, func(p int) bool { return syscall.Kill(p, 0) == nil }); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
+		e.Tmux("display-message", "-d", "4000", "-t", "="+e.Session+":", "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
+	}
+	return nil
 }
 
 // Send is `wvr send [--force] PANE < TEXT`: the text to agent PANE's

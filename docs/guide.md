@@ -330,7 +330,12 @@ needs:
   stays.
 - **Processes.** A Neovim that a crashed or killed tmux server left running,
   with its language servers, is ended, and sockets nothing listens on are
-  removed.
+  removed. So is what an agent left running in the background from its
+  worktree (a dev server, a watcher) once its thread has gone: closing a
+  thread ends it, and the next sweep catches any a crash or restart left.
+  A daemon that runs from elsewhere (Codex's app server, say) stays. `wvr gc
+  --dry-run` lists what would end, with its memory; `gc.log` in weaver's
+  state directory says what did.
 - **Files.** Agents that are gone are forgotten. Activity logs, per-turn
   snapshots and lost threads go after a month.
 
