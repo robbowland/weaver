@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,6 +132,70 @@ func sockBase() string {
 	return strings.TrimSuffix(s, ".sock")
 }
 
+// keepRows is rows as a list loads them, kept beside it (base.rows, base
+// its side files' stem) for rowsChanged.
+func keepRows(base, rows string) string {
+	if base != "" {
+		bestEffort(os.WriteFile(base+".rows", []byte(rows), 0o600))
+	}
+	return rows
+}
+
+// rowsChanged: are rows other than what the list at base last loaded? A
+// list refreshed as threads change reloads only then: fzf runs its preview
+// again on any reload, from the top, and a card you had scrolled would go
+// back there for a change the list does not show.
+func rowsChanged(base, rows string) bool {
+	b, err := os.ReadFile(base + ".rows")
+	return base == "" || err != nil || string(b) != rows
+}
+
+// A card you scroll holds its list: a reload would show the card from its
+// top again, so while it is scrolled a refresh leaves the list as it is,
+// till the cursor moves (focusRefresh) or the list is off screen. The mark
+// is the list's input label, which shows nowhere: no list has an input
+// border.
+const scrolledMark = "scrolled"
+
+// cardUnscrolled ends the hold, for actions that show the card from its
+// top.
+const cardUnscrolled = "change-input-label()"
+
+// cardScrollBinds scroll the card as fzf does, marking it scrolled.
+var cardScrollBinds = []string{
+	"--bind", "preview-scroll-up,shift-up:preview-up+change-input-label(" + scrolledMark + ")",
+	"--bind", "preview-scroll-down,shift-down:preview-down+change-input-label(" + scrolledMark + ")",
+}
+
+// focusRefresh, on a list's focus, ends its hold: the card you scrolled is
+// left, and the refresh it held goes ahead.
+func focusRefresh(refresh string) string {
+	return `transform{[ "$FZF_INPUT_LABEL" = ` + scrolledMark + ` ] && echo "` + cardUnscrolled + `+` + refresh + `"}`
+}
+
+// cardHold is how a refresh treats a list whose card you scrolled: on
+// screen, it holds; off screen, unmark ends the hold before it goes ahead.
+func (e *Env) cardHold() (hold bool, unmark string) {
+	if os.Getenv("FZF_INPUT_LABEL") != scrolledMark {
+		return false, ""
+	}
+	if e.onScreen() {
+		return true, ""
+	}
+	return false, cardUnscrolled + "+"
+}
+
+// onScreen: is this list's pane one a client shows? (A popover has no
+// pane of its own: it shows while it runs.)
+func (e *Env) onScreen() bool {
+	p := os.Getenv("TMUX_PANE")
+	if p == "" {
+		return true
+	}
+	out, err := e.Tmux("list-clients", "-F", "#{pane_id}")
+	return err != nil || slices.Contains(strings.Fields(string(out)), p)
+}
+
 // cardRoom is where the card goes in a dashboard cols x lines with a list of
 // items lines (fzf's --preview-window), kept next to the socket (.room,
 // .tight) for _chrome and _view.
@@ -180,7 +245,21 @@ type boardRow struct {
 // Rows is the dashboard's lines for fzf: one TAB-separated item per line,
 // id pane tab prev next label display, with the border's label, the header
 // and the 1-9 keys next to $FZF_SOCK.
-func (e *Env) Rows() string { return e.rows(false) }
+func (e *Env) Rows() string { return keepRows(sockBase(), e.rows(false)) }
+
+// Refresh is what the board does as threads change (`_refresh`, which
+// session.pushStatus posts): nothing while you read a card you scrolled
+// (cardHold); else its rows again if they changed, else its chrome alone.
+func (e *Env) Refresh() string {
+	hold, unmark := e.cardHold()
+	switch {
+	case hold:
+		return ""
+	case rowsChanged(sockBase(), e.rows(false)):
+		return unmark + "reload-sync(COLOR=1 " + session.Quote(e.Self) + " _rows)\n"
+	}
+	return unmark + e.Chrome()
+}
 
 // PlainRows is the board as text, $COLUMNS wide (`wvr ls | cat`).
 func (e *Env) PlainRows() string { return e.rows(true) }

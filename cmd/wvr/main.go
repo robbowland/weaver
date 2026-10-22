@@ -199,6 +199,7 @@ var commands = map[string]command{
 		}
 		return e.Rows()
 	})},
+	"_refresh": {session: true, run: prints(func(e *wvr.Env, _ []string) string { return e.Refresh() })},
 	"_preview": {session: true, run: prints((*wvr.Env).Preview)},
 	"_view":    {run: prints(func(_ *wvr.Env, args []string) string { return wvr.View(arg(args, 0)) })},
 	"_title":   {run: prints(func(*wvr.Env, []string) string { return wvr.Title() })},

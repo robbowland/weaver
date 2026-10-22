@@ -559,8 +559,24 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 
 The dashboard is fzf: `wvr home` in the weaver session's home window, at
 full size, and `wvr ls` (or `wvr` inside any other tmux session) in the
-pane it runs in. `PushStatus`, run by every hook that changes a state, reloads
-it through its `--listen` socket.
+pane it runs in. `PushStatus`, run by every hook that changes a state,
+refreshes it through its `--listen` socket (`transform(_refresh)`, the views'
+`_items NAME refresh`).
+
+A refresh reloads only rows that changed: fzf runs the preview again on any
+reload, `--track` or not, from its top (`+SCROLL` or line 1; it keeps no
+offset and shows none), so a card you were reading would jump back for a
+change you cannot see. The list's rows command keeps what it printed beside
+the socket (`.rows`, `keepRows`); a refresh prints the rows again only when
+they differ (`rowsChanged`), else just the chrome, which moves nothing.
+Rows that do change (an age, what an agent runs) still would, so a card you
+scroll holds the list: the wheel and `shift+↑↓` over it set the input's
+label to `scrolled` (no list has an input border, so it shows nowhere; a
+transform reads it as `$FZF_INPUT_LABEL`), and a refresh then does nothing
+while the list's pane is on a client's screen (`cardHold`). The hold ends
+as the cursor moves (the focus event clears the mark and refreshes), as the
+card is shown from its top again (`ctrl+r`, `s`, `?`), or at the first
+refresh while the list is off screen.
 
 fzf draws one sharp border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
 title and the status bar's counts in its label (home leaves the counts to the
@@ -933,8 +949,8 @@ A view (fzf on `$SOCK_DIR/<skey>.view.<name>.<pid>.sock`) shows what its
 source said last at once, asks again behind it when that is over 2 minutes
 old (once its fzf listens: `start` runs `_items NAME fetch-bg`, so an
 answer has a list to reload) and every 5 minutes after (`^r` now), and
-reloads when a thread changes
-(the status push) or is made. A row is `id ref prev next display search`:
+refreshes when a thread changes
+(the status push, and the 5-minute ask: [Dashboard](#dashboard)) or is made. A row is `id ref prev next display search`:
 id its kind and its section's key (`h` a heading, `g` the gap before one,
 `i` an item, `m` the line after a section's items when it has more); ref
 the item's, else `-` and the row's id: fzf keeps the cursor on a row

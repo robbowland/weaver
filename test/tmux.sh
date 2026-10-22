@@ -578,6 +578,41 @@ ok "rename: the thread's window, and its record, take the name you give it" \
 outside wvr rename "$AG2" "" >/dev/null 2>&1
 waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
 ok "...an empty name gives its agent's title back" "$(label2)" "02 Tidy the parser · repo/main"
+# A card you scroll holds the board's list as threads change (a reload
+# would show it from the top again), till the cursor moves or the board is
+# off screen.
+tx select-window -t "=$S:0"
+waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+v0() { tx capture-pane -p -t "=$S:0"; }
+cardtop0() { v0 | sed -n 2p | awk -F'│' '{print $3}' | tr -s ' '; }
+wheel0() { for _ in 1 2 3 4 5 6 7 8 9 10; do key "$(sgr 65 160 10 M)"; done; sleep 0.5; }
+key 3f # ?: the help in the card's place, longer than it
+waitfor 'v0 | grep -q "KEYS"'
+top0=$(cardtop0)
+wheel0
+top=$(cardtop0)
+outside wvr rename "$AG2" Held name >/dev/null 2>&1
+waitfor '[ "$(label2)" = "02 Held name · repo/main" ]'
+sleep 1
+ok "board: a card you scrolled holds the list as threads change" \
+	"$([ "$top" != "$top0" ] && echo scrolled)|$(cardtop0)|$(v0 | grep -c 'Held name')" "scrolled|$top|0" ||
+	v0 | sed 's/^/  board: /' | cut -c1-150 | head -8
+key 6a # j
+sleep 0.3
+key 6b # k
+waitfor 'v0 | grep -q "Held name"'
+ok "...till the cursor moves" "$(v0 | grep -c 'Held name')" "1"
+wheel0
+tx select-window -t "=$S:1"
+waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
+outside wvr rename "$AG2" "" >/dev/null 2>&1
+waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
+sleep 1
+tx select-window -t "=$S:0"
+waitfor 'v0 | grep -q "Tidy the parser"' 20
+ok "...or the board is off screen" "$(v0 | grep -c 'Tidy the parser')|$(v0 | grep -c 'Held name')" "1|0"
+key 3f # ?: the card again
+waitfor '! v0 | grep -q "KEYS"'
 
 # --- restart: a thread's agent started again in its own pane (an updated
 # harness), resuming its conversation; one mid-turn is left unless forced
@@ -626,7 +661,8 @@ case "$1 $2" in
 	case "$*" in
 	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
-	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	# Its body is longer than its card: the card scrolls.
+	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"Steps:\n\n- step 1\n- step 2\n- step 3\n- step 4\n- step 5\n- step 6\n- step 7\n- step 8\n- step 9\n- step 10\n- step 11\n- step 12\n- step 13\n- step 14\n- step 15\n- step 16\n- step 17\n- step 18\n- step 19\n- step 20\n- step 21\n- step 22\n- step 23\n- step 24\n- step 25\n- step 26\n- step 27\n- step 28\n- step 29\n- step 30\n- step 31\n- step 32\n- step 33\n- step 34\n- step 35\n- step 36\n- step 37\n- step 38\n- step 39\n- step 40\n- step 41\n- step 42\n- step 43\n- step 44\n- step 45\n- step 46\n- step 47\n- step 48\n- step 49\n- step 50\n- step 51\n- step 52\n- step 53\n- step 54\n- step 55\n- step 56\n- step 57\n- step 58\n- step 59\n- step 60","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
 	# An item named (ctrl+s on o/r#45), read as it is: GitHub's search does
 	# not find a number.
 	*'r0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 99)'*) printf '{"data":{"r0":{"issueOrPullRequest":%s}}}\n' "$(pr 99 'An old one' | sed 's/^{/{"__typename":"PullRequest",/')"; exit ;;
@@ -725,7 +761,7 @@ waitfor 'v900 | grep -q "QUEUE · 1"'
 key 2f # /
 sleep 0.5
 key "$(printf 'tidy' | xxd -p)"
-waitfor 'v900 | grep -q "#46  Tidy up"'
+waitfor 'v900 | grep -q "#46  Tidy up" && ! v900 | grep -q "Add a flag"'
 ok "...words, fuzzily: / tidy" "$(v900 | grep -c '#46  Tidy up  @me')|$(v900 | grep -c 'Add a flag')" "1|0"
 key 1b # esc
 waitfor 'v900 | grep -q "QUEUE · 1"'
@@ -801,6 +837,22 @@ ok "...a whole id not loaded, typed: looked up, as SEARCH" "$(v900 | grep -c 'SE
 	v900 | sed 's/^/  github: /' | head -12
 key 1b # esc
 waitfor '! v900 | grep -q "SEARCH ·"'
+# A card you have scrolled stays where you left it as agents change what
+# the view does not show: fzf shows a reloaded preview from its top.
+key 73 # s: the issues, the flaky test's long card
+waitfor 'v900 | grep -q "step 20"'
+vsock=$(ls /tmp/weaver-$(id -u)/tmux-$S.view.github.*.sock 2>/dev/null | head -n 1)
+cardtop() { v900 | sed -n 2p | awk -F'│' '{print $3}' | tr -s ' '; }
+top0=$(cardtop)
+curl -s -m 2 --unix-socket "$vsock" -X POST localhost -d "$(printf 'preview-down+%.0s' $(seq 9))preview-down" >/dev/null
+sleep 0.5
+top=$(cardtop)
+tx run-shell -t "=$S:" "wvr status --push >/dev/null 2>&1"
+sleep 1
+ok "GITHUB: a card scrolled stays there as the threads change nothing it shows" \
+	"$([ "$top" != "$top0" ] && echo scrolled)|$(cardtop)" "scrolled|$top"
+key 73 # s: the pull requests again
+waitfor 'v900 | grep -q "QUEUE · 1"'
 key 67 # g
 waitfor '[ "$(v900 | grep -c "Add a flag")" = 2 ]'
 click 3 50

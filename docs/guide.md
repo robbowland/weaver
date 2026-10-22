@@ -509,7 +509,10 @@ key:
 - **The status line.** `THREADS`, `GITHUB` and `LINEAR` go there. The counts
   go to the agent that needs you (`[!]`, `[x]`), or home (`[/]`).
 - **The wheel** scrolls what is under it: a list, a card, or a pane's history,
-  with a scrollbar to drag while you are scrolled back.
+  with a scrollbar to drag while you are scrolled back. A card you scroll
+  (the wheel, or `shift+↑↓`) stays where you left it: the list beside it
+  holds still as threads change, and catches up when you move the cursor
+  or leave it.
 
 Dragging in a pane selects and copies, in tmux's copy mode. To select the
 terminal's own way, hold `Shift` (Ghostty) or `Option` (iTerm2) as you drag.

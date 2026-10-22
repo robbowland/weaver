@@ -162,9 +162,10 @@ func (e *Env) pushStatus(labels bool) {
 		if st, err := os.Stat(s); err != nil || st.Mode()&os.ModeSocket == 0 {
 			continue
 		}
-		if !FzfPost(s, "reload-sync(COLOR=1 "+q+" _rows)+refresh-preview") {
-			b := strings.TrimSuffix(s, ".sock")
-			for _, x := range []string{s, b + ".keys", b + ".view", b + ".title", b + ".label", b + ".room", b + ".shown", b + ".tight", b + ".vp"} {
+		// A refresh, not a reload: one reloads only rows that changed, and
+		// leaves the card where you scrolled it otherwise.
+		if !FzfPost(s, "transform(COLOR=1 "+q+" _refresh)") {
+			for _, x := range BoardFiles(strings.TrimSuffix(s, ".sock")) {
 				os.Remove(x)
 			}
 		}
@@ -174,13 +175,21 @@ func (e *Env) pushStatus(labels bool) {
 	views, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".view.*.*.sock")
 	for _, s := range views {
 		name, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(s), e.SKey+".view."), ".")
-		if !FzfPost(s, "reload-sync("+q+" _items "+name+" rows)+refresh-preview") {
+		if !FzfPost(s, "transform("+q+" _items "+name+" refresh)") {
 			os.Remove(s)
+			os.Remove(s + ".rows")
 		}
 	}
 	if labels && e.WeaverSession() {
 		e.threadTabLabels(rows)
 	}
+}
+
+// BoardFiles are a board's socket and the files beside it, by their stem
+// base: they go with it.
+func BoardFiles(base string) []string {
+	return []string{base + ".sock", base + ".keys", base + ".view", base + ".title", base + ".label", base + ".room",
+		base + ".shown", base + ".tight", base + ".vp", base + ".rows"}
 }
 
 // FzfPost sends actions to the fzf listening on unix socket s.

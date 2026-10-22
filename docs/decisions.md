@@ -233,6 +233,16 @@ can supersede an earlier one, and says so.
   the real path a board started as: a switch either way is another file, an
   upgrade in place a newer one. A board's keys cannot run once their binary
   has gone, so its own process checks too, every 5 s (a few stats).
+- 2026-10-22: A card you scroll stays where you left it. Every status push
+  reloaded every board and view, and fzf shows a reloaded preview from its
+  top, so an issue's card jumped back as any agent ran a tool. A refresh
+  now reloads only rows that changed, which settles the views; the board's
+  rows change as agents work (an age, what one runs), so a scrolled card
+  also holds its list until the cursor moves or the list is off screen.
+  Holding the list rather than restoring the scroll: fzf neither reports
+  nor keeps a preview's offset, and tracking it means following every way
+  of scrolling. Dragging the card's scrollbar is the one way not marked: it
+  scrolls as before, without the hold.
 
 ## Threads
 

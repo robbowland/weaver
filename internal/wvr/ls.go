@@ -126,8 +126,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		base = e.SockDir + "/" + e.SKey + ".fzf.p" + strconv.Itoa(os.Getpid())
 	}
 	sock := base + ".sock"
-	side := []string{sock, base + ".keys", base + ".view", base + ".title", base + ".label", base + ".room",
-		base + ".shown", base + ".tight", base + ".vp"}
+	side := session.BoardFiles(base)
 	clean := func() {
 		for _, f := range side {
 			os.Remove(f)
@@ -199,7 +198,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--prompt", "/ ", "--ghost", "search threads", "--info", "hidden", "--no-separator",
 			"--preview", q + " _preview {2} {6} {1}", "--preview-window", pw,
 			"--bind", "resize:reload-sync(LS_REMEASURE=1 " + q + " _rows)", "--bind", "load:transform(" + q + " _chrome)",
-			"--bind", `focus:transform:case {1} in a*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n "$t" ] || t={5} ;; *) t={5}; [ -n "$t" ] || t={4} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
+			"--bind", "focus:" + focusRefresh("transform(COLOR=1 "+q+" _refresh)") + `+transform:case {1} in a*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n "$t" ] || t={5} ;; *) t={5}; [ -n "$t" ] || t={4} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last,q:" + quitAct,
 			"--bind", "enter,double-click:transform:case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; esac",
 		}
@@ -226,9 +225,10 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "click-footer:transform("+q+" _click board)",
 			"--bind", "click-header:transform("+q+" _click title)",
 			"--bind", "right-click:"+menuAct,
-			"--bind", "ctrl-r:reload-sync("+q+" _rows)+refresh-preview",
+			"--bind", "ctrl-r:"+cardUnscrolled+"+reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)
+		args = append(args, cardScrollBinds...)
 		if peek != "" {
 			// Alt y again closes it, as a toggle; Alt N and Alt 1 work in it
 			// as they do anywhere. It opens on the thread it is over.

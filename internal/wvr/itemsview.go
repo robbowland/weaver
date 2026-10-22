@@ -390,7 +390,17 @@ func (e *Env) itemSocks(name string) []string {
 func (e *Env) reloadItems(src itemSource) {
 	q := session.Quote(e.Self)
 	for _, s := range e.itemSocks(src.name()) {
-		session.FzfPost(s, "reload-sync("+q+" _items "+src.name()+" rows)+refresh-preview+transform("+q+" _items "+src.name()+" chrome)")
+		session.FzfPost(s, cardUnscrolled+"+reload-sync("+q+" _items "+src.name()+" rows)+refresh-preview+transform("+q+" _items "+src.name()+" chrome)")
+	}
+}
+
+// refreshItems has every view of src show what changed behind it, as
+// session.pushStatus does when threads change: a reload only for rows that
+// changed (`_items NAME refresh`), the card where you scrolled it.
+func (e *Env) refreshItems(src itemSource) {
+	q := session.Quote(e.Self)
+	for _, s := range e.itemSocks(src.name()) {
+		session.FzfPost(s, "transform("+q+" _items "+src.name()+" refresh)")
 	}
 }
 
@@ -924,7 +934,21 @@ func (e *Env) Items(args []string) error {
 	}
 	switch sub := firstArg(args); sub {
 	case "rows":
-		fmt.Print(e.itemRows(src))
+		fmt.Print(keepRows(os.Getenv("WEAVER_VIEW_SOCK"), e.itemRows(src)))
+		return nil
+	case "refresh":
+		// As threads change, or behind a fetch: nothing while you read a
+		// card you scrolled (cardHold); else its rows again if they
+		// changed, else its chrome alone.
+		me := session.Quote(e.Self) + " _items " + src.name()
+		hold, unmark := e.cardHold()
+		switch {
+		case hold:
+		case rowsChanged(os.Getenv("WEAVER_VIEW_SOCK"), e.itemRows(src)):
+			fmt.Print(unmark + "reload-sync(" + me + " rows)\n")
+		default:
+			fmt.Print(unmark + "transform(" + me + " chrome)\n")
+		}
 		return nil
 	case "chrome", "loaded":
 		// A newer weaver installed since the view started: it ends, for the
@@ -1042,6 +1066,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	defer os.Remove(sock + ".pos")
 	defer os.Remove(sock + ".find")
 	defer os.Remove(sock + ".born")
+	defer os.Remove(sock + ".rows")
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
 	go func() {
@@ -1060,7 +1085,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	go func() {
 		for range time.Tick(5 * time.Minute) {
 			src.fetch(e)
-			e.reloadItems(src)
+			e.refreshItems(src)
 		}
 	}()
 	q := session.Quote(e.Self)
@@ -1088,7 +1113,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		`+transform:[ "$FZF_MATCH_COUNT" = 0 ] && [ -n "$FZF_QUERY" ] && echo 'trigger(ctrl-s)'`
 	reviewAct = "transform:case {1} in i*) echo '" + reviewAct + "' ;; esac"
 	for {
-		rows := e.itemRows(src)
+		rows := keepRows(sock, e.itemRows(src))
 		// The cursor on the first item, not its section's heading.
 		first := 1
 		for i, l := range strings.Split(rows, "\n") {
@@ -1117,14 +1142,14 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
 			"--preview", me + " card {2}", "--preview-window", pw,
 			"--bind", "load:transform(" + me + " loaded)",
-			"--bind", `focus:transform:case {1} in i*|m*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
+			"--bind", "focus:" + focusRefresh("transform("+me+" refresh)") + `+transform:case {1} in i*|m*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last",
 			"--bind", "enter,double-click:" + enterAct,
 			"--bind", "alt-N,alt-n:" + threadAct,
 			"--bind", "alt-m:" + reviewAct,
 			"--bind", "o:" + act("open"),
 			"--bind", "m:execute-silent(" + me + " more {1})",
-			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
+			"--bind", "ctrl-r:" + cardUnscrolled + "+execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			// q and esc: back to your thread, as on home.
 			// esc's own clear-query, so fzf searches again (a transform's
@@ -1133,11 +1158,12 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--bind", "f:execute(" + me + " filter)+" + reload,
 			"--bind", "ctrl-s:execute-silent(" + me + " ask {q})",
 			"--bind", "q:" + backAct,
-			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
+			"--bind", "?:execute-silent(" + me + " help)+" + cardUnscrolled + "+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.
 			"--bind", "click-footer:transform(" + me + " click)",
 			"--bind", "right-click:" + menuAct,
 		}
+		args = append(args, cardScrollBinds...)
 		if peek != "" {
 			args = append(args, "--bind", "alt-y:abort", "--bind", "alt-1:print(alt-1)+accept")
 		}

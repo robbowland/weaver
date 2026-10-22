@@ -532,7 +532,7 @@ func View(what string) string {
 	} else {
 		os.Remove(f)
 	}
-	return out + "refresh-preview+transform-footer(" + session.Quote(selfPath()) + " _footer)\n"
+	return out + cardUnscrolled + "+refresh-preview+transform-footer(" + session.Quote(selfPath()) + " _footer)\n"
 }
 
 func selfPath() string { return session.Executable() }
