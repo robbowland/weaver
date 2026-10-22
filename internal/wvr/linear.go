@@ -54,7 +54,7 @@ func (c *linCache) settle() {
 func (c *linCache) refreshed(got, found []linear.Result) {
 	for i, r := range got {
 		if j := slices.IndexFunc(c.Results, func(o linear.Result) bool { return o.Section == r.Section }); j >= 0 {
-			got[i].List = r.List.Since(c.Results[j].List)
+			got[i].List = r.Since(c.Results[j].List)
 		}
 	}
 	c.Results = got
@@ -67,7 +67,7 @@ func (c *linCache) refreshed(got, found []linear.Result) {
 // search: one that failed keeps what the search had.
 func (c *linCache) found(r linear.Result) {
 	if c.Search != nil && c.Search.Section == r.Section {
-		r.List = r.List.Since(c.Search.List)
+		r.List = r.Since(c.Search.List)
 		c.Search = &r
 	}
 }
@@ -183,11 +183,11 @@ func (c *linCache) paged(s linear.Section, after string, p page.List[linear.Issu
 	id := func(it linear.Issue) string { return it.Identifier }
 	for i, r := range c.Results {
 		if r.Section == s {
-			c.Results[i].List = r.List.More(after, p, id)
+			c.Results[i].List = r.More(after, p, id)
 		}
 	}
 	if c.Search != nil && c.Search.Section == s {
-		c.Search.List = c.Search.List.More(after, p, id)
+		c.Search.List = c.Search.More(after, p, id)
 	}
 }
 

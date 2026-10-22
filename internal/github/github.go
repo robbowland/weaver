@@ -244,7 +244,7 @@ func parseRefs(k Kind, s Section, b []byte) (Result, error) {
 			node
 		}
 		if json.Unmarshal(a.IssueOrPullRequest, &n) == nil && n.Typename == want {
-			r.Items = append(r.Items, n.node.item(k))
+			r.Items = append(r.Items, n.item(k))
 		}
 	}
 	r.Total, r.Fetched = len(r.Items), time.Now()
@@ -385,7 +385,7 @@ func (n node) item(k Kind) Item {
 
 // Parse reads the response to Query(k, s, after): that page of the
 // section.
-func Parse(k Kind, s Section, after string, b []byte) (Result, error) {
+func Parse(k Kind, s Section, _ string, b []byte) (Result, error) {
 	r := Result{Section: s}
 	type search struct {
 		IssueCount int `json:"issueCount"`

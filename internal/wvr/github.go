@@ -54,7 +54,7 @@ func (c *ghCache) refreshed(got, found map[github.Kind][]github.Result) {
 	for k, rs := range got {
 		for i, r := range rs {
 			if j := slices.IndexFunc(c.Results[k], func(o github.Result) bool { return o.Section == r.Section }); j >= 0 {
-				rs[i].List = r.List.Since(c.Results[k][j].List)
+				rs[i].List = r.Since(c.Results[k][j].List)
 			}
 		}
 	}
@@ -75,7 +75,7 @@ func (c *ghCache) search(s github.Section) {
 // still the search: one that failed keeps what the search had.
 func (c *ghCache) found(k github.Kind, r github.Result) {
 	if s, ok := c.Search[k]; ok && s.Section == r.Section {
-		r.List = r.List.Since(s.List)
+		r.List = r.Since(s.List)
 		c.Search[k] = r
 	}
 }
@@ -85,11 +85,11 @@ func (c *ghCache) found(k github.Kind, r github.Result) {
 func (c *ghCache) paged(k github.Kind, s github.Section, after string, p page.List[github.Item]) {
 	for i, r := range c.Results[k] {
 		if r.Section == s {
-			c.Results[k][i].List = r.List.More(after, p, github.Item.Ref)
+			c.Results[k][i].List = r.More(after, p, github.Item.Ref)
 		}
 	}
 	if r, ok := c.Search[k]; ok && r.Section == s {
-		r.List = r.List.More(after, p, github.Item.Ref)
+		r.List = r.More(after, p, github.Item.Ref)
 		c.Search[k] = r
 	}
 }

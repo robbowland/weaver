@@ -24,18 +24,17 @@ func Command(k Kind, base string, m Mode) []string {
 		return w
 	}
 	// Each loosening option: its name, and whether a value follows it
-	// (as the next word, unless given as name=value).
-	var loose map[string]bool
-	var hold []string
+	// (as the next word, unless given as name=value). Claude Code's, unless
+	// it is Codex.
+	loose := map[string]bool{"--permission-mode": true, "--dangerously-skip-permissions": false,
+		"--allow-dangerously-skip-permissions": false}
+	hold := []string{"--permission-mode", "plan"}
 	switch k {
 	case Codex:
 		loose = map[string]bool{"--sandbox": true, "-s": true, "--full-auto": false,
 			"--dangerously-bypass-approvals-and-sandbox": false, "--yolo": false}
 		hold = []string{"--sandbox", "read-only"}
-	default:
-		loose = map[string]bool{"--permission-mode": true, "--dangerously-skip-permissions": false,
-			"--allow-dangerously-skip-permissions": false}
-		hold = []string{"--permission-mode", "plan"}
+	case Claude:
 	}
 	out := []string{w[0]}
 	for i := 1; i < len(w); i++ {

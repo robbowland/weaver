@@ -21,11 +21,11 @@ import (
 
 // markBorn marks a board or view started now, from this weaver, in born.
 func (e *Env) markBorn(born string) {
-	real, err := filepath.EvalSymlinks(e.Self)
+	path, err := filepath.EvalSymlinks(e.Self)
 	if err != nil {
-		real = e.Self
+		path = e.Self
 	}
-	bestEffort(os.WriteFile(born, []byte(real+"\n"), 0o600))
+	bestEffort(os.WriteFile(born, []byte(path+"\n"), 0o600))
 }
 
 // successor is the weaver a board or view marked in born starts again in,
@@ -42,14 +42,14 @@ func (e *Env) successor(born string) (string, bool) {
 	if err != nil || !filepath.IsAbs(now) {
 		now = e.Self
 	}
-	real, err := filepath.EvalSymlinks(now)
+	path, err := filepath.EvalSymlinks(now)
 	if err != nil {
 		return "", false
 	}
-	if was, _ := files.FirstLine(born); was != "" && was != real {
+	if was, _ := files.FirstLine(born); was != "" && was != path {
 		return now, true
 	}
-	if st, err := os.Stat(real); err == nil && st.ModTime().After(b.ModTime()) {
+	if st, err := os.Stat(path); err == nil && st.ModTime().After(b.ModTime()) {
 		return now, true
 	}
 	return "", false
