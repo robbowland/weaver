@@ -2,7 +2,6 @@ package session
 
 import (
 	"cmp"
-	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -362,12 +361,8 @@ func (e *Env) LostRows() []LostRow {
 			continue
 		}
 		f := e.LostDir + "/" + d.Name()
-		b, err := os.ReadFile(f)
+		lo, err := store.ReadLost(f)
 		if err != nil {
-			continue
-		}
-		var lo store.Lost
-		if json.Unmarshal(jsonx.First(b), &lo) != nil {
 			continue
 		}
 		st := lo.State

@@ -333,15 +333,17 @@ needs:
 
 - **Worktrees.** A worktree weaver made for a thread goes once no thread
   (open or lost) and no pane uses it, and nothing in it would be lost: no
-  uncommitted or untracked files, and its commits merged or pushed. Its branch
-  stays. A worktree you chose to keep when you closed its thread is yours, and
+  uncommitted or untracked files, and its commits merged or pushed. Its
+  ignored files (an `.env`, local settings) are kept a month in
+  `trash/` in weaver's state directory first. Its branch stays. A worktree you chose to keep when you closed its thread is yours, and
   stays.
 - **Processes.** A Neovim that a crashed or killed tmux server left running,
   with its language servers, is ended, and sockets nothing listens on are
   removed. So is what an agent left running in the background from its
   worktree (a dev server, a watcher) once its thread has gone: closing a
   thread ends it, and the next sweep catches any a crash or restart left.
-  A daemon that runs from elsewhere (Codex's app server, say) stays. `wvr gc
+  A daemon that runs from elsewhere (Codex's app server, say) stays, even
+  when a gone thread's command runs under it (that command alone ends). `wvr gc
   --dry-run` lists what would end, with its memory; `gc.log` in weaver's
   state directory says what did.
 - **Files.** Agents that are gone are forgotten. Activity logs, per-turn

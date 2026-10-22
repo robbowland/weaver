@@ -433,11 +433,18 @@ open `:AgentReview branch` after VimEnter.
 
 `wvr close` removes a worktree only when the thread record says weaver made
 it, it is a linked worktree (not the main checkout), not locked, `git status
---porcelain` is empty, HEAD is an ancestor of `origin/HEAD`, `upstream/HEAD`,
-`main` or `master`, or of its upstream with nothing unpushed, and no other pane
-is in it. It checks again after the agent has exited, and never forces:
+--porcelain --untracked-files=all` is empty (whatever status is set to show),
+HEAD is an ancestor of `origin/HEAD`, `upstream/HEAD`, `main` or `master`, or
+of its upstream with nothing unpushed, and nothing else uses it
+(`worktreeUsers`, which the sweep asks too: a thread of any session working
+there, a lost one, a pane in it on weaver's server or yours; not the thread
+being closed). It checks again after the agent has exited, and never forces:
 Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
-worktree themselves. The branch always stays.
+worktree themselves. Its ignored files, which removing it would take (an
+`.env`, local settings; not whole ignored directories a build makes again,
+nor `.DS_Store`), are copied first to `$STATE_DIR/trash/<name>-<when>/`,
+kept a month, and what says it was removed says where. The branch always
+stays.
 
 ## Lost threads
 
@@ -510,12 +517,13 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   weaver pane started (`WEAVER_TMUX_SESSION`, `TMUX` and `TMUX_PANE` in
   the environment of a process in it, read from `kern.procargs2`; macOS
   hides that of its own programs, `/bin/sh`'s, so the root may not say),
-  whose pane has gone (or whose server has: another `#{pid}`, or none), and
-  that runs from the checkout it was started in (`PWD`'s top level): a
-  process in it has its program, argv[0] or the script argv[1], under it,
-  as run (a virtualenv's python is a link elsewhere). A server put in the
-  background goes; a daemon a tool started on the way (Codex's app server,
-  gpg-agent) runs from elsewhere and stays. Each tree is sent TERM, then
+  whose pane has gone (or whose server has: another `#{pid}`, or none): of
+  it, each process that runs from the checkout it was started in (`PWD`'s
+  top level: its program, argv[0] or the script argv[1], under it, as run;
+  a virtualenv's python is a link elsewhere), with all under it
+  (`condemned`). A server put in the background goes; a daemon a tool
+  started on the way (Codex's app server, gpg-agent) runs from elsewhere and
+  stays, even when a gone thread's command runs under it. Each is sent TERM, then
   KILL after 2 s, and said in `$STATE_DIR/gc.log`; GC says how many on the
   status line. `wvr close` has `wvr _leftovers SHELL...` do it once the
   panes' shells have gone, in a process of its own, so closing never waits.
@@ -523,9 +531,10 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   ends nothing. `$STATE_DIR/worktrees` lists the
   worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
   before the list join it as they are seen); `SweepWorktrees` (at `_boot`,
-  and `wvr gc`) removes one an hour or more old that no open or lost thread
-  record and no pane's directory is in, when `worktreeRemovable` holds
-  (clean, its HEAD merged into a default branch or pushed), with `wt remove
+  and `wvr gc`) removes one an hour or more old that nothing uses
+  (`worktreeUsers`, as close asks), when `worktreeRemovable` holds
+  (clean, its HEAD merged into a default branch or pushed), its ignored
+  files kept first as close keeps them, with `wt remove
   --no-delete-branch` or `git worktree remove`, and says so on the status
   line. Close's `keep` takes a worktree off the list.
 - **Dashboard:** lost threads (of every session) last, under `LOST`, glyph

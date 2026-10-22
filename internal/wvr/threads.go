@@ -1075,7 +1075,9 @@ func worktreeRemovable(dir string) string {
 	if files.Exists(gd + "/locked") {
 		return "it is locked"
 	}
-	out, _ := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	// Untracked files however status is set to show them (ignored ones
+	// are kept aside as it goes: removeWorktree).
+	out, _ := exec.Command("git", "-C", dir, "status", "--porcelain", "--untracked-files=all").Output()
 	if n := strings.Count(string(out), "\n"); n > 0 {
 		return strconv.Itoa(n) + " uncommitted file" + plural(n)
 	}
@@ -1240,22 +1242,11 @@ func (e *Env) Close(args []string) error {
 	keep, removable, tilde := "", false, ""
 	if th.WorktreeCreated && !th.Here && th.Worktree != "" {
 		tilde = formPath(th.Worktree)
-		var users []string
-		skip := map[tmux.PaneID]bool{agentPane: true, nv: true, e.MyPane: true}
-		for _, p := range panes {
-			id := p.ID
-			if skip[id] || p.Exited || strings.HasSuffix(p.Cmd, " sidebar") {
-				continue
-			}
-			if p.Cwd == th.Worktree || strings.HasPrefix(p.Cwd, th.Worktree+"/") {
-				users = append(users, string(id))
-			}
-		}
-		switch why := worktreeRemovable(th.Worktree); {
+		switch why, users := worktreeRemovable(th.Worktree), e.worktreeUsers(th.Worktree, agentPane, nv, e.MyPane); {
 		case why != "":
 			keep = tilde + " " + CDim + "·" + COff + CGrey + " " + why
 		case len(users) > 0:
-			keep = tilde + " " + CDim + "·" + COff + CGrey + " pane " + strings.Join(users, " ") + " is in it"
+			keep = tilde + " " + CDim + "·" + COff + CGrey + " " + strings.Join(users, ", ") + " in it"
 		default:
 			removable = true
 		}
@@ -1413,12 +1404,15 @@ func (e *Env) CloseTail(a []string) error {
 		t := tildify(dir)
 		if why := worktreeRemovable(dir); why != "" {
 			rc = fmt.Errorf("kept %s: %s", t, why)
+		} else if users := e.worktreeUsers(dir); len(users) > 0 {
+			rc = fmt.Errorf("kept %s: %s in it", t, strings.Join(users, ", "))
 		} else {
-			if removeWorktree(dir, repo, os.Stdout) != nil {
+			if kept, err := e.removeWorktree(dir, repo, os.Stdout); err != nil {
+				fmt.Println("weaver: " + err.Error())
 				rc = cli.ErrSaid
 			} else {
 				e.forgetWorktree(dir)
-				fmt.Println("weaver: removed " + t)
+				fmt.Println("weaver: removed " + t + keptSays(kept))
 			}
 		}
 	}

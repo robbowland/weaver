@@ -468,12 +468,8 @@ func (e *Env) lostCard(sid, title string) string {
 	if title != "" {
 		out = titleLine(title)
 	}
-	b, err := os.ReadFile(f)
+	lo, err := store.ReadLost(f)
 	if err != nil {
-		return out
-	}
-	var lo store.Lost
-	if json.Unmarshal(jsonx.First(b), &lo) != nil {
 		return out
 	}
 	st := lo.State
