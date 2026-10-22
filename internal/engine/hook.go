@@ -114,6 +114,11 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane tmux.PaneID, agentNa
 			pk = session.Peek(h.sf)
 		}
 	}
+	// The pane's first event: a thread record an earlier server left under
+	// its number is not this agent's.
+	if !files.Exists(h.sf) {
+		e.DropStaleThread(pane)
+	}
 	if mode == "async" && !hooks.AsyncGate(ev, pk.State) {
 		return 0
 	}

@@ -29,10 +29,11 @@ func sub1(re *regexp.Regexp, l string) string {
 	return ""
 }
 
-// tmuxSessionKeys are the running tmux sessions' keys (tmux-<name>), on
-// weaver's server and the one we run in; nil when neither answers.
-func (e *Env) tmuxSessionKeys() map[string]bool {
-	m := map[string]bool{}
+// tmuxSessions are the running tmux sessions, by key (tmux-<name>), with
+// when each was made (epoch s), on weaver's server and the one we run in
+// (a name on both: the earlier); nil when neither answers.
+func (e *Env) tmuxSessions() map[string]int64 {
+	m := map[string]int64{}
 	ok := false
 	add := func(args ...string) {
 		out, err := RunTmux(args...)
@@ -41,14 +42,20 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 		}
 		ok = true
 		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			if l != "" {
-				m["tmux-"+strings.ReplaceAll(l, "/", "_")] = true
+			made, name, _ := strings.Cut(l, " ")
+			if name == "" {
+				continue
+			}
+			k := "tmux-" + strings.ReplaceAll(name, "/", "_")
+			n, _ := strconv.ParseInt(made, 10, 64)
+			if was, seen := m[k]; !seen || n < was {
+				m[k] = n
 			}
 		}
 	}
-	add(append(append([]string{}, e.TSock...), "list-sessions", "-F", "#S")...)
+	add(append(append([]string{}, e.TSock...), "list-sessions", "-F", "#{session_created} #S")...)
 	if e.InTmux {
-		add("list-sessions", "-F", "#S")
+		add("list-sessions", "-F", "#{session_created} #S")
 	}
 	if !ok {
 		return nil
@@ -58,20 +65,33 @@ func (e *Env) tmuxSessionKeys() map[string]bool {
 
 // GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid goes an hour
-// after its session, an ended one an hour after it ended; then old files,
-// the nvims a server that went left running, and dead sockets.
+// after its session, or at once when its session was made since (retired:
+// an earlier server's, whose pane number a new pane takes), an ended one
+// an hour after it ended; then old files, the nvims a server that went
+// left running, and dead sockets.
 // States of other keys (zellij's, from before weaver ran on tmux only) go
 // the same way as their agents do.
 func (e *Env) GC() {
 	now := time.Now().Unix()
-	var sessions map[string]bool
+	var sessions map[string]int64
 	asked := false
-	running := func(skey string) bool {
+	ask := func() {
 		if !asked {
-			sessions, asked = e.tmuxSessionKeys(), true
+			sessions, asked = e.tmuxSessions(), true
 		}
+	}
+	running := func(skey string) bool {
+		ask()
 		// Nobody answered: keep everything.
-		return sessions == nil || sessions[skey]
+		_, ok := sessions[skey]
+		return sessions == nil || ok
+	}
+	// Is skey's session one made after ts: another server's, the one a
+	// file of ts knew having gone?
+	madeAfter := func(skey string, ts int64) bool {
+		ask()
+		made, ok := sessions[skey]
+		return ok && ts > 0 && made > ts
 	}
 	for _, f := range paneFiles(e.StateDir, "json") {
 		l, _ := files.FirstLine(f)
@@ -84,7 +104,12 @@ func (e *Env) GC() {
 			}
 		} else {
 			b := filepath.Base(f)
-			if !running(b[:strings.LastIndexByte(b, '_')]) && now-ts > 3600 {
+			skey := b[:strings.LastIndexByte(b, '_')]
+			if madeAfter(skey, ts) {
+				e.Retire(f, "")
+				continue
+			}
+			if !running(skey) && now-ts > 3600 {
 				e.Forget(f, "")
 				continue
 			}
@@ -110,12 +135,16 @@ func (e *Env) GC() {
 		}
 	}
 	// A thread whose agent never reported (no state) goes with its
+	// session, or once its session is one made since it was written: an
+	// earlier server's, whose pane number a new pane would take it for.
 	for _, f := range paneFiles(e.StateDir, "thread") {
 		if files.Exists(strings.TrimSuffix(f, ".thread") + ".json") {
 			continue
 		}
 		b := filepath.Base(f)
-		if !running(b[:strings.LastIndexByte(b, '_')]) {
+		skey := b[:strings.LastIndexByte(b, '_')]
+		fi, err := os.Stat(f)
+		if err == nil && (!running(skey) || madeAfter(skey, fi.ModTime().Unix())) {
 			os.Remove(f)
 		}
 	}

@@ -424,7 +424,13 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   before; a pane closed while its session runs on is not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps
-  there, never forgets.
+  there, never forgets. Files with no pid to test are an earlier server's
+  when the running session of their name was created after them: `GC`
+  retires a state without a pid created before its last event `ts`, and
+  removes a thread record whose agent never reported (no state) written
+  before the session was made, as the pane's first event does
+  (`DropStaleThread`), so a new pane of that number never takes it for its
+  own.
 - **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json`, one object:
   `lost` (epoch s), `skey` (the session key it was lost from, `tmux-` first
   for a tmux session; records before 2026-10-15 call it `session`), `state`
