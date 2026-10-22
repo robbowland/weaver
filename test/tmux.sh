@@ -585,9 +585,29 @@ tx select-window -t "=$S:0"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 v0() { tx capture-pane -p -t "=$S:0"; }
 cardtop0() { v0 | sed -n 2p | awk -F'│' '{print $3}' | tr -s ' '; }
-wheel0() { for _ in 1 2 3 4 5 6 7 8 9 10; do key "$(sgr 65 160 10 M)"; done; sleep 0.5; }
-key 3f # ?: the help in the card's place, longer than it
-waitfor 'v0 | grep -q "KEYS"'
+# The wheel over the card, again till it scrolls: fzf drops input that comes
+# during a reload (--track holds it).
+wheel0() {
+	local before
+	before=$(cardtop0)
+	for _ in 1 2 3; do
+		for _ in 1 2 3 4 5 6 7 8 9 10; do key "$(sgr 65 160 10 M)"; done
+		sleep 0.5
+		[ "$(cardtop0)" != "$before" ] && return 0
+	done
+}
+# The help in the card's place (longer than it), as ? asks; through the
+# board's socket, again till it shows: fzf drops a key that comes during
+# a reload.
+helpshown() { v0 | grep -q "jump to the thread"; }
+helpto() { # helpto on|off
+	for _ in 1 2 3; do
+		{ [ "$1" = on ] && helpshown; } || { [ "$1" = off ] && ! helpshown; } && return 0
+		curl -s -m 2 --unix-socket "$(board)" -X POST localhost -d "transform(wvr _view help)" >/dev/null
+		waitfor "$([ "$1" = on ] && echo helpshown || echo '! helpshown')" 30
+	done
+}
+helpto on
 top0=$(cardtop0)
 wheel0
 top=$(cardtop0)
@@ -611,8 +631,7 @@ sleep 1
 tx select-window -t "=$S:0"
 waitfor 'v0 | grep -q "Tidy the parser"' 20
 ok "...or the board is off screen" "$(v0 | grep -c 'Tidy the parser')|$(v0 | grep -c 'Held name')" "1|0"
-key 3f # ?: the card again
-waitfor '! v0 | grep -q "KEYS"'
+helpto off
 
 # --- restart: a thread's agent started again in its own pane (an updated
 # harness), resuming its conversation; one mid-turn is left unless forced
