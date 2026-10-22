@@ -378,6 +378,19 @@ thread to its item:
 | GitHub issue | `N-<title's slug>` | `Implement #N`, `Investigate #N` |
 | Linear issue | Linear's `branchName`, else `<id>-<title's slug>` | `Implement ENG-42`, `Investigate ENG-42` |
 
+A pull request's thread is on its head as it is now (`prHead`): each time,
+`pull/N/head` (a fork's too) is fetched from the remote it is on, with what
+it merges into and (in this repository) its own branch, to
+`refs/weaver/pr/N`, in its own session within `WEAVER_FETCH_TIMEOUT`. Its
+branch is made there (tracking the pull request's branch when it is in this
+repository), or moved up to it when it is behind; one with commits the head
+has not, or checked out elsewhere and behind, stays as it is. When it is not
+at the head, or the head could not be fetched, a dim line says why and so
+does the agent's prompt (`PullRequest.Behind`); not fetched and not here,
+there is nothing to work on, and the thread is not made (never a branch of
+that name from the default branch). Started in an existing checkout, it must
+be on the pull request's branch.
+
 A pull request's repository is found among the checkouts weaver knows (yours,
 recent threads' and agents', `~/code/<name>` and the like, zoxide's of the
 same name) by the GitHub URL of a remote as configured; none known, the form

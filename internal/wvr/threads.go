@@ -2,6 +2,7 @@ package wvr
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -274,6 +275,94 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 	return ld, "could not fetch " + rm + " (offline?): starts from " + from
 }
 
+// prHead puts pull request pr's head where its thread works, branch of
+// repo: fetched, with what it merges into, from the remote it is on
+// (pull/N/head, a fork's too, kept at refs/weaver/pr/N); branch made there
+// (tracking the pull request's own branch when it is in this repository),
+// or moved up to it when it is behind. A branch with commits the head has
+// not, or checked out elsewhere, stays as it is, and the note says so (as
+// it does a fetch that failed). ok false: no head to work on.
+func (e *Env) prHead(repo string, pr items.PullRequest, branch string) (note string, ok bool) {
+	n, rm := strconv.Itoa(pr.Num), git.PreferredRemote(repo)
+	ref := "refs/weaver/pr/" + n
+	var head string
+	if rm != "" {
+		fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, pr.Label(), COff)
+		specs := []string{"+pull/" + n + "/head:" + ref}
+		if pr.Base != "" {
+			specs = append(specs, "+refs/heads/"+pr.Base+":refs/remotes/"+rm+"/"+pr.Base)
+		}
+		if !pr.Fork && pr.Head != "" {
+			specs = append(specs, "+refs/heads/"+pr.Head+":refs/remotes/"+rm+"/"+pr.Head)
+		}
+		if e.fetchRefs(repo, rm, specs...) {
+			head, _ = git.Line(repo, "rev-parse", "--verify", "-q", ref)
+		}
+	}
+	behind := func(why string) (string, bool) {
+		if !git.HasBranch(repo, branch) {
+			return "", false
+		}
+		return why + ": " + branch + " as it is here, which may be behind it", true
+	}
+	switch {
+	case head == "" && rm == "":
+		return behind("no remote to fetch " + pr.Label() + " from")
+	case head == "":
+		return behind("could not fetch " + pr.Label() + "'s head")
+	case !git.HasBranch(repo, branch):
+		if !git.OK(repo, "branch", "--quiet", branch, head) {
+			return "", false
+		}
+		if !pr.Fork && git.HasRemoteBranch(repo, rm, pr.Head) {
+			bestEffort(exec.Command("git", "-C", repo, "branch", "--quiet", "--set-upstream-to", rm+"/"+pr.Head, branch).Run())
+		}
+		return "", true
+	}
+	local, _ := git.Line(repo, "rev-parse", "--verify", "-q", "refs/heads/"+branch)
+	switch {
+	case local == head:
+		return "", true
+	case !git.OK(repo, "merge-base", "--is-ancestor", local, head):
+		return branch + " has commits " + pr.Label() + "'s head has not: kept as it is", true
+	}
+	if dir := checkedOut(repo, branch); dir != "" {
+		return branch + " is behind " + pr.Label() + "'s head, and checked out in " + tildify(dir) + ": pull it there", true
+	}
+	if !git.OK(repo, "branch", "--quiet", "--force", branch, head) {
+		return "could not move " + branch + " up to " + pr.Label() + "'s head: it stays behind", true
+	}
+	return "", true
+}
+
+// fetchRefs fetches refspecs from repo's remote rm, as the form's fetch does
+// (its own session, so ssh can never ask on this terminal), within
+// WEAVER_FETCH_TIMEOUT.
+func (e *Env) fetchRefs(repo, rm string, specs ...string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), cli.EnvSeconds("WEAVER_FETCH_TIMEOUT", 10*time.Second))
+	defer cancel()
+	c := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "fetch", "--quiet", "--no-write-fetch-head", rm}, specs...)...)
+	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	return c.Run() == nil
+}
+
+// checkedOut is the checkout of repo that has branch checked out; "" for
+// none.
+func checkedOut(repo, branch string) string {
+	out, _ := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").Output()
+	dir := ""
+	for _, l := range strings.Split(string(out), "\n") {
+		if d, ok := strings.CutPrefix(l, "worktree "); ok {
+			dir = d
+		}
+		if l == "branch refs/heads/"+branch {
+			return dir
+		}
+	}
+	return ""
+}
+
 // threadWorktree is the worktree for branch of repo, made unless it exists
 // (from base if given; a branch only on the remote is checked out to track
 // it), working from checkout from (where @ is): with Worktrunk when it is
@@ -395,6 +484,12 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 			name = "thread-" + time.Now().Format("150405")
 		}
 		branch, _ = git.Line(dir, "symbolic-ref", "--short", "-q", "HEAD")
+		// A pull request's thread works on its branch: in a checkout on
+		// another, it would review (and set the review base of) the wrong one.
+		if isPR && branch != pr.BranchName() {
+			return fmt.Errorf("%s is on %s, not %s's branch %s: start it in a worktree of its own",
+				tildify(dir), cmp.Or(branch, "a detached HEAD"), pr.Label(), pr.BranchName())
+		}
 	} else {
 		branch = fm.Branch
 		if branch == "" {
@@ -410,21 +505,22 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 				}
 			}
 		}
-		// A pull request from a fork: its head, fetched as a branch here.
-		if isPR && pr.Fork && !git.HasBranch(fm.Repo, branch) {
-			if rm := git.PreferredRemote(fm.Repo); rm != "" {
-				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, pr.Label(), COff)
-				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
-				c.Stderr = os.Stderr
-				if c.Run() != nil {
-					return cli.ErrSaid
-				}
-			}
-		}
-		// A branch that is not here yet: fetch first (it may be on the
-		// remote), and find where it would start.
 		note := ""
-		if !git.HasBranch(fm.Repo, branch) {
+		switch {
+		case isPR:
+			// A pull request's thread: on its head as it is now, or said
+			// (here, and to its agent) why not.
+			var ok bool
+			if pr.Behind, ok = e.prHead(fm.Repo, pr, branch); !ok {
+				return fmt.Errorf("could not fetch %s's head, and %s is not here: nothing to work on", pr.Label(), branch)
+			}
+			if pr.Behind != "" {
+				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n", CDim, pr.Behind, COff)
+			}
+			it = pr
+		case !git.HasBranch(fm.Repo, branch):
+			// A branch that is not here yet: fetch first (it may be on the
+			// remote), and find where it would start.
 			base, note = e.threadBase(fm.Repo, fm)
 		}
 		var ok bool

@@ -164,6 +164,10 @@ type PullRequest struct {
 	Fork         bool   `json:"fork,omitempty"`
 	Review       []Note `json:"review,omitempty"`
 	ReviewUnread string `json:"review_unread,omitempty"`
+	// Behind is why its thread's worktree may not be at its head (its head
+	// could not be fetched, its branch has commits of its own, ...), which
+	// its prompt says; "" when it is.
+	Behind string `json:"-"`
 }
 
 // GitHubIssue is a GitHub issue.
@@ -274,6 +278,10 @@ func (p PullRequest) instructions(m Mode, base string) string {
 		s = fmt.Sprintf("This worktree is at the pull request's head, and the review is read-only: change no files. "+
 			"Compare it with %s (git diff %s...HEAD). Report what you find, most serious first, each with its file:line, "+
 			"then any questions for its author.\n", base, base)
+	}
+	if p.Behind != "" {
+		s = strings.Replace(s, "This worktree is at the pull request's head", "This worktree is meant to be at the pull request's head", 1)
+		s += "But " + p.Behind + ": check with git before you trust it.\n"
 	}
 	if p.ReviewUnread != "" {
 		s += fmt.Sprintf("weaver could not read its review comments (%s): read its unresolved review threads with gh "+

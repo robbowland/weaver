@@ -607,6 +607,8 @@ gitc() { git -C "$AT/r" -c user.email=t@e -c user.name=t "$@"; }
 git init -q -b main "$AT/r" && gitc commit -q --allow-empty -m init
 gitc checkout -q -b add-flag && echo flag >"$AT/r/flag" && gitc add flag && gitc commit -q -m flag && gitc checkout -q main
 git clone -q --bare "$AT/r" "$AT/o-r.git" && gitc branch -q -D add-flag
+# GitHub keeps a pull request's head at refs/pull/N/head.
+git -C "$AT/o-r.git" update-ref refs/pull/45/head refs/heads/add-flag
 gitc remote add origin https://github.com/o/r.git && gitc config url."$AT/o-r.git".insteadOf https://github.com/o/r.git
 gitc fetch -q origin
 cat >"$AT/bin/gh" <<'GH'
