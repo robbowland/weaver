@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -226,6 +227,11 @@ func linFilter(s linear.Section) viewFilter {
 
 // words is what Linear's search finds for words as typed.
 func (linearSource) words(_ *Env, q string) viewFilter { return linFilter(linear.Words(q)) }
+
+// reLinearID is an issue's whole id: ENG-42 (its team's key, its number).
+var reLinearID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-\d+$`)
+
+func (linearSource) isID(q string) bool { return reLinearID.MatchString(q) }
 
 // searched is the search's answer, if there is a search.
 func (c linCache) searched() []linear.Result {

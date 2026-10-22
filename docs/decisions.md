@@ -418,6 +418,12 @@ can supersede an earlier one, and says so.
   so not loaded and not findable with /, and they have their own, Backlog,
   after Queue. A test checks the partition rather than the filters'
   wording.
+- 2026-10-22: A whole id typed in `/` that the view doesn't hold is asked
+  for once typing stops on it (600 ms, the query still that id), as
+  `ctrl+s` asks: someone who types `ENG-42` wants that issue, and `/` alone
+  answered with nothing. Only a whole id: words are asked for with
+  `ctrl+s` or `enter`, since a search on every pause would ask the service
+  for every half-typed word.
 
 ## Lost threads
 

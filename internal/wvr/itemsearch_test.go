@@ -1,7 +1,13 @@
 package wvr
 
 import (
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/github"
@@ -58,5 +64,79 @@ func TestKeySearch(t *testing.T) {
 	}
 	if got := e.itemQuery(githubSource{}, "flag"); got != "change-with-nth(6)\n" {
 		t.Errorf("query flag: %s", got)
+	}
+}
+
+// / looks an item up when what it names is a whole id of the view's
+// service (o/r#45 or #45 in GITHUB, ENG-42 in LINEAR) that nothing loaded
+// has; never for a bare number, another service's id, or one loaded.
+func TestLookupWanted(t *testing.T) {
+	loaded := []viewItem{{ref: "o/r#45", key: "#45"}, {ref: "ENG-42", key: "ENG-42"}}
+	for _, c := range []struct {
+		src  itemSource
+		q    string
+		want bool
+	}{
+		{githubSource{}, "o/r#99", true},
+		{githubSource{}, "#99", true},
+		{githubSource{}, " #99 ", true},
+		{githubSource{}, "o/r#45", false},
+		{githubSource{}, "#45", false},
+		{githubSource{}, "99", false},
+		{githubSource{}, "ENG-99", false},
+		{linearSource{}, "OPS-7", true},
+		{linearSource{}, "eng-42", false},
+		{linearSource{}, "o/r#99", false},
+		{linearSource{}, "flaky", false},
+	} {
+		if got := lookupWanted(c.src, loaded, c.q); got != c.want {
+			t.Errorf("%s %q: %v, want %v", c.src.name(), c.q, got, c.want)
+		}
+	}
+}
+
+// fakeView is a view's fzf socket that says its query is query, and keeps
+// the actions posted to it.
+func fakeView(t *testing.T, query string) (string, *[]string) {
+	t.Helper()
+	sock := filepath.Join(t.TempDir(), "v.sock")
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var posted []string
+	s := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			b, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			posted = append(posted, string(b))
+			mu.Unlock()
+			return
+		}
+		fmt.Fprintf(w, `{"query":%q,"matchCount":0}`, query)
+	})}
+	go func() { _ = s.Serve(l) }()
+	t.Cleanup(func() { _ = s.Close() })
+	return sock, &posted
+}
+
+// The lookup waits for typing to stop on the id: still the query, it asks
+// for it as ctrl+s does, the view's query cleared; another query by then,
+// nothing.
+func TestItemLookup(t *testing.T) {
+	lookupPause = 0
+	e := viewEnv(t)
+	sock, posted := fakeView(t, "#77")
+	t.Setenv("WEAVER_VIEW_SOCK", sock)
+	e.itemLookup(githubSource{}, "o/r#99")
+	if s, ok := readGitHub(e).Search[github.PRs]; ok || len(*posted) > 0 {
+		t.Errorf("the query moved on: a search all the same, %+v, %q", s.Section, *posted)
+	}
+	sock, posted = fakeView(t, "o/r#99")
+	t.Setenv("WEAVER_VIEW_SOCK", sock)
+	e.itemLookup(githubSource{}, "o/r#99")
+	if s := readGitHub(e).Search[github.PRs]; s.Title != "o/r#99" || len(*posted) != 1 || !strings.HasPrefix((*posted)[0], "clear-query+") {
+		t.Errorf("looked up: %+v, %q", s.Section, *posted)
 	}
 }

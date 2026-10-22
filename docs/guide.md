@@ -180,7 +180,7 @@ description.
 | `s` | GITHUB: switch between pull requests and issues |
 | `m` | More of a section that shows only some (its heading says `20 of 57`, or `30+` for Linear), kept as it refreshes (up to 100 a section on GitHub, 250 on Linear); `enter` on its last line, `⏎ more`, does too |
 | `f` | A filter: a search of your own, shown first as SEARCH; for GitHub, assigned to you, a review asked of you or your teams, opened by you, mentioning you, or what is open in a repository or with a label weaver has seen; for Linear, assigned to you, created by you, subscribed to, or a team's. `f` again offers to clear it |
-| `/` | Search what the view holds (its number, whole title, author, repository, branch and labels; for Linear, its team and people), best match first; a number or a reference (`45`, `#45`, `o/r#45`, `ENG-42`) finds that item first, exactly |
+| `/` | Search what the view holds (its number, whole title, author, repository, branch and labels; for Linear, its team and people), best match first; a number or a reference (`45`, `#45`, `o/r#45`, `ENG-42`) finds that item first, exactly; a whole one the view doesn't hold (`o/r#45`, `#45`, `ENG-42`) is asked for, as `ctrl+s` would, once you stop typing |
 | `ctrl+s` | Searching: ask GitHub or Linear for what you typed, shown as SEARCH (`enter` too, when nothing loaded matches; and words typed in `f`'s picker). GitHub's search syntax works as typed (`is:open label:bug`); an item named (`o/r#45`), or a number (`#45`) in the repositories weaver knows, is looked up as it is; bare words are searched in the repositories of the owners weaver knows |
 | `esc` | End the SEARCH, if there is one; else back to your thread |
 | `ctrl+r` | Ask again |

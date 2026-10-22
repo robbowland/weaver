@@ -1,8 +1,15 @@
 package wvr
 
 import (
+	"os"
+	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
+	"syscall"
+	"time"
+
+	"github.com/robbowland/weaver/internal/session"
 )
 
 // A view's search (/) is fzf's fuzzy match on each item's search line (its
@@ -47,8 +54,9 @@ func keySearch(its []viewItem, q string) string {
 }
 
 // itemQuery is what fzf does as the query changes to q: none, the rows as
-// they are; a key, fzf's search for it (keySearch) on the search line; any
-// other query, fzf's own search for it there.
+// they are; a key, fzf's search for it (keySearch) on the search line, and
+// for a whole id nothing loaded has, a lookup behind (itemLookup); any other
+// query, fzf's own search for it there.
 func (e *Env) itemQuery(src itemSource, q string) string {
 	switch {
 	case strings.TrimSpace(q) == "":
@@ -58,7 +66,40 @@ func (e *Env) itemQuery(src itemSource, q string) string {
 		for _, s := range src.read(e).sections[e.itemKind(src)] {
 			its = append(its, s.items...)
 		}
+		if lookupWanted(src, its, q) {
+			e.itemLookupBehind(src, strings.TrimSpace(q))
+		}
 		return "change-with-nth(6)+search(" + keySearch(its, q) + ")\n"
 	}
 	return "change-with-nth(6)\n"
+}
+
+// lookupWanted: should / look q up with the service: a whole id of its
+// (isID) that no item loaded has? What a view loads is a few sections'
+// first pages: an item it names exactly is no less there for that.
+func lookupWanted(src itemSource, its []viewItem, q string) bool {
+	q = strings.TrimSpace(q)
+	return src.isID(q) && !slices.ContainsFunc(its, func(it viewItem) bool { return it.names(q) })
+}
+
+// lookupPause is how long the query must stay a whole id before / looks it
+// up: typing it (ENG-4, ENG-42) asks once, for the one it ends on.
+var lookupPause = 600 * time.Millisecond
+
+// itemLookupBehind looks up id q behind the view (`_items NAME lookup q`).
+func (e *Env) itemLookupBehind(src itemSource, q string) {
+	c := exec.Command(e.Self, "_items", src.name(), "lookup", q)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	bestEffort(c.Start())
+}
+
+// itemLookup is / looking up id q, not loaded: once typing has stopped on it
+// (still the view's query after lookupPause), what ctrl+s does (itemAsk):
+// the view's / filter would hide what it found.
+func (e *Env) itemLookup(src itemSource, q string) {
+	time.Sleep(lookupPause)
+	if cur, ok := session.FzfQuery(os.Getenv("WEAVER_VIEW_SOCK")); !ok || strings.TrimSpace(cur) != q {
+		return
+	}
+	e.itemAsk(src, session.Quote(e.Self)+" _items "+src.name(), q)
 }

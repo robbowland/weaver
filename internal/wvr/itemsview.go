@@ -51,6 +51,9 @@ type itemSource interface {
 	// words is a search of the service for words as typed: its own search
 	// syntax, or (bare words) within what weaver knows of.
 	words(e *Env, q string) viewFilter
+	// isID: is q a whole id of an item of the service's (o/r#45 or #45 for
+	// GitHub, ENG-42 for Linear), which a search by words looks up as it is?
+	isID(q string) bool
 	// find reads the view's search (a filter's set made it), and keeps it.
 	find(e *Env)
 	// clear ends the view's search.
@@ -992,6 +995,9 @@ func (e *Env) Items(args []string) error {
 		return nil
 	case "ask":
 		e.itemAsk(src, session.Quote(e.Self)+" _items "+src.name(), ref)
+		return nil
+	case "lookup":
+		e.itemLookup(src, ref)
 		return nil
 	case "esc":
 		// In Alt y's popover (esc peek), back ends it.

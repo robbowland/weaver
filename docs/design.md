@@ -1012,6 +1012,14 @@ nothing matches), and `f` for words no filter matches. `ask` sends the
 view back to its rows through its socket, as a key would: actions a
 transform prints leave the query once the input hides.
 
+A whole id typed in `/` that no item loaded has (`itemSource.isID`:
+`o/r#45` or `#45`, `ENG-42`) is asked for without a key: the query's
+transform starts `_items NAME lookup {q}` behind the view, which waits
+600 ms (`lookupPause`) and asks only if the view's query (fzf's `GET`,
+`session.FzfQuery`) is still that id, so typing `ENG-42` asks once, for the
+one it ends on. It then does what `ask` does; the `/` filter would hide
+the answer otherwise.
+
 Like home, it outlives installs of weaver:
 it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
 weaver (as home's), the first reload after (`_items NAME chrome`) or the

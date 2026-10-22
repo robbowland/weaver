@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"os"
@@ -184,17 +185,38 @@ func (e *Env) pushStatus(labels bool) {
 
 // FzfPost sends actions to the fzf listening on unix socket s.
 func FzfPost(s, actions string) bool {
-	c := &http.Client{Timeout: time.Second, Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", s)
-		}}}
-	r, err := c.Post("http://localhost", "text/plain", strings.NewReader(actions))
+	r, err := fzfClient(s).Post("http://localhost", "text/plain", strings.NewReader(actions))
 	if err != nil {
 		return false
 	}
 	_ = r.Body.Close() // fzf has the actions
 	return true
+}
+
+// FzfQuery is the query of the fzf listening on socket s, as typed now;
+// false when it does not answer.
+func FzfQuery(s string) (string, bool) {
+	r, err := fzfClient(s).Get("http://localhost")
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = r.Body.Close() }()
+	var st struct {
+		Query string `json:"query"`
+	}
+	if json.NewDecoder(r.Body).Decode(&st) != nil {
+		return "", false
+	}
+	return st.Query, true
+}
+
+// fzfClient talks to the fzf listening on socket s, within a second.
+func fzfClient(s string) *http.Client {
+	return &http.Client{Timeout: time.Second, Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", s)
+		}}}
 }
 
 // MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands

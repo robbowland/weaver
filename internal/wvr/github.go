@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -250,6 +251,11 @@ func ghFilter(f github.Filter, note string) viewFilter {
 		updateGitHub(e, func(c *ghCache) { c.search(f.Section()) })
 	}}
 }
+
+// reGitHubID is a pull request's or issue's whole id: o/r#45, or #45.
+var reGitHubID = regexp.MustCompile(`^([\w.-]+/[\w.-]+)?#\d+$`)
+
+func (githubSource) isID(q string) bool { return reGitHubID.MatchString(q) }
 
 // words is a search for words as typed (github.Words), in the
 // repositories weaver knows: an item named, or a number, read as it is;

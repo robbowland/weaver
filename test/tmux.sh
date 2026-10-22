@@ -629,6 +629,7 @@ case "$1 $2" in
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
 	# An item named (ctrl+s on o/r#45), read as it is: GitHub's search does
 	# not find a number.
+	*'r0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 99)'*) printf '{"data":{"r0":{"issueOrPullRequest":%s}}}\n' "$(pr 99 'An old one' | sed 's/^{/{"__typename":"PullRequest",/')"; exit ;;
 	*'r0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 45)'*) printf '{"data":{"r0":{"issueOrPullRequest":%s}}}\n' "$(pr 45 'Add a flag' | sed 's/^{/{"__typename":"PullRequest",/')"; exit ;;
 	# Words asked for (ctrl+s), within o's repositories: an issue.
 	*'is:issue archived:false user:o flaky'*) page 1 "" '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}'; exit ;;
@@ -787,6 +788,16 @@ sleep 0.3
 key 13 # ctrl+s
 waitfor 'v900 | grep -q "SEARCH · o/r#45 · 1"'
 ok "...an item named, ctrl+s: GitHub asked for it as it is, as SEARCH" "$(v900 | grep -c 'SEARCH · o/r#45 · 1')|$(v900 | grep -c 'failed')" "1|0" ||
+	v900 | sed 's/^/  github: /' | head -12
+key 1b # esc
+waitfor '! v900 | grep -q "SEARCH ·"'
+# / on a whole id nothing loaded has: once typing stops, asked for as
+# ctrl+s asks, with no key
+key 2f # /
+sleep 0.5
+key "$(printf 'o/r#99' | xxd -p)"
+waitfor 'v900 | grep -q "SEARCH · o/r#99 · 1"' 60
+ok "...a whole id not loaded, typed: looked up, as SEARCH" "$(v900 | grep -c 'SEARCH · o/r#99 · 1')|$(v900 | grep -c 'An old one .*r #99')" "1|1" ||
 	v900 | sed 's/^/  github: /' | head -12
 key 1b # esc
 waitfor '! v900 | grep -q "SEARCH ·"'
