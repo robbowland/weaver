@@ -158,7 +158,7 @@ func threadOf(ts []viewThread, it viewItem) (viewThread, bool) {
 		}
 	}
 	for _, t := range ts {
-		if it.branch == "" || t.branch == "" || it.repo != "" && t.repo != it.repo {
+		if it.branch == "" || t.branch == "" || it.repo != "" && !items.SameRepo(t.repo, it.repo) {
 			continue
 		}
 		if t.branch == it.branch || it.branchPrefix && strings.HasPrefix(t.branch, it.branch) {

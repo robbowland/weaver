@@ -51,6 +51,10 @@ type GitHubRef struct {
 // LinearRef is a Linear issue, by its identifier (ENG-42).
 type LinearRef struct{ ID string }
 
+// SameRepo: are a and b one GitHub repository? owner/name, which GitHub
+// takes in any case.
+func SameRepo(a, b string) bool { return strings.EqualFold(a, b) }
+
 func (GitHubRef) isItemRef() {}
 func (LinearRef) isItemRef() {}
 

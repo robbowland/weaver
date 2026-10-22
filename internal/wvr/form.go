@@ -682,7 +682,7 @@ func (e *Env) New(args []string) error {
 				r.Repo = items.GitHubRepo(start)
 				ref = r
 			}
-			if r.Repo != "" && (fm.Repo == "" || !strings.EqualFold(items.GitHubRepo(fm.Repo), r.Repo)) {
+			if r.Repo != "" && (fm.Repo == "" || !items.SameRepo(items.GitHubRepo(fm.Repo), r.Repo)) {
 				if c := e.checkoutFor(r.Repo, fm.Repo); c != "" {
 					fm.Repo, fm.Here = c, c
 				} else {

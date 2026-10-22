@@ -43,7 +43,7 @@ func (e *Env) checkoutFor(repo, first string) string {
 		if i >= len(named) && i-len(named) >= 20 {
 			break
 		}
-		if strings.EqualFold(items.GitHubRepo(d), repo) {
+		if items.SameRepo(items.GitHubRepo(d), repo) {
 			if r, _, ok := git.RepoOf(d); ok {
 				return r
 			}

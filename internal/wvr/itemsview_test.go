@@ -22,3 +22,15 @@ func TestForkPullRequestThread(t *testing.T) {
 		t.Errorf("thread on pr-45: %v %v", th, ok)
 	}
 }
+
+// A repository is GitHub's owner/name in any case, as the form finds its
+// checkout: a remote's O/R is the item's o/r.
+func TestThreadOfRepoCase(t *testing.T) {
+	it := ghItem(github.Item{Kind: github.PRs, Repo: "o/r", Number: 45, Head: "add-flag"})
+	if th, ok := threadOf([]viewThread{{num: 3, repo: "O/R", branch: "add-flag"}}, it); !ok || th.num != 3 {
+		t.Errorf("thread in O/R: %v %v", th, ok)
+	}
+	if _, ok := threadOf([]viewThread{{num: 3, repo: "o/s", branch: "add-flag"}}, it); ok {
+		t.Error("joined a thread of another repository")
+	}
+}
