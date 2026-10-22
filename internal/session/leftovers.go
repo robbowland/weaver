@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,16 +22,16 @@ import (
 // restarted elsewhere or lost with its server leaves them holding memory
 // and ports for good.
 //
-// One is the tree under a process launchd adopted (parent 1) that was
-// started in a pane of a weaver session (WEAVER_TMUX_SESSION, TMUX and
-// TMUX_PANE in the environment of a process in it: macOS hides that of its
-// own programs, /bin/sh's, so the root may not say) whose pane has gone (or
-// whose tmux server has: another pid, or none): of it, each process that
-// runs from the worktree it was started in (its program, argv[0], or the
-// script argv[1], under that checkout), with all under it (condemned). A
-// daemon an agent's tool started on the way (Codex's app server,
-// gpg-agent) runs from elsewhere and stays, even when a command of a gone
-// thread's runs under it.
+// One is, under a process launchd adopted (parent 1), each process started
+// in a pane of a weaver session (WEAVER_TMUX_SESSION, TMUX and TMUX_PANE in
+// its own environment, or, where macOS hides it, its own programs' and
+// /bin/sh's, its parent's) whose pane has gone (or whose tmux server has:
+// another pid, or none), and that runs from the worktree it was started in
+// (its program, argv[0], or the script argv[1], under that checkout), with
+// all under it (condemned). A process whose own environment says no pane is
+// never one, whatever else runs in its tree; a daemon an agent's tool
+// started on the way (Codex's app server, gpg-agent) runs from elsewhere
+// and stays, even when a command of a gone thread's runs under it.
 
 // proc is a process as the sweep sees it.
 type proc struct {
@@ -93,33 +94,13 @@ func (e *Env) Leftovers() []Leftover {
 				}
 			}
 		}
-		// Where it was started: the first environment in it that says.
-		var env map[string]string
-		for _, p := range tree {
-			if p.env["WEAVER_TMUX_SESSION"] != "" && p.env["TMUX"] != "" && p.env["TMUX_PANE"] != "" {
-				env = p.env
-				break
+		ls = append(ls, condemned(tree, kids, func(env map[string]string) bool {
+			t := env["TMUX"]
+			if _, asked := panes[t]; !asked {
+				panes[t] = livePanes(t)
 			}
-		}
-		if env == nil {
-			continue
-		}
-		t := env["TMUX"]
-		if _, asked := panes[t]; !asked {
-			panes[t] = livePanes(t)
-		}
-		if panes[t][env["TMUX_PANE"]] {
-			continue
-		}
-		ps := condemned(tree, kids, checkoutOf(env["PWD"]))
-		if len(ps) == 0 {
-			continue
-		}
-		l := Leftover{Pid: ps[0].pid, Pane: env["TMUX_PANE"], Dir: env["PWD"], Cmd: strings.Join(ps[0].argv, " ")}
-		for _, p := range ps {
-			l.Procs = append(l.Procs, p.pid)
-		}
-		ls = append(ls, l)
+			return !panes[t][env["TMUX_PANE"]]
+		})...)
 	}
 	return ls
 }
@@ -165,25 +146,50 @@ func (e *Env) SweepLeftovers() int {
 	return n
 }
 
-// condemned are the processes of tree (breadth first, as Leftovers walks
-// it) that run from under dir, each with all under it; never one above them
-// that runs from elsewhere: a daemon a thread's command ran under stays.
-func condemned(tree []proc, kids map[int][]int, dir string) []proc {
+// condemned are the leftovers in tree (breadth first, as Leftovers walks
+// it) of panes gone says have gone: each process that runs from the
+// checkout its pane's agent worked in, with all under it, grouped by pane
+// and checkout. A process's pane is its own environment's (WEAVER_TMUX_SESSION,
+// TMUX, TMUX_PANE), or, where macOS hides it (its own programs', /bin/sh's),
+// its parent's; never another process's in the tree: one whose own
+// environment says no pane (a CI runner's test script, run from a checkout
+// while a hook of a pane runs under it) is never a pane's, and a daemon
+// above them, from elsewhere, stays.
+func condemned(tree []proc, kids map[int][]int, gone func(env map[string]string) bool) []Leftover {
 	parent := map[int]int{}
 	for _, p := range tree {
 		for _, k := range kids[p.pid] {
 			parent[k] = p.pid
 		}
 	}
-	marked := map[int]bool{}
-	var out []proc
+	paneEnv := map[int]map[string]string{}
+	group := map[int]int{} // a condemned process: its leftover's index
+	var ls []Leftover
 	for _, p := range tree {
-		if marked[parent[p.pid]] || runsFrom([]proc{p}, dir) {
-			marked[p.pid] = true
-			out = append(out, p)
+		switch {
+		case p.env["WEAVER_TMUX_SESSION"] != "" && p.env["TMUX"] != "" && p.env["TMUX_PANE"] != "":
+			paneEnv[p.pid] = p.env
+		case len(p.env) == 0:
+			paneEnv[p.pid] = paneEnv[parent[p.pid]]
 		}
+		if i, ok := group[parent[p.pid]]; ok {
+			group[p.pid] = i
+			ls[i].Procs = append(ls[i].Procs, p.pid)
+			continue
+		}
+		env := paneEnv[p.pid]
+		if env == nil || !runsFrom([]proc{p}, checkoutOf(env["PWD"])) || !gone(env) {
+			continue
+		}
+		i := slices.IndexFunc(ls, func(l Leftover) bool { return l.Pane == env["TMUX_PANE"] && l.Dir == env["PWD"] })
+		if i < 0 {
+			ls = append(ls, Leftover{Pid: p.pid, Pane: env["TMUX_PANE"], Dir: env["PWD"], Cmd: strings.Join(p.argv, " ")})
+			i = len(ls) - 1
+		}
+		group[p.pid] = i
+		ls[i].Procs = append(ls[i].Procs, p.pid)
 	}
-	return out
+	return ls
 }
 
 // livePanes are the panes of the tmux server a TMUX value names

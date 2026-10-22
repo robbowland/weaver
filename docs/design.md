@@ -516,15 +516,17 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   their language servers), ends what agents left running in panes that
   have gone (`SweepLeftovers`, below), and removes sockets in the socket
   dir nothing accepts on, a day after they were made.
-- **Leftovers:** a process tree launchd adopted (parent 1, yours) that a
-  weaver pane started (`WEAVER_TMUX_SESSION`, `TMUX` and `TMUX_PANE` in
-  the environment of a process in it, read from `kern.procargs2`; macOS
-  hides that of its own programs, `/bin/sh`'s, so the root may not say),
-  whose pane has gone (or whose server has: another `#{pid}`, or none): of
-  it, each process that runs from the checkout it was started in (`PWD`'s
-  top level: its program, argv[0] or the script argv[1], under it, as run;
-  a virtualenv's python is a link elsewhere), with all under it
-  (`condemned`). A server put in the background goes; a daemon a tool
+- **Leftovers:** in a process tree launchd adopted (parent 1, yours), each
+  process a weaver pane started (`WEAVER_TMUX_SESSION`, `TMUX` and
+  `TMUX_PANE` in its own environment, read from `kern.procargs2`, or, where
+  macOS hides it, its own programs' and `/bin/sh`'s, its parent's; never
+  another process's in the tree), whose pane has gone (or whose server
+  has: another `#{pid}`, or none), and that runs from the checkout it was
+  started in (`PWD`'s top level: its program, argv[0] or the script
+  argv[1], under it, as run; a virtualenv's python is a link elsewhere),
+  with all under it (`condemned`). A process whose own environment says no
+  pane is never one (CI's runner, whose test script runs from a checkout
+  while a hook of a pane runs under it). A server put in the background goes; a daemon a tool
   started on the way (Codex's app server, gpg-agent) runs from elsewhere and
   stays, even when a gone thread's command runs under it. Each is sent TERM, then
   KILL after 2 s, and said in `$STATE_DIR/gc.log`; GC says how many on the
