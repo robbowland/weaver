@@ -95,7 +95,8 @@ func runJSON(name string, args ...string) ([]byte, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("%s: %s", name, msg)
+		// gh says its own name first.
+		return nil, fmt.Errorf("%s: %s", name, strings.TrimPrefix(msg, name+": "))
 	}
 	return out, nil
 }
@@ -138,44 +139,61 @@ func fetchPR(r GitHubRef) (Item, error) {
 	// Review comments are in threads, which gh pr view leaves out: the
 	// unresolved ones, as the author has yet to answer them.
 	owner, name, _ := strings.Cut(r.Repo, "/")
-	q := `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){PullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:30){nodes{author{login} body}}}}}}}`
-	if out, err := runJSON("gh", "api", "graphql", "-f", "query="+q, "-F", "o="+owner, "-F", "r="+name, "-F", "n="+strconv.Itoa(r.Num)); err == nil {
-		var g struct {
-			Data struct {
-				Repository struct {
-					PullRequest struct {
-						ReviewThreads struct {
-							Nodes []struct {
-								IsResolved, IsOutdated bool
-								Path                   string
-								Line                   int
-								Comments               struct{ Nodes []ghComment }
-							}
+	if it.Review, err = reviewThreads(owner, name, r.Num); err != nil {
+		it.ReviewUnread = err.Error()
+	}
+	return it, nil
+}
+
+// reviewThreads are the comments of pull request n's unresolved review
+// threads, each where it is (path:line, outdated or not).
+func reviewThreads(owner, name string, n int) ([]Note, error) {
+	q := `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:30){nodes{author{login} body}}}}}}}`
+	out, err := runJSON("gh", "api", "graphql", "-f", "query="+q, "-F", "o="+owner, "-F", "r="+name, "-F", "n="+strconv.Itoa(n))
+	if err != nil {
+		return nil, err
+	}
+	var g struct {
+		Data struct {
+			Repository struct {
+				PullRequest struct {
+					ReviewThreads struct {
+						Nodes []struct {
+							IsResolved, IsOutdated bool
+							Path                   string
+							Line                   int
+							Comments               struct{ Nodes []ghComment }
 						}
 					}
 				}
 			}
 		}
-		if json.Unmarshal(out, &g) == nil {
-			for _, t := range g.Data.Repository.PullRequest.ReviewThreads.Nodes {
-				if t.IsResolved {
-					continue
-				}
-				w := t.Path
-				if t.Line > 0 {
-					w += ":" + strconv.Itoa(t.Line)
-				}
-				if t.IsOutdated {
-					w += " (outdated)"
-				}
-				for _, n := range ghNotes(t.Comments.Nodes) {
-					n.Where = w
-					it.Review = append(it.Review, n)
-				}
-			}
+		Errors []struct{ Message string }
+	}
+	if err := json.Unmarshal(out, &g); err != nil {
+		return nil, fmt.Errorf("gh: %v", err)
+	}
+	if len(g.Errors) > 0 {
+		return nil, fmt.Errorf("gh: %s", g.Errors[0].Message)
+	}
+	var ns []Note
+	for _, t := range g.Data.Repository.PullRequest.ReviewThreads.Nodes {
+		if t.IsResolved {
+			continue
+		}
+		w := t.Path
+		if t.Line > 0 {
+			w += ":" + strconv.Itoa(t.Line)
+		}
+		if t.IsOutdated {
+			w += " (outdated)"
+		}
+		for _, c := range ghNotes(t.Comments.Nodes) {
+			c.Where = w
+			ns = append(ns, c)
 		}
 	}
-	return it, nil
+	return ns, nil
 }
 
 func fetchIssue(r GitHubRef) (Item, error) {

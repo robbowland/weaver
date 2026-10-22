@@ -386,7 +386,9 @@ agent is sent the task, a line on what to do in this worktree, and the
 item's text (description, unresolved review comments with file:line,
 comments, the latest kept within 48 KB) between two marker lines carrying a
 random nonce, said to be untrusted: written by anyone who can comment.
-`--review` runs Claude Code with `--permission-mode plan`, Codex with
+Review comments that could not be read (gh failed, or GitHub refused the
+query) are said so in that line, with how to read them, never left out in
+silence (the item's `review_unread`). `--review` runs Claude Code with `--permission-mode plan`, Codex with
 `--sandbox read-only`; a pull request's review starts its nvim with
 `WEAVER_OPEN_REVIEW=branch`, which `weaver.lua` takes (once, then unsets) to
 open `:AgentReview branch` after VimEnter.

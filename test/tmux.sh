@@ -586,8 +586,10 @@ case "$1 $2" in
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
 	*'search(type: ISSUE'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
+	*'{pullRequest(number:$n){reviewThreads('*) echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}'; exit ;;
 	esac
-	echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}' ;;
+	# Any other query fails, as GitHub's schema validation does.
+	echo "gh: unknown query (fake): $*" >&2; exit 1 ;;
 "issue view") echo '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","author":{"login":"dan"},"state":"OPEN","comments":[]}' ;;
 "auth token") echo "gho_fake" ;;
 *) echo "gh (fake): $*" >&2; exit 1 ;;

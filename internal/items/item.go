@@ -152,15 +152,16 @@ type Item interface {
 
 // PullRequest is a GitHub pull request: its head branch (fetched as pr-N
 // when it is in a fork), what it merges into, and the review threads still
-// open on it.
+// open on it, or why they could not be read.
 type PullRequest struct {
 	Repo string `json:"repo"`
 	Num  int    `json:"num"`
 	Text
-	Head   string `json:"head"`
-	Base   string `json:"base"`
-	Fork   bool   `json:"fork,omitempty"`
-	Review []Note `json:"review,omitempty"`
+	Head         string `json:"head"`
+	Base         string `json:"base"`
+	Fork         bool   `json:"fork,omitempty"`
+	Review       []Note `json:"review,omitempty"`
+	ReviewUnread string `json:"review_unread,omitempty"`
 }
 
 // GitHubIssue is a GitHub issue.
@@ -264,14 +265,19 @@ func heading(what, ref string, t Text) string {
 }
 
 func (p PullRequest) instructions(m Mode, base string) string {
+	s := "This worktree is on the pull request's branch. Address each unresolved review comment, " +
+		"a commit for each where that makes sense, and never force-push. " +
+		"Where a comment needs a judgement call, ask me rather than guess.\n"
 	if m == ModeReview {
-		return fmt.Sprintf("This worktree is at the pull request's head, and the review is read-only: change no files. "+
+		s = fmt.Sprintf("This worktree is at the pull request's head, and the review is read-only: change no files. "+
 			"Compare it with %s (git diff %s...HEAD). Report what you find, most serious first, each with its file:line, "+
 			"then any questions for its author.\n", base, base)
 	}
-	return "This worktree is on the pull request's branch. Address each unresolved review comment, " +
-		"a commit for each where that makes sense, and never force-push. " +
-		"Where a comment needs a judgement call, ask me rather than guess.\n"
+	if p.ReviewUnread != "" {
+		s += fmt.Sprintf("weaver could not read its review comments (%s): read its unresolved review threads with gh "+
+			"(gh pr view %d -R %s --comments, and gh api for its reviewThreads) before you start.\n", p.ReviewUnread, p.Num, p.Repo)
+	}
+	return s
 }
 
 func (GitHubIssue) instructions(m Mode, _ string) string { return issueInstructions(m) }
