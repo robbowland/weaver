@@ -89,8 +89,11 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	if pane == "" || e.Session == "" {
 		return nil
 	}
+	// How the agent runs its hook: Codex runs every one in turn, waiting
+	// (config/codex-hooks.json); other agents' tool and subagent events
+	// are taken as Claude Code's async ones.
 	mode := "sync"
-	if h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent") {
+	if adapter != "codex" && (h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent")) {
 		mode = "async"
 	}
 	if pid == "" {

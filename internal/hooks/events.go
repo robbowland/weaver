@@ -27,6 +27,10 @@ type Normalized struct {
 	Prompt  jsonx.Text `json:"prompt"`
 	User    *bool      `json:"user"`
 	Waiting jsonx.Text `json:"waiting"` // needs_you
+	// needs_you, tool_done: which tool call (any text the same for one
+	// call's dialog and its end), so a dialog's call ending is told from
+	// another call ending while it waits.
+	ToolKey jsonx.Text `json:"tool_key"`
 	// tool_done: an edit's file, else its command and the paths it touched.
 	Tool    jsonx.Text   `json:"tool"`
 	File    jsonx.Text   `json:"file"`
@@ -43,7 +47,7 @@ type Normalized struct {
 // for none.
 func (n Normalized) Hook() Input {
 	h := Input{SessionID: string(n.Session), Transcript: string(n.Transcript), Cwd: string(n.Cwd),
-		PromptID: string(n.PromptID), Title: string(n.Title)}
+		PromptID: string(n.PromptID), Title: string(n.Title), CallKey: string(n.ToolKey)}
 	tool := func(name string, input map[string]string) {
 		h.ToolName = name
 		h.ToolInput, _ = json.Marshal(input)
@@ -151,6 +155,14 @@ func (a *jsonArgs) UnmarshalJSON(b []byte) error {
 // names differ from Claude Code's, so any tool may have changed files.
 func (c CodexInput) Normalized() Normalized {
 	n := Normalized{Agent: "codex", Session: c.SessionID, Cwd: c.Cwd, Transcript: c.Transcript, PromptID: c.TurnID}
+	// One call's dialog and its end name it alike: its tool and input.
+	if c.ToolName != "" {
+		ti := "null"
+		if len(c.ToolInput) > 0 {
+			ti = jsonx.Canon(c.ToolInput)
+		}
+		n.ToolKey = c.ToolName + ":" + jsonx.Text(ti)
+	}
 	var t codexTool
 	_ = jsonx.Decode(c.ToolInput, &t) // none, or not an object: nothing
 	cmd := t.Command

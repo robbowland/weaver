@@ -71,7 +71,10 @@ type hk struct {
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
 	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
-	rc                                                             int
+	// FollowBash: the background run follows a Bash call's edits (a sync
+	// hook's, which must not wait on git).
+	FollowBash string
+	rc         int
 }
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
@@ -161,7 +164,9 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 		w = "error: " + string(in.Error)
 	}
 	h.WaitingNew = oneline.Ctl(oneline.Squash(w, 100))
-	if in.ToolName != "" {
+	if in.CallKey != "" {
+		h.Key = oneline.Ctl(oneline.Cut(in.CallKey, 300))
+	} else if in.ToolName != "" {
 		ti := "null"
 		if len(in.ToolInput) > 0 {
 			ti = jsonx.Canon(in.ToolInput)
@@ -429,6 +434,19 @@ func writeState(e *session.Env, h *hk) {
 	bestEffort(store.Write(h.sf, st))
 }
 
+// followBash follows what a Bash or MCP call changed: the files it edited,
+// else (none found) its command in the log and a checktime for nvim.
+func followBash(e *session.Env, h *hk) {
+	if !followBashEdits(e, h) {
+		if h.Tool == "Bash" {
+			h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
+		}
+		if h.NV != "" {
+			nvimEvent(e, h, h.nvimHead("checktime"), "", "")
+		}
+	}
+}
+
 // hookLog is the activity log's lines for this event (docs/design.md).
 func (h *hk) hookLog(e *session.Env) {
 	if h.Sid == "" {
@@ -492,20 +510,19 @@ func afterWrite(e *session.Env, h *hk) {
 		bestEffort(os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644))
 	}
 	h.hookLog(e)
-	if h.Mode == "async" && h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
-		// Following a Bash or MCP edit needs git: this process runs in the
-		// background anyway, so do it here.
-		if !followBashEdits(e, h) {
-			if h.Tool == "Bash" {
-				h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
-			}
-			if h.NV != "" {
-				nvimEvent(e, h, h.nvimHead("checktime"), "", "")
-			}
+	if h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
+		// Following a Bash or MCP edit needs git: here when this process
+		// runs in the background anyway (Claude Code's async hook), else in
+		// the background run, never while the agent waits on its hook.
+		if h.Mode == "async" {
+			followBash(e, h)
+		} else {
+			h.FollowBash = "1"
 		}
 	}
 	// The background work, only when there is some.
-	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch != "" ||
+	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch+h.FollowBash != "" ||
+		h.Waiting != h.Old.Waiting ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		spawnBg(e, h)

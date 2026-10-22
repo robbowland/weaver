@@ -175,7 +175,9 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 hook input into it (`wvr adapt codex`). `--bell` rings the terminal bell on
 `/dev/tty` (a Codex daemon's hook: its pane's tty) when the agent starts
 needing you or finishes, for agents that cannot ring through their hook
-output.
+output. Codex runs each hook in turn and waits on it, so its events are all
+taken as sync ones; what would make a hook wait on git (following a shell
+call's edits) goes to the background run.
 
 Codex runs its hooks in its app server, a daemon every Codex session shares,
 with the environment of whichever session started it: `$TMUX`, `$TMUX_PANE`
@@ -202,6 +204,7 @@ the event is dropped: never filed under `$TMUX_PANE`'s pane.
 | `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
 | `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
 | `waiting` | `needs_you` | what it waits on |
+| `tool_key` | `needs_you`, `tool_done` | which tool call, any text the same for a call's dialog and its end: while a dialog waits, another call ending leaves it waiting, its own moves on (the Codex adapter: the tool's name and input) |
 | `tool`, `file`, `command`, `paths` | `tool_done` | with `file`, an edit; without, its changes are found as for a Bash command (in `cwd`, the root and `paths`) |
 | `tool`, `error` | `tool_failed` | |
 | `message` | `stop` | its last reply |

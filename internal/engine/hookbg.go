@@ -31,6 +31,9 @@ func hookBg(e *session.Env) {
 	}
 	bestEffort(os.Unsetenv("WEAVER_BG"))
 	h.sf = e.StateFile(h.Pane)
+	if h.FollowBash != "" {
+		followBash(e, h)
+	}
 	// nvim first: following is what you see.
 	if h.NV != "" {
 		if h.EvFile != "" {
@@ -39,7 +42,8 @@ func hookBg(e *session.Env) {
 			nvimEvent(e, h, nvimRoot{h.nvimHead("root"), h.Root}, h.Root, "")
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
-		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing {
+		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing ||
+			h.Waiting != h.Old.Waiting {
 			nvimStateEvent(e, h)
 		}
 	}
@@ -53,7 +57,7 @@ func hookBg(e *session.Env) {
 		}
 	}
 	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
-		h.Doing != h.sess().Doing {
+		h.Doing != h.sess().Doing || h.Waiting != h.Old.Waiting {
 		// A thread's label is its title (else its task or prompt) and branch.
 		if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root {
 			e.PushStatusAndLabels()

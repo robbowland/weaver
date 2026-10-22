@@ -60,6 +60,10 @@ cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":
 ok "codex: prompt" "$(st 1 state)|$(st 1 turn)|$(st 1 prompt)" "working|1|fix the tests"
 cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"shell\",\"tool_input\":{\"command\":[\"git\",\"push\"]}}"
 ok "codex: a permission request needs you" "$(st 1 state)|$(st 1 waiting)" "needs-you|shell: git push"
+cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"shell\",\"tool_input\":{\"command\":[\"ls\"]},\"tool_response\":{}}"
+ok "...another call ending while it waits leaves it waiting" "$(st 1 state)|$(st 1 waiting)" "needs-you|shell: git push"
+cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"shell\",\"tool_input\":{\"command\":[\"git\",\"push\"]},\"tool_response\":{}}"
+ok "...its own call ending: working again" "$(st 1 state)" "working"
 patch='*** Begin Patch\n*** Update File: '"$T/repo-wt-b/src/app.txt"'\n@@\n-line one\n+line 1\n*** End Patch'
 cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"apply_patch\",\"tool_use_id\":\"u1\",\"tool_input\":{\"input\":\"$patch\"},\"tool_response\":{}}"
 ok "codex: apply_patch: back to working, its file followed" "$(st 1 state)|$(st 1 file)" "working|$T/repo-wt-b/src/app.txt"

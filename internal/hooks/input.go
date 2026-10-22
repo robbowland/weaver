@@ -38,7 +38,10 @@ type Input struct {
 	ToolName  string          `json:"tool_name"`
 	ToolInput json.RawMessage `json:"tool_input"`
 	ToolUseID string          `json:"tool_use_id"`
-	Interrupt bool            `json:"is_interrupt"` // PostToolUseFailure
+	// CallKey is which call, when an adapter says (its tool_key): in place
+	// of the tool's name and input.
+	CallKey   string `json:"-"`
+	Interrupt bool   `json:"is_interrupt"` // PostToolUseFailure
 	// PostToolBatch's calls.
 	ToolCalls []struct {
 		Response jsonx.Text `json:"tool_response"`

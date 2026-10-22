@@ -86,10 +86,14 @@ func Transition(old, sess Record, ev Event) Change {
 		switch ev.Ntype {
 		case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input",
 			"worker_permission_prompt", "quota_auto_resume_stale", "":
-			// A dialog: keep the more specific text of the request that opened it.
+			// A dialog: keep the more specific text of the request that opened it,
+			// and the call it is for when the event says (another agent's).
 			n.State = StateNeedsYou
 			if old.State != StateNeedsYou || old.Waiting == "" {
 				n.Waiting = ev.Waiting
+			}
+			if ev.Key != "" {
+				n.Pending = ev.Key
 			}
 		case "elicitation_complete", "elicitation_response":
 			if old.State == StateNeedsYou {
