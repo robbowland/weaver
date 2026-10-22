@@ -326,10 +326,15 @@ waitfor '[ "$(windows)" = "0 1 " ]'
 # their agents, and a right click opens the menu of what is under it
 tx select-window -t "=$S:0"
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
+waitfor 'tx capture-pane -p -t "=$S:0" | grep -q "n NEW"'
 foot=$(tx capture-pane -p -t "=$S:0" | grep -n 'n NEW' | head -n 1)
 n=$(grep -c 'what should the agent do' "$AT/screen.log")
-click "$(python3 -I -c 'import sys; print(sys.argv[1].index("n NEW") + 3)' "${foot#*:}")" "${foot%%:*}"
-waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
+# Again till the form opens: fzf drops a click that comes during a reload,
+# as the board does when the thread above closes.
+for _ in 1 2 3; do
+	click "$(python3 -I -c 'import sys; print(sys.argv[1].index("n NEW") + 3)' "${foot#*:}")" "${foot%%:*}"
+	waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]' 30 && break
+done
 ok "mouse: a click on the board's n NEW, as n" "$([ "$(grep -c 'what should the agent do' "$AT/screen.log")" -gt "$n" ] && echo form)" "form"
 key 1b
 # (The form is a popup over the board: gone once its process is.)
