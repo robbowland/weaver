@@ -65,10 +65,14 @@ type itemSource interface {
 // viewGuide is a source's words for its ? card; team is "" for a source
 // without that section.
 type viewGuide struct {
-	queue, team, mine, watch string
-	red, green, faint        string
-	readOnly                 string // what alt+m starts
+	// sections are what each of its sections holds, in their order.
+	sections          []sectionNote
+	red, green, faint string
+	readOnly          string // what alt+m starts
 }
+
+// sectionNote is a section's title, and what it holds, for ?'s card.
+type sectionNote struct{ title, what string }
 
 // viewFilter is a search f offers: what the picker shows (a note beside
 // it), and what makes it the view's search, its source's own.
@@ -718,14 +722,11 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("?", "this help", "(? again: back)") +
 		key("q  esc", "back to your thread", "(esc, with a SEARCH: clear it)") +
 		"\n" + g + "SECTIONS" + o + "\n" +
-		"  " + g + "SEARCH" + o + "  what f or ctrl+s asked for, while you have it\n" +
-		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n"
-	if gd.team != "" {
-		out += "  " + g + "TEAM" + o + "    " + gd.team + "\n"
+		"  " + g + "SEARCH" + o + "   what f or ctrl+s asked for, or the item / named, not loaded\n"
+	for _, s := range gd.sections {
+		out += "  " + g + strings.ToUpper(s.title) + o + strings.Repeat(" ", max(9-len(s.title), 1)) + s.what + "\n"
 	}
-	out += "  " + g + "MINE" + o + "    " + gd.mine + "\n" +
-		"  " + g + "WATCH" + o + "   " + gd.watch + "\n" +
-		"\n" + g + "ROWS" + o + "\n" +
+	out += "\n" + g + "ROWS" + o + "\n" +
 		"  " + d + "01" + o + " " + paint(GWork, CGrey, CDim, COff) + "  the thread it has, as on the board\n"
 	for _, s := range []struct{ word, colour, what string }{{"red", CRed, gd.red}, {"green", CGreen, gd.green}, {"faint", CDim, gd.faint}} {
 		if s.what != "" {

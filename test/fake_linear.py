@@ -34,7 +34,9 @@ class H(BaseHTTPRequestHandler):
             return self.answer(200, {"data": {"viewer": {"name": "Rob", "organization": {"name": "Acme"}}}})
         if "issue(id:" in q:
             return self.answer(200, {"data": {"issue": dict(ISSUE, comments={"nodes": [{"body": "Seen it", "user": {"name": "Eve", "displayName": "eve"}}]})}})
-        nodes = [ISSUE] if "assignee: { isMe: { eq: true } }" in q else []
+        # ENG-42 is assigned to you and to do (unstarted): Queue's, as Linear
+        # would answer it, not Backlog's (triage or backlog).
+        nodes = [ISSUE] if "assignee: { isMe: { eq: true } }" in q and '"unstarted"' in q else []
         return self.answer(200, {"data": {"issues": {"nodes": nodes}}})
 
 

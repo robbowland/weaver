@@ -921,8 +921,10 @@ someone else) and Watch (what you follow).
   shows at most 20.
 - LINEAR: issues, each section an `issues(filter:)` query of Linear's
   GraphQL API, filtered on `isMe` so no request for the viewer comes first
-  (Queue: assigned, unstarted or started; Mine: created, assigned to
-  someone else, open; Watch: subscribed, neither, open), with linear-tui's
+  (Queue: assigned, unstarted or started; Backlog: assigned, triage or
+  backlog; Mine: created, assigned to someone else or no one, open; Watch:
+  subscribed, neither, open: a partition, every open issue that involves
+  you in one, `lists` by role and state, which a test checks), with linear-tui's
   issue fields (MIT, credited there), kept in `$STATE_DIR/linear.json`, at
   most 30, and whether there are more (its `pageInfo`): Linear counts no
   list, so a heading says `QUEUE · 30+`, where GitHub's says `20 of 57`.

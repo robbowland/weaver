@@ -94,9 +94,12 @@ func (linearSource) label(string) string { return "LINEAR ISSUES" }
 
 func (linearSource) guide() viewGuide {
 	return viewGuide{
-		queue:    "yours to do: assigned to you, to do or in progress",
-		mine:     "made by you, someone else's to do",
-		watch:    "what you subscribe to otherwise",
+		sections: []sectionNote{
+			{"Queue", "yours to do: assigned to you, to do or in progress"},
+			{"Backlog", "yours for later: assigned to you, in triage or the backlog"},
+			{"Mine", "made by you, someone else's to do"},
+			{"Watch", "what you subscribe to otherwise"},
+		},
 		red:      "urgent",
 		faint:    "not started yet",
 		readOnly: "an investigation",

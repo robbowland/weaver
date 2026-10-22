@@ -149,7 +149,8 @@ remove`. The branch always stays.
 ## Pull requests and issues
 
 Beside home are two views: **GITHUB**, your pull requests and issues, and
-**LINEAR**, your Linear issues. `tab` and `shift+tab` step between home and
+**LINEAR**, your Linear issues (every open one that involves you: assigned
+to you, to do or for later, made by you, or followed). `tab` and `shift+tab` step between home and
 the views like tabs, both in their windows and in `alt+y`'s popover over a
 thread ([The board](#the-board)). On home, `alt+y` steps on through the
 views, then back to the thread you came from.

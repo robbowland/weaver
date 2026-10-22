@@ -125,10 +125,12 @@ func (githubSource) service() string { return "GitHub" }
 
 func (githubSource) guide() viewGuide {
 	return viewGuide{
-		queue:    "yours to do: your review asked of you, or assigned to you",
-		team:     "your teams' to do: a review asked of a team you are in",
-		mine:     "yours: opened by you",
-		watch:    "what involves you otherwise",
+		sections: []sectionNote{
+			{"Queue", "yours to do: your review asked of you, or assigned to you"},
+			{"Team", "your teams' to do: a review asked of a team you are in"},
+			{"Mine", "yours: opened by you"},
+			{"Watch", "what involves you otherwise"},
+		},
 		red:      "changes requested, or a check failing",
 		green:    "approved",
 		faint:    "a draft, or nothing to say but who",

@@ -411,6 +411,14 @@ can supersede an earlier one, and says so.
   weaver knows, is read as it is: GitHub's search does not find an item by
   its number.)
 
+- 2026-10-22: LINEAR's sections are a partition of the open issues that
+  involve you, each in one: by role (assigned to you, else made by you, else
+  followed) and state. Queue stays what is yours to do (unstarted or
+  started); an issue of yours in Triage or the Backlog was in no section,
+  so not loaded and not findable with /, and they have their own, Backlog,
+  after Queue. A test checks the partition rather than the filters'
+  wording.
+
 ## Lost threads
 
 - 2026-10-15: Threads survive their multiplexer's server crashing: a thread

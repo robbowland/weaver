@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -217,13 +218,65 @@ type Section struct {
 // open is an issue not done: triage, backlog, unstarted or started.
 const open = `state: { type: { nin: ["completed", "canceled"] } }`
 
-// Sections are weaver's: what is yours to do, what you made, and what you
-// follow.
-var Sections = []Section{
-	{Title: "Queue", Filter: `{ assignee: { isMe: { eq: true } }, state: { type: { in: ["unstarted", "started"] } } }`},
-	{Title: "Mine", Filter: `{ creator: { isMe: { eq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
-	{Title: "Watch", Filter: `{ subscribers: { some: { isMe: { eq: true } } }, creator: { isMe: { neq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
+// openStates are the state types of an issue not done (open).
+var openStates = []string{"triage", "backlog", "unstarted", "started"}
+
+// role is how an open issue involves you, each in exactly one: assigned to
+// you; else made by you; else followed (subscribed to).
+type role int
+
+const (
+	assigned role = iota
+	made
+	followed
+)
+
+func (r role) String() string { return [...]string{"assigned", "made", "followed"}[r] }
+
+// who is the IssueFilter's fields for issues of role r.
+func (r role) who() string {
+	switch r {
+	case made:
+		return `creator: { isMe: { eq: true } }, assignee: { isMe: { neq: true } }`
+	case followed:
+		return `subscribers: { some: { isMe: { eq: true } } }, creator: { isMe: { neq: true } }, assignee: { isMe: { neq: true } }`
+	case assigned:
+	}
+	return `assignee: { isMe: { eq: true } }`
 }
+
+// list is one of weaver's sections: the issues of a role in some states.
+type list struct {
+	title  string
+	role   role
+	states []string
+}
+
+// filter is l as an IssueFilter.
+func (l list) filter() string {
+	if slices.Equal(l.states, openStates) {
+		return "{ " + l.role.who() + ", " + open + " }"
+	}
+	return "{ " + l.role.who() + `, state: { type: { in: ["` + strings.Join(l.states, `", "`) + `"] } } }`
+}
+
+// lists are weaver's sections, every open issue that involves you in one:
+// what is yours to do, yours for later, what you made, and what you follow.
+var lists = []list{
+	{"Queue", assigned, []string{"unstarted", "started"}},
+	{"Backlog", assigned, []string{"triage", "backlog"}},
+	{"Mine", made, openStates},
+	{"Watch", followed, openStates},
+}
+
+// Sections are lists as the views ask for them.
+var Sections = func() []Section {
+	ss := make([]Section, len(lists))
+	for i, l := range lists {
+		ss[i] = Section{Title: l.title, Filter: l.filter()}
+	}
+	return ss
+}()
 
 // Limit is how many issues a section shows.
 const Limit = 30

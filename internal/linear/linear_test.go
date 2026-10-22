@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -132,5 +133,32 @@ func TestFetchNoKey(t *testing.T) {
 	}
 	if _, err := Key(); !errors.Is(err, ErrNoKey) {
 		t.Errorf("a key: %v", err)
+	}
+}
+
+// Every open issue that involves you is in exactly one section: assigned
+// to you (to do, or for later), else made by you, else followed; in any
+// state not done. One of yours left in Backlog was once in none.
+func TestSectionsPartition(t *testing.T) {
+	for _, r := range []role{assigned, made, followed} {
+		for _, st := range openStates {
+			var in []string
+			for _, l := range lists {
+				if l.role == r && slices.Contains(l.states, st) {
+					in = append(in, l.title)
+				}
+			}
+			if len(in) != 1 {
+				t.Errorf("%s, %s: in %v, want exactly one section", r, st, in)
+			}
+		}
+	}
+	if len(Sections) != len(lists) {
+		t.Fatalf("Sections %d, lists %d", len(Sections), len(lists))
+	}
+	for i, l := range lists {
+		if Sections[i].Title != l.title || Sections[i].Filter != l.filter() {
+			t.Errorf("section %d: %+v", i, Sections[i])
+		}
 	}
 }

@@ -329,7 +329,7 @@ func TestLinearRefreshKeepsDepth(t *testing.T) {
 	})
 	linearSource{}.fetch(e)
 	for _, r := range readLinear(e).Results {
-		want := map[string]int{"Queue": 250, "Mine": 45, "Watch": 30}[r.Title]
+		want := map[string]int{"Queue": 250, "Backlog": 30, "Mine": 45, "Watch": 30}[r.Title]
 		if len(r.Items) != want || r.Err != "" || r.Next != "c"+strconv.Itoa(want) {
 			t.Errorf("%s, holding %d: %d after a refresh (next %q, err %q), want %d", r.Title, held[r.Title], len(r.Items), r.Next, r.Err, want)
 		}
