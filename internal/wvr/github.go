@@ -249,17 +249,11 @@ func ghFilter(f github.Filter, note string) viewFilter {
 	}}
 }
 
-// words is a search for words as typed (github.Words), within the owners
-// of the repositories weaver knows.
+// words is a search for words as typed (github.Words), in the
+// repositories weaver knows: an item named, or a number, read as it is;
+// words, within their owners'.
 func (githubSource) words(e *Env, q string) viewFilter {
-	var owners []string
-	for _, r := range e.knownRepos(readGitHub(e)) {
-		o, _, _ := strings.Cut(r, "/")
-		if !slices.ContainsFunc(owners, func(x string) bool { return strings.EqualFold(x, o) }) {
-			owners = append(owners, o)
-		}
-	}
-	return ghFilter(github.Words(q, owners), "")
+	return ghFilter(github.Words(q, e.knownRepos(readGitHub(e))), "")
 }
 
 // find reads the first page of the search, of each kind, and keeps it.

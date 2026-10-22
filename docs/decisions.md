@@ -406,7 +406,10 @@ can supersede an earlier one, and says so.
   repositories weaver knows, as GitHub's search is of all of GitHub and
   words alone would find strangers' issues first. Owners rather than each
   repository: few qualifiers, and a team's other repositories are what
-  one usually wants. Its answer is SEARCH, as a filter's is.
+  one usually wants. Its answer is SEARCH, as a filter's is. (2026-10-22:
+  an item named, `o/r#45`, or a number alone, `#45`, in the repositories
+  weaver knows, is read as it is: GitHub's search does not find an item by
+  its number.)
 
 ## Lost threads
 

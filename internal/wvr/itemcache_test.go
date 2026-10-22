@@ -247,6 +247,12 @@ func TestWordsWithinOwners(t *testing.T) {
 	if s := readGitHub(e).Search[github.PRs]; f.title != "flaky test" || s.Filters != "user:O user:p flaky test" {
 		t.Errorf("%q: %+v", f.title, s.Section)
 	}
+	// A number alone: that item in each repository weaver knows, read as it is.
+	f = (githubSource{}).words(e, "#3")
+	f.set(e)
+	if s := readGitHub(e).Search[github.PRs]; s.Refs != "O/s#3 o/r#3 p/q#3" || s.Filters != "" {
+		t.Errorf("#3: %+v", s.Section)
+	}
 }
 
 // fakeGitHubPages puts a gh on PATH that answers every search with as many

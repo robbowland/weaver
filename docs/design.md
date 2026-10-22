@@ -993,9 +993,13 @@ while it has one (`_items NAME esc`, which ends it before going back), ends
 it.
 
 `ctrl+s`, searching, asks the service for the query (`_items NAME ask
-{q}`), as the view's search, as a filter's: GitHub's search syntax as
-typed when it has a qualifier, a reference as its number in its
-repository, else the words within the owners of the repositories weaver
+{q}`), as the view's search, as a filter's: an item named (`o/r#45`) read
+as it is, and a number alone (`#45`) that number in each of the first 10
+repositories weaver knows, one request for them all
+(`repository.issueOrPullRequest`; GitHub's search does not find an item by
+its number; one GitHub does not have is none, not a failure, though gh
+fails for it: `Section.Refs`); GitHub's search syntax as typed when it has
+a qualifier; else the words within the owners of the repositories weaver
 knows (`user:o`; none known, what involves you), since GitHub's search is
 of all of GitHub (`github.Words`); Linear's search, `searchIssues`, which
 counts what it finds (`linear.Words`). enter does it when nothing loaded

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,12 +37,15 @@ const (
 // Section is one search: its title, and its filters (GitHub's search
 // syntax, without is:pr or is:issue); Also, a second search whose items it
 // shows too (GitHub's search has no OR between qualifiers); and how many
-// it shows at most (0: Limit).
+// it shows at most (0: Limit). One with Refs (owner/name#N, by spaces)
+// names its items instead, each read as it is, for GitHub's search does
+// not find an item by its number.
 type Section struct {
 	Title   string `json:"title"`
 	Filters string `json:"filters"`
 	Also    string `json:"also,omitempty"`
 	Max     int    `json:"max,omitempty"`
+	Refs    string `json:"refs,omitempty"`
 }
 
 // limit is how many items section s shows at most.
@@ -161,8 +165,12 @@ fragment issue on Issue {
 }`
 
 // Query is the request for section s of kind k: its page of n items
-// after cursor after ("": its first).
+// after cursor after ("": its first); one naming items, each of them, of
+// either kind (one page).
 func Query(k Kind, s Section, after string, n int) string {
+	if s.Refs != "" {
+		return refsQuery(s.Refs)
+	}
 	is, frag, fields := "is:pr", "pr", prFields
 	if k == Issues {
 		is, frag, fields = "is:issue", "issue", issueFields
@@ -186,6 +194,61 @@ func Query(k Kind, s Section, after string, n int) string {
 		body += search("t", s.Also, ta)
 	}
 	return "query {\n" + body + "}\n" + fields + "\n"
+}
+
+// refsQuery is the request for the items refs names (owner/name#N, by
+// spaces): each as rN, a pull request or an issue.
+func refsQuery(refs string) string {
+	body := ""
+	for i, ref := range strings.Fields(refs) {
+		m := reRef.FindStringSubmatch(ref)
+		if m == nil {
+			continue
+		}
+		owner, name, _ := strings.Cut(m[1], "/")
+		o, _ := json.Marshal(owner)
+		nm, _ := json.Marshal(name)
+		body += fmt.Sprintf("  r%d: repository(owner: %s, name: %s) { issueOrPullRequest(number: %s) { __typename ...pr ...issue } }\n", i, o, nm, m[2])
+	}
+	return "query {\n" + body + "}\n" + prFields + "\n" + issueFields + "\n"
+}
+
+// parseRefs reads the answer to refsQuery for section s: its items of kind
+// k, in the order named. One GitHub does not have (NOT_FOUND) is none; any
+// other error, the answer's.
+func parseRefs(k Kind, s Section, b []byte) (Result, error) {
+	var resp struct {
+		Data   map[string]*struct{ IssueOrPullRequest json.RawMessage }
+		Errors []struct{ Type, Message string }
+	}
+	if err := json.Unmarshal(b, &resp); err != nil {
+		return Result{}, fmt.Errorf("gh: %v", err)
+	}
+	for _, e := range resp.Errors {
+		if e.Type != "NOT_FOUND" {
+			return Result{}, errors.New("gh: " + e.Message)
+		}
+	}
+	want := "PullRequest"
+	if k == Issues {
+		want = "Issue"
+	}
+	r := Result{Section: s}
+	for i := range strings.Fields(s.Refs) {
+		a := resp.Data["r"+strconv.Itoa(i)]
+		if a == nil || len(a.IssueOrPullRequest) == 0 || string(a.IssueOrPullRequest) == "null" {
+			continue
+		}
+		var n struct {
+			Typename string `json:"__typename"`
+			node
+		}
+		if json.Unmarshal(a.IssueOrPullRequest, &n) == nil && n.Typename == want {
+			r.Items = append(r.Items, n.node.item(k))
+		}
+	}
+	r.Total, r.Fetched = len(r.Items), time.Now()
+	return r, nil
 }
 
 // ended is a search's cursor once it has no more pages, in a section's
@@ -423,52 +486,73 @@ func Fetch(held Held, search ...Section) (map[Kind][]Result, map[Kind][]Result) 
 }
 
 // Filter is a search of your own (a view's f): what it is called, and its
-// filters (GitHub's search syntax, as a section's), asked of pull requests
-// and issues alike.
+// filters (GitHub's search syntax, as a section's), or the items it names
+// (Section.Refs), asked of pull requests and issues alike.
 type Filter struct {
-	Title, Filters string
+	Title, Filters, Refs string
 }
 
 // Section is f as a section, of either kind.
-func (f Filter) Section() Section { return Section{Title: f.Title, Filters: f.Filters} }
+func (f Filter) Section() Section { return Section{Title: f.Title, Filters: f.Filters, Refs: f.Refs} }
 
 // Filters are the searches of your own the views offer before a
 // repository's and a label's.
 var Filters = []Filter{
-	{"assigned to me", "is:open assignee:@me sort:updated-desc"},
-	{"review asked of me", "is:open user-review-requested:@me sort:updated-desc"},
-	{"review asked of my teams", "is:open review-requested:@me -user-review-requested:@me sort:updated-desc"},
-	{"opened by me", "is:open author:@me sort:updated-desc"},
-	{"mentions me", "is:open mentions:@me sort:updated-desc"},
+	{Title: "assigned to me", Filters: "is:open assignee:@me sort:updated-desc"},
+	{Title: "review asked of me", Filters: "is:open user-review-requested:@me sort:updated-desc"},
+	{Title: "review asked of my teams", Filters: "is:open review-requested:@me -user-review-requested:@me sort:updated-desc"},
+	{Title: "opened by me", Filters: "is:open author:@me sort:updated-desc"},
+	{Title: "mentions me", Filters: "is:open mentions:@me sort:updated-desc"},
 }
 
 // RepoFilter is what is open in repository repo (owner/name).
 func RepoFilter(repo string) Filter {
-	return Filter{"repository " + repo, "is:open repo:" + repo + " sort:updated-desc"}
+	return Filter{Title: "repository " + repo, Filters: "is:open repo:" + repo + " sort:updated-desc"}
 }
 
 var (
 	reQualifier = regexp.MustCompile(`(^|\s)-?[a-z][a-z-]*:\S`)
 	reRef       = regexp.MustCompile(`^([\w.-]+/[\w.-]+)#(\d+)$`)
+	reNumber    = regexp.MustCompile(`^#(\d+)$`)
 )
 
-// Words is a search for words as typed: GitHub's search syntax as it is,
-// with a qualifier; a reference (o/r#45), its number in its repository;
-// else, since GitHub's search is of all of GitHub, the words within the
-// repositories of owners (none known: what involves you).
-func Words(words string, owners []string) Filter {
+// refRepos is how many repositories a number alone (#45) is read in.
+const refRepos = 10
+
+// Words is a search for words as typed, repos the repositories weaver knows
+// (owner/name, most recent first): an item named (o/r#45), read as it is;
+// a number alone (#45), that number in each repository known (its first
+// refRepos); GitHub's search syntax as it is, with a qualifier; else, since
+// GitHub's search is of all of GitHub, the words within the repositories
+// of their owners (none known: what involves you).
+func Words(words string, repos []string) Filter {
 	w := strings.Join(strings.Fields(words), " ")
-	f := w
-	switch m := reRef.FindStringSubmatch(w); {
-	case m != nil:
-		f = "repo:" + m[1] + " " + m[2]
+	f := Filter{Title: w, Filters: w}
+	switch {
+	case reRef.MatchString(w):
+		return Filter{Title: w, Refs: w}
+	case reNumber.MatchString(w) && len(repos) > 0:
+		var refs []string
+		for _, r := range repos[:min(len(repos), refRepos)] {
+			refs = append(refs, r+w)
+		}
+		return Filter{Title: w, Refs: strings.Join(refs, " ")}
 	case reQualifier.MatchString(w):
-	case len(owners) > 0:
-		f = "user:" + strings.Join(owners, " user:") + " " + w
-	default:
-		f = "involves:@me " + w
+		return f
 	}
-	return Filter{w, f}
+	var owners []string
+	for _, r := range repos {
+		o, _, _ := strings.Cut(r, "/")
+		if !slices.ContainsFunc(owners, func(x string) bool { return strings.EqualFold(x, o) }) {
+			owners = append(owners, o)
+		}
+	}
+	if len(owners) > 0 {
+		f.Filters = "user:" + strings.Join(owners, " user:") + " " + w
+	} else {
+		f.Filters = "involves:@me " + w
+	}
+	return f
 }
 
 // LabelFilter is what is open with label in repos: a label is a
@@ -479,7 +563,7 @@ func LabelFilter(label string, repos []string) Filter {
 	for _, r := range repos {
 		f += " repo:" + r
 	}
-	return Filter{"label " + label, f + " sort:updated-desc"}
+	return Filter{Title: "label " + label, Filters: f + " sort:updated-desc"}
 }
 
 // Ask asks GitHub for section s of kind k, its page after cursor after
@@ -490,7 +574,12 @@ func Ask(k Kind, s Section, after string) Result { return ask(k, s, after, s.lim
 func ask(k Kind, s Section, after string, n int) Result {
 	b, err := gh(Query(k, s, after, n))
 	var r Result
-	if err == nil {
+	switch {
+	case s.Refs != "" && len(b) > 0:
+		// gh fails for an item GitHub does not have, but answers with
+		// the rest: the answer says.
+		r, err = parseRefs(k, s, b)
+	case err == nil:
 		r, err = Parse(k, s, after, b)
 	}
 	if err != nil {
@@ -499,7 +588,8 @@ func ask(k Kind, s Section, after string, n int) Result {
 	return r
 }
 
-// gh runs a GraphQL query through gh, within 30 s.
+// gh runs a GraphQL query through gh, within 30 s: its answer, and, when
+// it failed, why (with what it answered all the same).
 func gh(query string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -516,7 +606,7 @@ func gh(query string) ([]byte, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, errors.New("gh: " + msg)
+		return out, errors.New("gh: " + strings.TrimPrefix(msg, "gh: "))
 	}
 	return out, nil
 }

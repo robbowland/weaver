@@ -627,6 +627,9 @@ case "$1 $2" in
 	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	# An item named (ctrl+s on o/r#45), read as it is: GitHub's search does
+	# not find a number.
+	*'r0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 45)'*) printf '{"data":{"r0":{"issueOrPullRequest":%s}}}\n' "$(pr 45 'Add a flag' | sed 's/^{/{"__typename":"PullRequest",/')"; exit ;;
 	# Words asked for (ctrl+s), within o's repositories: an issue.
 	*'is:issue archived:false user:o flaky'*) page 1 "" '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}'; exit ;;
 	# f's mentions me: a pull request, and an issue.
@@ -775,6 +778,16 @@ sleep 0.3
 key 0d # enter
 waitfor 'v900 | grep -q "SEARCH · zzz · 0"'
 ok "...enter, when nothing loaded matches" "$(v900 | grep -c 'SEARCH · zzz · 0')|$(v900 | grep -c 'QUEUE · 1')" "1|1"
+key 1b # esc
+waitfor '! v900 | grep -q "SEARCH ·"'
+key 2f # /
+sleep 0.5
+key "$(printf 'o/r#45' | xxd -p)"
+sleep 0.3
+key 13 # ctrl+s
+waitfor 'v900 | grep -q "SEARCH · o/r#45 · 1"'
+ok "...an item named, ctrl+s: GitHub asked for it as it is, as SEARCH" "$(v900 | grep -c 'SEARCH · o/r#45 · 1')|$(v900 | grep -c 'failed')" "1|0" ||
+	v900 | sed 's/^/  github: /' | head -12
 key 1b # esc
 waitfor '! v900 | grep -q "SEARCH ·"'
 key 67 # g

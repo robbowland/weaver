@@ -171,18 +171,56 @@ func TestParseNext(t *testing.T) {
 // GitHub's search is of all of GitHub.
 func TestWords(t *testing.T) {
 	for _, c := range []struct {
-		words  string
-		owners []string
-		want   string
+		words string
+		repos []string
+		want  string
+		refs  string
 	}{
-		{"flaky  test", []string{"o", "p"}, "user:o user:p flaky test"},
-		{"flaky", nil, "involves:@me flaky"},
-		{"is:open label:bug", []string{"o"}, "is:open label:bug"},
-		{"crash -author:bot", []string{"o"}, "crash -author:bot"},
-		{"o/r#45", []string{"p"}, "repo:o/r 45"},
+		{"flaky  test", []string{"o/r", "P/q", "o/s", "p/t"}, "user:o user:P flaky test", ""},
+		{"flaky", nil, "involves:@me flaky", ""},
+		{"is:open label:bug", []string{"o/r"}, "is:open label:bug", ""},
+		{"crash -author:bot", []string{"o/r"}, "crash -author:bot", ""},
+		// An item named: read as it is (GitHub's search does not find a
+		// number), in its repository, or a number in each known.
+		{"o/r#45", []string{"p/q"}, "", "o/r#45"},
+		{"#45", []string{"o/r", "p/q"}, "", "o/r#45 p/q#45"},
+		{"#45", nil, "involves:@me #45", ""},
 	} {
-		if f := Words(c.words, c.owners); f.Filters != c.want || f.Title != strings.Join(strings.Fields(c.words), " ") {
-			t.Errorf("%q: %+v, want %q", c.words, f, c.want)
+		f := Words(c.words, c.repos)
+		if f.Filters != c.want || f.Refs != c.refs || f.Title != strings.Join(strings.Fields(c.words), " ") || f.Section().Refs != c.refs {
+			t.Errorf("%q: %+v, want filters %q refs %q", c.words, f, c.want, c.refs)
 		}
+	}
+}
+
+// A search that names items reads each as it is, a request for them all:
+// what GitHub has, of each kind; one that does not exist is none, not a
+// failure (gh says it, and fails, but answers with the rest).
+func TestAskRefs(t *testing.T) {
+	bin := t.TempDir()
+	gh := `#!/bin/sh
+case "$*" in
+*'r0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 45)'*'r1: repository(owner: "p", name: "q") { issueOrPullRequest(number: 45)'*'fragment pr on PullRequest'*'fragment issue on Issue'*)
+	echo '{"data":{"r0":{"issueOrPullRequest":{"__typename":"PullRequest","number":45,"title":"Add a flag","state":"OPEN","repository":{"nameWithOwner":"o/r"},"updatedAt":"2026-10-16T10:00:00Z"}},"r1":{"issueOrPullRequest":null}},"errors":[{"type":"NOT_FOUND","path":["r1","issueOrPullRequest"],"message":"Could not resolve to an issue or pull request with the number of 45."}]}'
+	echo 'gh: Could not resolve to an issue or pull request with the number of 45.' >&2
+	exit 1 ;;
+*'issueOrPullRequest'*) echo '{"errors":[{"type":"FORBIDDEN","message":"no"}]}'; echo 'gh: no' >&2; exit 1 ;;
+esac
+echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	s := Words("#45", []string{"o/r", "p/q"}).Section()
+	prs, iss := Ask(PRs, s, ""), Ask(Issues, s, "")
+	if len(prs.Items) != 1 || prs.Items[0].Ref() != "o/r#45" || prs.Items[0].Title != "Add a flag" || prs.Err != "" || prs.Total != 1 || prs.Next != "" || prs.Fetched.IsZero() {
+		t.Errorf("pull requests: %+v", prs)
+	}
+	if len(iss.Items) != 0 || iss.Err != "" || iss.Fetched.IsZero() {
+		t.Errorf("issues: %+v", iss)
+	}
+	if r := Ask(PRs, Words("x/y#1", nil).Section(), ""); r.Err == "" {
+		t.Errorf("a failure that is not a missing item: %+v", r)
 	}
 }
