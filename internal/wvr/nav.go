@@ -104,7 +104,7 @@ func (e *Env) GoHome() {
 // that the popover would have been in the way of: a jump, or a dialog (tmux
 // shows one popup at a time). False when no terminal looks at the session.
 func (e *Env) peek(cur tab) bool {
-	if os.MkdirAll(e.SockDir, 0o700) != nil {
+	if e.SockDirReady() != nil {
 		return false
 	}
 	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())

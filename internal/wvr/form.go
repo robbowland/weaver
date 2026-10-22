@@ -843,9 +843,8 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 	if fm.Where == WhereWorktree && fm.Base == "" {
 		go e.fetchStart(fm.Repo, sf)
 	}
-	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
-		os.MkdirAll(e.SockDir, 0o700)
-		os.Chmod(e.SockDir, 0o700)
+	if err := e.SockDirReady(); err != nil {
+		return "", err
 	}
 	for {
 		h := strings.TrimRight(e.FormHeader(sf, query, errs), "\n")

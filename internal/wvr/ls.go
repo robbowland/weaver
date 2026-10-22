@@ -116,9 +116,8 @@ func (e *Env) ls(peek, at string) (string, error) {
 		adoptAct, nextAct, prevAct, menuAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept", "ignore"
 	}
 	os.Setenv("LS_JUMP", jumpAct)
-	if st, err := os.Stat(e.SockDir); err != nil || !st.IsDir() {
-		os.MkdirAll(e.SockDir, 0o700)
-		os.Chmod(e.SockDir, 0o700)
+	if err := e.SockDirReady(); err != nil {
+		return "", err
 	}
 	// Hooks reload this dashboard through its socket as agents change; its
 	// files go with it, also when its pane is closed under it.

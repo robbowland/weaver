@@ -249,13 +249,9 @@ func (e *Env) Nvim(args []string) error {
 			file = args[2]
 		}
 	}
-	if err := os.MkdirAll(e.SockDir, 0o700); err != nil {
-		return errors.New("cannot create " + e.SockDir)
+	if err := e.SockDirReady(); err != nil {
+		return err
 	}
-	if st, err := os.Stat(e.SockDir); err != nil || st.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
-		return errors.New(e.SockDir + " is not owned by you")
-	}
-	os.Chmod(e.SockDir, 0o700)
 	sock := e.NvimSock(agentPane)
 	// Never take the socket of an nvim still serving this agent (answering,
 	// or alive but busy): go to it instead, and let this pane close.

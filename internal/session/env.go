@@ -3,11 +3,13 @@
 package session
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
@@ -116,6 +118,24 @@ func (e *Env) SessionWhere() agent.Where {
 		return agent.Where{}
 	}
 	return agent.Where{Server: n, Session: ses}
+}
+
+// SockDirReady makes weaver's socket directory, or checks the one there:
+// a directory (not a link) of yours, for you alone. What weaver keeps in it
+// (fzf's key files, peek's actions) it runs, so one another user made is
+// refused, never used.
+func (e *Env) SockDirReady() error {
+	if err := os.MkdirAll(e.SockDir, 0o700); err != nil {
+		return errors.New("cannot create " + e.SockDir)
+	}
+	st, err := os.Lstat(e.SockDir)
+	if err != nil || !st.IsDir() || st.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+		return errors.New(e.SockDir + " is not a directory of yours: remove it")
+	}
+	if st.Mode().Perm() != 0o700 {
+		return os.Chmod(e.SockDir, 0o700)
+	}
+	return nil
 }
 
 // Say shows text on tmux's message line for ms milliseconds, on the client
