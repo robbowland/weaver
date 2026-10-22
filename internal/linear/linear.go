@@ -232,10 +232,12 @@ type Result struct {
 	page.List[Issue]
 }
 
-// Query is section s's request: its first page, and whether there is
-// another (Linear does not count a list's issues).
+// Query is section s's request: its page after cursor $after (null: its
+// first), and whether there is another (Linear does not count a list's
+// issues).
 func Query(s Section) string {
-	return fmt.Sprintf("query Section { issues(filter: %s, first: %d, orderBy: updatedAt) { nodes { %s } pageInfo { hasNextPage endCursor } } }", s.Filter, Limit, issueFields)
+	return fmt.Sprintf("query Section($after: String) { issues(filter: %s, first: %d, after: $after, orderBy: updatedAt) { nodes { %s } pageInfo { hasNextPage endCursor } } }",
+		s.Filter, Limit, issueFields)
 }
 
 // pageInfo is where a list's next page starts, if it has one.
@@ -252,17 +254,30 @@ func (p pageInfo) next() string {
 	return ""
 }
 
-// ask is what Linear finds for section s, asked as key, or why asking
-// failed.
-func ask(key string, s Section) Result {
+// Ask asks Linear for section s, its page after cursor after ("": its
+// first): what it found, or why asking failed.
+func Ask(s Section, after string) Result {
+	key, err := Key()
+	if err != nil {
+		return Result{Section: s, List: page.Failed[Issue](err)}
+	}
+	return ask(key, s, after)
+}
+
+// ask is Ask, signed in as key.
+func ask(key string, s Section, after string) Result {
 	var d struct {
 		Issues struct {
 			Nodes    []node   `json:"nodes"`
 			PageInfo pageInfo `json:"pageInfo"`
 		} `json:"issues"`
 	}
+	vars := map[string]any{"after": nil}
+	if after != "" {
+		vars["after"] = after
+	}
 	r := Result{Section: s}
-	if err := query(key, Query(s), nil, &d); err != nil {
+	if err := query(key, Query(s), vars, &d); err != nil {
 		r.List = page.Failed[Issue](err)
 		return r
 	}
@@ -290,7 +305,7 @@ func Fetch() []Result {
 	}
 	ch := make(chan answer)
 	for i := range Sections {
-		go func() { ch <- answer{i, ask(key, Sections[i])} }()
+		go func() { ch <- answer{i, ask(key, Sections[i], "")} }()
 	}
 	for range Sections {
 		a := <-ch

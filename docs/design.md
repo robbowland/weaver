@@ -930,17 +930,35 @@ source said last at once, asks again behind it when that is over 2 minutes
 old (once its fzf listens: `start` runs `_items NAME fetch-bg`, so an
 answer has a list to reload) and every 5 minutes after (`^r` now), and
 reloads when a thread changes
-(the status push) or is made. fzf keeps the cursor on a row across a
-reload by its ref (`--track --id-nth 2`), and blocks until it finds the
-row it was on, so no row's ref is empty (a heading's or a gap's is its id
-after a `-`): a row of none, never found, left the view empty and deaf to
-its keys. Each row carries a second line for search
-(`id ref prev next display search`): the item's number (`#45`, `ENG-42`),
-its whole title and its terms (author, repository, head branch, labels;
-Linear's team, people and branch); a heading's and a gap's is empty. A
-query switches fzf to it (`change-with-nth(6)`, back to 5 when empty) and
-ranks the matches (`--tiebreak index`: ties in the rows' order), so the
-headings go and nothing cut to fit is missed. Like home, it outlives installs of weaver:
+(the status push) or is made. A row is `id ref prev next display search`:
+id its kind and its section's key (`h` a heading, `g` the gap before one,
+`i` an item, `m` the line after a section's items when it has more); ref
+the item's, else `-` and the row's id: fzf keeps the cursor on a row
+across a reload by it (`--track --id-nth 2`), and blocks until it finds
+the row it was on, so none is empty (a row of none, never found, left the
+view empty and deaf to its keys); prev and next the rows around a heading
+or gap the cursor steps to. search is a second line for search: the item's
+number (`#45`, `ENG-42`), its whole title and its terms (author,
+repository, head branch, labels; Linear's team, people and branch); the
+other rows' is empty. A query switches fzf to it (`change-with-nth(6)`,
+back to 5 when empty) and ranks the matches (`--tiebreak index`: ties in
+the rows' order), so the headings go and nothing cut to fit is missed.
+
+A section with more than it shows (GitHub: its search's `pageInfo`;
+Linear: its list's) keeps where its next page starts, and ends in its `m`
+row (`⏎ more · 37 left`). `m` on any of its rows, or enter on that one,
+runs `_items NAME more ID [N]`, which, when the section has more,
+starts `_items NAME page ID [N]` detached: that says `asking…` in
+the asking view's header, reads the page after (`github.Ask`,
+`linear.Ask`), puts its items the section has not got after its own under
+the cache's lock (`page.List.More`: only if the section still ends at the
+cursor it read from, so a refresh between wins), and reloads the views;
+the asking view puts its cursor at N (where the `m` row was: the first
+item read) once its list has loaded (`<sock>.pos`, which its `load`
+event, `_items NAME loaded`, takes: till then fzf keeps the cursor on the
+row it was on). A section's total and age stay its first page's. Pages
+last until the next refresh, which asks for every section's first page
+again. Like home, it outlives installs of weaver:
 it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
 weaver (as home's), the first reload after (`_items NAME chrome`) or the
 view's own check aborts its fzf, and the view execs that weaver's `_items

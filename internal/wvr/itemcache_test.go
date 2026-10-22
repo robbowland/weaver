@@ -143,3 +143,31 @@ func TestRowsKeyed(t *testing.T) {
 		t.Errorf("%d lines", len(seen))
 	}
 }
+
+// A section with more ends in a line that enter (and m) reads them by, a
+// line the cursor rests on; its heading counts what is left.
+func TestMoreLine(t *testing.T) {
+	e := viewEnv(t)
+	now := time.Now()
+	updateGitHub(e, func(c *ghCache) {
+		c.Results = map[github.Kind][]github.Result{github.PRs: {
+			{Section: github.Section{Title: "Queue"}, List: page.List[github.Item]{Total: 1, Items: prs(1), Fetched: now}},
+			{Section: github.Section{Title: "Mine"}, List: page.List[github.Item]{Total: 3, Items: prs(2), Next: "c1", Fetched: now}},
+		}}
+	})
+	var ids, more string
+	for _, l := range strings.Split(strings.TrimSuffix(e.itemRows(githubSource{}), "\n"), "\n") {
+		f := strings.Split(l, "\t")
+		ids += f[0] + "/" + f[2] + "/" + f[3] + " "
+		if f[0] == "m1" {
+			more = reAnsi.ReplaceAllString(f[4], "")
+		}
+	}
+	// A heading or a gap steps to the lines around it the cursor rests on.
+	if ids != "h0//2 i0// g1/2/5 h1/2/5 i1// m1// " {
+		t.Errorf("lines %s", ids)
+	}
+	if strings.TrimSpace(more) != "⏎ more · 2 left" {
+		t.Errorf("more line %q", more)
+	}
+}

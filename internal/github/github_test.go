@@ -9,7 +9,7 @@ import (
 )
 
 func TestQuery(t *testing.T) {
-	q := Query(PRs, 0)
+	q := Query(PRs, Sections[PRs][0], "")
 	for _, want := range []string{`s: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open user-review-requested:@me`,
 		`t: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open assignee:@me -author:@me`,
 		"...pr", "fragment pr on PullRequest", "statusCheckRollup"} {
@@ -17,10 +17,10 @@ func TestQuery(t *testing.T) {
 			t.Errorf("PR query lacks %q", want)
 		}
 	}
-	if q := Query(PRs, 1); !strings.Contains(q, `first: 50, query: "is:pr archived:false is:open review-requested:@me -user-review-requested:@me draft:false`) || strings.Contains(q, "t: search") {
+	if q := Query(PRs, Sections[PRs][1], ""); !strings.Contains(q, `first: 50, query: "is:pr archived:false is:open review-requested:@me -user-review-requested:@me draft:false`) || strings.Contains(q, "t: search") {
 		t.Errorf("Team query: %s", q)
 	}
-	if q := Query(Issues, 1); !strings.Contains(q, `"is:issue archived:false is:open author:@me`) || !strings.Contains(q, "fragment issue on Issue") {
+	if q := Query(Issues, Sections[Issues][1], ""); !strings.Contains(q, `"is:issue archived:false is:open author:@me`) || !strings.Contains(q, "fragment issue on Issue") {
 		t.Errorf("issue query: %s", q)
 	}
 }
@@ -33,7 +33,7 @@ func TestParseMerges(t *testing.T) {
 	}
 	answer := `{"data":{"s":{"issueCount":2,"nodes":[` + pr(1, "2026-10-16T10:00:00Z") + `,` + pr(2, "2026-10-16T09:00:00Z") +
 		`]},"t":{"issueCount":2,"nodes":[` + pr(2, "2026-10-16T09:00:00Z") + `,` + pr(3, "2026-10-16T11:00:00Z") + `]}}}`
-	r, err := Parse(PRs, 0, []byte(answer))
+	r, err := Parse(PRs, Sections[PRs][0], "", []byte(answer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestParse(t *testing.T) {
 	     {"__typename":"StatusContext","context":"ci/legacy","state":"SUCCESS"}]}}}}]}},
 	  {}
 	]}}}`
-	r, err := Parse(PRs, 0, []byte(answer))
+	r, err := Parse(PRs, Sections[PRs][0], "", []byte(answer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestParse(t *testing.T) {
 	if it.Checks != "FAILURE" || strings.Join(it.FailingChecks, " ") != "lint" || it.PassingChecks != 2 || it.RunningChecks != 1 {
 		t.Errorf("checks %s %v %d %d", it.Checks, it.FailingChecks, it.PassingChecks, it.RunningChecks)
 	}
-	if _, err := Parse(PRs, 0, []byte(`{"errors":[{"message":"Bad credentials"}]}`)); err == nil || !strings.Contains(err.Error(), "Bad credentials") {
+	if _, err := Parse(PRs, Sections[PRs][0], "", []byte(`{"errors":[{"message":"Bad credentials"}]}`)); err == nil || !strings.Contains(err.Error(), "Bad credentials") {
 		t.Errorf("an error: %v", err)
 	}
 }
@@ -101,5 +101,53 @@ func TestFetchEachSection(t *testing.T) {
 				t.Errorf("%s %s: %+v", k, r.Title, r)
 			}
 		}
+	}
+}
+
+// A section pages on from where its last page ended; one with a second
+// search pages both, each from its own cursor, leaving out one at its end.
+func TestQueryPages(t *testing.T) {
+	if q := Query(PRs, Sections[PRs][2], "c1"); !strings.Contains(q, `s: search(type: ISSUE, first: 20, after: "c1", query: "is:pr archived:false is:open author:@me`) ||
+		!strings.Contains(q, "issueCount pageInfo { hasNextPage endCursor } nodes") {
+		t.Errorf("Mine's next page: %s", q)
+	}
+	queue := Sections[PRs][0]
+	if q := Query(PRs, queue, "c1 c2"); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
+		t.Errorf("Queue's next page: %s", q)
+	}
+	if q := Query(PRs, queue, "c1 -"); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || strings.Contains(q, "t: search") {
+		t.Errorf("Queue's next page, its second search at its end: %s", q)
+	}
+	if q := Query(PRs, queue, "- c2"); strings.Contains(q, "s: search") || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
+		t.Errorf("Queue's next page, its own search at its end: %s", q)
+	}
+}
+
+// A page says where the next starts: for a section with a second search,
+// both searches' cursors, one at its end marked so, and none once both
+// are.
+func TestParseNext(t *testing.T) {
+	search := func(more bool, cursor string) string {
+		return `{"issueCount":1,"pageInfo":{"hasNextPage":` + strconv.FormatBool(more) + `,"endCursor":"` + cursor + `"},"nodes":[]}`
+	}
+	queue := Sections[PRs][0]
+	for _, c := range []struct {
+		s           Section
+		after, data string
+		next        string
+	}{
+		{queue, "", `{"s":` + search(true, "c1") + `,"t":` + search(false, "x") + `}`, "c1 -"},
+		{queue, "c1 -", `{"s":` + search(false, "c2") + `}`, ""},
+		{queue, "c1 c9", `{"s":` + search(false, "c2") + `,"t":` + search(true, "c10") + `}`, "- c10"},
+		{Sections[PRs][2], "", `{"s":` + search(true, "m1") + `}`, "m1"},
+		{Sections[PRs][2], "m1", `{"s":` + search(false, "m2") + `}`, ""},
+	} {
+		r, err := Parse(PRs, c.s, c.after, []byte(`{"data":`+c.data+`}`))
+		if err != nil || r.Next != c.next {
+			t.Errorf("%s after %q: next %q, %v; want %q", c.s.Title, c.after, r.Next, err, c.next)
+		}
+	}
+	if _, err := Parse(PRs, queue, "c1 c2", []byte(`{"data":{}}`)); err == nil {
+		t.Error("no search answered")
 	}
 }

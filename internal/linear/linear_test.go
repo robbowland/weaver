@@ -74,6 +74,22 @@ func TestFetchSaysMore(t *testing.T) {
 	}
 }
 
+// A section's next page is asked from where its last ended.
+func TestAskPage(t *testing.T) {
+	fakeLinear(t, func(q string, vars map[string]any) string {
+		if vars["after"] == "c30" && strings.Contains(q, "after: $after") {
+			return issues("", "ENG-31")
+		}
+		return issues("c30", "ENG-1")
+	})
+	if r := Ask(Sections[0], ""); r.Err != "" || r.Next != "c30" || r.Items[0].Identifier != "ENG-1" {
+		t.Errorf("the first page: %+v", r)
+	}
+	if r := Ask(Sections[0], "c30"); r.Err != "" || r.Next != "" || r.Items[0].Identifier != "ENG-31" {
+		t.Errorf("the page after: %+v", r)
+	}
+}
+
 // Without a key, every section fails for that reason, and says so itself.
 func TestFetchNoKey(t *testing.T) {
 	noKey(t)

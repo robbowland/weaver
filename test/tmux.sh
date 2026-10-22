@@ -616,6 +616,10 @@ gitc remote add origin https://github.com/o/r.git && gitc config url."$AT/o-r.gi
 gitc fetch -q origin
 cat >"$AT/bin/gh" <<'GH'
 #!/bin/bash
+# pr N TITLE: a pull request of yours, as a search finds it; page COUNT
+# NEXT NODES: a search's answer, NEXT the cursor of the page after.
+pr() { printf '{"number":%s,"title":"%s","body":"","url":"https://github.com/o/r/pull/%s","state":"OPEN","isDraft":false,"author":{"login":"me"},"updatedAt":"2026-10-16T09:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"tidy-%s","baseRefName":"main","isCrossRepository":false,"reviewDecision":"","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}' "$1" "$2" "$1" "$1"; }
+page() { printf '{"data":{"s":{"issueCount":%s,"pageInfo":{"hasNextPage":%s,"endCursor":"%s"},"nodes":[%s]}}}\n' "$1" "$([ -n "$2" ] && echo true || echo false)" "$2" "$3"; }
 case "$1 $2" in
 "pr view") echo '{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","author":{"login":"alice"},"state":"OPEN","headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"comments":[{"author":{"login":"carol"},"body":"Looks good"}]}' ;;
 "api graphql")
@@ -623,6 +627,10 @@ case "$1 $2" in
 	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	# Mine: three pull requests, a page each.
+	*'after: "m2"'*'is:pr archived:false is:open author:@me'*) page 3 "" "$(pr 48 'Tidy the rest')"; exit ;;
+	*'after: "m1"'*'is:pr archived:false is:open author:@me'*) page 3 m2 "$(pr 47 'Tidy more')"; exit ;;
+	*'is:pr archived:false is:open author:@me'*) page 3 m1 "$(pr 46 'Tidy up')"; exit ;;
 	*'search(type: ISSUE'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'{pullRequest(number:$n){reviewThreads('*) echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"isResolved":false,"isOutdated":false,"path":"flag","line":1,"comments":{"nodes":[{"author":{"login":"bob"},"body":"Name it --who"}]}},{"isResolved":true,"isOutdated":false,"path":"x","line":2,"comments":{"nodes":[{"author":{"login":"bob"},"body":"a resolved one"}]}}]}}}}}'; exit ;;
 	esac
@@ -696,6 +704,20 @@ ok "GITHUB: / searches the number, the whole title, author, repository and branc
 key 1b # esc: the sections again
 waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "QUEUE · 1"'
 ok "...esc: the sections again" "$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "1"
+# More than a section shows: its last line reads the next page (enter, the
+# cursor on the first it read), and m on any of its lines the one after.
+v900() { tx capture-pane -p -t "=$S:900"; }
+key 47 # G: the last line, Mine's more
+waitfor 'v900 | grep -q "MINE · 1 of 3" && v900 | grep -q "⏎ more · 2 left"'
+ok "GITHUB: a section with more, counted, ends in a line to read them" "$(v900 | grep -c 'MINE · 1 of 3')|$(v900 | grep -c '⏎ more · 2 left')" "1|1"
+key 0d # enter
+waitfor 'v900 | grep -q "MINE · 2 of 3" && [ "$(v900 | grep -c "Tidy more")" = 2 ]'
+ok "...enter on it reads the next page, the cursor on its first" "$(v900 | grep -c 'MINE · 2 of 3')|$(v900 | grep -c 'Tidy more')|$(v900 | grep -c '1 left')" "1|2|1"
+key 6d # m
+waitfor 'v900 | grep -q "MINE · 3" && v900 | grep -q "Tidy the rest"'
+ok "...m on one of its items, the page after" "$(v900 | grep -c 'MINE · 3 ')|$(v900 | grep -c 'Tidy the rest')|$(v900 | grep -c '⏎ more')" "1|1|0"
+key 67 # g: back to the first
+waitfor '[ "$(v900 | grep -c "Add a flag")" = 2 ]'
 click 3 50
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
 ok "...THREADS: home" "$(where | cut -d ' ' -f 1)" "0"

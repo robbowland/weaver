@@ -39,8 +39,12 @@ type itemSource interface {
 	label(kind string) string
 	// read is what the service said last, from its cache.
 	read(e *Env) itemData
-	// fetch asks the service again and keeps the answer.
+	// fetch asks the service again and keeps the answer: each section's
+	// first page.
 	fetch(e *Env)
+	// more reads the page after section key's of kind, and keeps it after
+	// the section's items until the next fetch.
+	more(e *Env, kind, key string)
 	// service is where the items live: GitHub, Linear.
 	service() string
 	// guide is what its ? card says of its sections (Queue, Team, Mine,
@@ -64,13 +68,25 @@ type itemData struct {
 // itemSection is a section's items, how many there are in all (0: the
 // service does not say), whether there are more to read, when they were
 // read (zero: never) and why asking for them failed last ("": it did not).
+// key is what its source's more names it by.
 type itemSection struct {
+	key     string
 	title   string
 	total   int
 	more    bool
 	items   []viewItem
 	fetched time.Time
 	err     string
+}
+
+// section is kind's section key.
+func (d itemData) section(kind, key string) (itemSection, bool) {
+	for _, s := range d.sections[kind] {
+		if s.key == key {
+			return s, true
+		}
+	}
+	return itemSection{}, false
 }
 
 // asOf is when what the view shows of kind was read: its oldest section's
@@ -313,14 +329,16 @@ func (e *Env) reloadItems(src itemSource) {
 }
 
 // itemRows are the view's lines for fzf, a section at a time under its
-// heading: id ref prev next display search. Headings and the gaps between
-// are not items (prev and next are the items around them, for the cursor to
-// step over them). ref is what fzf keeps the cursor on across a reload
+// heading: id ref prev next display search. id is the line's kind and its
+// section's key: h a heading, g the gap before one, i an item, m the line
+// after a section's items when it has more (enter reads them). Headings
+// and gaps are not for the cursor (prev and next are the lines around them
+// it can rest on). ref is what fzf keeps the cursor on across a reload
 // (--id-nth): an item's ref, another line's id after a '-'; never empty,
 // since fzf blocks until it finds the line it was on, and a line of no key
 // it never finds. search is the line a search shows and matches: the
-// item's number, its whole title and its terms, none of it cut to fit; a
-// heading's and a gap's is empty, so they go while you search.
+// item's number, its whole title and its terms, none of it cut to fit; the
+// other lines' is empty, so they go while you search.
 func (e *Env) itemRows(src itemSource) string {
 	d := src.read(e)
 	ts := e.itemThreads()
@@ -340,15 +358,15 @@ func (e *Env) itemRows(src itemSource) string {
 	}
 	wf, ww = min(wf, 22), min(ww, 24)
 	wt := max(w-2-1-3-2-wf-2-ww-2-3, 12)
-	for i, s := range sections {
+	for _, s := range sections {
 		// An empty section goes, but one that failed: it may not be empty.
 		if len(s.items) == 0 && s.err == "" {
 			continue
 		}
 		if len(ls) > 0 {
-			ls = append(ls, line{id: "g" + strconv.Itoa(i)})
+			ls = append(ls, line{id: "g" + s.key})
 		}
-		ls = append(ls, line{id: "h" + strconv.Itoa(i), text: s.heading()})
+		ls = append(ls, line{id: "h" + s.key, text: s.heading()})
 		for _, it := range s.items {
 			num, cell := "  ", "   "
 			if t, ok := threadOf(ts, it); ok {
@@ -358,21 +376,29 @@ func (e *Env) itemRows(src itemSource) string {
 				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
 			search := CDim + num + COff + " " + cell + "  " + it.key + "  " + oneline.Line(it.title) + "  " +
 				CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
-			ls = append(ls, line{id: "i" + strconv.Itoa(len(ls)), ref: it.ref, text: text, search: search})
+			ls = append(ls, line{id: "i" + s.key, ref: it.ref, text: text, search: search})
+		}
+		if s.more {
+			left := ""
+			if s.total > len(s.items) {
+				left = " · " + strconv.Itoa(s.total-len(s.items)) + " left"
+			}
+			ls = append(ls, line{id: "m" + s.key, text: "       " + CGrey + "⏎" + COff + CDim + " more" + left + COff})
 		}
 	}
+	rests := func(id string) bool { return id[0] == 'i' || id[0] == 'm' }
 	var b strings.Builder
 	for i, l := range ls {
 		prev, next := "", ""
-		if l.id[0] != 'i' {
+		if !rests(l.id) {
 			for j := i - 1; j >= 0; j-- {
-				if ls[j].id[0] == 'i' {
+				if rests(ls[j].id) {
 					prev = strconv.Itoa(j + 1)
 					break
 				}
 			}
 			for j := i + 1; j < len(ls); j++ {
-				if ls[j].id[0] == 'i' {
+				if rests(ls[j].id) {
 					next = strconv.Itoa(j + 1)
 					break
 				}
@@ -385,6 +411,15 @@ func (e *Env) itemRows(src itemSource) string {
 		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\t%s\n", l.id, ref, prev, next, l.text, l.search)
 	}
 	return b.String()
+}
+
+// rowKey is the key of the section that line id (itemRows') is of; "" for
+// none.
+func rowKey(id string) string {
+	if id == "" {
+		return ""
+	}
+	return id[1:]
 }
 
 // itemLabel is the view's border label, as the board's: what it shows and
@@ -486,6 +521,9 @@ func (e *Env) itemMenu(src itemSource, k string) []menuItem {
 	}
 	if searching() {
 		return ms
+	}
+	if s, ok := src.read(e).section(e.itemKind(src), rowKey(k)); ok && s.more {
+		ms = append(ms, menuItem{"more of " + strings.ToLower(s.title), "m", "m"})
 	}
 	if len(ms) > 0 {
 		ms = append(ms, menuItem{})
@@ -592,6 +630,7 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("alt+m", "a read-only thread:", gd.readOnly) +
 		key("j k  g G", "move; first, last", "") +
 		key("o", "open it in "+src.service(), "") +
+		key("m", "more of its section", "(⏎ on the section's last line)") +
 		key("/", "search", "(esc: back)")
 	if len(src.kinds()) > 1 {
 		out += key("s", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
@@ -640,13 +679,56 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 
 // itemKeys are the view's keys while browsing; searching (/) unbinds them so
 // they type.
-const itemKeys = "j,k,g,G,o,s,q,?"
+const itemKeys = "j,k,g,G,o,s,m,q,?"
+
+// itemMore is what m (and enter on a section's last line, at fzf's index n
+// of it) does: when the section line id is of has more, read its next page
+// behind the view (`_items NAME page`).
+func (e *Env) itemMore(src itemSource, id, n string) {
+	if s, ok := src.read(e).section(e.itemKind(src), rowKey(id)); !ok || !s.more {
+		return
+	}
+	c := exec.Command(e.Self, "_items", src.name(), "page", id, n)
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	bestEffort(c.Start())
+}
+
+// itemPage reads the next page of the section line id is of, the view that
+// asked saying it asks, and has every view show it; the view that asked
+// from the section's last line (at index n) puts its cursor where that line
+// was, on the first item it read, once the list has loaded (`<sock>.pos`,
+// itemLoaded: till then fzf keeps the cursor on the line it was on).
+func (e *Env) itemPage(src itemSource, id, n string) {
+	asker := os.Getenv("WEAVER_VIEW_SOCK")
+	if asker != "" {
+		session.FzfPost(asker, "change-header("+asking+")")
+	}
+	src.more(e, e.itemKind(src), rowKey(id))
+	if i, ok := atoi(n); ok && asker != "" && strings.HasPrefix(id, "m") {
+		bestEffort(os.WriteFile(asker+".pos", []byte(strconv.Itoa(i+1)+"\n"), 0o600))
+	}
+	e.reloadItems(src)
+}
+
+// itemLoaded is what a view does as its list loads: its chrome, and the
+// cursor where a page read asked for it (`<sock>.pos`).
+func (e *Env) itemLoaded(src itemSource) string {
+	out := e.itemChrome(src)
+	s := os.Getenv("WEAVER_VIEW_SOCK")
+	if p, err := files.FirstLine(s + ".pos"); err == nil && s != "" {
+		os.Remove(s + ".pos")
+		if n, ok := atoi(p); ok {
+			out = strings.TrimSuffix(out, "\n") + "+pos(" + strconv.Itoa(n) + ")\n"
+		}
+	}
+	return out
+}
 
 // Items is `wvr _items NAME [rows|chrome|card REF|from REF [--review]|open
-// REF|switch|help|fetch|fetch-bg]`: view NAME (github, linear), for good
-// (ctrl-c starts it again), and what its fzf runs. It shows what the
-// service said last at once, and asks again behind it when that is more
-// than 2 minutes old, and every 5 minutes it is open.
+// REF|switch|help|fetch|fetch-bg|more ID [N]|page ID [N]]`: view NAME
+// (github, linear), for good (ctrl-c starts it again), and what its fzf
+// runs. It shows what the service said last at once, and asks again behind
+// it when that is more than 2 minutes old, and every 5 minutes it is open.
 func (e *Env) Items(args []string) error {
 	src, ok := itemSourceOf(firstArg(args))
 	if !ok {
@@ -661,7 +743,7 @@ func (e *Env) Items(args []string) error {
 	case "rows":
 		fmt.Print(e.itemRows(src))
 		return nil
-	case "chrome":
+	case "chrome", "loaded":
 		// A newer weaver installed since the view started: it ends, for the
 		// view to start again in that weaver, as the home board does.
 		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
@@ -670,7 +752,11 @@ func (e *Env) Items(args []string) error {
 				return nil
 			}
 		}
-		fmt.Print(e.itemChrome(src))
+		if sub == "loaded" {
+			fmt.Print(e.itemLoaded(src))
+		} else {
+			fmt.Print(e.itemChrome(src))
+		}
 		return nil
 	case "card":
 		fmt.Print(e.itemCard(src, ref))
@@ -709,6 +795,12 @@ func (e *Env) Items(args []string) error {
 		c := exec.Command(e.Self, "_items", src.name(), "fetch")
 		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		return c.Start()
+	case "more":
+		e.itemMore(src, ref, arg(args, 2))
+		return nil
+	case "page":
+		e.itemPage(src, ref, arg(args, 2))
+		return nil
 	case "":
 	default:
 		return fmt.Errorf("no _items %s %s", src.name(), sub)
@@ -739,6 +831,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
 	defer os.Remove(sock)
 	defer os.Remove(sock + ".help")
+	defer os.Remove(sock + ".pos")
 	defer os.Remove(sock + ".born")
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
@@ -767,15 +860,19 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	act := func(cmd string) string {
 		return "transform:case {1} in i*) echo 'execute-silent(" + me + " " + cmd + " {2})' ;; esac"
 	}
-	fromAct, reviewAct := act("from"), "transform:case {1} in i*) echo 'execute-silent("+me+" from {2} --review)' ;; esac"
+	fromAct, reviewAct := "execute-silent("+me+" from {2})", "execute-silent("+me+" from {2} --review)"
 	backAct := "execute-silent(" + q + " go back)"
 	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+me+" menu {1})"
 	if peek != "" {
 		// In the popover, what opens a dialog or goes elsewhere ends it.
-		fromAct = "transform:case {1} in i*) echo 'print(from)+accept' ;; esac"
-		reviewAct = "transform:case {1} in i*) echo 'print(review)+accept' ;; esac"
+		fromAct, reviewAct = "print(from)+accept", "print(review)+accept"
 		backAct, nextAct, prevAct, menuAct = "abort", "print(next)+accept", "print(prev)+accept", "ignore"
 	}
+	// Alt N on an item, its thread; enter too, and on a section's last
+	// line, its next page.
+	threadAct := "transform:case {1} in i*) echo '" + fromAct + "' ;; esac"
+	enterAct := "transform:case {1} in i*) echo '" + fromAct + "' ;; m*) echo 'execute-silent(" + me + " more {1} {n})' ;; esac"
+	reviewAct = "transform:case {1} in i*) echo '" + reviewAct + "' ;; esac"
 	for {
 		rows := e.itemRows(src)
 		// The cursor on the first item, not its section's heading.
@@ -805,12 +902,14 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--scrollbar", "│", "--color", FzfColors,
 			"--prompt", "/ ", "--ghost", "search", "--info", "hidden", "--no-separator",
 			"--preview", me + " card {2}", "--preview-window", pw,
-			"--bind", "load:transform(" + me + " chrome)",
-			"--bind", `focus:transform:case {1} in i*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
+			"--bind", "load:transform(" + me + " loaded)",
+			"--bind", `focus:transform:case {1} in i*|m*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={3}; [ -n "$t" ] || t={4} ;; *) t={4}; [ -n "$t" ] || t={3} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last",
-			"--bind", "enter,double-click,alt-N,alt-n:" + fromAct,
+			"--bind", "enter,double-click:" + enterAct,
+			"--bind", "alt-N,alt-n:" + threadAct,
 			"--bind", "alt-m:" + reviewAct,
 			"--bind", "o:" + act("open"),
+			"--bind", "m:execute-silent(" + me + " more {1})",
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			// q and esc: back to your thread, as on home.

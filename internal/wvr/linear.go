@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/linear"
+	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -89,8 +91,8 @@ func updateLinear(e *Env, change func(*linCache)) {
 func (linearSource) read(e *Env) itemData {
 	c := readLinear(e)
 	d := itemData{sections: map[string][]itemSection{}}
-	for _, r := range c.Results {
-		s := itemSection{title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
+	for i, r := range c.Results {
+		s := itemSection{key: strconv.Itoa(i), title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
 		for _, it := range r.Items {
 			s.items = append(s.items, linItem(it))
 		}
@@ -103,6 +105,29 @@ func (linearSource) read(e *Env) itemData {
 func (linearSource) fetch(e *Env) {
 	got := linear.Fetch()
 	updateLinear(e, func(c *linCache) { c.refreshed(got) })
+}
+
+// more reads the page after section key's (its index), and keeps it
+// (paged).
+func (linearSource) more(e *Env, _, key string) {
+	rs := readLinear(e).Results
+	i, ok := atoi(key)
+	if !ok || i >= len(rs) || rs[i].Next == "" {
+		return
+	}
+	s, after := rs[i].Section, rs[i].Next
+	p := linear.Ask(s, after)
+	updateLinear(e, func(c *linCache) { c.paged(s, after, p.List) })
+}
+
+// paged is c with p, the page of section s read after cursor after, after
+// that section's issues, if it still ends there.
+func (c *linCache) paged(s linear.Section, after string, p page.List[linear.Issue]) {
+	for i, r := range c.Results {
+		if r.Section == s {
+			c.Results[i].List = r.List.More(after, p, func(it linear.Issue) string { return it.Identifier })
+		}
+	}
 }
 
 // linPriority is an issue's priority as a signal: urgent and high stand out.

@@ -147,22 +147,62 @@ fragment issue on Issue {
   assignees(first: 3) { nodes { login } }
 }`
 
-// Query is the request for section i of kind k.
-func Query(k Kind, i int) string {
+// Query is the request for section s of kind k: its page after cursor
+// after ("": its first).
+func Query(k Kind, s Section, after string) string {
 	is, frag, fields := "is:pr", "pr", prFields
 	if k == Issues {
 		is, frag, fields = "is:issue", "issue", issueFields
 	}
-	s := Sections[k][i]
-	search := func(alias, filters string) string {
+	search := func(alias, filters, after string) string {
 		q, _ := json.Marshal(is + " archived:false " + filters)
-		return fmt.Sprintf("  %s: search(type: ISSUE, first: %d, query: %s) { issueCount nodes { ...%s } }\n", alias, s.limit(), q, frag)
+		from := ""
+		if after != "" {
+			a, _ := json.Marshal(after)
+			from = ", after: " + string(a)
+		}
+		return fmt.Sprintf("  %s: search(type: ISSUE, first: %d%s, query: %s) { issueCount pageInfo { hasNextPage endCursor } nodes { ...%s } }\n",
+			alias, s.limit(), from, q, frag)
 	}
-	body := search("s", s.Filters)
-	if s.Also != "" {
-		body += search("t", s.Also)
+	body := ""
+	sa, ta := s.cursors(after)
+	if sa != ended {
+		body += search("s", s.Filters, sa)
+	}
+	if s.Also != "" && ta != ended {
+		body += search("t", s.Also, ta)
 	}
 	return "query {\n" + body + "}\n" + fields + "\n"
+}
+
+// ended is a search's cursor once it has no more pages, in a section's
+// pair of them.
+const ended = "-"
+
+// cursors are the cursors of section s's searches, its own and its second
+// one's, in after, the section's: a section with a second search pages
+// both, its cursor the pair (ended for one at its end).
+func (s Section) cursors(after string) (string, string) {
+	if s.Also == "" || after == "" {
+		return after, ""
+	}
+	sa, ta, _ := strings.Cut(after, " ")
+	return sa, ta
+}
+
+// next is section s's cursor after a page whose searches end at sa and ta
+// ("": at their end), none when both are at their end.
+func (s Section) next(sa, ta string) string {
+	if s.Also == "" || sa == "" && ta == "" {
+		return sa
+	}
+	if sa == "" {
+		sa = ended
+	}
+	if ta == "" {
+		ta = ended
+	}
+	return sa + " " + ta
 }
 
 type login struct {
@@ -267,12 +307,17 @@ func (n node) item(k Kind) Item {
 	return it
 }
 
-// Parse reads the response to Query(k, i): that section's result.
-func Parse(k Kind, i int, b []byte) (Result, error) {
-	r := Result{Section: Sections[k][i]}
+// Parse reads the response to Query(k, s, after): that page of the
+// section.
+func Parse(k Kind, s Section, after string, b []byte) (Result, error) {
+	r := Result{Section: s}
 	type search struct {
-		IssueCount int    `json:"issueCount"`
-		Nodes      []node `json:"nodes"`
+		IssueCount int `json:"issueCount"`
+		PageInfo   struct {
+			HasNextPage bool   `json:"hasNextPage"`
+			EndCursor   string `json:"endCursor"`
+		} `json:"pageInfo"`
+		Nodes []node `json:"nodes"`
 	}
 	var resp struct {
 		Data struct {
@@ -286,12 +331,19 @@ func Parse(k Kind, i int, b []byte) (Result, error) {
 	if err := json.Unmarshal(b, &resp); err != nil {
 		return r, fmt.Errorf("github: %w", err)
 	}
-	if resp.Data.S == nil {
+	if resp.Data.S == nil && resp.Data.T == nil {
 		if len(resp.Errors) > 0 {
 			return r, errors.New("github: " + resp.Errors[0].Message)
 		}
 		return r, errors.New("github: no search in the answer")
 	}
+	next := func(s *search) string {
+		if s == nil || !s.PageInfo.HasNextPage {
+			return ""
+		}
+		return s.PageInfo.EndCursor
+	}
+	r.Next = s.next(next(resp.Data.S), next(resp.Data.T))
 	// The section's own search, then its second one's items it has not got
 	// (an item can match both), most recently updated first; the total, as
 	// many as both match, less those both returned.
@@ -336,17 +388,7 @@ func Fetch() map[Kind][]Result {
 	for _, k := range []Kind{PRs, Issues} {
 		for i := range Sections[k] {
 			n++
-			go func() {
-				b, err := gh(Query(k, i))
-				a := answer{k: k, i: i}
-				if err == nil {
-					a.r, err = Parse(k, i, b)
-				}
-				if err != nil {
-					a.r = Result{Section: Sections[k][i], List: page.Failed[Item](err)}
-				}
-				ch <- a
-			}()
+			go func() { ch <- answer{k, i, Ask(k, Sections[k][i], "")} }()
 		}
 	}
 	out := map[Kind][]Result{PRs: make([]Result, len(Sections[PRs])), Issues: make([]Result, len(Sections[Issues]))}
@@ -355,6 +397,20 @@ func Fetch() map[Kind][]Result {
 		out[a.k][a.i] = a.r
 	}
 	return out
+}
+
+// Ask asks GitHub for section s of kind k, its page after cursor after
+// ("": its first): what it found, or why asking failed.
+func Ask(k Kind, s Section, after string) Result {
+	b, err := gh(Query(k, s, after))
+	var r Result
+	if err == nil {
+		r, err = Parse(k, s, after, b)
+	}
+	if err != nil {
+		return Result{Section: s, List: page.Failed[Item](err)}
+	}
+	return r
 }
 
 // gh runs a GraphQL query through gh, within 30 s.

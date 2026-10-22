@@ -364,6 +364,16 @@ can supersede an earlier one, and says so.
   match weaver's labels, `WEAVER :: THREADS`), so a review and work on the
   same item read apart on the board; the name row shows the prefix, so it
   is yours to keep or drop.
+- 2026-10-22: A section shows more than its cap a page at a time (Rob:
+  "There should be a way to get more than the cap"), not a bigger cap: a
+  search costs about a second whatever its size, and the caps keep the
+  first look fast. `m` (more; free in the views, and no window manager
+  takes it) reads the next page of the section under the cursor, and the
+  line after a section's items, `⏎ more`, is its button. Pages last until
+  the next refresh, which asks for first pages again: a refresh's answer
+  stays what each section is, and a page read before it is never mixed
+  with one after (a page is kept only if its section still ends where it
+  was read from). Linear counts no list, so its heading says `30+`.
 
 ## Lost threads
 

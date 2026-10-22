@@ -9,6 +9,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -98,8 +99,8 @@ func (githubSource) read(e *Env) itemData {
 	c := readGitHub(e)
 	d := itemData{sections: map[string][]itemSection{}}
 	for k, rs := range c.Results {
-		for _, r := range rs {
-			s := itemSection{title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
+		for i, r := range rs {
+			s := itemSection{key: strconv.Itoa(i), title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
 			for _, it := range r.Items {
 				s.items = append(s.items, ghItem(it))
 			}
@@ -113,6 +114,30 @@ func (githubSource) read(e *Env) itemData {
 func (githubSource) fetch(e *Env) {
 	got := github.Fetch()
 	updateGitHub(e, func(c *ghCache) { c.refreshed(got) })
+}
+
+// more reads the page after section key's (its index) of kind, and keeps
+// it (paged).
+func (githubSource) more(e *Env, kind, key string) {
+	k := github.Kind(kind)
+	rs := readGitHub(e).Results[k]
+	i, ok := atoi(key)
+	if !ok || i >= len(rs) || rs[i].Next == "" {
+		return
+	}
+	s, after := rs[i].Section, rs[i].Next
+	p := github.Ask(k, s, after)
+	updateGitHub(e, func(c *ghCache) { c.paged(k, s, after, p.List) })
+}
+
+// paged is c with p, the page of section s of kind k read after cursor
+// after, after that section's items, if it still ends there.
+func (c *ghCache) paged(k github.Kind, s github.Section, after string, p page.List[github.Item]) {
+	for i, r := range c.Results[k] {
+		if r.Section == s {
+			c.Results[k][i].List = r.List.More(after, p, github.Item.Ref)
+		}
+	}
 }
 
 // ghItem is a pull request or issue as the view shows it.

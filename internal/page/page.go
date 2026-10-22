@@ -34,3 +34,33 @@ func (l List[I]) Since(before List[I]) List[I] {
 	before.Err = l.Err
 	return before
 }
+
+// More is l with p, the page read after cursor after: its items l has not
+// got (id names one), in their order, and where the page after it starts;
+// l's total and age stay its first page's. A page that failed leaves the
+// items as they were, with its error; one read after another cursor than
+// l's next is not l's (a refresh came between), and leaves l as it was.
+func (l List[I]) More(after string, p List[I], id func(I) string) List[I] {
+	if after == "" || after != l.Next {
+		return l
+	}
+	if p.Err != "" {
+		l.Err = p.Err
+		return l
+	}
+	seen := make(map[string]bool, len(l.Items))
+	for _, it := range l.Items {
+		seen[id(it)] = true
+	}
+	for _, it := range p.Items {
+		if k := id(it); !seen[k] {
+			seen[k] = true
+			l.Items = append(l.Items, it)
+		}
+	}
+	l.Next, l.Err = p.Next, ""
+	if l.Total > 0 {
+		l.Total = max(l.Total, len(l.Items))
+	}
+	return l
+}
