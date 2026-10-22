@@ -154,10 +154,12 @@ func (e *Env) ls(peek, at string) (string, error) {
 		clean()
 		os.Remove(base + ".born")
 	}()
-	// The home board outlives installs of weaver: when it started, for
-	// _chrome to tell that a newer weaver is installed under it.
+	// The home board outlives installs of weaver (installs.go): when it
+	// started and from which, for _chrome to tell that a newer weaver is
+	// installed under it.
 	if home {
-		os.WriteFile(base+".born", nil, 0o644)
+		e.markBorn(base + ".born")
+		e.watchInstalls(base+".born", sock)
 		// The status line's strip and counts as this weaver draws them (and
 		// clicks them): an install may have changed that under a running
 		// session, whose home board then starts again in it.
@@ -258,9 +260,9 @@ func (e *Env) ls(peek, at string) (string, error) {
 			t.Close()
 			// A newer weaver is installed (_chrome ended the board for it):
 			// the board starts again in it, whose keys know its rows.
-			if newer(e.Self, base+".born") {
+			if next, ok := e.successor(base + ".born"); ok {
 				os.Remove(base + ".born")
-				syscall.Exec(e.Self, []string{e.Self, "ls"}, os.Environ())
+				syscall.Exec(next, []string{next, "ls"}, os.Environ())
 			}
 			time.Sleep(200 * time.Millisecond)
 			continue

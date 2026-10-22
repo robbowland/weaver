@@ -222,6 +222,17 @@ can supersede an earlier one, and says so.
   turns fzf's names into labels and a clicked label back into fzf's name.
   Alt R in a view, bound with and without Shift, is written `alt+r`, as the
   form's read-only switch is.
+- 2026-10-22: The home board and the views start again in the weaver `wvr`
+  resolves to now, not when the file at the path they started from changes.
+  That missed a switch between installs (Homebrew's `bin/wvr`, and
+  `install.sh`'s `~/.local/bin/wvr` ahead of it on PATH): the started
+  path's file never changed, so a view kept the old weaver's keys under the
+  new one's rows, and removing `~/.local/bin/wvr` left its keys running a
+  binary that had gone. tmux's keys and the hooks run `wvr` from PATH
+  already, so the board and views follow the weaver they do. `.born` keeps
+  the real path a board started as: a switch either way is another file, an
+  upgrade in place a newer one. A board's keys cannot run once their binary
+  has gone, so its own process checks too, every 5 s (a few stats).
 
 ## Threads
 

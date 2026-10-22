@@ -45,7 +45,9 @@ chmod +x "$AT/bin/claude"
 # weaver: the binary built from this checkout, its files unpacked here.
 (cd "$ROOT" && go build -o "$AT/bin/wvr" ./cmd/wvr) || exit 1
 export XDG_DATA_HOME=$AT/data
-export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
+# $AT/bin2, ahead of it and empty: where a test installs weaver again.
+mkdir -p "$AT/bin2"
+export PATH="$AT/bin2:$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
 
 pass=0 fail=0
@@ -667,6 +669,17 @@ tx run-shell -t "=$S:" "wvr _items github fetch >/dev/null 2>&1"
 waitfor '[ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ]' 100
 ok "GITHUB: a newer weaver installed, the view starts again in it at its next reload" \
 	"$([ -n "$old" ] && [ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ] && echo again)|$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "again|1"
+# weaver installed ahead on PATH (install.sh's over Homebrew's): the view
+# starts again in that one; that one removed, in the one wvr finds then,
+# though its keys' binary is gone (the view sees to it itself).
+vcmd() { ps -o command= -p "$(tx display -p -t "=$S:900" '#{pane_pid}')"; }
+cp "$AT/bin/wvr" "$AT/bin2/wvr"
+tx run-shell -t "=$S:" "wvr _items github fetch >/dev/null 2>&1"
+waitfor '[ "$(vcmd)" = "$AT/bin2/wvr _items github" ]' 100
+ok "GITHUB: weaver installed ahead on PATH, the view starts again in that one" "$(vcmd)" "$AT/bin2/wvr _items github"
+rm "$AT/bin2/wvr"
+waitfor '[ "$(vcmd)" = "$AT/bin/wvr _items github" ] && tx capture-pane -p -t "=$S:900" | grep -q "QUEUE · 1"' 120
+ok "...that one removed, in the one wvr finds then" "$(vcmd)|$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "$AT/bin/wvr _items github|1"
 ok "...the strip of them on home, home in ink" "$(tx display -p -t "=$S:0" '#{T:status-left}')" \
 	" #[range=user|home]#[fg=#ffffff]THREADS#[norange]   #[range=user|github]#[fg=#616161]GITHUB#[norange]   #[range=user|linear]#[fg=#616161]LINEAR#[norange]"
 click 14 50 # GITHUB, on the status line

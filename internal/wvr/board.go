@@ -832,9 +832,11 @@ func HF() string {
 func (e *Env) Chrome() string {
 	base := sockBase()
 	// The home board, with a newer weaver installed since it started: it
-	// ends, for the board to start again in that weaver.
-	if os.Getenv("LS_HOME") != "" && files.Exists(base+".born") && newer(e.Self, base+".born") {
-		return "abort\n"
+	// ends, for the board to start again in that weaver (installs.go).
+	if os.Getenv("LS_HOME") != "" {
+		if _, ok := e.successor(base + ".born"); ok {
+			return "abort\n"
+		}
 	}
 	out := ""
 	if hf := HF(); hf != "" {
@@ -848,16 +850,6 @@ func (e *Env) Chrome() string {
 	}
 	label, _ := files.FirstLine(base + ".label")
 	return out + "change-border-label:" + label + "\n"
-}
-
-// newer: is a's modification time after b's (test -nt)?
-func newer(a, b string) bool {
-	sa, err1 := os.Stat(a)
-	sb, err2 := os.Stat(b)
-	if err1 != nil || err2 != nil {
-		return err1 == nil && err2 != nil
-	}
-	return sa.ModTime().After(sb.ModTime())
 }
 
 // gitTurn asks git about a snapshot commit: its turn and point (trailers),

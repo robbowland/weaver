@@ -765,12 +765,18 @@ else weaver's.
 - **Home:** `wvr home`, in window 0, is the dashboard at full size that
   never ends: enter, digits and `e` go to a thread and leave it running, `n`
   runs `wvr new` inside it (also on an empty board), `q` and `esc` go back
-  to the window you came from, as alt+y does. It outlives installs of weaver,
-  so it touches `<skey>.fzf.<pid>.born` as it starts; the first reload after a
-  newer weaver is installed runs that weaver's `_rows` and `_chrome`, and
-  `_chrome`, seeing the binary newer than `.born`, aborts the board, which
-  then execs the new weaver's board (`LS_HOME=1 weaver ls`) in the same pane
-  and process. Its old keys never meet rows they do not know. The PR and
+  to the window you came from, as alt+y does. It outlives installs of weaver
+  (`installs.go`), so it writes `<skey>.fzf.<pid>.born` as it starts: its
+  time is when, and it holds the real path of the binary it runs. It starts
+  again in the weaver `wvr` resolves to on `$PATH` (else its own), as tmux's
+  keys and the hooks run it, once that is another file than the one in
+  `.born` (an upgrade; Homebrew's and `install.sh`'s `~/.local/bin/wvr`
+  swapped, either way) or one changed since: `_chrome`, on the first reload
+  after, aborts the board, which then execs that weaver's board (`LS_HOME=1
+  wvr ls`) in the same pane and process. The board's own process asks too,
+  every 5 s, and aborts its fzf through its socket: its keys cannot once the
+  binary they run by has gone. Its old keys never meet rows they do not
+  know. The PR and
   issue Inbox, when it comes, is a second window beside home, out of the
   thread numbering.
 - **alt+y:** `wvr go home` (run in the pane's directory). From a thread, a
@@ -927,10 +933,10 @@ Linear's team, people and branch); a heading's and a gap's is empty. A
 query switches fzf to it (`change-with-nth(6)`, back to 5 when empty) and
 ranks the matches (`--tiebreak index`: ties in the rows' order), so the
 headings go and nothing cut to fit is missed. Like home, it outlives installs of weaver:
-it touches `<sock>.born` as it starts, and the first reload after a newer
-weaver is installed (`_items NAME chrome`, seeing the binary newer) aborts
-its fzf, and the view execs the new weaver's `_items NAME` in the same pane
-and process, which asks as that weaver asks. A section's requests go at once, and one that
+it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
+weaver (as home's), the first reload after (`_items NAME chrome`) or the
+view's own check aborts its fzf, and the view execs that weaver's `_items
+NAME` in the same pane and process, which asks as that weaver asks. A section's requests go at once, and one that
 fails keeps what it had. A row shows the thread the item has: its item's
 ref, else its branch, as the item's thread would name it
 (`items.Item.BranchName`: a pull request's head, `pr-N` for one from a

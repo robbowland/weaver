@@ -591,9 +591,11 @@ func (e *Env) Items(args []string) error {
 	case "chrome":
 		// A newer weaver installed since the view started: it ends, for the
 		// view to start again in that weaver, as the home board does.
-		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".born") && newer(e.Self, s+".born") {
-			fmt.Print("abort\n")
-			return nil
+		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
+			if _, ok := e.successor(s + ".born"); ok {
+				fmt.Print("abort\n")
+				return nil
+			}
 		}
 		fmt.Print(e.itemChrome(src))
 		return nil
@@ -673,10 +675,12 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		os.Remove(sock + ".born")
 		os.Exit(129)
 	}()
-	// The view outlives installs of weaver: when it started, for chrome to
-	// tell that a newer weaver is installed under it.
+	// The view outlives installs of weaver (installs.go): when it started
+	// and from which, for chrome to tell that a newer weaver is installed
+	// under it.
 	if peek == "" {
-		bestEffort(os.WriteFile(sock+".born", nil, 0o600))
+		e.markBorn(sock + ".born")
+		e.watchInstalls(sock+".born", sock)
 	}
 	refresh := func() {
 		src.fetch(e)
@@ -775,10 +779,10 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		_ = t.Close() // opened only to see that there is one
 		// A newer weaver is installed (chrome ended the view for it): the
 		// view starts again in it, asking as it asks.
-		if newer(e.Self, sock+".born") {
+		if next, ok := e.successor(sock + ".born"); ok {
 			os.Remove(sock)
 			os.Remove(sock + ".born")
-			return "", syscall.Exec(e.Self, []string{e.Self, "_items", src.name()}, os.Environ())
+			return "", syscall.Exec(next, []string{next, "_items", src.name()}, os.Environ())
 		}
 		time.Sleep(200 * time.Millisecond)
 	}

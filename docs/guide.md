@@ -174,8 +174,8 @@ description. In a view, `s` switches GITHUB between pull requests and issues,
 number, whole title, author, repository, branch and labels; for Linear, its
 team and people), best match first, and `ctrl+r` asks again. Each
 view refreshes every 5 minutes and shows what it last heard straight away;
-after you upgrade weaver, it restarts in the new version at its next
-refresh, as home does.
+after you upgrade weaver, it restarts in the new version, as home does
+([Upgrading](#upgrading)).
 
 ### A thread from an item
 
@@ -543,8 +543,10 @@ and each sign-in is offered.
 robbowland/kegs/weaver` installs what is on main, unreleased.
 
 After an upgrade, a running weaver session reads weaver's tmux config again
-the next time `wvr` attaches to it, and an open board restarts in the new
-weaver at its next reload.
+the next time `wvr` attaches to it, and home and the views restart in the
+`wvr` on your PATH at their next reload, or within a few seconds. That
+includes switching builds: `./install.sh`'s `~/.local/bin/wvr` ahead of
+Homebrew's, and Homebrew's again once you remove it.
 
 ### Files
 
