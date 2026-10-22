@@ -987,7 +987,21 @@ refresh asks the search again with the sections, and it pages as they do
 (its key `s`); its heading says what it found of the other kind (`issues:
 1 (s)`). Picked again, or `clear` at the picker's top, or `esc` in the view
 while it has one (`_items NAME esc`, which ends it before going back), ends
-it. Like home, it outlives installs of weaver:
+it.
+
+`ctrl+s`, searching, asks the service for the query (`_items NAME ask
+{q}`), as the view's search, as a filter's: GitHub's search syntax as
+typed when it has a qualifier, a reference as its number in its
+repository, else the words within the owners of the repositories weaver
+knows (`user:o`; none known, what involves you), since GitHub's search is
+of all of GitHub (`github.Words`); Linear's search, `searchIssues`, which
+counts what it finds (`linear.Words`). enter does it when nothing loaded
+matches (an action of its own: fzf skips one that names a field when
+nothing matches), and `f` for words no filter matches. `ask` sends the
+view back to its rows through its socket, as a key would: actions a
+transform prints leave the query once the input hides.
+
+Like home, it outlives installs of weaver:
 it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
 weaver (as home's), the first reload after (`_items NAME chrome`) or the
 view's own check aborts its fzf, and the view execs that weaver's `_items

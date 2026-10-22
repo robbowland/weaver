@@ -165,3 +165,24 @@ func TestParseNext(t *testing.T) {
 		t.Error("no search answered")
 	}
 }
+
+// Words are asked as typed when they say where (a qualifier); a reference
+// as its number in its repository; bare words within the owners known, as
+// GitHub's search is of all of GitHub.
+func TestWords(t *testing.T) {
+	for _, c := range []struct {
+		words  string
+		owners []string
+		want   string
+	}{
+		{"flaky  test", []string{"o", "p"}, "user:o user:p flaky test"},
+		{"flaky", nil, "involves:@me flaky"},
+		{"is:open label:bug", []string{"o"}, "is:open label:bug"},
+		{"crash -author:bot", []string{"o"}, "crash -author:bot"},
+		{"o/r#45", []string{"p"}, "repo:o/r 45"},
+	} {
+		if f := Words(c.words, c.owners); f.Filters != c.want || f.Title != strings.Join(strings.Fields(c.words), " ") {
+			t.Errorf("%q: %+v, want %q", c.words, f, c.want)
+		}
+	}
+}

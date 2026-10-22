@@ -48,6 +48,9 @@ type itemSource interface {
 	// filters are the searches f offers: weaver's searches of your own,
 	// then what is open in each repository, label or team weaver knows.
 	filters(e *Env) []viewFilter
+	// words is a search of the service for words as typed: its own search
+	// syntax, or (bare words) within what weaver knows of.
+	words(e *Env, q string) viewFilter
 	// find reads the view's search (a filter's set made it), and keeps it.
 	find(e *Env)
 	// clear ends the view's search.
@@ -546,7 +549,7 @@ func readOnly(kind string) string {
 // itemHints are the view's keys: browsing, or searching.
 func (e *Env) itemHints(src itemSource) []choice {
 	if searching() {
-		return []choice{{"⏎", "THREAD"}, {"esc", "BACK"}, {"tab", "VIEWS"}}
+		return []choice{{"⏎", "THREAD"}, {"ctrl+s", "ASK " + strings.ToUpper(src.service())}, {"esc", "BACK"}, {"tab", "VIEWS"}}
 	}
 	hs := []choice{{"⏎", "THREAD"}, {"alt+m", readOnly(e.itemKind(src))}, {"o", "OPEN"}}
 	if len(src.kinds()) > 1 {
@@ -694,9 +697,10 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("j k  g G", "move; first, last", "") +
 		key("o", "open it in "+src.service(), "") +
 		key("m", "more of its section", "(⏎ on the section's last line)") +
-		key("f", "a filter: a search of "+src.service()+" as SEARCH,", "first") +
+		key("f", "filter: a search of "+src.service()+", as SEARCH", "") +
 		strings.Repeat(" ", 2+helpCol) + d + "(yours, or a repository's, a label's, a team's)" + o + "\n" +
-		key("/", "search", "(esc: back)")
+		key("/", "search", "(esc: back)") +
+		key("  ctrl+s", "ask "+src.service()+" for what you typed", "(⏎ too, if none match)")
 	if len(src.kinds()) > 1 {
 		out += key("s", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
 	}
@@ -705,7 +709,7 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("?", "this help", "(? again: back)") +
 		key("q  esc", "back to your thread", "(esc, with a SEARCH: clear it)") +
 		"\n" + g + "SECTIONS" + o + "\n" +
-		"  " + g + "SEARCH" + o + "  what f asked for, while you have it\n" +
+		"  " + g + "SEARCH" + o + "  what f or ctrl+s asked for, while you have it\n" +
 		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n"
 	if gd.team != "" {
 		out += "  " + g + "TEAM" + o + "    " + gd.team + "\n"
@@ -777,10 +781,8 @@ func (e *Env) itemPage(src itemSource, id, n string) {
 }
 
 // itemFilter is f: a picker of src's filters, the search it has first, to
-// clear it. The one picked becomes the view's search, read behind the view
-// once the view has shown it asking (`<sock>.find`, itemLoaded: a reload
-// of its answer before then would be lost under that one); picked again,
-// the search ends.
+// clear it. The one picked becomes the view's search (words no filter
+// matches, a search for them); picked again, the search ends.
 func (e *Env) itemFilter(src itemSource) {
 	fs := src.filters(e)
 	cur := src.read(e).searched()
@@ -799,21 +801,44 @@ func (e *Env) itemFilter(src itemSource) {
 			at = strconv.Itoa(i)
 		}
 	}
-	out := e.pick(b.String(), formLabel("WEAVER", "FILTER"), formPrompt("filter"), "a search of "+src.service(), at)
-	_, sel, _ := strings.Cut(out, "\n")
+	out := e.pick(b.String(), formLabel("WEAVER", "FILTER"), formPrompt("filter"), "a search, or words to ask "+src.service()+" for", at)
+	q, sel, _ := strings.Cut(out, "\n")
 	v, _, _ := strings.Cut(sel, "\t")
 	i, ok := atoi(v)
 	switch {
 	case v == "x", ok && i < len(fs) && fs[i].title == cur:
 		src.clear(e)
 	case ok && i < len(fs):
-		fs[i].set(e)
-		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
-			bestEffort(os.WriteFile(s+".find", nil, 0o600))
-		} else {
-			e.itemFindBehind(src)
-		}
+		e.itemSearch(src, fs[i])
+	case sel == "" && strings.TrimSpace(q) != "":
+		// Words no filter matched: the service asked for them.
+		e.itemSearch(src, src.words(e, q))
 	}
+}
+
+// itemSearch makes f the view's search, read behind the view once the
+// view shows it asking (`<sock>.find`, itemLoaded: a reload of its answer
+// before then would be lost under the view's own).
+func (e *Env) itemSearch(src itemSource, f viewFilter) {
+	f.set(e)
+	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
+		bestEffort(os.WriteFile(s+".find", nil, 0o600))
+	} else {
+		e.itemFindBehind(src)
+	}
+}
+
+// itemAsk is ctrl+s (and enter when nothing matches): the service asked for
+// the query q, as the view's search, and the view back to its rows. Those
+// actions go to the view's socket, as a key's would: from a transform
+// (enter's), fzf would leave the query, the input hidden.
+func (e *Env) itemAsk(src itemSource, me, q string) {
+	s := os.Getenv("WEAVER_VIEW_SOCK")
+	if strings.TrimSpace(q) == "" || s == "" {
+		return
+	}
+	e.itemSearch(src, src.words(e, q))
+	session.FzfPost(s, "clear-query+change-with-nth(5)+hide-input+rebind("+itemKeys+")+reload-sync("+me+" rows)+transform("+me+" chrome)")
 }
 
 // itemFindBehind reads the view's search behind the view (`_items NAME
@@ -955,6 +980,9 @@ func (e *Env) Items(args []string) error {
 	case "find":
 		e.itemFind(src)
 		return nil
+	case "ask":
+		e.itemAsk(src, session.Quote(e.Self)+" _items "+src.name(), ref)
+		return nil
 	case "esc":
 		// In Alt y's popover (esc peek), back ends it.
 		back := "execute-silent(" + session.Quote(e.Self) + " go back)"
@@ -1036,7 +1064,10 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	// Alt N on an item, its thread; enter too, and on a section's last
 	// line, its next page.
 	threadAct := "transform:case {1} in i*) echo '" + fromAct + "' ;; esac"
-	enterAct := "transform:case {1} in i*) echo '" + fromAct + "' ;; m*) echo 'execute-silent(" + me + " more {1} {n})' ;; esac"
+	// Nothing matching the query, it asks the service (ctrl+s): an action
+	// of its own, since fzf skips one that names a field with no match.
+	enterAct := "transform[case {1} in i*) echo '" + fromAct + "' ;; m*) echo 'execute-silent(" + me + " more {1} {n})' ;; esac]" +
+		`+transform:[ "$FZF_MATCH_COUNT" = 0 ] && [ -n "$FZF_QUERY" ] && echo 'trigger(ctrl-s)'`
 	reviewAct = "transform:case {1} in i*) echo '" + reviewAct + "' ;; esac"
 	for {
 		rows := e.itemRows(src)
@@ -1082,6 +1113,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			// leaves a key's search in place).
 			"--bind", "esc:clear-query+transform(" + me + " esc" + peekArg + ")",
 			"--bind", "f:execute(" + me + " filter)+" + reload,
+			"--bind", "ctrl-s:execute-silent(" + me + " ask {q})",
 			"--bind", "q:" + backAct,
 			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.

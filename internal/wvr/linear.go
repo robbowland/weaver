@@ -182,11 +182,7 @@ func (c *linCache) paged(s linear.Section, after string, p page.List[linear.Issu
 func (linearSource) filters(e *Env) []viewFilter {
 	c := readLinear(e)
 	var fs []viewFilter
-	add := func(s linear.Section) {
-		fs = append(fs, viewFilter{title: s.Title, set: func(e *Env) {
-			updateLinear(e, func(c *linCache) { c.Search = &linear.Result{Section: s} })
-		}})
-	}
+	add := func(s linear.Section) { fs = append(fs, linFilter(s)) }
 	for _, s := range linear.Filters {
 		add(s)
 	}
@@ -203,6 +199,16 @@ func (linearSource) filters(e *Env) []viewFilter {
 	}
 	return fs
 }
+
+// linFilter is section s as f offers it.
+func linFilter(s linear.Section) viewFilter {
+	return viewFilter{title: s.Title, set: func(e *Env) {
+		updateLinear(e, func(c *linCache) { c.Search = &linear.Result{Section: s} })
+	}}
+}
+
+// words is what Linear's search finds for words as typed.
+func (linearSource) words(_ *Env, q string) viewFilter { return linFilter(linear.Words(q)) }
 
 // searched is the search's answer, if there is a search.
 func (c linCache) searched() []linear.Result {

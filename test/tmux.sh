@@ -627,6 +627,8 @@ case "$1 $2" in
 	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	# Words asked for (ctrl+s), within o's repositories: an issue.
+	*'is:issue archived:false user:o flaky'*) page 1 "" '{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}'; exit ;;
 	# f's mentions me: a pull request, and an issue.
 	*'is:issue archived:false is:open mentions:@me'*) page 1 "" '{"number":13,"title":"Mentioned in an issue","body":"","url":"https://github.com/o/r/issues/13","state":"OPEN","author":{"login":"erin"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}'; exit ;;
 	*'is:pr archived:false is:open mentions:@me'*) page 1 "" "$(pr 50 'Mentioned you')"; exit ;;
@@ -754,6 +756,27 @@ waitfor 'v900 | grep -q "PULL REQUESTS"'
 key 1b # esc
 waitfor '! v900 | grep -q "SEARCH ·"'
 ok "...esc ends it" "$(v900 | grep -c 'SEARCH ·')|$(v900 | grep -c 'QUEUE · 1')" "0|1"
+# ctrl+s, searching, asks GitHub for the words (within the owners of the
+# repositories weaver knows) as SEARCH; so does enter, when nothing loaded
+# matches.
+key 2f # /
+sleep 0.5
+key "$(printf 'flaky' | xxd -p)"
+sleep 0.3
+key 13 # ctrl+s
+waitfor 'v900 | grep -q "SEARCH · flaky · 0 · issues: 1 (s)"'
+ok "GITHUB: / words, ctrl+s: GitHub asked for them, as SEARCH" "$(v900 | grep -c 'SEARCH · flaky · 0 · issues: 1 (s)')|$(v900 | grep -c 'QUEUE · 1')" "1|1"
+key 1b # esc
+waitfor '! v900 | grep -q "SEARCH ·"'
+key 2f # /
+sleep 0.5
+key "$(printf 'zzz' | xxd -p)"
+sleep 0.3
+key 0d # enter
+waitfor 'v900 | grep -q "SEARCH · zzz · 0"'
+ok "...enter, when nothing loaded matches" "$(v900 | grep -c 'SEARCH · zzz · 0')|$(v900 | grep -c 'QUEUE · 1')" "1|1"
+key 1b # esc
+waitfor '! v900 | grep -q "SEARCH ·"'
 key 67 # g
 waitfor '[ "$(v900 | grep -c "Add a flag")" = 2 ]'
 click 3 50

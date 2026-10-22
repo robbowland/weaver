@@ -88,6 +88,20 @@ func TestFetchSearch(t *testing.T) {
 	}
 }
 
+// Words are what Linear's search finds for them, counted.
+func TestAskWords(t *testing.T) {
+	fakeLinear(t, func(q string, vars map[string]any) string {
+		if !strings.Contains(q, "searchIssues(term: $term") || vars["term"] != "flaky test" {
+			return `{"errors":[{"message":"not a search"}]}`
+		}
+		return `{"data":{"searchIssues":{"nodes":[{"identifier":"ENG-9","title":"Flaky test"}],"pageInfo":{"hasNextPage":true,"endCursor":"s1"},"totalCount":31}}}`
+	})
+	r := Ask(Words(" flaky  test "), "")
+	if r.Err != "" || r.Title != "flaky test" || r.Total != 31 || r.Next != "s1" || len(r.Items) != 1 || r.Items[0].Identifier != "ENG-9" {
+		t.Errorf("%+v", r)
+	}
+}
+
 // A section's next page is asked from where its last ended.
 func TestAskPage(t *testing.T) {
 	fakeLinear(t, func(q string, vars map[string]any) string {

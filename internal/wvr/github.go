@@ -206,11 +206,7 @@ func (githubSource) more(e *Env, kind, key string) {
 func (githubSource) filters(e *Env) []viewFilter {
 	c := readGitHub(e)
 	var fs []viewFilter
-	add := func(f github.Filter, note string) {
-		fs = append(fs, viewFilter{title: f.Title, note: note, set: func(e *Env) {
-			updateGitHub(e, func(c *ghCache) { c.search(f.Section()) })
-		}})
-	}
+	add := func(f github.Filter, note string) { fs = append(fs, ghFilter(f, note)) }
 	for _, f := range github.Filters {
 		add(f, "")
 	}
@@ -230,6 +226,26 @@ func (githubSource) filters(e *Env) []viewFilter {
 		add(github.LabelFilter(l, labels[l]), strings.Join(labels[l], ", "))
 	}
 	return fs
+}
+
+// ghFilter is f as f offers it, with a note.
+func ghFilter(f github.Filter, note string) viewFilter {
+	return viewFilter{title: f.Title, note: note, set: func(e *Env) {
+		updateGitHub(e, func(c *ghCache) { c.search(f.Section()) })
+	}}
+}
+
+// words is a search for words as typed (github.Words), within the owners
+// of the repositories weaver knows.
+func (githubSource) words(e *Env, q string) viewFilter {
+	var owners []string
+	for _, r := range e.knownRepos(readGitHub(e)) {
+		o, _, _ := strings.Cut(r, "/")
+		if !slices.ContainsFunc(owners, func(x string) bool { return strings.EqualFold(x, o) }) {
+			owners = append(owners, o)
+		}
+	}
+	return ghFilter(github.Words(q, owners), "")
 }
 
 // find reads the first page of the search, of each kind, and keeps it.

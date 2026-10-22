@@ -206,10 +206,12 @@ func (n node) issue() Issue {
 }
 
 // Section is one list of issues: its title and its filter (an
-// IssueFilter, as GraphQL).
+// IssueFilter, as GraphQL); or, with a term, what Linear's search finds for
+// it (within the filter, if any).
 type Section struct {
 	Title  string `json:"title"`
 	Filter string `json:"filter"`
+	Term   string `json:"term,omitempty"`
 }
 
 // open is an issue not done: triage, backlog, unstarted or started.
@@ -218,9 +220,9 @@ const open = `state: { type: { nin: ["completed", "canceled"] } }`
 // Sections are weaver's: what is yours to do, what you made, and what you
 // follow.
 var Sections = []Section{
-	{"Queue", `{ assignee: { isMe: { eq: true } }, state: { type: { in: ["unstarted", "started"] } } }`},
-	{"Mine", `{ creator: { isMe: { eq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
-	{"Watch", `{ subscribers: { some: { isMe: { eq: true } } }, creator: { isMe: { neq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
+	{Title: "Queue", Filter: `{ assignee: { isMe: { eq: true } }, state: { type: { in: ["unstarted", "started"] } } }`},
+	{Title: "Mine", Filter: `{ creator: { isMe: { eq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
+	{Title: "Watch", Filter: `{ subscribers: { some: { isMe: { eq: true } } }, creator: { isMe: { neq: true } }, assignee: { isMe: { neq: true } }, ` + open + ` }`},
 }
 
 // Limit is how many issues a section shows.
@@ -234,8 +236,16 @@ type Result struct {
 
 // Query is section s's request: its page after cursor $after (null: its
 // first), and whether there is another (Linear does not count a list's
-// issues).
+// issues, but counts what its search finds); a term's, $term.
 func Query(s Section) string {
+	if s.Term != "" {
+		filter := ""
+		if s.Filter != "" {
+			filter = ", filter: " + s.Filter
+		}
+		return fmt.Sprintf("query Search($after: String, $term: String!) { searchIssues(term: $term%s, first: %d, after: $after) { nodes { %s } pageInfo { hasNextPage endCursor } totalCount } }",
+			filter, Limit, issueFields)
+	}
 	return fmt.Sprintf("query Section($after: String) { issues(filter: %s, first: %d, after: $after, orderBy: updatedAt) { nodes { %s } pageInfo { hasNextPage endCursor } } }",
 		s.Filter, Limit, issueFields)
 }
@@ -266,25 +276,39 @@ func Ask(s Section, after string) Result {
 
 // ask is Ask, signed in as key.
 func ask(key string, s Section, after string) Result {
+	type list struct {
+		Nodes      []node   `json:"nodes"`
+		PageInfo   pageInfo `json:"pageInfo"`
+		TotalCount float64  `json:"totalCount"`
+	}
 	var d struct {
-		Issues struct {
-			Nodes    []node   `json:"nodes"`
-			PageInfo pageInfo `json:"pageInfo"`
-		} `json:"issues"`
+		Issues *list `json:"issues"`
+		Search *list `json:"searchIssues"`
 	}
 	vars := map[string]any{"after": nil}
 	if after != "" {
 		vars["after"] = after
+	}
+	if s.Term != "" {
+		vars["term"] = s.Term
 	}
 	r := Result{Section: s}
 	if err := query(key, Query(s), vars, &d); err != nil {
 		r.List = page.Failed[Issue](err)
 		return r
 	}
-	for _, n := range d.Issues.Nodes {
+	l := d.Issues
+	if s.Term != "" {
+		l = d.Search
+	}
+	if l == nil {
+		r.List = page.Failed[Issue](errors.New("linear: no issues in the answer"))
+		return r
+	}
+	for _, n := range l.Nodes {
 		r.Items = append(r.Items, n.issue())
 	}
-	r.Next, r.Fetched = d.Issues.PageInfo.next(), time.Now()
+	r.Total, r.Next, r.Fetched = int(l.TotalCount), l.PageInfo.next(), time.Now()
 	return r
 }
 
@@ -319,15 +343,21 @@ func Fetch(search ...Section) ([]Result, []Result) {
 
 // Filters are the searches of your own the views offer before a team's.
 var Filters = []Section{
-	{"assigned to me", `{ assignee: { isMe: { eq: true } }, ` + open + ` }`},
-	{"created by me", `{ creator: { isMe: { eq: true } }, ` + open + ` }`},
-	{"subscribed to", `{ subscribers: { some: { isMe: { eq: true } } }, ` + open + ` }`},
+	{Title: "assigned to me", Filter: `{ assignee: { isMe: { eq: true } }, ` + open + ` }`},
+	{Title: "created by me", Filter: `{ creator: { isMe: { eq: true } }, ` + open + ` }`},
+	{Title: "subscribed to", Filter: `{ subscribers: { some: { isMe: { eq: true } } }, ` + open + ` }`},
 }
 
 // TeamFilter is what is open in the team of key (ENG), called name.
 func TeamFilter(key, name string) Section {
 	k, _ := json.Marshal(key)
-	return Section{"team " + name, `{ team: { key: { eq: ` + string(k) + ` } }, ` + open + ` }`}
+	return Section{Title: "team " + name, Filter: `{ team: { key: { eq: ` + string(k) + ` } }, ` + open + ` }`}
+}
+
+// Words is what Linear's search finds for words.
+func Words(words string) Section {
+	w := strings.Join(strings.Fields(words), " ")
+	return Section{Title: w, Term: w}
 }
 
 // Get is issue id (ENG-42) with its comments, for a thread's prompt.

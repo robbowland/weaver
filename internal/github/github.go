@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -431,6 +432,30 @@ var Filters = []Filter{
 // RepoFilter is what is open in repository repo (owner/name).
 func RepoFilter(repo string) Filter {
 	return Filter{"repository " + repo, "is:open repo:" + repo + " sort:updated-desc"}
+}
+
+var (
+	reQualifier = regexp.MustCompile(`(^|\s)-?[a-z][a-z-]*:\S`)
+	reRef       = regexp.MustCompile(`^([\w.-]+/[\w.-]+)#(\d+)$`)
+)
+
+// Words is a search for words as typed: GitHub's search syntax as it is,
+// with a qualifier; a reference (o/r#45), its number in its repository;
+// else, since GitHub's search is of all of GitHub, the words within the
+// repositories of owners (none known: what involves you).
+func Words(words string, owners []string) Filter {
+	w := strings.Join(strings.Fields(words), " ")
+	f := w
+	switch m := reRef.FindStringSubmatch(w); {
+	case m != nil:
+		f = "repo:" + m[1] + " " + m[2]
+	case reQualifier.MatchString(w):
+	case len(owners) > 0:
+		f = "user:" + strings.Join(owners, " user:") + " " + w
+	default:
+		f = "involves:@me " + w
+	}
+	return Filter{w, f}
 }
 
 // LabelFilter is what is open with label in repos: a label is a

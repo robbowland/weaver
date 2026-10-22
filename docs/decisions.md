@@ -396,6 +396,14 @@ can supersede an earlier one, and says so.
   how many there are; a review-asked filter finds no issues, which is
   simpler than kinds of filter. The search is kept in the view's cache, so
   a refresh asks it again; picking it again, or `esc`, ends it.
+- 2026-10-22: A search can go to the service (`ctrl+s`, or enter when
+  nothing loaded matches), since what is loaded is a few pages at most.
+  GitHub's search syntax passes through as typed when it says where (a
+  qualifier); bare words are searched within the owners of the
+  repositories weaver knows, as GitHub's search is of all of GitHub and
+  words alone would find strangers' issues first. Owners rather than each
+  repository: few qualifiers, and a team's other repositories are what
+  one usually wants. Its answer is SEARCH, as a filter's is.
 
 ## Lost threads
 

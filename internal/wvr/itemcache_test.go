@@ -225,3 +225,19 @@ func TestSearchSection(t *testing.T) {
 		t.Errorf("cleared: %+v", d)
 	}
 }
+
+// Words asked for are searched within the owners of the repositories
+// weaver knows, each once, in any case.
+func TestWordsWithinOwners(t *testing.T) {
+	e := viewEnv(t)
+	updateGitHub(e, func(c *ghCache) {
+		c.Results = map[github.Kind][]github.Result{github.PRs: {{Section: github.Section{Title: "Queue"}, List: page.List[github.Item]{Items: []github.Item{
+			{Kind: github.PRs, Repo: "o/r", Number: 1}, {Kind: github.PRs, Repo: "O/s", Number: 2}, {Kind: github.PRs, Repo: "p/q", Number: 3},
+		}}}}}
+	})
+	f := (githubSource{}).words(e, " flaky  test ")
+	f.set(e)
+	if s := readGitHub(e).Search[github.PRs]; f.title != "flaky test" || s.Filters != "user:O user:p flaky test" {
+		t.Errorf("%q: %+v", f.title, s.Section)
+	}
+}
