@@ -939,7 +939,9 @@ thread first (the one it has, or
 the branch enter starts one on), the item's fields, and its description,
 rendered from markdown by `internal/markdown` (goldmark's parser, with
 GitHub's tables, strikethrough, task lists and bare links; no HTML or
-link targets), set as the vault's Micrographics theme sets a note: a
+link targets, and none of the text's own control sequences, escape
+sequences whole, since anyone wrote it), set as the vault's
+Micrographics theme sets a note: a
 section (h2) under a faint rule with its index (`01  SUMMARY`), h3 bold,
 h4 to h6 grey capitals; prose in ink (the theme's reading text, the card's
 point), strong in bold, code in ink between faint backticks (in a

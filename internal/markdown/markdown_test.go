@@ -98,3 +98,20 @@ func TestRenderLinks(t *testing.T) {
 		t.Errorf("a link left open: %q", got)
 	}
 }
+
+// A description is anyone's: no control sequence in it reaches the
+// terminal, from its text or its code (an OSC 52 sets the clipboard, an
+// OSC 8 makes a link), and one left open takes nothing after it.
+func TestRenderInert(t *testing.T) {
+	src := "Hi \x1b]52;c;ZXZpbA==\x07there \x1b[31mred\x1b[0m \x1b]8;;https://evil\x1b\\x\x1b]8;;\x1b\\ \u009b2J\x1bc\n\n" +
+		"```\n\x1b[2Jcode\x07\x1b]0;title\n```\n\nafter \x1b]8;;open\n"
+	got := Render(src, 60, Style{})
+	if strings.ContainsAny(got, "\x1b\x07\u009b") {
+		t.Errorf("a control sequence came through: %q", got)
+	}
+	for _, want := range []string{"Hi there red x 2J", "  code\n", "after"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lost %q: %q", want, got)
+		}
+	}
+}

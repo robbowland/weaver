@@ -49,12 +49,75 @@ const (
 
 var md = goldmark.New(goldmark.WithExtensions(extension.Table, extension.Strikethrough, extension.TaskList, extension.Linkify))
 
-// Render is src rendered to width columns.
+// Render is src rendered to width columns. src is anyone's (an item's text
+// is untrusted): none of its own control sequences reaches the terminal.
 func Render(src string, width int, st Style) string {
-	b := []byte(strings.ReplaceAll(src, "\r", ""))
+	b := []byte(inert(src))
 	r := renderer{src: b, st: st, h2: new(int)}
 	ls := r.blocks(md.Parser().Parse(text.NewReader(b)), max(width, 10))
 	return strings.Join(ls, "\n")
+}
+
+// inert is s with nothing in it a terminal acts on: each escape sequence
+// whole (an OSC 52 would set the clipboard, an OSC 8 make a link), then any
+// other control character (C0, DEL, C1); tabs and newlines stay.
+func inert(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			i += escape(s[i:])
+			continue
+		}
+		r, n := utf8.DecodeRuneInString(s[i:])
+		if r != '\t' && r != '\n' && (r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0) {
+			i += n
+			continue
+		}
+		b.WriteString(s[i : i+n])
+		i += n
+	}
+	return b.String()
+}
+
+// escape is how long the escape sequence s starts with is: a CSI to its
+// final byte; an OSC, DCS, SOS, PM or APC to its BEL or ST (or the next
+// control character, so one left open takes no more); any other to its
+// final byte.
+func escape(s string) int {
+	if len(s) < 2 {
+		return len(s)
+	}
+	i := 2
+	switch s[1] {
+	case '[':
+		for i < len(s) && s[i] >= 0x20 && s[i] <= 0x3f {
+			i++
+		}
+		if i < len(s) && s[i] >= 0x40 && s[i] <= 0x7e {
+			i++
+		}
+		return i
+	case ']', 'P', 'X', '^', '_':
+		for ; i < len(s); i++ {
+			switch {
+			case s[i] == 0x07:
+				return i + 1
+			case s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\':
+				return i + 2
+			case s[i] < 0x20:
+				return i
+			}
+		}
+		return i
+	}
+	i = 1
+	for i < len(s) && s[i] >= 0x20 && s[i] <= 0x2f {
+		i++
+	}
+	if i < len(s) && s[i] >= 0x30 && s[i] <= 0x7e {
+		i++
+	}
+	return i
 }
 
 type renderer struct {
