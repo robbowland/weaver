@@ -121,7 +121,10 @@ last said and its task list.
 
 **Views.** Beside home are GITHUB (your pull requests and issues) and LINEAR
 (your Linear issues). `alt+N` on an item opens the new-thread form filled in
-for it, and `alt+m` starts a read-only review or investigation of it.
+for it, and `alt+m` starts a read-only review or investigation of it. `m`
+shows more of a section, `f` adds a quick filter (assigned to you, a
+repository, a label), and `/` searches what the view holds, `ctrl+s`
+asking GitHub or Linear instead.
 
 **States.** weaver follows each agent through its hooks and shows its state
 as a cell that reads without colour:
