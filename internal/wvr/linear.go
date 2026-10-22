@@ -90,7 +90,7 @@ func (linearSource) read(e *Env) itemData {
 	c := readLinear(e)
 	d := itemData{sections: map[string][]itemSection{}}
 	for _, r := range c.Results {
-		s := itemSection{title: r.Title, total: r.Total, fetched: r.Fetched, err: r.Err}
+		s := itemSection{title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
 		for _, it := range r.Items {
 			s.items = append(s.items, linItem(it))
 		}

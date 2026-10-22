@@ -12,6 +12,9 @@ type List[I any] struct {
 	// when it does not count them (Linear's lists).
 	Total int `json:"total"`
 	Items []I `json:"items"`
+	// Next is where the page after these starts (the service's cursor);
+	// "" when there is none.
+	Next string `json:"next,omitempty"`
 	// Fetched is when the items were read (zero: never); Err, why the last
 	// ask failed, the items, if any, being from before it.
 	Fetched time.Time `json:"fetched,omitzero"`

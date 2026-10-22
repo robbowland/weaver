@@ -99,7 +99,7 @@ func (githubSource) read(e *Env) itemData {
 	d := itemData{sections: map[string][]itemSection{}}
 	for k, rs := range c.Results {
 		for _, r := range rs {
-			s := itemSection{title: r.Title, total: r.Total, fetched: r.Fetched, err: r.Err}
+			s := itemSection{title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
 			for _, it := range r.Items {
 				s.items = append(s.items, ghItem(it))
 			}

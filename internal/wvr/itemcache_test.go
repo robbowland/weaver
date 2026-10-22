@@ -99,3 +99,21 @@ func TestOldCache(t *testing.T) {
 		t.Errorf("%+v", s)
 	}
 }
+
+// A heading says how many it shows of how many, or, of a list the service
+// does not count (Linear's), that there are more.
+func TestHeadingCount(t *testing.T) {
+	its, now := make([]viewItem, 30), time.Now()
+	for _, c := range []struct {
+		s    itemSection
+		want string
+	}{
+		{itemSection{title: "Queue", total: 57, items: its[:20], more: true, fetched: now}, "QUEUE · 20 of 57"},
+		{itemSection{title: "Queue", items: its, more: true, fetched: now}, "QUEUE · 30+"},
+		{itemSection{title: "Queue", items: its[:5], fetched: now}, "QUEUE · 5"},
+	} {
+		if got := reAnsi.ReplaceAllString(c.s.heading(), ""); got != c.want {
+			t.Errorf("%q, want %q", got, c.want)
+		}
+	}
+}

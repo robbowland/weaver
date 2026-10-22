@@ -232,9 +232,45 @@ type Result struct {
 	page.List[Issue]
 }
 
-// Query is section i's request.
-func Query(i int) string {
-	return fmt.Sprintf("query Section { issues(filter: %s, first: %d, orderBy: updatedAt) { nodes { %s } } }", Sections[i].Filter, Limit, issueFields)
+// Query is section s's request: its first page, and whether there is
+// another (Linear does not count a list's issues).
+func Query(s Section) string {
+	return fmt.Sprintf("query Section { issues(filter: %s, first: %d, orderBy: updatedAt) { nodes { %s } pageInfo { hasNextPage endCursor } } }", s.Filter, Limit, issueFields)
+}
+
+// pageInfo is where a list's next page starts, if it has one.
+type pageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
+}
+
+// next is the cursor of the page after, "" when there is none.
+func (p pageInfo) next() string {
+	if p.HasNextPage {
+		return p.EndCursor
+	}
+	return ""
+}
+
+// ask is what Linear finds for section s, asked as key, or why asking
+// failed.
+func ask(key string, s Section) Result {
+	var d struct {
+		Issues struct {
+			Nodes    []node   `json:"nodes"`
+			PageInfo pageInfo `json:"pageInfo"`
+		} `json:"issues"`
+	}
+	r := Result{Section: s}
+	if err := query(key, Query(s), nil, &d); err != nil {
+		r.List = page.Failed[Issue](err)
+		return r
+	}
+	for _, n := range d.Issues.Nodes {
+		r.Items = append(r.Items, n.issue())
+	}
+	r.Next, r.Fetched = d.Issues.PageInfo.next(), time.Now()
+	return r
 }
 
 // Fetch asks Linear for every section, a request each, at once: each
@@ -254,21 +290,7 @@ func Fetch() []Result {
 	}
 	ch := make(chan answer)
 	for i := range Sections {
-		go func() {
-			var d struct {
-				Issues struct{ Nodes []node } `json:"issues"`
-			}
-			a := answer{i: i, r: Result{Section: Sections[i]}}
-			if err := query(key, Query(i), nil, &d); err != nil {
-				a.r.List = page.Failed[Issue](err)
-			} else {
-				for _, n := range d.Issues.Nodes {
-					a.r.Items = append(a.r.Items, n.issue())
-				}
-				a.r.Fetched = time.Now()
-			}
-			ch <- a
-		}()
+		go func() { ch <- answer{i, ask(key, Sections[i])} }()
 	}
 	for range Sections {
 		a := <-ch

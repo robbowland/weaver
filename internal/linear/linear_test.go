@@ -1,9 +1,15 @@
 package linear
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +23,55 @@ func noKey(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 	t.Setenv("LINEAR_API_KEY", "")
+}
+
+// fakeLinear is Linear's API at a test server, answering with answer for
+// each request's query (and its variables), signed in as lin_test.
+func fakeLinear(t *testing.T, answer func(q string, vars map[string]any) string) {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if r.Header.Get("Authorization") != "lin_test" || json.NewDecoder(r.Body).Decode(&req) != nil {
+			http.Error(w, `{"errors":[{"message":"no"}]}`, http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, answer(req.Query, req.Variables))
+	}))
+	t.Cleanup(s.Close)
+	t.Setenv("WEAVER_LINEAR_URL", s.URL)
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+}
+
+// issues is an issues answer: identifiers ids, and the cursor of the page
+// after ("": none).
+func issues(next string, ids ...string) string {
+	var ns []string
+	for _, id := range ids {
+		ns = append(ns, `{"identifier":"`+id+`","title":"t","team":{"key":"ENG","name":"Engineering"},"state":{"name":"Todo","type":"unstarted"}}`)
+	}
+	return `{"data":{"issues":{"nodes":[` + strings.Join(ns, ",") + `],"pageInfo":{"hasNextPage":` + strconv.FormatBool(next != "") +
+		`,"endCursor":"` + next + `"}}}}`
+}
+
+// A section says when Linear has more than it sent: Linear counts no list,
+// so that is all there is to say.
+func TestFetchSaysMore(t *testing.T) {
+	fakeLinear(t, func(q string, _ map[string]any) string {
+		if !strings.Contains(q, "pageInfo { hasNextPage endCursor }") {
+			return `{"errors":[{"message":"no pageInfo asked"}]}`
+		}
+		if strings.Contains(q, Sections[0].Filter) {
+			return issues("c30", "ENG-1", "ENG-2")
+		}
+		return issues("")
+	})
+	got := Fetch()
+	if got[0].Next != "c30" || len(got[0].Items) != 2 || got[0].Err != "" || got[1].Next != "" || got[1].Err != "" {
+		t.Errorf("%+v", got)
+	}
 }
 
 // Without a key, every section fails for that reason, and says so itself.

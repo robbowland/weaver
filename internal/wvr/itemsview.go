@@ -62,11 +62,12 @@ type itemData struct {
 }
 
 // itemSection is a section's items, how many there are in all (0: the
-// service does not say), when they were read (zero: never) and why asking
-// for them failed last ("": it did not).
+// service does not say), whether there are more to read, when they were
+// read (zero: never) and why asking for them failed last ("": it did not).
 type itemSection struct {
 	title   string
 	total   int
+	more    bool
 	items   []viewItem
 	fetched time.Time
 	err     string
@@ -99,15 +100,19 @@ func (d itemData) stale(limit time.Duration) bool {
 }
 
 // heading is section s's heading: its title, how many it shows of how
-// many, and, when asking for it failed, that its items are from before.
+// many (N+ when the service has more but does not count them), and, when
+// asking for it failed, that its items are from before.
 func (s itemSection) heading() string {
 	h := CGrey + strings.ToUpper(s.title)
 	if s.err != "" && s.fetched.IsZero() {
 		return h + COff + CDim + " · " + COff + CRed + "failed" + COff
 	}
 	count := strconv.Itoa(len(s.items))
-	if s.total > len(s.items) {
+	switch {
+	case s.total > len(s.items):
 		count += " of " + strconv.Itoa(s.total)
+	case s.more:
+		count += "+"
 	}
 	h += " · " + count + COff
 	if s.err != "" {
