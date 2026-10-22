@@ -932,8 +932,10 @@ weaver is installed (`_items NAME chrome`, seeing the binary newer) aborts
 its fzf, and the view execs the new weaver's `_items NAME` in the same pane
 and process, which asks as that weaver asks. A section's requests go at once, and one that
 fails keeps what it had. A row shows the thread the item has: its item's
-ref, else its branch (a pull request's head; a GitHub issue's `N-…`;
-Linear's branch name). The card is the thread first (the one it has, or
+ref, else its branch, as the item's thread would name it
+(`items.Item.BranchName`: a pull request's head, `pr-N` for one from a
+fork; a GitHub issue's `N-…`; Linear's branch name). The card is the
+thread first (the one it has, or
 the branch enter starts one on), the item's fields, and its description,
 rendered from markdown by `internal/markdown` (goldmark's parser, with
 GitHub's tables, strikethrough, task lists and bare links; no HTML or

@@ -122,7 +122,10 @@ func ghItem(it github.Item) viewItem {
 		f("by", "@"+it.Author, CGrey, 1)
 	} else {
 		v.from = []string{"github", "pr", it.Repo, strconv.Itoa(it.Number)}
-		v.branch, v.startOn = it.Head, it.Head
+		// Its thread's branch, as the thread names it: pr-N for one from a
+		// fork, whose own branch (its main, say) is not this repository's.
+		v.branch = items.PullRequest{Repo: it.Repo, Num: it.Number, Head: it.Head, Fork: it.HeadInFork}.BranchName()
+		v.startOn = v.branch
 		f("by", "@"+it.Author, CGrey, 1)
 		f("branch", it.Base+" ← "+it.Head, CGrey, 1)
 		label := "review"
