@@ -755,16 +755,10 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		e.markBorn(sock + ".born")
 		e.watchInstalls(sock+".born", sock)
 	}
-	refresh := func() {
-		src.fetch(e)
-		e.reloadItems(src)
-	}
-	if src.read(e).stale(2 * time.Minute) {
-		go refresh()
-	}
 	go func() {
 		for range time.Tick(5 * time.Minute) {
-			refresh()
+			src.fetch(e)
+			e.reloadItems(src)
 		}
 	}()
 	q := session.Quote(e.Self)
@@ -792,9 +786,15 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 				break
 			}
 		}
+		start := "start:pos(" + strconv.Itoa(first) + ")"
+		if src.read(e).stale(2 * time.Minute) {
+			// Asked again once fzf listens: an answer sooner (a fake gh's)
+			// had no list to reload, and the view stayed empty.
+			start += "+execute-silent(" + me + " fetch-bg)"
+		}
 		pw := itemCardRoom(strings.Count(rows, "\n"))
 		args := []string{"--listen", sock, "--with-shell", "/bin/sh -c",
-			"--sync", "--track", "--id-nth", "2", "--bind", "start:pos(" + strconv.Itoa(first) + ")",
+			"--sync", "--track", "--id-nth", "2", "--bind", start,
 			"--delimiter", "\t", "--with-nth", "5", "--tabstop", "1",
 			// Browsing, the rows as they come; searching, the best match
 			// first (ties as they come), on the search line.

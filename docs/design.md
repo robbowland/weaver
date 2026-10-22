@@ -927,7 +927,9 @@ someone else) and Watch (what you follow).
 
 A view (fzf on `$SOCK_DIR/<skey>.view.<name>.<pid>.sock`) shows what its
 source said last at once, asks again behind it when that is over 2 minutes
-old and every 5 minutes after (`^r` now), and reloads when a thread changes
+old (once its fzf listens: `start` runs `_items NAME fetch-bg`, so an
+answer has a list to reload) and every 5 minutes after (`^r` now), and
+reloads when a thread changes
 (the status push) or is made. fzf keeps the cursor on a row across a
 reload by its ref (`--track --id-nth 2`), and blocks until it finds the
 row it was on, so no row's ref is empty (a heading's or a gap's is its id
