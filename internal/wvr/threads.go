@@ -513,6 +513,17 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	return nil
 }
 
+// keepIfFailed has tmux keep agent pane p when its agent exits with an
+// error, until a key closes it: what the agent said (a broken install, a
+// bad flag) stays to be read, rather than going with its pane and leaving
+// nvim alone in the window. A tmux without failed-key closes it at once.
+func (e *Env) keepIfFailed(p tmux.PaneID, kind agent.Kind) {
+	t := p.Target()
+	e.Tmux("set-option", "-p", "-t", t, "remain-on-exit", "failed-key", ";",
+		"set-option", "-p", "-t", t, "remain-on-exit-format", "weaver: "+string(kind)+
+			" exited #{?pane_dead_signal,on signal #{pane_dead_signal},with status #{pane_dead_status}} · any key closes this pane")
+}
+
 // AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
 // thread. First run: record the thread for this pane, tell the nvim beside
 // it where the agent is, and start the agent with the task. A lost thread
@@ -534,6 +545,9 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	paneNum, _ := atoi(string(pane))
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
+		if pane != "" {
+			e.keepIfFailed(pane, kind)
+		}
 		w := strings.Fields(cmd)
 		p, err := exec.LookPath(w[0])
 		if err != nil {

@@ -33,10 +33,12 @@ export WEAVER_SELF_SETUP=0
 SD=$XDG_STATE_HOME/weaver
 mkdir -p "$AT/bin" "$SD" "$AT/claude/sessions"
 : >"$WORKTRUNK_CONFIG_PATH"
-# A fake agent: notes its arguments, then waits as a shell.
+# A fake agent: notes its arguments, then waits as a shell; told to "fail
+# now", fails as a broken install does.
 cat >"$AT/bin/claude" <<EOF
 #!/bin/bash
 printf '%s\n' "\$@" >"$AT/args.\${TMUX_PANE#%}"
+[ "\${*: -1}" = "fail now" ] && { echo "claude: broken install"; exit 3; }
 exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
@@ -472,6 +474,24 @@ tx run-shell -b -t "%$AG" "wvr close --yes $AG >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 1 " ]'
 ok "...closing the thread you are in: home, not the window tmux showed before" "$(where | cut -d ' ' -f 1)" "0"
 tx run-shell -b -t "%$AG1" "wvr close --yes $AG1 >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 " ]'
+
+# --- an agent that fails as it starts (a broken install): its pane stays, with
+# what it said and how it ended, until a key closes it
+tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here --no-focus 'fail now' >/dev/null 2>&1"
+waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+AGF=$(pane_at 1 1)
+waitfor '[ "$(tx display -p -t "%$AGF" "#{pane_dead}" 2>/dev/null)" = 1 ]'
+ok "a failed agent: its pane kept, what it said and how it ended on it" \
+	"$(tx display -p -t "%$AGF" '#{pane_dead}')|$(tx capture-pane -p -S - -t "%$AGF" | grep -c -e 'broken install' -e 'claude exited with status 3')" "1|2" ||
+	tx capture-pane -p -S - -t "%$AGF" | grep . | sed 's/^/  pane: /'
+tx select-window -t "=$S:1" \; select-pane -t "%$AGF"
+waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
+key 71 # q
+waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 1 ]'
+ok "...a key closes it" "$(panes 1 | wc -l | tr -d ' ')" "1"
+tx kill-window -t "=$S:1"
+rm -f "$SD/tmux-${S}_$AGF".*
 waitfor '[ "$(windows)" = "0 " ]'
 
 # --- adopt: an agent you started by hand (here, beside home's board) becomes

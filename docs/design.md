@@ -244,7 +244,12 @@ after its session went leaves `resume` (the session id) there instead of
 `task`, and its agent's pane resumes: `claude --resume <session_id>`
 (`--continue` when unknown), `codex resume <id>` (`--last`). A thread closed
 before its nvim is recorded as bound is closed whole all the same: `close`
-finds that nvim as the pane started for its agent.
+finds that nvim as the pane started for its agent. Before it execs the
+agent, the pane sets its own `remain-on-exit failed-key` (and a
+`remain-on-exit-format` naming the agent and its status), so an agent that
+exits with an error (a broken install, a bad flag in `WEAVER_CLAUDE`) leaves
+what it said on the pane until a key closes it, rather than leaving nvim
+alone in the window with no word of why; a clean exit closes it at once.
 
 ### Thread record
 
