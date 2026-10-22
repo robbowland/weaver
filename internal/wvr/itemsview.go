@@ -221,19 +221,23 @@ type cardField struct {
 
 // viewThread is a thread of this session, as a view matches it to an item.
 type viewThread struct {
-	pane   tmux.PaneID // its agent's
-	num    int
-	state  agent.State
-	seen   bool
-	since  int64
-	ref    string // its work item's
-	repo   string // its repository on GitHub, owner/name
-	branch string
+	pane  tmux.PaneID // its agent's
+	num   int
+	state agent.State
+	seen  bool
+	since int64
+	// What it asks of you, and why it is quiet, as the board says them
+	// (session.Need).
+	need                 session.Need
+	exited, notReporting bool
+	ref                  string // its work item's
+	repo                 string // its repository on GitHub, owner/name
+	branch               string
 }
 
 // itemThreads are the session's threads.
 func (e *Env) itemThreads() []viewThread {
-	rows, _ := e.AgentRows()
+	rows, now := e.AgentRows()
 	slugs := map[string]string{}
 	var ts []viewThread
 	for _, r := range rows {
@@ -248,7 +252,8 @@ func (e *Env) itemThreads() []viewThread {
 		if err != nil {
 			continue
 		}
-		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch}
+		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch,
+			need: r.Need(now), exited: r.Exited, notReporting: r.NotReporting(now)}
 		if th.Item != nil {
 			t.ref = th.Item.Ref
 		}
@@ -284,35 +289,39 @@ func threadOf(ts []viewThread, it viewItem) (viewThread, bool) {
 	return viewThread{}, false
 }
 
-// cell is the thread's cell, painted as the board paints it.
+// cell is the thread's cell, painted as the board paints it: by what it
+// asks of you, then how it is quiet.
 func (t viewThread) cell() string {
-	switch t.state {
-	case agent.StateNeedsYou:
+	switch t.need {
+	case session.NeedYou:
 		return paint(GNeed, CRed, CDim, COff)
-	case agent.StateDone:
-		if t.seen {
-			return paint(GSeen, CDim, CDim, COff)
-		}
+	case session.NeedLook:
 		return paint(GDone, CGreen, CDim, COff)
-	case agent.StateWorking, agent.StateStarting:
+	case session.NeedWait:
 		return paint(GWork, CGrey, CDim, COff)
-	case agent.StateInterrupted:
+	case session.NeedNothing:
+	}
+	switch {
+	case t.exited, t.notReporting:
+	case t.state == agent.StateDone:
+		return paint(GSeen, CDim, CDim, COff)
+	case t.state == agent.StateInterrupted:
 		return paint(GInt, CGrey, CDim, COff)
-	case agent.StateIdle, agent.StateEnded:
 	}
 	return paint(GIdle, CDim, CDim, COff)
 }
 
-// word is the thread's state as the card says it.
+// word is the thread's state as the card says it, as the board does.
 func (t viewThread) word() string {
-	switch t.state {
-	case agent.StateNeedsYou:
+	switch {
+	case t.exited:
+		return "exited"
+	case t.notReporting:
+		return "not reporting"
+	case t.need == session.NeedYou:
 		return CRed + "needs you" + COff
-	case agent.StateDone:
-		if !t.seen {
-			return CGreen + "done" + COff
-		}
-	case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
+	case t.need == session.NeedLook:
+		return CGreen + "done" + COff
 	}
 	return string(t.state)
 }
@@ -737,7 +746,7 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 	if t, ok := threadOf(e.itemThreads(), it); ok && t.pane != "" {
 		e.focus(t.pane)
 		e.MarkSeen(t.pane)
-		e.Tmux("display-message", "-d", "2500", fmt.Sprintf("weaver: %s has thread %02d: went to it", it.where, t.num))
+		e.Say(2500, fmt.Sprintf("weaver: %s has thread %02d: went to it", it.where, t.num))
 		return nil
 	}
 	args := append([]string{}, it.from...)
@@ -1017,7 +1026,9 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	if _, err := exec.LookPath("fzf"); err != nil {
 		return "", err
 	}
-	bestEffort(os.MkdirAll(e.SockDir, 0o700))
+	if err := e.SockDirReady(); err != nil {
+		return "", err
+	}
 	sock := e.SockDir + "/" + e.SKey + ".view." + src.name() + "." + strconv.Itoa(os.Getpid()) + ".sock"
 	defer os.Remove(sock)
 	defer os.Remove(sock + ".help")

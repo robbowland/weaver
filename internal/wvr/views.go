@@ -231,7 +231,7 @@ func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
 	if !show {
 		args = append(args, "-d")
 	}
-	args = append(args, "-t", "="+e.Session+":"+strconv.Itoa(idx), "-n", v.label, "-c", v.dir, "-e", "WEAVER_TMUX_SESSION="+e.Session)
+	args = append(args, "-t", "="+e.Session+":"+strconv.Itoa(idx), "-n", tmux.Text(v.label), "-c", tmux.Text(v.dir), "-e", "WEAVER_TMUX_SESSION="+e.Session)
 	for _, x := range v.env {
 		args = append(args, "-e", x)
 	}
