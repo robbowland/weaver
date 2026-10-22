@@ -44,3 +44,28 @@ func TestRunsFrom(t *testing.T) {
 		t.Error("everything runs from /")
 	}
 }
+
+// Of a tree launchd adopted, what runs from the checkout goes, with all
+// under it; a daemon above it (Codex's app server, whose command it was)
+// stays, as does its other work.
+func TestCondemned(t *testing.T) {
+	pwd := map[string]string{"PWD": "/w"}
+	tree := []proc{
+		{pid: 10, argv: []string{"/home/u/.codex/bin/codex", "app-server"}, env: pwd},
+		{pid: 11, argv: []string{"/bin/bash", "-lc", "pytest"}, env: pwd},
+		{pid: 12, argv: []string{"/bin/bash", "-lc", "ls"}, env: pwd},
+		{pid: 13, argv: []string{"/w/.venv/bin/python", "-m", "pytest"}, env: pwd},
+		{pid: 14, argv: []string{"/usr/bin/git", "status"}, env: pwd},
+	}
+	kids := map[int][]int{10: {11, 12}, 11: {13}, 13: {14}}
+	var got []int
+	for _, p := range condemned(tree, kids, "/w") {
+		got = append(got, p.pid)
+	}
+	if !reflect.DeepEqual(got, []int{13, 14}) {
+		t.Errorf("condemned %v, want [13 14]", got)
+	}
+	if ps := condemned(tree[:1], kids, "/w"); len(ps) != 0 {
+		t.Errorf("a daemon from elsewhere, alone: %v", ps)
+	}
+}

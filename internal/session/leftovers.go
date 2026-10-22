@@ -25,11 +25,12 @@ import (
 // started in a pane of a weaver session (WEAVER_TMUX_SESSION, TMUX and
 // TMUX_PANE in the environment of a process in it: macOS hides that of its
 // own programs, /bin/sh's, so the root may not say) whose pane has gone (or
-// whose tmux server has: another pid, or none), and that runs from the
-// worktree it was started in: some process in the tree has its program
-// (argv[0], or the script argv[1]) under that checkout. A daemon an
-// agent's tool started on the way (Codex's app server, gpg-agent) runs
-// from elsewhere and stays.
+// whose tmux server has: another pid, or none): of it, each process that
+// runs from the worktree it was started in (its program, argv[0], or the
+// script argv[1], under that checkout), with all under it (condemned). A
+// daemon an agent's tool started on the way (Codex's app server,
+// gpg-agent) runs from elsewhere and stays, even when a command of a gone
+// thread's runs under it.
 
 // proc is a process as the sweep sees it.
 type proc struct {
@@ -38,7 +39,9 @@ type proc struct {
 	env  map[string]string
 }
 
-// Leftover is one: the process launchd adopted, and the tree under it.
+// Leftover is one: the topmost process that runs from the checkout, and
+// all under it (of the tree launchd adopted: never a process above it that
+// does not, such as a shared daemon one of whose commands it is).
 type Leftover struct {
 	Pid       int
 	Procs     []int
@@ -105,11 +108,15 @@ func (e *Env) Leftovers() []Leftover {
 		if _, asked := panes[t]; !asked {
 			panes[t] = livePanes(t)
 		}
-		if panes[t][env["TMUX_PANE"]] || !runsFrom(tree, checkoutOf(env["PWD"])) {
+		if panes[t][env["TMUX_PANE"]] {
 			continue
 		}
-		l := Leftover{Pid: pid, Pane: env["TMUX_PANE"], Dir: env["PWD"], Cmd: strings.Join(root.argv, " ")}
-		for _, p := range tree {
+		ps := condemned(tree, kids, checkoutOf(env["PWD"]))
+		if len(ps) == 0 {
+			continue
+		}
+		l := Leftover{Pid: ps[0].pid, Pane: env["TMUX_PANE"], Dir: env["PWD"], Cmd: strings.Join(ps[0].argv, " ")}
+		for _, p := range ps {
 			l.Procs = append(l.Procs, p.pid)
 		}
 		ls = append(ls, l)
@@ -156,6 +163,27 @@ func (e *Env) SweepLeftovers() int {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 	return n
+}
+
+// condemned are the processes of tree (breadth first, as Leftovers walks
+// it) that run from under dir, each with all under it; never one above them
+// that runs from elsewhere: a daemon a thread's command ran under stays.
+func condemned(tree []proc, kids map[int][]int, dir string) []proc {
+	parent := map[int]int{}
+	for _, p := range tree {
+		for _, k := range kids[p.pid] {
+			parent[k] = p.pid
+		}
+	}
+	marked := map[int]bool{}
+	var out []proc
+	for _, p := range tree {
+		if marked[parent[p.pid]] || runsFrom([]proc{p}, dir) {
+			marked[p.pid] = true
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // livePanes are the panes of the tmux server a TMUX value names
