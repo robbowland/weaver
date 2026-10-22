@@ -51,3 +51,19 @@ func TestReadConversation(t *testing.T) {
 		}
 	}
 }
+
+// What the adopt picker takes for a session id when nothing listed matches.
+func TestSessionIDish(t *testing.T) {
+	for s, want := range map[string]bool{
+		"01a15945-1711-7650-b563-be62b35380bf": true,
+		"01a1":                                 true,
+		"E42F":                                 true,
+		"01a":                                  false,
+		"fix the parser":                       false,
+		"":                                     false,
+	} {
+		if got := sessionIDish(s); got != want {
+			t.Errorf("sessionIDish(%q) = %v", s, got)
+		}
+	}
+}

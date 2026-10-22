@@ -303,7 +303,8 @@ like any other:
 - **A conversation that isn't running**, such as one you ran outside tmux
   before a restart: `a` anywhere else on the board lists your recent Claude
   Code conversations, and `enter` resumes one as a thread, in the directory
-  it started in. From any shell, inside tmux or not, `wvr adopt SESSION-ID`
+  it started in. Type or paste a session id (or its first four or more
+  characters) to find one, listed or not. From any shell, inside tmux or not, `wvr adopt SESSION-ID`
   (or its first four or more characters) does the same, into the weaver
   session; `wvr adopt` alone opens the list there.
 

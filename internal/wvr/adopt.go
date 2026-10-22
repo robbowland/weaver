@@ -265,17 +265,28 @@ func (e *Env) pickConversation() string {
 		if running[c.ID] != "" {
 			mark = "  " + CDim + "running" + COff
 		}
-		fmt.Fprintf(&b, "%s\t%s  %s%s %4s%s%s\n", c.ID, oneline.Fit(c.Title, 46), CGrey, oneline.Fit(where, 26), age(now-c.Mod), COff, mark)
+		// Its session id last, dim: searched for, as typed or pasted.
+		fmt.Fprintf(&b, "%s\t%s  %s%s %4s%s%s  %s%s%s\n", c.ID, oneline.Fit(c.Title, 46), CGrey, oneline.Fit(where, 26), age(now-c.Mod), COff, mark,
+			CDim, c.ID, COff)
 	}
 	if n == 0 {
 		e.Tmux("display-message", "-d", "3000", "weaver: no conversation to adopt")
 		return ""
 	}
-	out := e.pick(b.String(), formLabel("WEAVER", "ADOPT"), formPrompt("adopt"), "a conversation, to resume as a thread", "")
-	ls := strings.Split(out, "\n")
-	if len(ls) < 2 {
-		return ""
+	out := e.pick(b.String(), formLabel("WEAVER", "ADOPT"), formPrompt("adopt"), "a conversation, or its session id", "")
+	query, picked, _ := strings.Cut(out, "\n")
+	if v, _, _ := strings.Cut(picked, "\t"); v != "" {
+		return v
 	}
-	v, _, _ := strings.Cut(ls[1], "\t")
-	return v
+	// None listed matches: a session id (or its first 4+ characters) is
+	// looked for among them all.
+	if q := strings.TrimSpace(query); sessionIDish(q) {
+		return q
+	}
+	return ""
+}
+
+// sessionIDish: could s be a session id, or the first 4+ characters of one?
+func sessionIDish(s string) bool {
+	return len(s) >= 4 && strings.Trim(s, "0123456789abcdefABCDEF-") == ""
 }
