@@ -165,9 +165,10 @@ hookj "$AG" "$(ev SessionStart ',"source":"startup"')"
 hookj "$AG" "$(ev UserPromptSubmit ',"prompt":"say hello"')"
 ok "hook: working, turn 1, its nvim" "$(jq -r '"\(.state) \(.turn) \(.nvim_pane)"' "$SD/tmux-${S}_$AG.json" 2>/dev/null)" "working 1 $NV"
 # Async hooks land in any order: a tool event of a turn that has ended, late,
-# leaves it done (even past the 3 s that cover events without a prompt id).
+# leaves it done (past the 3 s that cover events without a prompt id, within
+# the 10 s an async hook may lag).
 hookj "$AG" "$(ev Stop ',"prompt_id":"p1","last_assistant_message":"hello"')"
-jq -c '.since -= 10' "$SD/tmux-${S}_$AG.json" >"$AT/st.json" && mv "$AT/st.json" "$SD/tmux-${S}_$AG.json"
+jq -c '.since -= 5' "$SD/tmux-${S}_$AG.json" >"$AT/st.json" && mv "$AT/st.json" "$SD/tmux-${S}_$AG.json"
 hookj "$AG" "$(ev PostToolUse ',"prompt_id":"p1","tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}')" --async
 ok "hook: a late tool event of the turn that ended leaves it done" "$(jq -r .state "$SD/tmux-${S}_$AG.json")" "done"
 hookj "$AG" "$(ev UserPromptSubmit ',"prompt_id":"p2","prompt":"go on"')"

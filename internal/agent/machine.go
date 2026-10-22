@@ -40,6 +40,11 @@ type Change struct {
 	Bell int
 }
 
+// lateWindow is how long (s) after a turn ends an async hook of that turn
+// may still land: Claude Code runs them in the background, a second or
+// two behind.
+const lateWindow = 10
+
 // Transition is what ev makes of old, the stored state (sess: old when it
 // is this session's, else empty). Only the members the state machine owns
 // are set: state, what it waits on, background work, the command it runs,
@@ -134,17 +139,17 @@ func Transition(old, sess Record, ev Event) Change {
 			n.State = StateNeedsYou
 		} else {
 			// A late async hook must not undo a Stop or an interrupt: one of
-			// the turn that ended (its prompt_id) never does; without a
-			// prompt_id, one within 3 s of it.
+			// the turn that ended (its prompt_id) within lateWindow of it;
+			// without a prompt_id, within 3 s. Later than that, the turn
+			// carries on: a Stop hook of yours blocked its end, and it works
+			// on (its next Stop ends it, and rings).
 			switch old.State {
 			case StateDone, StateIdle, StateInterrupted:
-				recent := false
-				if old.Since == "" {
-					recent = ev.Now < 3
-				} else if s, err := strconv.ParseInt(old.Since.String(), 10, 64); err == nil {
-					recent = ev.Now-s < 3
+				ago := ev.Now
+				if s, err := strconv.ParseInt(old.Since.String(), 10, 64); err == nil && old.Since != "" {
+					ago = ev.Now - s
 				}
-				if ev.PromptID != "" && ev.PromptID == sess.PromptID || recent {
+				if ev.PromptID != "" && ev.PromptID == sess.PromptID && ago < lateWindow || ago < 3 {
 					n.State = old.State
 				}
 			case StateEnded:

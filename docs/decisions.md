@@ -36,7 +36,9 @@ can supersede an earlier one, and says so.
 - 2026-10-15: From prior art (workmux, agent-deck, herdr, claude-squad, cmux,
   tmux-claude-hatch) and Claude Code's, Codex's and tmux's documentation:
   async hooks land in any order, so a late tool event of a finished turn (its
-  `prompt_id`) never reopens it; Claude Code starts on a session id weaver
+  `prompt_id`) never reopens it (2026-10-22: within 10 s of its end; later,
+  the turn has carried on past a Stop hook that blocked its end, and is
+  working); Claude Code starts on a session id weaver
   chose (`--session-id`, named with `-n`), so a thread knows its conversation
   before its first hook and is never resumed with `--continue`; seen marks a
   finished agent as you look rather than when a hook next fires.
