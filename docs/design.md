@@ -963,9 +963,12 @@ cursor it read from, so a refresh between wins), and reloads the views;
 the asking view puts its cursor at N (where the `m` row was: the first
 item read) once its list has loaded (`<sock>.pos`, which its `load`
 event, `_items NAME loaded`, takes: till then fzf keeps the cursor on the
-row it was on). A section's total and age stay its first page's. Pages
-last until the next refresh, which asks for every section's first page
-again.
+row it was on). A section's total and age stay its first page's. A
+refresh keeps what was read: it asks each section's first page (the
+search's too) for as many items as the section holds, at least its own
+page, at most one request's (GitHub's 100, Linear's 250: `again`, the
+view's `held`), so a page read stays unless the section held more than
+that.
 
 `f` opens a picker (`_items NAME filter`, run by fzf's `execute` in the
 view's pane) of searches of your own, each its source's (`viewFilter`):

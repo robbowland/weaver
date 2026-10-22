@@ -9,7 +9,7 @@ import (
 )
 
 func TestQuery(t *testing.T) {
-	q := Query(PRs, Sections[PRs][0], "")
+	q := Query(PRs, Sections[PRs][0], "", Sections[PRs][0].limit())
 	for _, want := range []string{`s: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open user-review-requested:@me`,
 		`t: search(type: ISSUE, first: 100, query: "is:pr archived:false is:open assignee:@me -author:@me`,
 		"...pr", "fragment pr on PullRequest", "statusCheckRollup"} {
@@ -17,10 +17,10 @@ func TestQuery(t *testing.T) {
 			t.Errorf("PR query lacks %q", want)
 		}
 	}
-	if q := Query(PRs, Sections[PRs][1], ""); !strings.Contains(q, `first: 50, query: "is:pr archived:false is:open review-requested:@me -user-review-requested:@me draft:false`) || strings.Contains(q, "t: search") {
+	if q := Query(PRs, Sections[PRs][1], "", Sections[PRs][1].limit()); !strings.Contains(q, `first: 50, query: "is:pr archived:false is:open review-requested:@me -user-review-requested:@me draft:false`) || strings.Contains(q, "t: search") {
 		t.Errorf("Team query: %s", q)
 	}
-	if q := Query(Issues, Sections[Issues][1], ""); !strings.Contains(q, `"is:issue archived:false is:open author:@me`) || !strings.Contains(q, "fragment issue on Issue") {
+	if q := Query(Issues, Sections[Issues][1], "", Sections[Issues][1].limit()); !strings.Contains(q, `"is:issue archived:false is:open author:@me`) || !strings.Contains(q, "fragment issue on Issue") {
 		t.Errorf("issue query: %s", q)
 	}
 }
@@ -94,7 +94,7 @@ func TestFetchEachSection(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 	search := Filters[4].Section()
-	got, found := Fetch(search)
+	got, found := Fetch(func(Kind, Section) int { return 0 }, search)
 	for _, k := range []Kind{PRs, Issues} {
 		for i, r := range got[k] {
 			mine := r.Title == "Mine"
@@ -121,18 +121,18 @@ func TestLabelFilter(t *testing.T) {
 // A section pages on from where its last page ended; one with a second
 // search pages both, each from its own cursor, leaving out one at its end.
 func TestQueryPages(t *testing.T) {
-	if q := Query(PRs, Sections[PRs][2], "c1"); !strings.Contains(q, `s: search(type: ISSUE, first: 20, after: "c1", query: "is:pr archived:false is:open author:@me`) ||
+	if q := Query(PRs, Sections[PRs][2], "c1", Sections[PRs][2].limit()); !strings.Contains(q, `s: search(type: ISSUE, first: 20, after: "c1", query: "is:pr archived:false is:open author:@me`) ||
 		!strings.Contains(q, "issueCount pageInfo { hasNextPage endCursor } nodes") {
 		t.Errorf("Mine's next page: %s", q)
 	}
 	queue := Sections[PRs][0]
-	if q := Query(PRs, queue, "c1 c2"); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
+	if q := Query(PRs, queue, "c1 c2", queue.limit()); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
 		t.Errorf("Queue's next page: %s", q)
 	}
-	if q := Query(PRs, queue, "c1 -"); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || strings.Contains(q, "t: search") {
+	if q := Query(PRs, queue, "c1 -", queue.limit()); !strings.Contains(q, `s: search(type: ISSUE, first: 100, after: "c1"`) || strings.Contains(q, "t: search") {
 		t.Errorf("Queue's next page, its second search at its end: %s", q)
 	}
-	if q := Query(PRs, queue, "- c2"); strings.Contains(q, "s: search") || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
+	if q := Query(PRs, queue, "- c2", queue.limit()); strings.Contains(q, "s: search") || !strings.Contains(q, `t: search(type: ISSUE, first: 100, after: "c2"`) {
 		t.Errorf("Queue's next page, its own search at its end: %s", q)
 	}
 }

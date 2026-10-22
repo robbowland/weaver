@@ -1,14 +1,21 @@
 package wvr
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/robbowland/weaver/internal/github"
+	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/session"
 )
@@ -239,5 +246,86 @@ func TestWordsWithinOwners(t *testing.T) {
 	f.set(e)
 	if s := readGitHub(e).Search[github.PRs]; f.title != "flaky test" || s.Filters != "user:O user:p flaky test" {
 		t.Errorf("%q: %+v", f.title, s.Section)
+	}
+}
+
+// fakeGitHubPages puts a gh on PATH that answers every search with as many
+// pull requests (numbered from 1) as it asks for, of 500 in all.
+func fakeGitHubPages(t *testing.T) {
+	t.Helper()
+	bin := t.TempDir()
+	gh := `#!/bin/sh
+n=$(printf '%s' "$*" | sed -n 's/.*first: \([0-9][0-9]*\).*/\1/p' | head -n 1)
+nodes=$(seq 1 "$n" | awk '{ printf "%s{\"number\":%d,\"title\":\"pr\",\"state\":\"OPEN\",\"repository\":{\"nameWithOwner\":\"o/r\"},\"updatedAt\":\"2026-10-16T10:00:00Z\"}", (NR > 1 ? "," : ""), $1 }')
+echo "{\"data\":{\"s\":{\"issueCount\":500,\"pageInfo\":{\"hasNextPage\":true,\"endCursor\":\"c$n\"},\"nodes\":[$nodes]}}}"
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A refresh keeps what you loaded of a section (more): it asks for as many
+// as the section holds, at least its own page (so what is new still comes)
+// and at most what one request of GitHub's brings (100).
+func TestRefreshKeepsDepth(t *testing.T) {
+	fakeGitHubPages(t)
+	e := viewEnv(t)
+	held := map[string]int{"Team": 150, "Mine": 45, "Watch": 3}
+	updateGitHub(e, func(c *ghCache) {
+		c.Results = map[github.Kind][]github.Result{}
+		for _, s := range github.Sections[github.PRs] {
+			var ns []int
+			for n := 1; n <= held[s.Title]; n++ {
+				ns = append(ns, n)
+			}
+			c.Results[github.PRs] = append(c.Results[github.PRs], github.Result{Section: s, List: page.List[github.Item]{Items: prs(ns...), Next: "old"}})
+		}
+	})
+	githubSource{}.fetch(e)
+	for _, r := range readGitHub(e).Results[github.PRs] {
+		want := map[string]int{"Queue": 100, "Team": 100, "Mine": 45, "Watch": 20}[r.Title]
+		if len(r.Items) != want || r.Err != "" || !strings.HasPrefix(r.Next, "c"+strconv.Itoa(want)) {
+			t.Errorf("%s, holding %d: %d after a refresh (next %q), want %d", r.Title, held[r.Title], len(r.Items), r.Next, want)
+		}
+	}
+}
+
+// A Linear refresh keeps what you loaded of a section as GitHub's does: as
+// many as it holds, at least its own page (30), at most what one request
+// of Linear's brings (250).
+func TestLinearRefreshKeepsDepth(t *testing.T) {
+	reFirst := regexp.MustCompile(`first: (\d+)`)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Query string }
+		bestEffort(json.NewDecoder(r.Body).Decode(&req))
+		n, _ := strconv.Atoi(reFirst.FindStringSubmatch(req.Query)[1])
+		var ns []string
+		for i := 1; i <= n; i++ {
+			ns = append(ns, fmt.Sprintf(`{"identifier":"ENG-%d","title":"t","team":{"key":"ENG","name":"Engineering"},"state":{"name":"Todo","type":"unstarted"}}`, i))
+		}
+		fmt.Fprintf(w, `{"data":{"issues":{"nodes":[%s],"pageInfo":{"hasNextPage":true,"endCursor":"c%d"}}}}`, strings.Join(ns, ","), n)
+	}))
+	t.Cleanup(s.Close)
+	t.Setenv("WEAVER_LINEAR_URL", s.URL)
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	e := viewEnv(t)
+	held := map[string]int{"Queue": 300, "Mine": 45, "Watch": 3}
+	updateLinear(e, func(c *linCache) {
+		c.Results = nil
+		for _, sec := range linear.Sections {
+			var its []linear.Issue
+			for i := 1; i <= held[sec.Title]; i++ {
+				its = append(its, linear.Issue{Identifier: fmt.Sprintf("ENG-%d", i)})
+			}
+			c.Results = append(c.Results, linear.Result{Section: sec, List: page.List[linear.Issue]{Items: its, Next: "old"}})
+		}
+	})
+	linearSource{}.fetch(e)
+	for _, r := range readLinear(e).Results {
+		want := map[string]int{"Queue": 250, "Mine": 45, "Watch": 30}[r.Title]
+		if len(r.Items) != want || r.Err != "" || r.Next != "c"+strconv.Itoa(want) {
+			t.Errorf("%s, holding %d: %d after a refresh (next %q, err %q), want %d", r.Title, held[r.Title], len(r.Items), r.Next, r.Err, want)
+		}
 	}
 }

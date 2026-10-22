@@ -52,6 +52,18 @@ func (s Section) limit() int {
 	return Limit
 }
 
+// pageMax is the most items GitHub's search answers a request with.
+const pageMax = 100
+
+// again is how many items to ask section s's first page for again, held
+// as it is: as many as it holds (its pages read since), at least its own
+// page, at most one request's.
+func (s Section) again(held int) int { return min(max(held, s.limit()), pageMax) }
+
+// Held is how many items of each section (of kind k) are held now, for a
+// refresh to ask for as many again.
+type Held func(k Kind, s Section) int
+
 // Sections are weaver's: what waits on you, what is yours, and what you
 // take part in. A review asked of a team you are in counts as asked of you
 // (review-requested:@me), and in a busy organisation those outnumber your
@@ -148,9 +160,9 @@ fragment issue on Issue {
   assignees(first: 3) { nodes { login } }
 }`
 
-// Query is the request for section s of kind k: its page after cursor
-// after ("": its first).
-func Query(k Kind, s Section, after string) string {
+// Query is the request for section s of kind k: its page of n items
+// after cursor after ("": its first).
+func Query(k Kind, s Section, after string, n int) string {
 	is, frag, fields := "is:pr", "pr", prFields
 	if k == Issues {
 		is, frag, fields = "is:issue", "issue", issueFields
@@ -163,7 +175,7 @@ func Query(k Kind, s Section, after string) string {
 			from = ", after: " + string(a)
 		}
 		return fmt.Sprintf("  %s: search(type: ISSUE, first: %d%s, query: %s) { issueCount pageInfo { hasNextPage endCursor } nodes { ...%s } }\n",
-			alias, s.limit(), from, q, frag)
+			alias, n, from, q, frag)
 	}
 	body := ""
 	sa, ta := s.cursors(after)
@@ -378,8 +390,9 @@ func Parse(k Kind, s Section, after string, b []byte) (Result, error) {
 // each of search (a search of your own, a Filter's) of both kinds, a
 // request each, all at once (a search takes about a second; GitHub answers
 // aliased ones in turn), within 30 s: what each found, or why asking for it
-// failed; the sections by kind, then the searches by kind.
-func Fetch(search ...Section) (map[Kind][]Result, map[Kind][]Result) {
+// failed; the sections by kind, then the searches by kind. Each first page
+// as deep as held says it is held (Section.again).
+func Fetch(held Held, search ...Section) (map[Kind][]Result, map[Kind][]Result) {
 	type answer struct {
 		k Kind
 		i int
@@ -392,7 +405,7 @@ func Fetch(search ...Section) (map[Kind][]Result, map[Kind][]Result) {
 		asked[k] = append(append([]Section{}, Sections[k]...), search...)
 		for i, s := range asked[k] {
 			n++
-			go func() { ch <- answer{k, i, Ask(k, s, "")} }()
+			go func() { ch <- answer{k, i, ask(k, s, "", s.again(held(k, s)))} }()
 		}
 	}
 	out, found := map[Kind][]Result{}, map[Kind][]Result{}
@@ -471,8 +484,11 @@ func LabelFilter(label string, repos []string) Filter {
 
 // Ask asks GitHub for section s of kind k, its page after cursor after
 // ("": its first): what it found, or why asking failed.
-func Ask(k Kind, s Section, after string) Result {
-	b, err := gh(Query(k, s, after))
+func Ask(k Kind, s Section, after string) Result { return ask(k, s, after, s.limit()) }
+
+// ask is Ask, a page of n items.
+func ask(k Kind, s Section, after string, n int) Result {
+	b, err := gh(Query(k, s, after, n))
 	var r Result
 	if err == nil {
 		r, err = Parse(k, s, after, b)

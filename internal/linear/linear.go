@@ -228,26 +228,34 @@ var Sections = []Section{
 // Limit is how many issues a section shows.
 const Limit = 30
 
+// pageMax is the most issues Linear answers a request with.
+const pageMax = 250
+
+// again is how many issues to ask a section's first page for again, held
+// as it is: as many as it holds (its pages read since), at least Limit, at
+// most one request's.
+func again(held int) int { return min(max(held, Limit), pageMax) }
+
 // Result is a section's issues, and how asking for them went.
 type Result struct {
 	Section
 	page.List[Issue]
 }
 
-// Query is section s's request: its page after cursor $after (null: its
-// first), and whether there is another (Linear does not count a list's
-// issues, but counts what its search finds); a term's, $term.
-func Query(s Section) string {
+// Query is section s's request: its page of n issues after cursor $after
+// (null: its first), and whether there is another (Linear does not count a
+// list's issues, but counts what its search finds); a term's, $term.
+func Query(s Section, n int) string {
 	if s.Term != "" {
 		filter := ""
 		if s.Filter != "" {
 			filter = ", filter: " + s.Filter
 		}
 		return fmt.Sprintf("query Search($after: String, $term: String!) { searchIssues(term: $term%s, first: %d, after: $after) { nodes { %s } pageInfo { hasNextPage endCursor } totalCount } }",
-			filter, Limit, issueFields)
+			filter, n, issueFields)
 	}
 	return fmt.Sprintf("query Section($after: String) { issues(filter: %s, first: %d, after: $after, orderBy: updatedAt) { nodes { %s } pageInfo { hasNextPage endCursor } } }",
-		s.Filter, Limit, issueFields)
+		s.Filter, n, issueFields)
 }
 
 // pageInfo is where a list's next page starts, if it has one.
@@ -271,11 +279,11 @@ func Ask(s Section, after string) Result {
 	if err != nil {
 		return Result{Section: s, List: page.Failed[Issue](err)}
 	}
-	return ask(key, s, after)
+	return ask(key, s, after, Limit)
 }
 
-// ask is Ask, signed in as key.
-func ask(key string, s Section, after string) Result {
+// ask is Ask, signed in as key, a page of n issues.
+func ask(key string, s Section, after string, n int) Result {
 	type list struct {
 		Nodes      []node   `json:"nodes"`
 		PageInfo   pageInfo `json:"pageInfo"`
@@ -293,7 +301,7 @@ func ask(key string, s Section, after string) Result {
 		vars["term"] = s.Term
 	}
 	r := Result{Section: s}
-	if err := query(key, Query(s), vars, &d); err != nil {
+	if err := query(key, Query(s, n), vars, &d); err != nil {
 		r.List = page.Failed[Issue](err)
 		return r
 	}
@@ -315,8 +323,8 @@ func ask(key string, s Section, after string) Result {
 // Fetch asks Linear for every section, and for each of search (a search
 // of your own), a request each, at once: each one's issues, or why asking
 // for it failed (every one, without a key); the sections, then the
-// searches.
-func Fetch(search ...Section) ([]Result, []Result) {
+// searches. Each first page as deep as held says it is held (again).
+func Fetch(held func(Section) int, search ...Section) ([]Result, []Result) {
 	asked := append(append([]Section{}, Sections...), search...)
 	out := make([]Result, len(asked))
 	key, err := Key()
@@ -332,7 +340,7 @@ func Fetch(search ...Section) ([]Result, []Result) {
 	}
 	ch := make(chan answer)
 	for i, s := range asked {
-		go func() { ch <- answer{i, ask(key, s, "")} }()
+		go func() { ch <- answer{i, ask(key, s, "", again(held(s)))} }()
 	}
 	for range asked {
 		a := <-ch

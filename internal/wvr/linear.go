@@ -142,15 +142,29 @@ func (linearSource) read(e *Env) itemData {
 	return d
 }
 
-// fetch asks Linear again, the search too, and keeps the answer
-// (refreshed).
+// fetch asks Linear again, the search too, each as deep as it is held
+// (what more read stays), and keeps the answer (refreshed).
 func (linearSource) fetch(e *Env) {
+	c := readLinear(e)
 	var search []linear.Section
-	if s := readLinear(e).Search; s != nil {
-		search = append(search, s.Section)
+	if c.Search != nil {
+		search = append(search, c.Search.Section)
 	}
-	got, found := linear.Fetch(search...)
+	got, found := linear.Fetch(c.held, search...)
 	updateLinear(e, func(c *linCache) { c.refreshed(got, found) })
+}
+
+// held is how many issues c holds of section s (linear.Fetch).
+func (c linCache) held(s linear.Section) int {
+	if c.Search != nil && c.Search.Section == s {
+		return len(c.Search.Items)
+	}
+	for _, r := range c.Results {
+		if r.Section == s {
+			return len(r.Items)
+		}
+	}
+	return 0
 }
 
 // more reads the page after section key's, and keeps it (paged).

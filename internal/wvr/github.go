@@ -94,6 +94,19 @@ func (c *ghCache) paged(k github.Kind, s github.Section, after string, p page.Li
 	}
 }
 
+// held is how many items c holds of section s of kind k (github.Held).
+func (c ghCache) held(k github.Kind, s github.Section) int {
+	if r, ok := c.Search[k]; ok && r.Section == s {
+		return len(r.Items)
+	}
+	for _, r := range c.Results[k] {
+		if r.Section == s {
+			return len(r.Items)
+		}
+	}
+	return 0
+}
+
 // section is c's section key of kind k: its index, or the search's ("s").
 func (c ghCache) section(k github.Kind, key string) (github.Result, bool) {
 	if key == searchKey {
@@ -178,14 +191,15 @@ func (g githubSource) read(e *Env) itemData {
 	return d
 }
 
-// fetch asks GitHub again, the search too, and keeps the answer
-// (refreshed).
+// fetch asks GitHub again, the search too, each as deep as it is held
+// (what more read stays), and keeps the answer (refreshed).
 func (githubSource) fetch(e *Env) {
+	c := readGitHub(e)
 	var search []github.Section
-	if r, ok := readGitHub(e).Search[github.PRs]; ok {
+	if r, ok := c.Search[github.PRs]; ok {
 		search = append(search, r.Section)
 	}
-	got, found := github.Fetch(search...)
+	got, found := github.Fetch(c.held, search...)
 	updateGitHub(e, func(c *ghCache) { c.refreshed(got, found) })
 }
 

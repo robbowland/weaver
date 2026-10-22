@@ -369,11 +369,14 @@ can supersede an earlier one, and says so.
   search costs about a second whatever its size, and the caps keep the
   first look fast. `m` (more; free in the views, and no window manager
   takes it) reads the next page of the section under the cursor, and the
-  line after a section's items, `⏎ more`, is its button. Pages last until
-  the next refresh, which asks for first pages again: a refresh's answer
-  stays what each section is, and a page read before it is never mixed
-  with one after (a page is kept only if its section still ends where it
-  was read from). Linear counts no list, so its heading says `30+`.
+  line after a section's items, `⏎ more`, is its button. A refresh's
+  answer stays what each section is, and a page read before it is never
+  mixed with one after (a page is kept only if its section still ends
+  where it was read from). Linear counts no list, so its heading says
+  `30+`. (2026-10-22: a refresh asks each first page for as many items as
+  its section holds, up to one request's, GitHub's 100 or Linear's 250, so
+  pages read are not lost to the next refresh; deeper than that, a refresh
+  would cost a request a page, every five minutes.)
 - 2026-10-22: A view's `/` stays fzf's fuzzy match (Rob: "The fuzzy search
   likely needs improving too"): fzf was not what fell short. Its search
   line began with the thread's number and cell, so digits and short words
