@@ -329,7 +329,7 @@ func (e *Env) Next() {
 		return
 	}
 	defer release()
-	rows, _ := e.AgentRows()
+	rows, now := e.AgentRows()
 	type c struct {
 		class int
 		since int64
@@ -342,27 +342,17 @@ func (e *Env) Next() {
 		if r.Pane == "" {
 			continue
 		}
+		// Who needs you first, then who is done and unseen.
 		class := 0
-		switch r.State {
-		case agent.StateNeedsYou:
-		case agent.StateDone:
-			if r.Seen {
-				continue
-			}
+		switch r.Need(now) {
+		case session.NeedYou:
+		case session.NeedLook:
 			class = 1
-		case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
-			continue
-		default:
+		case session.NeedWait, session.NeedNothing:
 			continue
 		}
 		// What tmux's message line says as you land: whose, and why.
-		l := r.Title
-		if l == "" {
-			l = r.Ttask
-		}
-		if l == "" {
-			l = r.Prompt
-		}
+		l := r.Called()
 		if i := strings.IndexByte(l, '\n'); i >= 0 {
 			l = l[:i]
 		}

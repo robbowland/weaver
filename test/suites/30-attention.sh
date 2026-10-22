@@ -199,6 +199,16 @@ ok "status for the status line, kept by the hooks: Micrographics signal colours,
 focus 0
 wvr status --push
 ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(wvr status)" "true|$G_NEED 1  $G_WORK 1"
+# ...or at its nvim, beside it
+hook 0 UserPromptSubmit "$T/repo" "" "again" >/dev/null
+fake_nvim 0 2
+focus 2
+hook 0 Stop "$T/repo" >/dev/null
+wvr status --push
+ok "...or whose nvim you are looking at" "$(st 0 seen)" "true"
+kill "$FAKE_NVIM_PID" 2>/dev/null
+rm -f "$SD/${SK}_0.nvim"
+focus 0
 ok "...in the status line too" "$(status_line)" "#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
 printf 'garbage\n' >"$SD/$SK.status"
 ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "

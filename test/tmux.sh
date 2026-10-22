@@ -491,23 +491,28 @@ ok "...closing the thread you are in: home, not the window tmux showed before" "
 tx run-shell -b -t "%$AG1" "wvr close --yes $AG1 >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 " ]'
 
-# --- an agent that fails as it starts (a broken install): its pane stays, with
-# what it said and how it ended, until a key closes it
+# --- an agent that exits (here, fails as it starts: a broken install): its
+# pane stays, with what it said and how it ended; the board shows the thread
+# exited (counted as nothing), R starts its agent again, x closes the thread
 tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here --no-focus 'fail now' >/dev/null 2>&1"
 waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
 AGF=$(pane_at 1 1)
 waitfor '[ "$(tx display -p -t "%$AGF" "#{pane_dead}" 2>/dev/null)" = 1 ]'
-ok "a failed agent: its pane kept, what it said and how it ended on it" \
+ok "an exited agent: its pane kept, what it said and how it ended on it" \
 	"$(tx display -p -t "%$AGF" '#{pane_dead}')|$(tx capture-pane -p -S - -t "%$AGF" | grep -c -e 'broken install' -e 'claude exited with status 3')" "1|2" ||
 	tx capture-pane -p -S - -t "%$AGF" | grep . | sed 's/^/  pane: /'
-tx select-window -t "=$S:1" \; select-pane -t "%$AGF"
-waitfor '[ "$(where | cut -d " " -f 1)" = 1 ]'
-key 71 # q
-waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 1 ]'
-ok "...a key closes it" "$(panes 1 | wc -l | tr -d ' ')" "1"
-tx kill-window -t "=$S:1"
-rm -f "$SD/tmux-${S}_$AGF".*
+waitfor '[ "$(board_rows)" = 1 ]'
+ok "...the board shows its thread, exited, and the status line counts nothing" \
+	"$(curl -s -m 2 --unix-socket "$(board)" "http://localhost?limit=100" | jq -r '[.matches[].text | select(startswith("a"))][0]' | grep -c 'exited')|$(wvr status --tmux "$S")" "1|"
+rm -f "$AT/args.$AGF"
+tx run-shell -t "=$S:" "wvr restart $AGF >'$AT/restart.out' 2>&1"
+waitfor '[ "$(tx display -p -t "%$AGF" "#{pane_dead}" 2>/dev/null)" = 0 ] && [ -f "$AT/args.$AGF" ]'
+ok "...R starts its agent again in its pane, on its conversation" \
+	"$(tx display -p -t "%$AGF" '#{pane_dead}')|$(head -n 1 "$AT/args.$AGF")" "0|--resume" ||
+	sed 's/^/  restart: /' "$AT/restart.out"
+tx run-shell -b -t "%$AGF" "wvr close --yes $AGF >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 " ]'
+ok "...and closing it closes the thread" "$(windows)|$(ls "$SD" | grep -c "tmux-${S}_$AGF\\.")" "0 |0"
 
 # --- adopt: an agent you started by hand (here, beside home's board) becomes
 # a thread where it runs: a window of its own at its number, an nvim beside

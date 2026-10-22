@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -116,13 +117,14 @@ func (e *Env) restartAgent(p tmux.PaneID, force bool) (string, error) {
 		return "%" + string(p), errors.New("not a thread (adopt it first)")
 	}
 	label := fmt.Sprintf("%02d", th.Num)
-	st, err := store.ReadState(e.StateFile(p))
-	if err != nil || st.SessionID == "" {
-		return label, errors.New("its agent has not said which conversation it is in yet")
-	}
-	if !force && (st.State == agent.StateWorking || st.State == agent.StateNeedsYou) {
+	// Mid-turn as the board says it; an agent that has exited never is.
+	if r, now, ok := e.RowOf(p); ok && !force && r.MidTurn(now) {
 		return label, errMidTurn
 	}
+	// Its conversation, as its state says, else as its record does; none
+	// known (it never reported): its agent starts afresh.
+	st, _ := store.ReadState(e.StateFile(p))
+	st.SessionID = cmp.Or(st.SessionID, th.SessionID)
 	kind, ok := agent.ParseKind(string(th.Agent))
 	if !ok {
 		kind = agent.Claude

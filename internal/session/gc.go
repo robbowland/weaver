@@ -14,6 +14,8 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/store"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 var (
@@ -67,6 +69,42 @@ func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 	return ss, ok
 }
 
+// paneLife is a pane of a life of a session: its key, its id, and which
+// life (server, session id).
+type paneLife struct {
+	skey  string
+	pane  tmux.PaneID
+	where agent.Where
+}
+
+// panesShown are the panes of the running sessions, on weaver's server and
+// the one we run in.
+func (e *Env) panesShown() map[paneLife]bool {
+	m := map[paneLife]bool{}
+	add := func(args ...string) {
+		out, err := RunTmux(args...)
+		if err != nil {
+			return
+		}
+		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+			f := strings.SplitN(l, " ", 4)
+			if len(f) != 4 {
+				continue
+			}
+			srv, _ := strconv.Atoi(f[1])
+			if p, ok := tmux.ParsePane(f[0]); ok {
+				m[paneLife{KeyOf(f[3]), p, agent.Where{Server: srv, Session: f[2]}}] = true
+			}
+		}
+	}
+	const format = "#{pane_id} #{pid} #{session_id} #S"
+	add(append(append([]string{}, e.TSock...), "list-panes", "-a", "-F", format)...)
+	if e.InTmux {
+		add("list-panes", "-a", "-F", format)
+	}
+	return m
+}
+
 // GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid is retired an
 // hour after its session went, or at once when its session was made since
@@ -102,12 +140,21 @@ func (e *Env) GC() {
 		}
 		return made > 0 && ts > 0 && made > ts
 	}
+	var shown map[paneLife]bool
 	for _, f := range paneFiles(e.StateDir, "json") {
 		l, _ := files.FirstLine(f)
 		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), agent.State(sub1(reGcState, l))
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
 		if pid != "" {
 			if !AgentAlive(pid, start, nil) {
+				// Its pane kept (it exited, its thread to be started again
+				// or closed): the board's to show, not to retire.
+				if shown == nil {
+					shown = e.panesShown()
+				}
+				if st, err := store.ReadState(f); err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
+					continue
+				}
 				e.Retire(f, pid)
 				continue
 			}

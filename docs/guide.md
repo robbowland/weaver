@@ -244,6 +244,10 @@ means two agents share the worktree, so their per-turn diffs mix.
 The headings' counts are the status line's. The cursor never rests on a
 heading, and stays on its agent as the board reloads itself.
 
+When a thread's agent exits (you quit it, or it fails as it starts), its
+pane stays with what it said last, and its row shows it exited: `R` starts
+its agent again on its conversation, `x` closes the thread.
+
 | Key | Does |
 | --- | --- |
 | `enter`, `1`–`9` | Jump to the thread (`1`–`9`: that row) |

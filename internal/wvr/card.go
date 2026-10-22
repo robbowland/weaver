@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -299,7 +300,32 @@ func (e *Env) Preview(args []string) string {
 	} else if err != nil {
 		return out
 	}
-	return out + card(s, from, previewCols(), head, ab, changed, nw, shared)
+	// Its state as its row on the board says it (refined, starting or not
+	// reporting, exited), else as its record does.
+	sh := shownOf(s)
+	if r, now, ok := e.RowOf(p); ok {
+		sh = shown{state: r.State, since: r.Since, seen: r.Seen, waiting: r.Waiting, exited: r.Exited, notReporting: r.NotReporting(now)}
+	}
+	return out + card(s, sh, from, previewCols(), head, ab, changed, nw, shared)
+}
+
+// shown is an agent's state as its card says it: the board's, from its row.
+type shown struct {
+	state                      agent.State
+	since                      int64 // epoch s
+	seen, exited, notReporting bool
+	waiting                    string
+}
+
+// shownOf is record s's state as it stands, for an agent with no row.
+func shownOf(s agent.Record) shown {
+	since := time.Now().Unix()
+	if v := jsonx.NumberOr(s.Since, 0); s.Since != "" {
+		since = int64(v)
+	} else if s.TS != 0 {
+		since = s.TS
+	}
+	return shown{state: cmp.Or(s.State, agent.StateIdle), since: since, seen: s.Seen, waiting: s.Waiting}
 }
 
 // itemLine is a thread record's work item for its card: PR o/r#45, issue
@@ -321,28 +347,19 @@ func itemLine(t store.Thread) string {
 	return l
 }
 
-func card(s agent.Record, from string, w int, head, ab string, changed, nw, shared int) string {
+func card(s agent.Record, sh shown, from string, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
-	st := s.State
-	if st == "" {
-		st = agent.StateIdle
-	}
-	since := now
-	if v := jsonx.NumberOr(s.Since, 0); s.Since != "" {
-		since = int64(v)
-	} else if s.TS != 0 {
-		since = s.TS
-	}
+	st, since := sh.state, sh.since
 	word := string(st)
-	switch st {
-	case agent.StateNeedsYou:
+	switch {
+	case sh.exited:
+		word = "exited · R starts it again"
+	case sh.notReporting:
+		word = "not reporting"
+	case st == agent.StateNeedsYou:
 		word = CRed + "needs you" + COff
-	case agent.StateDone:
-		if !s.Seen {
-			word = CGreen + string(agent.StateDone) + COff
-		}
-	case agent.StateWorking, agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
-		// The state's own word.
+	case st == agent.StateDone && !sh.seen:
+		word = CGreen + string(agent.StateDone) + COff
 	}
 	first := word + CDim + " · " + COff + cardAge(now-since)
 	if s.Agent != "" && s.Agent != string(agent.Claude) {
@@ -354,8 +371,8 @@ func card(s agent.Record, from string, w int, head, ab string, changed, nw, shar
 		add(field(w, "from", from, "", 1))
 	}
 	add(field(w, "asked", s.Prompt, "", 4))
-	if st == agent.StateNeedsYou {
-		waits := s.Waiting
+	if st == agent.StateNeedsYou && !sh.exited {
+		waits := sh.waiting
 		if waits == "" {
 			waits = "you"
 		}

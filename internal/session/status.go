@@ -71,23 +71,20 @@ func StatusLine(args []string) string {
 // `[!] 1  [x] 2  [/] 1`, each only when there are some (done counts the
 // ones not yet seen).
 func (e *Env) StatusText() string {
-	rows, _ := e.AgentRows()
+	rows, now := e.AgentRows()
 	var n, d, w int
 	for _, r := range rows {
 		if r.Pane == "" {
 			continue
 		}
-		switch r.State {
-		case agent.StateNeedsYou:
+		switch r.Need(now) {
+		case NeedYou:
 			n++
-		case agent.StateWorking, agent.StateStarting:
+		case NeedLook:
+			d++
+		case NeedWait:
 			w++
-		case agent.StateDone:
-			if !r.Seen {
-				d++
-			}
-		case agent.StateIdle, agent.StateInterrupted, agent.StateEnded:
-			// Not counted.
+		case NeedNothing:
 		}
 	}
 	var out []string
@@ -116,29 +113,27 @@ func (e *Env) pushStatus(labels bool) {
 	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
 		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "
 	}
-	rows, _ := e.AgentRows()
+	rows, at := e.AgentRows()
 	var need, done, work int
 	var seenNow []tmux.PaneID
 	for _, r := range rows {
 		if r.Pane == "" {
 			continue
 		}
-		switch r.State {
-		case agent.StateNeedsYou:
+		switch r.Need(at) {
+		case NeedYou:
 			need++
-		case agent.StateWorking, agent.StateStarting:
-			work++
-		case agent.StateDone:
-			if r.Seen {
-				continue
-			}
-			if strings.Contains(clients, " "+string(r.Pane)+" ") {
+		case NeedLook:
+			// Done while you look at it (its pane or its nvim): seen at once.
+			if strings.Contains(clients, " "+string(r.Pane)+" ") ||
+				strings.Contains(clients, " "+string(e.NvimPane(r.Pane))+" ") && e.NvimPane(r.Pane) != "" {
 				seenNow = append(seenNow, r.Pane)
 			} else {
 				done++
 			}
-		case agent.StateIdle, agent.StateInterrupted, agent.StateEnded:
-			// Not counted.
+		case NeedWait:
+			work++
+		case NeedNothing:
 		}
 	}
 	for _, p := range seenNow {

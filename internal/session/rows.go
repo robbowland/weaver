@@ -48,6 +48,7 @@ type Row struct {
 	Tdone, Ttotal                                                     int  // its tasks
 	Tnum                                                              int  // its thread's number; 0 for none
 	Review                                                            bool // its thread is read-only: a review, an investigation
+	Exited                                                            bool // its agent has exited and left its pane (kept: R starts it again, x closes it)
 	Troots                                                            []string
 	Doing                                                             string // the command it runs now
 }
@@ -104,14 +105,16 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			}
 			continue
 		}
-		if p.Exited || s.State == agent.StateEnded {
+		// An agent that ended in a pane that runs on (an adopted shell's) is
+		// gone from the board; one whose pane it left is shown, exited.
+		if s.State == agent.StateEnded && !p.Exited {
 			continue
 		}
 		// Claude Code's own session file says more than the hooks can:
 		// a long tool you approved is work, an unreported dialog needs
 		// you, quiet after Esc is interrupted.
 		var c *claudeSession
-		if c0, ok := live[string(s.Pid)]; ok && c0.SessionID == s.SessionID {
+		if c0, ok := live[string(s.Pid)]; ok && c0.SessionID == s.SessionID && !p.Exited {
 			c = &c0
 		}
 		cu, cst, cwait := 0.0, "", ""
@@ -189,12 +192,14 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		for _, x := range s.TurnRoots {
 			r.Troots = append(r.Troots, oneline.Line(x))
 		}
-		if n, err := strconv.Atoi(r.Pid); err == nil {
+		r.Exited = p.Exited
+		if n, err := strconv.Atoi(r.Pid); err == nil && !r.Exited {
 			pids = append(pids, n)
 		}
 		rows = append(rows, r)
 	}
-	// A thread whose agent has not reported yet (its pane still open).
+	// A thread whose agent has not reported yet (or never will: it exited
+	// at once, its pane kept).
 	for _, f := range threads {
 		if have[strings.TrimSuffix(f, ".thread")+".json"] {
 			continue
@@ -205,7 +210,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		pane := paneOfNum(*t.Pane)
 		p := byID[pane]
-		if p == nil || p.Exited {
+		if p == nil {
 			continue
 		}
 		since := t.Created
@@ -215,7 +220,8 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview})
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,
+			Exited: p.Exited})
 	}
 	starts := ProcStarts(pids)
 	for _, g := range gones {
@@ -229,7 +235,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	}
 	out := rows[:0]
 	for _, r := range rows {
-		if r.Pid != "" && !AgentAlive(r.Pid, r.Pstart, starts) {
+		if !r.Exited && r.Pid != "" && !AgentAlive(r.Pid, r.Pstart, starts) {
 			// Killed without a SessionEnd: it is not coming back (a thread
 			// lost with its session is kept, to resume).
 			e.Retire(r.Sfile, r.Pid)

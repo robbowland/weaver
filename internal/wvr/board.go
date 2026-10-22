@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 	"golang.org/x/sys/unix"
 )
 
@@ -219,31 +220,23 @@ func (e *Env) rows(plain bool) string {
 		if a.Since > 0 {
 			since = a.Since
 		}
-		name := a.Title
-		if name == "" {
-			name = a.Ttask
-		}
-		if name == "" {
-			name = a.Prompt
-		}
-		if name == "" {
-			kind := a.Agent
-			if kind == "" {
-				kind = string(agent.Claude)
-			}
-			name = "new " + kind + " session"
-		}
-		var g int
+		name := a.Called()
+		// Its group is what it asks of you (session.Need), as the status
+		// line counts it; the glyph and fact say how.
+		need := a.Need(now)
+		g := int(need)
 		var glyph, fact string
-		switch a.State {
-		case agent.StateNeedsYou:
-			g, fact = 0, a.Waiting
+		switch {
+		case a.Exited:
+			fact = "exited · R starts it again, x closes it"
+			glyph = paint(GIdle, dim, dim, off)
+		case a.State == agent.StateNeedsYou:
+			fact = a.Waiting
 			if fact == "" {
 				fact = "input"
 			}
 			glyph = paint(GNeed, red, dim, off)
-		case agent.StateWorking:
-			g = 2
+		case a.State == agent.StateWorking:
 			glyph = paint(GWork, grey, dim, off)
 			switch {
 			case a.Doing != "":
@@ -263,11 +256,11 @@ func (e *Env) rows(plain bool) string {
 				// Nothing it runs or edits yet: the model at work.
 				fact = "thinking"
 			}
-		case agent.StateDone:
+		case a.State == agent.StateDone:
 			if a.Seen {
-				g, glyph = 3, paint(GSeen, dim, dim, off)
+				glyph = paint(GSeen, dim, dim, off)
 			} else {
-				g, glyph = 1, paint(GDone, green, dim, off)
+				glyph = paint(GDone, green, dim, off)
 			}
 			roots := a.Troots
 			if len(roots) == 0 {
@@ -289,27 +282,21 @@ func (e *Env) rows(plain bool) string {
 					fact += " · " + last
 				}
 			}
-		case agent.StateInterrupted:
-			g, fact = 3, string(agent.StateInterrupted)
+		case a.State == agent.StateInterrupted:
+			fact = string(agent.StateInterrupted)
 			glyph = paint(GInt, grey, dim, off)
-		case agent.StateStarting:
-			// Its agent reports within seconds, unless its hooks are not in
-			// place (Codex runs them only once trusted in /hooks).
-			if now-since < 120 {
-				g, fact = 2, string(agent.StateStarting)
-				glyph = paint(GWork, grey, dim, off)
-			} else {
-				g, fact = 3, "not reporting"
-				glyph = paint(GIdle, dim, dim, off)
-				if a.Agent == "codex" {
-					fact = "no hooks: trust them in codex /hooks"
-				}
+		case a.NotReporting(now):
+			fact = "not reporting"
+			glyph = paint(GIdle, dim, dim, off)
+			if a.Agent == "codex" {
+				fact = "no hooks: trust them in codex /hooks"
 			}
-		case agent.StateIdle, agent.StateEnded:
-			// Seen and quiet: as anything else, the idle cell.
-			fallthrough
+		case a.State == agent.StateStarting:
+			// Its agent reports within seconds.
+			fact = string(agent.StateStarting)
+			glyph = paint(GWork, grey, dim, off)
 		default:
-			g = 3
+			// Idle, or ended: quiet, the idle cell.
 			glyph = paint(GIdle, dim, dim, off)
 			if a.Turn == 0 {
 				fact = "no prompt yet"
@@ -322,10 +309,10 @@ func (e *Env) rows(plain bool) string {
 		}
 		// Needs you, done and working: longest first; idle: latest first.
 		k := since
-		if g == 3 {
+		if need == session.NeedNothing {
 			k = 10000000000 - since
 		}
-		if g < 3 {
+		if need != session.NeedNothing {
 			states[g]++
 		}
 		// A read-only thread: in its own group, by state there.
@@ -357,14 +344,8 @@ func (e *Env) rows(plain bool) string {
 		if digits(l.Lost) {
 			since, _ = strconv.ParseInt(l.Lost, 10, 64)
 		}
-		// Named as a live thread is: its task.
-		name := oneline.Line(l.Task)
-		if name == "" {
-			name = l.Title
-		}
-		if name == "" {
-			name = l.Name
-		}
+		// Named as it was when live.
+		name := l.Called()
 		fact := "its session went · ⏎ resumes"
 		w := git.WhereOf(l.Dir)
 		where := w.Repo

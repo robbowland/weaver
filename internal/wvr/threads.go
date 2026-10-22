@@ -501,15 +501,17 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	return nil
 }
 
-// keepIfFailed has tmux keep agent pane p when its agent exits with an
-// error, until a key closes it: what the agent said (a broken install, a
-// bad flag) stays to be read, rather than going with its pane and leaving
-// nvim alone in the window. A tmux without failed-key closes it at once.
-func (e *Env) keepIfFailed(p tmux.PaneID, kind agent.Kind) {
+// keepExited has tmux keep agent pane p when its agent exits, as its
+// thread lasts until you close it: what the agent said last (a broken
+// install, a bad flag, a goodbye) stays to be read, and the board shows it
+// exited, R to start it again, x to close the thread, rather than its pane
+// going and leaving nvim alone in the window.
+func (e *Env) keepExited(p tmux.PaneID, kind agent.Kind) {
 	t := p.Target()
-	e.Tmux("set-option", "-p", "-t", t, "remain-on-exit", "failed-key", ";",
+	e.Tmux("set-option", "-p", "-t", t, "remain-on-exit", "on", ";",
 		"set-option", "-p", "-t", t, "remain-on-exit-format", "weaver: "+string(kind)+
-			" exited #{?pane_dead_signal,on signal #{pane_dead_signal},with status #{pane_dead_status}} · any key closes this pane")
+			" exited#{?pane_dead_signal, on signal #{pane_dead_signal},#{?#{!=:#{pane_dead_status},0}, with status #{pane_dead_status},}}"+
+			" · on the board, R starts it again, x closes the thread")
 }
 
 // AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
@@ -535,7 +537,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
 		if pane != "" {
-			e.keepIfFailed(pane, kind)
+			e.keepExited(pane, kind)
 		}
 		w := agent.Command(kind, cmd, mode)
 		if len(w) == 0 {
@@ -1117,17 +1119,22 @@ func (e *Env) Close(args []string) error {
 		}
 		name = k + " in pane " + string(agentPane)
 	}
-	what := CGrey + string(st) + COff
-	switch st {
-	case agent.StateNeedsYou:
+	// Its state and name as its row on the board says them.
+	called := ""
+	exited := false
+	if r, _, ok := e.RowOf(agentPane); ok {
+		st, called, exited = r.State, r.Called(), r.Exited
+	}
+	what := CGrey + string(cmp.Or(st, agent.StateStarting)) + COff
+	switch {
+	case exited:
+		what = CGrey + "exited" + COff
+	case st == agent.StateNeedsYou:
 		what = CRed + "needs you" + COff
-	case agent.StateDone:
+	case st == agent.StateDone:
 		what = CGreen + string(agent.StateDone) + COff
-	case agent.StateWorking:
+	case st == agent.StateWorking:
 		what = string(agent.StateWorking)
-	case "":
-		what = CGrey + string(agent.StateStarting) + COff
-	case agent.StateIdle, agent.StateInterrupted, agent.StateEnded, agent.StateStarting:
 	}
 	n := 0
 	if nv != "" {
@@ -1186,9 +1193,9 @@ func (e *Env) Close(args []string) error {
 	if k == "" {
 		k = "claude"
 	}
-	// Named as the board names it: its number and task, then where.
+	// Named as the board names it: its number and name, then its branch.
 	head, sub := CBold+name+COff, ""
-	if t := oneline.Line(th.Task); t != "" {
+	if t := oneline.Line(called); t != "" {
 		head = CBold + oneline.Cut(t, 56) + COff
 		if th.Num > 0 {
 			head = CDim + fmt.Sprintf("%02d", th.Num) + COff + " " + head
@@ -1378,16 +1385,13 @@ func (e *Env) Send(args []string) error {
 	if strings.TrimSpace(string(text)) == "" {
 		return errors.New("nothing to send")
 	}
-	rows, _ := e.AgentRows()
-	var st agent.State
-	for _, r := range rows {
-		if r.Pane == want {
-			st = r.State
-			break
-		}
-	}
-	if st == "" {
+	r, _, ok := e.RowOf(want)
+	if !ok {
 		return errors.New("no agent in pane " + string(want))
+	}
+	st := r.State
+	if r.Exited {
+		return errors.New("the agent has exited: R on the board starts it again")
 	}
 	if !force {
 		switch st {
@@ -1453,21 +1457,18 @@ func (e *Env) Quit(args []string) error {
 		if err != nil {
 			return errors.New("quit needs a terminal to ask, or --yes")
 		}
+		// What comes back (its threads) and what stops: turns under way,
+		// and edits not yet saved in the agents' nvims.
 		threads, work, bufs := 0, 0, 0
-		ts, _ := filepath.Glob(e.StateDir + "/" + skey + "_*.thread")
-		threads = len(ts)
-		// What stops: turns under way, and edits not yet saved in the
-		// agents' nvims.
-		js, _ := filepath.Glob(e.StateDir + "/" + skey + "_*.json")
-		for _, f := range js {
-			p := strings.TrimSuffix(f[strings.LastIndexByte(f, '_')+1:], ".json")
-			if !digits(p) {
-				continue
+		rows, now := e.AgentRows()
+		for _, r := range rows {
+			if r.Tnum > 0 {
+				threads++
 			}
-			if l, _ := files.FirstLine(f); strings.Contains(l, `"state":"working"`) {
+			if r.MidTurn(now) {
 				work++
 			}
-			if n := unsaved(e.SockDir + "/" + skey + "_" + p + ".sock"); n > 0 {
+			if n := unsaved(e.NvimSock(r.Pane)); n > 0 {
 				bufs += n
 			}
 		}

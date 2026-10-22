@@ -249,14 +249,17 @@ first, which claims it), removes the directory, then execs the agent with the
 task as its prompt (`claude "<task>"`, `codex "<task>"`). A thread restored
 after its session went leaves `resume` (the session id) there instead of
 `task`, and its agent's pane resumes: `claude --resume <session_id>`
-(`--continue` when unknown), `codex resume <id>` (`--last`). A thread closed
+(the agent afresh when unknown), `codex resume <id>`. A thread closed
 before its nvim is recorded as bound is closed whole all the same: `close`
 finds that nvim as the pane started for its agent. Before it execs the
-agent, the pane sets its own `remain-on-exit failed-key` (and a
-`remain-on-exit-format` naming the agent and its status), so an agent that
-exits with an error (a broken install, a bad flag in `WEAVER_CLAUDE`) leaves
-what it said on the pane until a key closes it, rather than leaving nvim
-alone in the window with no word of why; a clean exit closes it at once.
+agent, the pane sets its own `remain-on-exit on` (and a
+`remain-on-exit-format` naming the agent, its status, and R and x), so an
+agent that exits, cleanly or not (a broken install, a bad flag in
+`WEAVER_CLAUDE`), leaves what it said on its pane and its thread on the
+board, exited: `R` (`wvr restart`) starts its agent again in that pane on
+its conversation (afresh when none is known), `x` closes the thread. A
+thread lasts until you close it, so its window never stays with nvim
+alone in it.
 
 ### Thread record
 
@@ -549,13 +552,20 @@ to start one, with nothing to select.
 | NEEDS YOU | `[!]` red | needs you | longest waiting first |
 | DONE | `[x]` green | done, not yet seen | finished longest ago first |
 | WORKING | `[/]` grey | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
-| IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted | most recent first |
+| IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted, exited (its pane kept: R, x), not reporting | most recent first |
 | REVIEWS | as its state | a read-only thread's agent (`mode` `review`), in any state | by state as above, then as that group orders |
 
-So the headings' counts are the status bar's, and the order is the one alt+1
+The group is what the agent asks of you (`session.Need`: needs you, done and
+unseen, working or starting, nothing), from its row (`AgentRows`: its
+hooks' state refined by Claude Code's own session file). The status bar's
+counts, ctrl+q's question (`@weaver-busy`: needs you or working), alt+1,
+the card, close's card, quit's card, `wvr restart`'s mid-turn guard and
+`wvr send` all take it from there, so none says otherwise. So the headings'
+counts are the status bar's, and the order is the one alt+1
 visits, but for read-only threads: REVIEWS holds them whatever their state
-(the title's counts, by state, still include them). A row: its number (1-9), glyph, name (Claude Code's title, else the
-thread's task, else the last prompt; at most 40 columns), one fact (what it
+(the title's counts, by state, still include them). A row: its number (1-9), glyph, name (`Row.Called`, as everything that
+names it: the name you gave the thread, else Claude Code's title, else the
+thread's task or item, else the last prompt; at most 40 columns), one fact (what it
 waits on; for a finished turn, the files it changed and its last reply;
 the command it runs (`running npm test`), background tasks, subagents, task
 progress or the file being edited; the
@@ -777,7 +787,7 @@ else weaver's.
   flagged window, runs `wvr _seen <window>` 1.5 s later, which marks its
   done agents seen only if the window is still the session's current one:
   passing through with alt+j/k leaves them new. (A thread that finishes while
-  you are on it is seen at once: the counts see the clients' panes.)
+  you are on it, or on its nvim, is seen at once: the counts see the clients' panes.)
 - **alt+1** says where it landed in tmux's message line: `[2/3] 02 name ·
   needs you · what it waits on`.
 - **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
