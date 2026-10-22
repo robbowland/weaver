@@ -953,15 +953,17 @@ refreshes when a thread changes
 (the status push, and the 5-minute ask: [Dashboard](#dashboard)) or is made. A row is `id ref prev next display search`:
 id its kind and its section's key (`h` a heading, `g` the gap before one,
 `i` an item, `m` the line after a section's items when it has more); ref
-the item's, else `-` and the row's id: fzf keeps the cursor on a row
-across a reload by it (`--track --id-nth 2`), and blocks until it finds
-the row it was on, so none is empty (a row of none, never found, left the
-view empty and deaf to its keys); prev and next the rows around a heading
-or gap the cursor steps to. search is a second line for search, what an
+the item's, else `-` and the row's id. id and ref are what fzf keeps the
+cursor on across a reload (`--track --id-nth 1,2`), so they are unique: an
+item in two sections (SEARCH and QUEUE) is two rows, and fzf goes to the
+first row with the key it had, which moved the cursor up to the other.
+None is empty (a row of none left the view empty and deaf to its keys).
+prev and next are the rows around a heading or gap the cursor steps to. search is a second line for search, what an
 item is searched by: its number (`#45`, `ENG-42`), its whole title and its
 terms (author, repository, head branch, labels; Linear's team, people and
 branch), and not its thread's number or cell, whose digits and brackets
-matched anything; the other rows' is empty. A query switches fzf to it
+matched anything, on the item's first row only, so a search lists it
+once; the other rows' is empty. A query switches fzf to it
 (`change-with-nth(6)`, back to 5 when empty) and ranks the matches
 (`--tiebreak index`: ties in the rows' order), so the headings go and
 nothing cut to fit is missed. A query that reads as a key (`45`, `#45`,

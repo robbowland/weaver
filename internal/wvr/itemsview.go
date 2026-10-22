@@ -409,13 +409,14 @@ func (e *Env) refreshItems(src itemSource) {
 // section's key: h a heading, g the gap before one, i an item, m the line
 // after a section's items when it has more (enter reads them). Headings
 // and gaps are not for the cursor (prev and next are the lines around them
-// it can rest on). ref is what fzf keeps the cursor on across a reload
-// (--id-nth): an item's ref, another line's id after a '-'; never empty,
-// since fzf blocks until it finds the line it was on, and a line of no key
-// it never finds. search is the line a search shows and matches: what an
-// item is searched by (its number, whole title and terms, none of it cut
-// to fit, and not its thread's number or cell, whose digits and brackets
-// match anything); the other lines' is empty, so they go while you search.
+// it can rest on). id and ref are what fzf keeps the cursor on across a
+// reload (--id-nth 1,2), unique: an item in two sections is two lines, and
+// fzf goes to the first line of the key it had. ref is an item's ref,
+// another line's id after a '-'. search is the line a search shows and
+// matches: what an item is searched by (its number, whole title and terms,
+// none of it cut to fit, and not its thread's number or cell, whose digits
+// and brackets match anything), on the item's first line only, so a search
+// finds it once; the other lines' is empty, so they go while you search.
 func (e *Env) itemRows(src itemSource) string {
 	d := src.read(e)
 	ts := e.itemThreads()
@@ -434,6 +435,7 @@ func (e *Env) itemRows(src itemSource) string {
 	}
 	wf, ww = min(wf, 22), min(ww, 24)
 	wt := max(w-2-1-3-2-wf-2-ww-2-3, 12)
+	searched := map[string]bool{}
 	for _, s := range sections {
 		// An empty section goes, but one that failed (it may not be empty)
 		// and the search, which says so.
@@ -451,7 +453,11 @@ func (e *Env) itemRows(src itemSource) string {
 			}
 			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + fitAnsi(it.fact, wf) + "  " +
 				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
-			search := it.key + "  " + oneline.Line(it.title) + "  " + CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
+			search := ""
+			if !searched[it.ref] {
+				searched[it.ref] = true
+				search = it.key + "  " + oneline.Line(it.title) + "  " + CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
+			}
 			ls = append(ls, viewLine{id: "i" + s.key, ref: it.ref, text: text, search: search})
 		}
 		if s.more {
@@ -1130,7 +1136,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		}
 		pw := itemCardRoom(strings.Count(rows, "\n"))
 		args := []string{"--listen", sock, "--with-shell", "/bin/sh -c",
-			"--sync", "--track", "--id-nth", "2", "--bind", start,
+			"--sync", "--track", "--id-nth", "1,2", "--bind", start,
 			"--delimiter", "\t", "--with-nth", "5", "--tabstop", "1",
 			// Browsing, the rows as they come; searching, the best match
 			// first (ties as they come), on the search line.

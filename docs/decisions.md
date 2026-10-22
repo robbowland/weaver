@@ -434,6 +434,13 @@ can supersede an earlier one, and says so.
   answered with nothing. Only a whole id: words are asked for with
   `ctrl+s` or `enter`, since a search on every pause would ask the service
   for every half-typed word.
+- 2026-10-22: A view's search lists an item once, and its cursor keeps its
+  line through a reload. An item in two sections (SEARCH and QUEUE, say)
+  showed twice while searching, and fzf, tracking rows by the item's ref
+  alone, put the cursor back on its first row at every reload, the top of
+  the list for SEARCH's. Rows are tracked by section and ref; only the
+  item's first row is searched. An item that moves section across a reload
+  leaves the cursor where it was rather than following it.
 
 ## Lost threads
 

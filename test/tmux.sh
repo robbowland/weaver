@@ -825,6 +825,26 @@ key 13 # ctrl+s
 waitfor 'v900 | grep -q "SEARCH · o/r#45 · 1"'
 ok "...an item named, ctrl+s: GitHub asked for it as it is, as SEARCH" "$(v900 | grep -c 'SEARCH · o/r#45 · 1')|$(v900 | grep -c 'failed')" "1|0" ||
 	v900 | sed 's/^/  github: /' | head -12
+# An item in two sections (SEARCH and QUEUE): the cursor stays on the line
+# it is on as the view reloads, and a search finds the item once.
+vsock=$(ls /tmp/weaver-$(id -u)/tmux-$S.view.github.*.sock 2>/dev/null | head -n 1)
+vcur() { curl -s -m 2 --unix-socket "$vsock" localhost | jq -r '.current.text' | cut -f1,2; }
+first=$(vcur)
+key 6a # j: past SEARCH's line, to QUEUE's
+waitfor '[ "$(vcur)" != "$first" ]'
+at=$(vcur)
+curl -s -m 2 --unix-socket "$vsock" -X POST localhost -d "reload-sync(wvr _items github rows)" >/dev/null
+sleep 1
+ok "GITHUB: an item in two sections, the cursor stays on its line as the view reloads" \
+	"$(vcur)|$([ "$(echo "$at" | cut -f2)" = "$(echo "$first" | cut -f2)" ] && echo same-item)" "$at|same-item"
+key 2f # /
+sleep 0.5
+key "$(printf 'flag' | xxd -p)"
+waitfor 'v900 | grep -q "#45  Add a flag  @"'
+sleep 0.3
+ok "...and a search finds it once" "$(v900 | grep -c '#45  Add a flag  @')" "1"
+key 1b # esc: the query
+sleep 0.3
 key 1b # esc
 waitfor '! v900 | grep -q "SEARCH ·"'
 # / on a whole id nothing loaded has: once typing stops, asked for as
@@ -841,7 +861,6 @@ waitfor '! v900 | grep -q "SEARCH ·"'
 # the view does not show: fzf shows a reloaded preview from its top.
 key 73 # s: the issues, the flaky test's long card
 waitfor 'v900 | grep -q "step 20"'
-vsock=$(ls /tmp/weaver-$(id -u)/tmux-$S.view.github.*.sock 2>/dev/null | head -n 1)
 cardtop() { v900 | sed -n 2p | awk -F'│' '{print $3}' | tr -s ' '; }
 top0=$(cardtop)
 curl -s -m 2 --unix-socket "$vsock" -X POST localhost -d "$(printf 'preview-down+%.0s' $(seq 9))preview-down" >/dev/null
