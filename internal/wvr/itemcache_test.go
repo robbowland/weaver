@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,5 +116,30 @@ func TestHeadingCount(t *testing.T) {
 		if got := reAnsi.ReplaceAllString(c.s.heading(), ""); got != c.want {
 			t.Errorf("%q, want %q", got, c.want)
 		}
+	}
+}
+
+// Every line has a key fzf finds it by again after a reload (--track
+// --id-nth 2): on a line of none, fzf blocks for good, looking for it, and
+// the view came up empty.
+func TestRowsKeyed(t *testing.T) {
+	e := viewEnv(t)
+	now := time.Now()
+	updateGitHub(e, func(c *ghCache) {
+		c.Results = map[github.Kind][]github.Result{github.PRs: {
+			{Section: github.Section{Title: "Queue"}, List: page.List[github.Item]{Total: 1, Items: prs(1), Fetched: now}},
+			{Section: github.Section{Title: "Mine"}, List: page.List[github.Item]{Total: 1, Items: prs(2), Fetched: now}},
+		}}
+	})
+	seen := map[string]bool{}
+	for _, l := range strings.Split(strings.TrimSuffix(e.itemRows(githubSource{}), "\n"), "\n") {
+		f := strings.Split(l, "\t")
+		if f[1] == "" || seen[f[1]] {
+			t.Errorf("line %q: no key of its own", l)
+		}
+		seen[f[1]] = true
+	}
+	if len(seen) != 5 {
+		t.Errorf("%d lines", len(seen))
 	}
 }

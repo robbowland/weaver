@@ -315,7 +315,10 @@ func (e *Env) reloadItems(src itemSource) {
 // itemRows are the view's lines for fzf, a section at a time under its
 // heading: id ref prev next display search. Headings and the gaps between
 // are not items (prev and next are the items around them, for the cursor to
-// step over them). search is the line a search shows and matches: the
+// step over them). ref is what fzf keeps the cursor on across a reload
+// (--id-nth): an item's ref, another line's id after a '-'; never empty,
+// since fzf blocks until it finds the line it was on, and a line of no key
+// it never finds. search is the line a search shows and matches: the
 // item's number, its whole title and its terms, none of it cut to fit; a
 // heading's and a gap's is empty, so they go while you search.
 func (e *Env) itemRows(src itemSource) string {
@@ -375,7 +378,11 @@ func (e *Env) itemRows(src itemSource) string {
 				}
 			}
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\t%s\n", l.id, l.ref, prev, next, l.text, l.search)
+		ref := l.ref
+		if ref == "" {
+			ref = "-" + l.id
+		}
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\t%s\n", l.id, ref, prev, next, l.text, l.search)
 	}
 	return b.String()
 }
