@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -20,6 +21,7 @@ type Env struct {
 	SKey      string      // the session's key in file names: tmux-<name> for tmux
 	MyPane    tmux.PaneID // the pane weaver runs in; empty in a popup
 	InTmux    bool        // inside a tmux client's pane ($TMUX)
+	Where     agent.Where // the life of the session its agents run in ($TMUX's, or the pane an event is from)
 	StateDir  string
 	LogDir    string
 	LostDir   string
@@ -58,6 +60,7 @@ func Load() *Env {
 	e.Self = Executable()
 	e.MyPane, _ = tmux.ParsePane(os.Getenv("TMUX_PANE"))
 	e.InTmux = os.Getenv("TMUX") != ""
+	e.Where = agent.ParseWhere(os.Getenv("TMUX"))
 	if e.InTmux {
 		// weaver's tmux sessions set it for their panes; anywhere else, ask.
 		e.Session = os.Getenv("WEAVER_TMUX_SESSION")
@@ -71,10 +74,13 @@ func Load() *Env {
 		}
 	}
 	if e.Session != "" {
-		e.SKey = "tmux-" + strings.ReplaceAll(e.Session, "/", "_")
+		e.SKey = KeyOf(e.Session)
 	}
 	return e
 }
+
+// KeyOf is tmux session name's key in file names: tmux-<name>, a / as _.
+func KeyOf(name string) string { return "tmux-" + strings.ReplaceAll(name, "/", "_") }
 
 // Executable is the path this binary was run by: a link stays a link
 // (Homebrew's bin/wvr outlives an upgrade; the Cellar path it points to
@@ -98,6 +104,18 @@ func (e *Env) Tmux(args ...string) ([]byte, error) {
 		args = append(append([]string{}, e.TSock...), args...)
 	}
 	return exec.Command("tmux", args...).Output()
+}
+
+// SessionWhere is the life of this session as tmux says now (zero when it
+// does not): what an agent started in it runs in.
+func (e *Env) SessionWhere() agent.Where {
+	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pid} #{session_id}")
+	srv, ses, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+	n, _ := strconv.Atoi(srv)
+	if err != nil || n <= 0 || !strings.HasPrefix(ses, "$") {
+		return agent.Where{}
+	}
+	return agent.Where{Server: n, Session: ses}
 }
 
 // RunTmux runs a tmux client with these arguments as they are.

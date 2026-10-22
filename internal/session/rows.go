@@ -414,39 +414,43 @@ func (e *Env) LostCheck(f string) bool {
 	case "prompt_input_exit", "logout", "clear":
 		return false
 	}
-	srv := ""
-	if s.Server != 0 {
-		srv = strconv.Itoa(s.Server)
-	}
 	base := filepath.Base(b)
-	return e.serverLost(base[:strings.LastIndexByte(base, '_')], float64(s.TS), srv)
+	return e.serverLost(base[:strings.LastIndexByte(base, '_')], s.TS, s.Where)
 }
 
-// serverLost: did session key skey's session go since ts (epoch s), the
-// agent having run on tmux server srv (its pid, when its state says)? A tmux
-// session: when the machine has started since ts (no server outlives that,
-// and one started since may have the old one's pid), or its server no
-// longer has it, or has one of its name made since: another server, or
-// (older states) a session made after ts. Any other key (zellij's, from
-// before weaver ran on tmux) never is.
-func (e *Env) serverLost(skey string, ts float64, srv string) bool {
+// serverLost: did session key skey's session go since ts (epoch s), its
+// agent having run in life w of it (when its state says)? A tmux session:
+// when the machine has started since ts (no server outlives that, and one
+// started since may have the old one's pid), or no server has that life of
+// it any more: no session of its name, or one on another server, or one
+// made again on the same server (another id; older states, without one: a
+// session made after ts). Any other key (zellij's, from before weaver ran
+// on tmux) never is.
+func (e *Env) serverLost(skey string, ts int64, w agent.Where) bool {
 	if !strings.HasPrefix(skey, "tmux-") {
 		return false
 	}
-	if b := BootTime(); b > 0 && ts < float64(b) {
+	if b := BootTime(); b > 0 && ts < b {
 		return true
 	}
-	out, _ := e.Tmux("list-sessions", "-F", "#S #{session_created} #{pid}")
-	for _, l := range strings.Split(string(out), "\n") {
-		f := strings.Fields(l)
-		if len(f) < 2 || "tmux-"+strings.ReplaceAll(f[0], "/", "_") != skey {
+	ss, _ := e.tmuxSessions()
+	for _, s := range ss {
+		if s.key != skey {
 			continue
 		}
-		if srv != "" && len(f) > 2 {
-			return f[2] != srv
+		switch {
+		case w.Server == 0:
+			if s.created <= ts {
+				return false
+			}
+		case s.where.Server != w.Server:
+		case w.Session != "":
+			if s.where.Session == w.Session {
+				return false
+			}
+		case s.created <= ts:
+			return false
 		}
-		n, _ := strconv.ParseFloat(f[1], 64)
-		return n > ts
 	}
 	return true
 }

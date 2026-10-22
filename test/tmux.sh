@@ -408,6 +408,8 @@ waitfor '[ -f "$AT/args.$AG" ]'
 ok "restart: the thread comes back by itself, resumed (read-only as it was), and you stay home" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--permission-mode plan --resume sid-1 |0" ||
 	{ ls "$SD/lost" | sed 's/^/  lost: /'; tail -n 8 "$SD/hook.log" 2>/dev/null | sed 's/^/  log: /'; }
+ok "...its state is this server's session's from the start, not the one that went" \
+	"$(jq -r '"\(.server)|\(.tmux_session)"' "$SD/tmux-${S}_$AG.json")" "$(tx display -p -t "=$S:" '#{pid}|#{session_id}')"
 jq -c 'del(.mode)' "$SD/tmux-${S}_$AG.thread" >"$AT/thread.json" && mv "$AT/thread.json" "$SD/tmux-${S}_$AG.thread"
 
 # --- Ctrl q asks while an agent is mid-turn; the board's x closes it (y to

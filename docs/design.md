@@ -55,7 +55,8 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
-| `server` | int | tmux only: the pid of the tmux server the agent runs on (from `$TMUX`); a server started again is another, however soon, so its threads count as lost (absent in older states: then a session made after `ts`) |
+| `server` | int | tmux only: the pid of the tmux server the agent runs on (from `$TMUX`, or the pane a Codex daemon's hook is placed in); a server started again is another, however soon, so its threads count as lost (absent in older states: then a session made after `ts`) |
+| `tmux_session` | string | tmux only: the id of its session on that server (`$3`); a session quit and made again, even on the same server, is another (absent in older states: then a session made after `ts`). With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Hook to Neovim
@@ -172,19 +173,24 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 `wvr event [--bell]` reads one event as JSON on stdin; the pane is
 `$TMUX_PANE` unless the event names one. Adapters translate an agent's own
 hook input into it (`wvr adapt codex`). `--bell` rings the terminal bell on
-`/dev/tty` when the agent starts needing you or finishes, for agents that
-cannot ring through their hook output.
+`/dev/tty` (a Codex daemon's hook: its pane's tty) when the agent starts
+needing you or finishes, for agents that cannot ring through their hook
+output.
 
 Codex runs its hooks in its app server, a daemon every Codex session shares,
-with the environment of whichever session started it: `$TMUX_PANE` there is
-that session's pane, closed perhaps. So a Codex hook not run from inside
-the pane `$TMUX_PANE` names (that pane's process is not its ancestor) finds
-its pane by its session (`engine.codexPane`): the pane bound to it in
-`$STATE_DIR/codex/<session>`, else the one pane running `codex` whose
-directory is the session's `cwd` (of two, the one no other session is bound
-to), bound to it from then on; its `pid` is that pane's process, not the
-daemon. A SessionEnd drops the binding, and GC old ones after a month.
-Neither found, `$TMUX_PANE` is all it goes by.
+with the environment of whichever session started it: `$TMUX`, `$TMUX_PANE`
+and the session there are that session's pane's, on a server that may have
+gone since. A Codex hook run from inside the pane `$TMUX_PANE` names (that
+pane's process is its ancestor, whatever it runs) is that pane's. One that
+is not finds its pane by its session (`engine.codexPane`): the pane bound to
+it on this server in `$STATE_DIR/codex/<session>` (`<pane> <server pid>`; a
+binding of another server, or one without its server, counts for nothing),
+else the one pane running `codex` whose directory is the session's `cwd` (of
+two, the one no other session is bound to), bound to it from then on. Its
+`pid` is that pane's process, and its session, key, `server`,
+`tmux_session` and bell are that pane's, not the daemon's environment's. A
+SessionEnd drops the binding, and GC old ones after a month. Neither found,
+the event is dropped: never filed under `$TMUX_PANE`'s pane.
 
 | Field | For | Meaning |
 | --- | --- | --- |
@@ -201,6 +207,7 @@ Neither found, `$TMUX_PANE` is all it goes by.
 | `message` | `stop` | its last reply |
 | `error` | `error` | ends the turn, needs you |
 | `subagent`, `subagent_type` | `subagent_start`, `subagent_stop` | |
+| `reason` | `session_end` | why it ended: the state's `end_reason` (an end on purpose is not lost) |
 
 `event` is one of `session_start`, `prompt`, `needs_you`, `answered`,
 `tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
@@ -426,9 +433,11 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   thread record and a session id, its `end_reason` is not `prompt_input_exit`,
   `logout` or `clear` (ended on purpose), and its session has gone since its
   last event: the machine has started since its last event `ts`
-  (`kern.boottime`), or the tmux server no longer has a session of its name,
-  or has one on another server (the state's `server`, its pid) or, for older
-  states, one created after `ts`. Anything else is forgotten as
+  (`kern.boottime`), or no tmux server (weaver's, or the caller's) has that
+  life of the session any more: none of its name, or one on another server
+  (the state's `server`), or one made again on the same server (another
+  `tmux_session`; for older states without one, one created after `ts`;
+  without `server` either, one created after `ts`). Anything else is forgotten as
   before; a pane closed while its session runs on is not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps

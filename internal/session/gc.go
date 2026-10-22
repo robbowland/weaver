@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -29,12 +30,17 @@ func sub1(re *regexp.Regexp, l string) string {
 	return ""
 }
 
-// tmuxSessions are the running tmux sessions, by key (tmux-<name>), with
-// when each was made (epoch s), on weaver's server and the one we run in
-// (a name on both: the earlier); nil when neither answers.
-func (e *Env) tmuxSessions() map[string]int64 {
-	m := map[string]int64{}
-	ok := false
+// tmuxSession is a running tmux session: its key (tmux-<name>), when it
+// was made (epoch s), and the life it is (its server, its id there).
+type tmuxSession struct {
+	key     string
+	created int64
+	where   agent.Where
+}
+
+// tmuxSessions are the running tmux sessions on weaver's server and the one
+// we run in; ok false when neither answers.
+func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 	add := func(args ...string) {
 		out, err := RunTmux(args...)
 		if err != nil {
@@ -42,25 +48,23 @@ func (e *Env) tmuxSessions() map[string]int64 {
 		}
 		ok = true
 		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			made, name, _ := strings.Cut(l, " ")
-			if name == "" {
+			// The name last: it may have spaces.
+			f := strings.SplitN(l, " ", 4)
+			if len(f) != 4 || f[3] == "" {
 				continue
 			}
-			k := "tmux-" + strings.ReplaceAll(name, "/", "_")
-			n, _ := strconv.ParseInt(made, 10, 64)
-			if was, seen := m[k]; !seen || n < was {
-				m[k] = n
-			}
+			made, _ := strconv.ParseInt(f[0], 10, 64)
+			srv, _ := strconv.Atoi(f[1])
+			ss = append(ss, tmuxSession{key: "tmux-" + strings.ReplaceAll(f[3], "/", "_"), created: made,
+				where: agent.Where{Server: srv, Session: f[2]}})
 		}
 	}
-	add(append(append([]string{}, e.TSock...), "list-sessions", "-F", "#{session_created} #S")...)
+	const format = "#{session_created} #{pid} #{session_id} #S"
+	add(append(append([]string{}, e.TSock...), "list-sessions", "-F", format)...)
 	if e.InTmux {
-		add("list-sessions", "-F", "#{session_created} #S")
+		add("list-sessions", "-F", format)
 	}
-	if !ok {
-		return nil
-	}
-	return m
+	return ss, ok
 }
 
 // GC forgets agents that are gone: a dead agent is retired (its thread
@@ -73,25 +77,30 @@ func (e *Env) tmuxSessions() map[string]int64 {
 // the same way as their agents do.
 func (e *Env) GC() {
 	now := time.Now().Unix()
-	var sessions map[string]int64
-	asked := false
+	var sessions []tmuxSession
+	answered, asked := false, false
 	ask := func() {
 		if !asked {
-			sessions, asked = e.tmuxSessions(), true
+			sessions, answered = e.tmuxSessions()
+			asked = true
 		}
 	}
 	running := func(skey string) bool {
 		ask()
 		// Nobody answered: keep everything.
-		_, ok := sessions[skey]
-		return sessions == nil || ok
+		return !answered || slices.ContainsFunc(sessions, func(s tmuxSession) bool { return s.key == skey })
 	}
-	// Is skey's session one made after ts: another server's, the one a
-	// file of ts knew having gone?
+	// Is skey's session one made after ts: another life of it, the one a
+	// file of ts knew having gone? (A name on two servers: the earlier.)
 	madeAfter := func(skey string, ts int64) bool {
 		ask()
-		made, ok := sessions[skey]
-		return ok && ts > 0 && made > ts
+		made := int64(0)
+		for _, s := range sessions {
+			if s.key == skey && (made == 0 || s.created < made) {
+				made = s.created
+			}
+		}
+		return made > 0 && ts > 0 && made > ts
 	}
 	for _, f := range paneFiles(e.StateDir, "json") {
 		l, _ := files.FirstLine(f)

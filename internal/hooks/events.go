@@ -22,6 +22,7 @@ type Normalized struct {
 	PromptID   jsonx.Text `json:"prompt_id"`
 	Title      jsonx.Text `json:"title"`
 	Source     jsonx.Text `json:"source"` // session_start
+	Reason     jsonx.Text `json:"reason"` // session_end: why it ended
 	// prompt: the text, and false for a machine-injected one.
 	Prompt  jsonx.Text `json:"prompt"`
 	User    *bool      `json:"user"`
@@ -90,7 +91,7 @@ func (n Normalized) Hook() Input {
 	case "error":
 		h.Event, h.Error = "StopFailure", n.Error
 	case "session_end":
-		h.Event = "SessionEnd"
+		h.Event, h.Reason = "SessionEnd", string(n.Reason)
 	case "subagent_start":
 		h.Event, h.AgentID, h.AgentType = "SubagentStart", string(n.Subagent), string(n.SubagentType)
 	case "subagent_stop":
@@ -110,6 +111,7 @@ type CodexInput struct {
 	Cwd         jsonx.Text      `json:"cwd"`
 	Transcript  jsonx.Text      `json:"transcript_path"`
 	Source      jsonx.Text      `json:"source"`
+	Reason      jsonx.Text      `json:"reason"`
 	Prompt      jsonx.Text      `json:"prompt"`
 	ToolName    jsonx.Text      `json:"tool_name"`
 	ToolInput   json.RawMessage `json:"tool_input"`
@@ -211,7 +213,7 @@ func (c CodexInput) Normalized() Normalized {
 	case "Stop":
 		n.Event, n.Message = "stop", c.LastMessage
 	case "SessionEnd":
-		n.Event = "session_end"
+		n.Event, n.Reason = "session_end", c.Reason
 	case "SubagentStart":
 		n.Event, n.Subagent, n.SubagentType = "subagent_start", c.AgentID, c.AgentType
 	case "SubagentStop":

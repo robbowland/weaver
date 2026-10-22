@@ -415,17 +415,9 @@ func writeState(e *session.Env, h *hk, lk string) {
 		nv := json.Number(h.NV)
 		st.NvimPane = &nv
 	}
-	// The tmux server it runs on ($TMUX is "socket,pid,session"): a server
-	// started again is another, however soon (serverLost).
-	if t := os.Getenv("TMUX"); strings.IndexByte(t, ',') >= 0 {
-		srv := t[strings.IndexByte(t, ',')+1:]
-		if j := strings.IndexByte(srv, ','); j >= 0 {
-			srv = srv[:j]
-		}
-		if n, ok := atoi(srv); ok && n != 0 {
-			st.Server = n
-		}
-	}
+	// The life of the tmux session it runs in: a server or session made
+	// again is another, however soon (serverLost).
+	st.Where = e.Where
 	if h.Sid != "" {
 		st.Log = e.LogDir + "/" + h.Sid + ".jsonl"
 	}

@@ -133,7 +133,7 @@ func (e *Env) restartAgent(p tmux.PaneID, force bool) (string, error) {
 		return label, fmt.Errorf("cannot create %s", d)
 	}
 	th.Pane = nil
-	if err := writeResume(d, th, st, st.SessionID); err != nil {
+	if err := e.writeResume(d, th, st, st.SessionID); err != nil {
 		os.RemoveAll(d)
 		return label, err
 	}

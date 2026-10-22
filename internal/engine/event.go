@@ -61,25 +61,33 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	if pane == "" {
 		pane = string(e.MyPane)
 	}
-	if pane == "" || e.Session == "" {
-		return nil
-	}
 	h := n.Hook()
 	if h.Event == "" {
 		return nil
 	}
-	// Codex's hooks run in its shared app server, with the environment of
-	// another session's pane (codexPane).
+	// Where its bell rings: the terminal it runs in.
+	tty := "/dev/tty"
+	// Codex's hooks may run in its shared app server, with another pane's
+	// environment: its pane, session, server and terminal are the pane's
+	// it is placed in (codexPane), and one it cannot place is dropped.
 	if adapter == "codex" {
-		if p, ap, ok := codexPane(e, tmux.PaneID(pane), strip(n.Session), strip(n.Cwd)); ok {
-			pane = string(p)
-			if ap != "" {
-				pid = ap
-			}
+		at, ok := codexPane(e, tmux.PaneID(pane), strip(n.Session), strip(n.Cwd))
+		if !ok {
+			return nil
+		}
+		pane = string(at.pane.id)
+		if !at.inPane {
+			pid, tty = strconv.Itoa(at.pane.pid), at.pane.tty
+			pe := *e
+			pe.Session, pe.SKey, pe.Where = at.pane.session, session.KeyOf(at.pane.session), at.pane.where
+			e = &pe
 		}
 		if h.Event == "SessionEnd" {
 			defer forgetCodexSession(e, strip(n.Session))
 		}
+	}
+	if pane == "" || e.Session == "" {
+		return nil
 	}
 	mode := "sync"
 	if h.Event == "PostToolUse" || strings.HasPrefix(h.Event, "Subagent") {
@@ -100,7 +108,7 @@ func Event(e *session.Env, adapter string, bell bool) error {
 			bl = "1"
 		}
 		if bl == "1" && (rc == 10 || rc == 11) || bl == "needs-you" && rc == 10 {
-			if t, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+			if t, err := os.OpenFile(tty, os.O_WRONLY, 0); err == nil {
 				_, err := t.WriteString("\a")
 				bestEffort(errors.Join(err, t.Close())) // a bell missed
 			}
