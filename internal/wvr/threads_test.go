@@ -69,3 +69,28 @@ func TestPaneOfFile(t *testing.T) {
 		t.Errorf("paneOfFile: %q", p)
 	}
 }
+
+// A thread's number is the lowest its session's threads (opening ones too)
+// leave free: session "a" does not count session "a_b"'s.
+func TestThreadNum(t *testing.T) {
+	dir := t.TempDir()
+	e := &Env{&session.Env{StateDir: dir, SKey: "tmux-a"}}
+	for f, n := range map[string]string{
+		"tmux-a_1.thread":              `{"num":1}`,
+		"tmux-a_b_7.thread":            `{"num":2}`,
+		"new/tmux-a_123/thread.json":   `{"num":3}`,
+		"new/tmux-a_b_456/thread.json": `{"num":4}`,
+	} {
+		p := filepath.Join(dir, f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, used := e.threadNum()
+	if n != 2 || !used[1] || !used[3] || used[2] || used[4] {
+		t.Errorf("threadNum = %d %v, want 2 with 1 and 3 used", n, used)
+	}
+}

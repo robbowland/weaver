@@ -40,6 +40,24 @@ import (
 
 func (e *Env) threadsNew() string { return e.StateDir + "/new" }
 
+// opening is the meeting place of a thread window being opened, token
+// tok's: new/<skey>_<tok>/, where its agent's pane finds what to start
+// (task, or resume) and its record (docs/design.md, Threads).
+func (e *Env) opening(tok string) string { return e.threadsNew() + "/" + e.SKey + "_" + tok }
+
+// openingRecords are the thread records waiting in this session's meeting
+// places: <skey>_<digits> only, so session "a" never counts "a_b"'s.
+func (e *Env) openingRecords() []string {
+	ms, _ := filepath.Glob(e.threadsNew() + "/" + e.SKey + "_*/thread.json")
+	var out []string
+	for _, m := range ms {
+		if tok := strings.TrimPrefix(filepath.Base(filepath.Dir(m)), e.SKey+"_"); digits(tok) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 func token() string {
 	var b [2]byte
 	rand.Read(b[:])
@@ -88,9 +106,8 @@ func (e *Env) numLock() func() {
 // than 30 s was left by panes closed before they met, and holds no number.
 func (e *Env) threadNum() (int, map[int]bool) {
 	used := map[int]bool{}
-	fs, _ := filepath.Glob(e.StateDir + "/" + e.SKey + "_*.thread")
-	ns, _ := filepath.Glob(e.threadsNew() + "/" + e.SKey + "_*/thread.json")
-	for _, f := range ns {
+	fs := e.SessionFiles("thread")
+	for _, f := range e.openingRecords() {
 		if s, err := os.Stat(f); err == nil && time.Since(s.ModTime()) < 30*time.Second {
 			fs = append(fs, f)
 		}
@@ -551,7 +568,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
 	}
 	tok := token()
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	if os.MkdirAll(d, 0o755) != nil {
 		return errors.New("cannot create " + d)
 	}
@@ -621,7 +638,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		return errors.New("unknown agent: " + agentName)
 	}
 	pane := e.MyPane
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	cmd, mode := agentCmd(kind), agent.ModeWork
 	cmdOf := func(t store.Thread) {
 		if t.Cmd != "" {
@@ -745,7 +762,7 @@ func resumeArgs(kind agent.Kind, sid string) []string {
 // cannot be.
 func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 	tok := token()
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return "", fmt.Errorf("cannot create %s", d)
 	}
@@ -773,7 +790,7 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 // the directory its agent started in, whose agent resumes its conversation.
 // It keeps its number when free; its state carries on.
 func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, error) {
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	st, th := lo.State, lo.Thread
 	sid := oneline.Line(st.SessionID)
 	kind := th.Agent
@@ -1379,7 +1396,7 @@ func (e *Env) CloseTail(a []string) error {
 		e.Tmux("kill-pane", "-t", nv.Target())
 	}
 	if digits(tok) {
-		os.RemoveAll(e.threadsNew() + "/" + e.SKey + "_" + tok)
+		os.RemoveAll(e.opening(tok))
 	}
 	for i := 0; i < 50 && pid != "" && session.AgentAlive(pid, start, nil); i++ {
 		time.Sleep(100 * time.Millisecond)

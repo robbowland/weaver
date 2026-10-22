@@ -215,7 +215,7 @@ func (e *Env) adoptConversation(which string) (string, error) {
 	repo, _, _ := git.RepoOf(c.Start)
 	name := cmp.Or(items.Slugify(c.Title), c.Branch, "thread-"+time.Now().Format("150405"))
 	tok := token()
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return "", fmt.Errorf("cannot create %s", d)
 	}

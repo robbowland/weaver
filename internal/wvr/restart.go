@@ -130,7 +130,7 @@ func (e *Env) restartAgent(p tmux.PaneID, force bool) (string, error) {
 		kind = agent.Claude
 	}
 	tok := token()
-	d := e.threadsNew() + "/" + e.SKey + "_" + tok
+	d := e.opening(tok)
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return label, fmt.Errorf("cannot create %s", d)
 	}
