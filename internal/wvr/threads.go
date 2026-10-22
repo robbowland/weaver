@@ -464,22 +464,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	unlock := e.numLock()
 	n, _ := e.threadNum()
 	// The command its agent runs, from here (the pane will not have this
-	// environment).
-	// A review is read-only: Claude Code in plan mode, Codex sandboxed.
-	cmd := agentCmd(fm.Agent)
-	if review {
-		if fm.Agent == agent.Codex {
-			cmd += " --sandbox read-only"
-		} else {
-			cmd += " --permission-mode plan"
-		}
-	}
-	rec := store.Thread{Num: n, Cmd: cmd, Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
-		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base, Title: title}
-	rec.Item = ti
-	if review {
-		rec.Mode = "review"
-	}
+	// environment); its mode holds it each time it starts (agent.Command).
+	rec := store.Thread{Num: n, Cmd: agentCmd(fm.Agent), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
+		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base, Title: title,
+		Item: ti, Mode: fm.Mode}
 	if store.Write(d+"/thread.json", rec) != nil {
 		unlock()
 		return errors.New("cannot write the thread record")
@@ -536,11 +524,12 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	}
 	pane := e.MyPane
 	d := e.threadsNew() + "/" + e.SKey + "_" + tok
-	cmd := agentCmd(kind)
+	cmd, mode := agentCmd(kind), agent.ModeWork
 	cmdOf := func(t store.Thread) {
 		if t.Cmd != "" {
 			cmd = t.Cmd
 		}
+		mode = t.Mode
 	}
 	paneNum, _ := atoi(string(pane))
 	pn := jsonx.Int(paneNum)
@@ -548,7 +537,10 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		if pane != "" {
 			e.keepIfFailed(pane, kind)
 		}
-		w := strings.Fields(cmd)
+		w := agent.Command(kind, cmd, mode)
+		if len(w) == 0 {
+			return errors.New("no command for " + string(kind))
+		}
 		p, err := exec.LookPath(w[0])
 		if err != nil {
 			return &cli.Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}

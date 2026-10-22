@@ -160,7 +160,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Bg = s.Background
 		// The name you gave the thread, else its agent's title.
 		r.Title = oneline.Line(cmp.Or(t.Title, s.Title))
-		r.Review = t.Mode == "review"
+		r.Review = t.Mode == agent.ModeReview
 		r.Nsub = len(s.Subagents)
 		r.Pid = oneline.Line(string(s.Pid))
 		r.Pstart = oneline.Line(s.ProcStart)
@@ -215,7 +215,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == "review"})
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview})
 	}
 	starts := ProcStarts(pids)
 	for _, g := range gones {

@@ -397,15 +397,18 @@ hookj "$AG" "$(ev SessionStart ',"source":"resume"')"
 waitfor '[ "$(tx display -p -t "=$S:1" "#{window_name}")" = "01 say hello · repo/main" ]'
 ok "...and its window its label again" "$(tx display -p -t "=$S:1" '#{window_name}')" "01 say hello · repo/main"
 
-# --- again, and the session brings it back by itself
+# --- again, and the session brings it back by itself; a read-only thread
+# comes back read-only
+jq -c '.mode = "review"' "$SD/tmux-${S}_$AG.thread" >"$AT/thread.json" && mv "$AT/thread.json" "$SD/tmux-${S}_$AG.thread"
 crash
 attach
 waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
 AG=$(pane_at 1 1)
 waitfor '[ -f "$AT/args.$AG" ]'
-ok "restart: the thread comes back by itself, resumed, and you stay home" \
-	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--resume sid-1 |0" ||
+ok "restart: the thread comes back by itself, resumed (read-only as it was), and you stay home" \
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG" 2>/dev/null)|$(where | cut -d ' ' -f 1)" "0 1 |--permission-mode plan --resume sid-1 |0" ||
 	{ ls "$SD/lost" | sed 's/^/  lost: /'; tail -n 8 "$SD/hook.log" 2>/dev/null | sed 's/^/  log: /'; }
+jq -c 'del(.mode)' "$SD/tmux-${S}_$AG.thread" >"$AT/thread.json" && mv "$AT/thread.json" "$SD/tmux-${S}_$AG.thread"
 
 # --- Ctrl q asks while an agent is mid-turn; the board's x closes it (y to
 # confirm); Ctrl q quits

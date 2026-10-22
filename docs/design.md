@@ -272,7 +272,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
-| `mode` | string | `review`: read-only (its `cmd` carries the flags); absent otherwise |
+| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan` or Codex's `--sandbox read-only`; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 The window's current name is tmux's; in the weaver session weaver labels it
@@ -388,8 +388,9 @@ comments, the latest kept within 48 KB) between two marker lines carrying a
 random nonce, said to be untrusted: written by anyone who can comment.
 Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
-silence (the item's `review_unread`). `--review` runs Claude Code with `--permission-mode plan`, Codex with
-`--sandbox read-only`; a pull request's review starts its nvim with
+silence (the item's `review_unread`). `--review` makes the thread's `mode`
+`review`: its agent runs Claude Code in plan mode, Codex in a read-only
+sandbox, each time it starts; a pull request's review starts its nvim with
 `WEAVER_OPEN_REVIEW=branch`, which `weaver.lua` takes (once, then unsets) to
 open `:AgentReview branch` after VimEnter.
 

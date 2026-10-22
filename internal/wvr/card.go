@@ -315,7 +315,7 @@ func itemLine(t store.Thread) string {
 	case "issue":
 		l = "issue " + l
 	}
-	if t.Mode == "review" {
+	if t.Mode == agent.ModeReview {
 		l += " · review, read-only"
 	}
 	return l

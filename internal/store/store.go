@@ -35,7 +35,7 @@ type Thread struct {
 	Created         int64       `json:"created"`
 	Base            string      `json:"base"`
 	Item            *ThreadItem `json:"item,omitempty"`
-	Mode            string      `json:"mode,omitempty"`
+	Mode            agent.Mode  `json:"mode,omitempty"`
 	Pane            *jsonx.Int  `json:"pane,omitempty"`
 	SessionID       string      `json:"session_id,omitempty"`
 	// Title is the name you gave it (wvr new --name, the form's name,

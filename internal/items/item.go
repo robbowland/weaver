@@ -12,17 +12,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/robbowland/weaver/internal/agent"
 )
 
-// Mode is what a thread does with its work item.
-type Mode string
+// Mode is what a thread does with its work item: ModeWork works on it,
+// ModeReview reviews it without changing anything (a pull request), or
+// investigates it into a plan (an issue). Its agent runs held to it
+// (agent.Command).
+type Mode = agent.Mode
 
 const (
-	// ModeWork works on it.
-	ModeWork Mode = ""
-	// ModeReview reviews it without changing anything (a pull request), or
-	// investigates it into a plan (an issue).
-	ModeReview Mode = "review"
+	ModeWork   = agent.ModeWork
+	ModeReview = agent.ModeReview
 )
 
 // GitHubKind is which kind of GitHub item a number names.
