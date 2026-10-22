@@ -56,19 +56,64 @@ type viewGuide struct {
 	readOnly                 string // what alt+m starts
 }
 
-// itemData is what a service said: when, what went wrong, and its
-// sections of each kind.
+// itemData is what a service said: its sections of each kind.
 type itemData struct {
-	fetched  time.Time
-	err      string
 	sections map[string][]itemSection
 }
 
-// itemSection is a section's items, and how many there are in all.
+// itemSection is a section's items, how many there are in all (0: the
+// service does not say), when they were read (zero: never) and why asking
+// for them failed last ("": it did not).
 type itemSection struct {
-	title string
-	total int
-	items []viewItem
+	title   string
+	total   int
+	items   []viewItem
+	fetched time.Time
+	err     string
+}
+
+// asOf is when what the view shows of kind was read: its oldest section's
+// (zero when none has been read).
+func (d itemData) asOf(kind string) time.Time {
+	var at time.Time
+	for _, s := range d.sections[kind] {
+		if !s.fetched.IsZero() && (at.IsZero() || s.fetched.Before(at)) {
+			at = s.fetched
+		}
+	}
+	return at
+}
+
+// stale: is any section of any kind older than limit, or not read at all?
+func (d itemData) stale(limit time.Duration) bool {
+	n := 0
+	for _, ss := range d.sections {
+		for _, s := range ss {
+			if time.Since(s.fetched) > limit {
+				return true
+			}
+			n++
+		}
+	}
+	return n == 0
+}
+
+// heading is section s's heading: its title, how many it shows of how
+// many, and, when asking for it failed, that its items are from before.
+func (s itemSection) heading() string {
+	h := CGrey + strings.ToUpper(s.title)
+	if s.err != "" && s.fetched.IsZero() {
+		return h + COff + CDim + " · " + COff + CRed + "failed" + COff
+	}
+	count := strconv.Itoa(len(s.items))
+	if s.total > len(s.items) {
+		count += " of " + strconv.Itoa(s.total)
+	}
+	h += " · " + count + COff
+	if s.err != "" {
+		h += CDim + " · " + COff + CRed + "failed" + COff + CDim + ", as of " + age(int64(time.Since(s.fetched).Seconds())) + " ago" + COff
+	}
+	return h
 }
 
 // viewItem is a work item as the view shows it, whichever service it is
@@ -288,17 +333,14 @@ func (e *Env) itemRows(src itemSource) string {
 	wf, ww = min(wf, 22), min(ww, 24)
 	wt := max(w-2-1-3-2-wf-2-ww-2-3, 12)
 	for i, s := range sections {
-		if len(s.items) == 0 {
+		// An empty section goes, but one that failed: it may not be empty.
+		if len(s.items) == 0 && s.err == "" {
 			continue
 		}
 		if len(ls) > 0 {
 			ls = append(ls, line{id: "g" + strconv.Itoa(i)})
 		}
-		count := strconv.Itoa(s.total)
-		if s.total > len(s.items) {
-			count = strconv.Itoa(len(s.items)) + " of " + count
-		}
-		ls = append(ls, line{id: "h" + strconv.Itoa(i), text: CGrey + strings.ToUpper(s.title) + " · " + count + COff})
+		ls = append(ls, line{id: "h" + strconv.Itoa(i), text: s.heading()})
 		for _, it := range s.items {
 			num, cell := "  ", "   "
 			if t, ok := threadOf(ts, it); ok {
@@ -347,26 +389,45 @@ func (e *Env) itemLabel(src itemSource) string {
 // asking is the view's header while it asks again.
 const asking = CDim + "asking…" + COff
 
-// itemFresh is the view's header: how fresh what it shows is, or what went
-// wrong asking.
+// itemFresh is the view's header: how old what it shows is (its oldest
+// section's), and which sections failed and why, their items being from
+// before.
 func (e *Env) itemFresh(src itemSource) string {
-	d := src.read(e)
-	if d.fetched.IsZero() {
-		if d.err != "" {
-			return CRed + oneline.Cut(d.err, 80) + COff
+	d, kind := src.read(e), e.itemKind(src)
+	ss := d.sections[kind]
+	var failed []string
+	why, n := "", 0
+	for _, s := range ss {
+		n += len(s.items)
+		if s.err != "" {
+			failed = append(failed, strings.ToUpper(s.title))
+			if why == "" {
+				why = s.err
+			}
 		}
+	}
+	if len(failed) == len(ss) && why != "" {
+		// Every one: the one reason, not a list of them all.
+		failed = nil
+	}
+	if why != "" {
+		if len(failed) > 0 {
+			why = strings.Join(failed, ", ") + " failed: " + why
+		}
+		why = CRed + oneline.Cut(why, 80) + COff
+	}
+	at := d.asOf(kind)
+	switch {
+	case at.IsZero() && why != "":
+		return why
+	case at.IsZero():
 		return asking
 	}
-	t := CDim + "as of " + age(int64(time.Since(d.fetched).Seconds())) + " ago" + COff
-	if d.err != "" {
-		// What it shows is what it heard before: how old, and why.
-		return t + CDim + " · " + COff + CRed + oneline.Cut(d.err, 80) + COff
-	}
-	n := 0
-	for _, s := range d.sections[e.itemKind(src)] {
-		n += len(s.items)
-	}
-	if n == 0 {
+	t := CDim + "as of " + age(int64(time.Since(at).Seconds())) + " ago" + COff
+	switch {
+	case why != "":
+		return t + CDim + " · " + COff + why
+	case n == 0:
 		// Nothing to show: say so, not an empty list.
 		t += CDim + " · nothing for you in any section" + COff
 	}
@@ -686,7 +747,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		src.fetch(e)
 		e.reloadItems(src)
 	}
-	if d := src.read(e); time.Since(d.fetched) > 2*time.Minute {
+	if src.read(e).stale(2 * time.Minute) {
 		go refresh()
 	}
 	go func() {

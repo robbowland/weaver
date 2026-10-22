@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/robbowland/weaver/internal/page"
 )
 
 // Kind is what a section searches: pull requests or issues.
@@ -107,11 +109,11 @@ type Item struct {
 // Ref is the item as weaver names it: owner/name#N.
 func (it Item) Ref() string { return fmt.Sprintf("%s#%d", it.Repo, it.Number) }
 
-// Result is a section's items, and how many there are in all.
+// Result is a section's items, how many there are in all, and how asking
+// for them went.
 type Result struct {
 	Section
-	Total int    `json:"total"`
-	Items []Item `json:"items"`
+	page.List[Item]
 }
 
 // Limit is how many items a section shows.
@@ -315,19 +317,19 @@ func Parse(k Kind, i int, b []byte) (Result, error) {
 	if resp.Data.T != nil {
 		sort.SliceStable(r.Items, func(a, b int) bool { return r.Items[a].UpdatedAt.After(r.Items[b].UpdatedAt) })
 	}
+	r.Fetched = time.Now()
 	return r, nil
 }
 
 // Fetch asks GitHub for every section of both kinds through gh, a request
 // each, all at once (a search takes about a second; GitHub answers aliased
-// ones in turn), within 30 s. A section that fails comes back empty, and
-// the first error with it.
-func Fetch() (map[Kind][]Result, error) {
+// ones in turn), within 30 s: each section's items, or why asking for it
+// failed.
+func Fetch() map[Kind][]Result {
 	type answer struct {
-		k   Kind
-		i   int
-		r   Result
-		err error
+		k Kind
+		i int
+		r Result
 	}
 	ch := make(chan answer)
 	n := 0
@@ -336,26 +338,23 @@ func Fetch() (map[Kind][]Result, error) {
 			n++
 			go func() {
 				b, err := gh(Query(k, i))
-				a := answer{k: k, i: i, err: err}
+				a := answer{k: k, i: i}
 				if err == nil {
-					a.r, a.err = Parse(k, i, b)
-				} else {
-					a.r = Result{Section: Sections[k][i]}
+					a.r, err = Parse(k, i, b)
+				}
+				if err != nil {
+					a.r = Result{Section: Sections[k][i], List: page.Failed[Item](err)}
 				}
 				ch <- a
 			}()
 		}
 	}
 	out := map[Kind][]Result{PRs: make([]Result, len(Sections[PRs])), Issues: make([]Result, len(Sections[Issues]))}
-	var first error
 	for ; n > 0; n-- {
 		a := <-ch
 		out[a.k][a.i] = a.r
-		if a.err != nil && first == nil {
-			first = a.err
-		}
 	}
-	return out, first
+	return out
 }
 
 // gh runs a GraphQL query through gh, within 30 s.

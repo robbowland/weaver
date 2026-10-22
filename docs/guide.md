@@ -173,9 +173,11 @@ description. In a view, `s` switches GITHUB between pull requests and issues,
 `o` opens the item in the browser, `/` searches what the view holds (its
 number, whole title, author, repository, branch and labels; for Linear, its
 team and people), best match first, and `ctrl+r` asks again. Each
-view refreshes every 5 minutes and shows what it last heard straight away;
-after you upgrade weaver, it restarts in the new version, as home does
-([Upgrading](#upgrading)).
+view refreshes every 5 minutes and shows what it last heard straight away,
+and how old that is. A section GitHub or Linear fails to answer keeps what
+it showed, its heading marked `failed` with how old that is, and the header
+says why. After you upgrade weaver, a view restarts in the new version, as
+home does ([Upgrading](#upgrading)).
 
 ### A thread from an item
 

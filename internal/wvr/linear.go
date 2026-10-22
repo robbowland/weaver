@@ -21,11 +21,35 @@ import (
 
 type linearSource struct{}
 
-// linCache is what Linear said last, in $STATE_DIR/linear.json.
+// linCache is what Linear said last, in $STATE_DIR/linear.json: each
+// section's issues, and how asking for them went.
 type linCache struct {
-	Fetched time.Time       `json:"fetched"`
-	Err     string          `json:"err,omitempty"`
+	// Fetched is an older weaver's: when it asked for every section, which
+	// is when its sections were read (settle).
+	Fetched time.Time       `json:"fetched,omitzero"`
 	Results []linear.Result `json:"results"`
+}
+
+// settle has an older weaver's cache say, section by section, when its
+// sections were read.
+func (c *linCache) settle() {
+	for i := range c.Results {
+		if c.Results[i].Fetched.IsZero() && c.Results[i].Err == "" {
+			c.Results[i].Fetched = c.Fetched
+		}
+	}
+	c.Fetched = time.Time{}
+}
+
+// refreshed is c with a refresh's answer: every section as asked, but one
+// that failed with what that section (by its filter, wherever it was) had.
+func (c *linCache) refreshed(got []linear.Result) {
+	for i, r := range got {
+		if j := slices.IndexFunc(c.Results, func(o linear.Result) bool { return o.Section == r.Section }); j >= 0 {
+			got[i].List = r.List.Since(c.Results[j].List)
+		}
+	}
+	c.Results = got
 }
 
 func (linearSource) service() string     { return "Linear" }
@@ -49,14 +73,24 @@ func linCacheFile(e *Env) string { return e.StateDir + "/linear.json" }
 func readLinear(e *Env) linCache {
 	var c linCache
 	bestEffort(store.Read(linCacheFile(e), &c))
+	c.settle()
 	return c
+}
+
+// updateLinear changes the cache as it is now, under its lock: a refresh
+// and a change at once each keep the other's.
+func updateLinear(e *Env, change func(*linCache)) {
+	bestEffort(store.Update(linCacheFile(e), func(c *linCache) {
+		c.settle()
+		change(c)
+	}))
 }
 
 func (linearSource) read(e *Env) itemData {
 	c := readLinear(e)
-	d := itemData{fetched: c.Fetched, err: c.Err, sections: map[string][]itemSection{}}
+	d := itemData{sections: map[string][]itemSection{}}
 	for _, r := range c.Results {
-		s := itemSection{title: r.Title, total: len(r.Items)}
+		s := itemSection{title: r.Title, total: r.Total, fetched: r.Fetched, err: r.Err}
 		for _, it := range r.Items {
 			s.items = append(s.items, linItem(it))
 		}
@@ -65,24 +99,10 @@ func (linearSource) read(e *Env) itemData {
 	return d
 }
 
-// fetch asks Linear again and keeps the answer: a section that failed keeps
-// what it had.
+// fetch asks Linear again and keeps the answer (refreshed).
 func (linearSource) fetch(e *Env) {
-	old := readLinear(e)
-	res, err := linear.Fetch()
-	c := linCache{Fetched: time.Now(), Results: res}
-	if err != nil {
-		c.Err = err.Error()
-		if errors.Is(err, linear.ErrNoKey) {
-			c.Results = old.Results
-		}
-		for i, r := range c.Results {
-			if len(r.Items) == 0 && i < len(old.Results) {
-				c.Results[i] = old.Results[i]
-			}
-		}
-	}
-	bestEffort(store.Write(linCacheFile(e), c))
+	got := linear.Fetch()
+	updateLinear(e, func(c *linCache) { c.refreshed(got) })
 }
 
 // linPriority is an issue's priority as a signal: urgent and high stand out.

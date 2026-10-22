@@ -20,7 +20,7 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
-| `$STATE_DIR/github.json` | what GitHub said last for the GITHUB view's sections (see [Views](#views)) |
+| `$STATE_DIR/github.json`, `linear.json` | what GitHub and Linear said last for the views' sections, each section with when it was read and why asking for it last failed; changed under `.lock` beside it (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
@@ -936,8 +936,19 @@ headings go and nothing cut to fit is missed. Like home, it outlives installs of
 it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
 weaver (as home's), the first reload after (`_items NAME chrome`) or the
 view's own check aborts its fzf, and the view execs that weaver's `_items
-NAME` in the same pane and process, which asks as that weaver asks. A section's requests go at once, and one that
-fails keeps what it had. A row shows the thread the item has: its item's
+NAME` in the same pane and process, which asks as that weaver asks.
+
+A section's requests go at once, and each section comes back with how
+asking for it went (`internal/page`'s `List`: its items, when they were
+read, why asking failed). The cache takes a refresh under its lock, as it
+is then: a section that failed keeps what it had, found by its search
+(Linear: its filter) wherever it moved, as of when that was read, with the
+error. The header's age is the oldest section's, and it names the sections
+that failed and why (every one: just why); a failed section's heading says
+`failed, as of 1h ago`, and one with nothing from before shows too. A cache
+an older weaver wrote (one time, one error for all) reads as of that time.
+
+A row shows the thread the item has: its item's
 ref, else its branch, as the item's thread would name it
 (`items.Item.BranchName`: a pull request's head, `pr-N` for one from a
 fork; a GitHub issue's `N-…`; Linear's branch name). The card is the

@@ -193,6 +193,22 @@ func UpdateThread(f string, change func(*Thread)) bool {
 	return Write(f, th) == nil
 }
 
+// Update changes the record in file f under its lock: read (the zero
+// record when there is none, or none that reads), changed, written back
+// whole. Two changes at once each keep the other's.
+func Update[T any](f string, change func(*T)) error {
+	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+		return err
+	}
+	defer Lock(f)()
+	var v T
+	if Read(f, &v) != nil {
+		v = *new(T)
+	}
+	change(&v)
+	return Write(f, v)
+}
+
 // lockStale is how old a lock is that no holder can still mean: one whose
 // pid a process started since has taken.
 const lockStale = 10 * time.Second

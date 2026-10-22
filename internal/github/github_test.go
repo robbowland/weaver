@@ -1,6 +1,8 @@
 package github
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -78,5 +80,26 @@ func TestParse(t *testing.T) {
 	}
 	if _, err := Parse(PRs, 0, []byte(`{"errors":[{"message":"Bad credentials"}]}`)); err == nil || !strings.Contains(err.Error(), "Bad credentials") {
 		t.Errorf("an error: %v", err)
+	}
+}
+
+// Each section says how asking for it went: one that fails, why, and the
+// rest what GitHub found, when.
+func TestFetchEachSection(t *testing.T) {
+	bin := t.TempDir()
+	gh := "#!/bin/sh\ncase \"$*\" in\n*'is:open author:@me'*) echo 'HTTP 502' >&2; exit 1 ;;\nesac\n" +
+		`echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'` + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	got := Fetch()
+	for _, k := range []Kind{PRs, Issues} {
+		for i, r := range got[k] {
+			mine := r.Title == "Mine"
+			if r.Section != Sections[k][i] || mine != (r.Err == "gh: HTTP 502") || mine != r.Fetched.IsZero() {
+				t.Errorf("%s %s: %+v", k, r.Title, r)
+			}
+		}
 	}
 }

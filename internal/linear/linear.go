@@ -21,6 +21,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/robbowland/weaver/internal/page"
 )
 
 // endpoint is Linear's API ($WEAVER_LINEAR_URL in tests).
@@ -224,10 +226,10 @@ var Sections = []Section{
 // Limit is how many issues a section shows.
 const Limit = 30
 
-// Result is a section's issues.
+// Result is a section's issues, and how asking for them went.
 type Result struct {
 	Section
-	Items []Issue `json:"items"`
+	page.List[Issue]
 }
 
 // Query is section i's request.
@@ -235,17 +237,20 @@ func Query(i int) string {
 	return fmt.Sprintf("query Section { issues(filter: %s, first: %d, orderBy: updatedAt) { nodes { %s } } }", Sections[i].Filter, Limit, issueFields)
 }
 
-// Fetch asks Linear for every section, a request each, at once. A section
-// that fails comes back empty, and the first error with it.
-func Fetch() ([]Result, error) {
+// Fetch asks Linear for every section, a request each, at once: each
+// section's issues, or why asking for it failed (every one, without a key).
+func Fetch() []Result {
+	out := make([]Result, len(Sections))
 	key, err := Key()
 	if err != nil {
-		return nil, err
+		for i, s := range Sections {
+			out[i] = Result{Section: s, List: page.Failed[Issue](err)}
+		}
+		return out
 	}
 	type answer struct {
-		i   int
-		r   Result
-		err error
+		i int
+		r Result
 	}
 	ch := make(chan answer)
 	for i := range Sections {
@@ -254,23 +259,22 @@ func Fetch() ([]Result, error) {
 				Issues struct{ Nodes []node } `json:"issues"`
 			}
 			a := answer{i: i, r: Result{Section: Sections[i]}}
-			a.err = query(key, Query(i), nil, &d)
-			for _, n := range d.Issues.Nodes {
-				a.r.Items = append(a.r.Items, n.issue())
+			if err := query(key, Query(i), nil, &d); err != nil {
+				a.r.List = page.Failed[Issue](err)
+			} else {
+				for _, n := range d.Issues.Nodes {
+					a.r.Items = append(a.r.Items, n.issue())
+				}
+				a.r.Fetched = time.Now()
 			}
 			ch <- a
 		}()
 	}
-	out := make([]Result, len(Sections))
-	var first error
 	for range Sections {
 		a := <-ch
 		out[a.i] = a.r
-		if a.err != nil && first == nil {
-			first = a.err
-		}
 	}
-	return out, first
+	return out
 }
 
 // Get is issue id (ENG-42) with its comments, for a thread's prompt.

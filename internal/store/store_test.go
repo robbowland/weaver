@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -50,5 +51,24 @@ func TestThreadAbout(t *testing.T) {
 		if got := c.th.About(); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.th, got, c.want)
 		}
+	}
+}
+
+// Changes at once each keep the other's: each reads the record under its
+// lock.
+func TestUpdate(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "cache", "c.json")
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Go(func() {
+			if err := Update(f, func(v *[]int) { *v = append(*v, i) }); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	var v []int
+	if err := Read(f, &v); err != nil || len(v) != 10 {
+		t.Errorf("%v %v: a change lost", v, err)
 	}
 }

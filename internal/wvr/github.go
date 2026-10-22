@@ -17,11 +17,39 @@ import (
 
 type githubSource struct{}
 
-// ghCache is what GitHub said last, in $STATE_DIR/github.json.
+// ghCache is what GitHub said last, in $STATE_DIR/github.json: each
+// section's items, and how asking for them went.
 type ghCache struct {
-	Fetched time.Time                       `json:"fetched"`
-	Err     string                          `json:"err,omitempty"`
+	// Fetched is an older weaver's: when it asked for every section, which
+	// is when its sections were read (settle).
+	Fetched time.Time                       `json:"fetched,omitzero"`
 	Results map[github.Kind][]github.Result `json:"results"`
+}
+
+// settle has an older weaver's cache say, section by section, when its
+// sections were read.
+func (c *ghCache) settle() {
+	for _, rs := range c.Results {
+		for i := range rs {
+			if rs[i].Fetched.IsZero() && rs[i].Err == "" {
+				rs[i].Fetched = c.Fetched
+			}
+		}
+	}
+	c.Fetched = time.Time{}
+}
+
+// refreshed is c with a refresh's answer: every section as asked, but one
+// that failed with what that section (by its search, wherever it was) had.
+func (c *ghCache) refreshed(got map[github.Kind][]github.Result) {
+	for k, rs := range got {
+		for i, r := range rs {
+			if j := slices.IndexFunc(c.Results[k], func(o github.Result) bool { return o.Section == r.Section }); j >= 0 {
+				rs[i].List = r.List.Since(c.Results[k][j].List)
+			}
+		}
+	}
+	c.Results = got
 }
 
 func (githubSource) name() string    { return "github" }
@@ -53,15 +81,25 @@ func ghCacheFile(e *Env) string { return e.StateDir + "/github.json" }
 func readGitHub(e *Env) ghCache {
 	var c ghCache
 	bestEffort(store.Read(ghCacheFile(e), &c))
+	c.settle()
 	return c
+}
+
+// updateGitHub changes the cache as it is now, under its lock: a refresh
+// and a change at once each keep the other's.
+func updateGitHub(e *Env, change func(*ghCache)) {
+	bestEffort(store.Update(ghCacheFile(e), func(c *ghCache) {
+		c.settle()
+		change(c)
+	}))
 }
 
 func (githubSource) read(e *Env) itemData {
 	c := readGitHub(e)
-	d := itemData{fetched: c.Fetched, err: c.Err, sections: map[string][]itemSection{}}
+	d := itemData{sections: map[string][]itemSection{}}
 	for k, rs := range c.Results {
 		for _, r := range rs {
-			s := itemSection{title: r.Title, total: r.Total}
+			s := itemSection{title: r.Title, total: r.Total, fetched: r.Fetched, err: r.Err}
 			for _, it := range r.Items {
 				s.items = append(s.items, ghItem(it))
 			}
@@ -71,23 +109,10 @@ func (githubSource) read(e *Env) itemData {
 	return d
 }
 
-// fetch asks GitHub again and keeps the answer: a section that failed
-// keeps what it had.
+// fetch asks GitHub again and keeps the answer (refreshed).
 func (githubSource) fetch(e *Env) {
-	old := readGitHub(e)
-	res, err := github.Fetch()
-	c := ghCache{Fetched: time.Now(), Results: res}
-	if err != nil {
-		c.Err = err.Error()
-		for k, rs := range res {
-			for i, r := range rs {
-				if len(r.Items) == 0 && r.Total == 0 && i < len(old.Results[k]) {
-					res[k][i] = old.Results[k][i]
-				}
-			}
-		}
-	}
-	bestEffort(store.Write(ghCacheFile(e), c))
+	got := github.Fetch()
+	updateGitHub(e, func(c *ghCache) { c.refreshed(got) })
 }
 
 // ghItem is a pull request or issue as the view shows it.
