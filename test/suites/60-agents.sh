@@ -53,8 +53,9 @@ cx() {
 	for _ in $(seq 60); do [ -f "$AT/cx.done" ] && break; sleep 0.05; done
 }
 cb='"session_id":"cx-1","transcript_path":null,"cwd":"'"$T/repo-wt-b"'","model":"gpt-5","permission_mode":"default"'
+printf '{"num":3,"name":"cx","agent":"codex","pane":1}\n' >"$SD/${SK}_1.thread"
 cx "{$cb,\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}"
-ok "codex: session start" "$(st 1 state)|$(st 1 agent)" "idle|codex"
+ok "codex: session start; its thread learns its conversation" "$(st 1 state)|$(st 1 agent)|$(jq -r .session_id "$SD/${SK}_1.thread")" "idle|codex|cx-1"
 cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"fix the tests\"}"
 ok "codex: prompt" "$(st 1 state)|$(st 1 turn)|$(st 1 prompt)" "working|1|fix the tests"
 cx "{$cb,\"turn_id\":\"t1\",\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"shell\",\"tool_input\":{\"command\":[\"git\",\"push\"]}}"

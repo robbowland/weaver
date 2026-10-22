@@ -68,11 +68,11 @@ func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 }
 
 // GC forgets agents that are gone: a dead agent is retired (its thread
-// kept as lost when its session went), a state without a pid goes an hour
-// after its session, or at once when its session was made since (retired:
-// an earlier server's, whose pane number a new pane takes), an ended one
-// an hour after it ended; then old files, the nvims a server that went
-// left running, and dead sockets.
+// kept as lost when its session went), a state without a pid is retired an
+// hour after its session went, or at once when its session was made since
+// (an earlier server's, whose pane number a new pane takes), an ended one
+// forgotten an hour after it ended; then old files, the nvims a server that
+// went left running, and dead sockets.
 // States of other keys (zellij's, from before weaver ran on tmux only) go
 // the same way as their agents do.
 func (e *Env) GC() {
@@ -112,14 +112,13 @@ func (e *Env) GC() {
 				continue
 			}
 		} else {
-			b := filepath.Base(f)
-			skey := b[:strings.LastIndexByte(b, '_')]
+			skey := KeyOfFile(f)
 			if madeAfter(skey, ts) {
 				e.Retire(f, "")
 				continue
 			}
 			if !running(skey) && now-ts > 3600 {
-				e.Forget(f, "")
+				e.Retire(f, "")
 				continue
 			}
 		}
@@ -143,18 +142,18 @@ func (e *Env) GC() {
 			os.Remove(f)
 		}
 	}
-	// A thread whose agent never reported (no state) goes with its
-	// session, or once its session is one made since it was written: an
-	// earlier server's, whose pane number a new pane would take it for.
+	// A thread whose agent never reported (no state) is lost with its
+	// session, or once its session is one made since it was written (an
+	// earlier server's, whose pane number a new pane would take it for):
+	// kept, to open again, never dropped.
 	for _, f := range paneFiles(e.StateDir, "thread") {
 		if files.Exists(strings.TrimSuffix(f, ".thread") + ".json") {
 			continue
 		}
-		b := filepath.Base(f)
-		skey := b[:strings.LastIndexByte(b, '_')]
+		skey := KeyOfFile(f)
 		fi, err := os.Stat(f)
 		if err == nil && (!running(skey) || madeAfter(skey, fi.ModTime().Unix())) {
-			os.Remove(f)
+			e.LoseThread(f)
 		}
 	}
 	old := func(dir, pat string, age time.Duration, all bool) {

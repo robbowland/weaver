@@ -61,16 +61,7 @@ func (e *Env) Rename(args []string) error {
 // retitle sets the title of the thread whose agent is pane p ("" for none:
 // its agent's own), and relabels its window and the boards.
 func (e *Env) retitle(p tmux.PaneID, title string) error {
-	// Its record's other writers (adopt, a reopened thread) number under
-	// this lock too.
-	unlock := e.numLock()
-	th, err := store.ReadThread(e.ThreadFile(p))
-	if err == nil {
-		th.Title = title
-		err = store.Write(e.ThreadFile(p), th)
-	}
-	unlock()
-	if err != nil {
+	if !store.UpdateThread(e.ThreadFile(p), func(th *store.Thread) { th.Title = title }) {
 		return errors.New("cannot write its thread record")
 	}
 	e.PushStatusAndLabels()

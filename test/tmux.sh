@@ -383,6 +383,16 @@ crash
 attach WEAVER_RESTORE=0
 ok "crash: the lost thread waits on the board (WEAVER_RESTORE=0)" "$(windows)|$(ls "$SD/lost")" "0 |tmux-${S}_sid-1.json"
 ok "...and the status line no longer counts what the session that went ran" "$(wvr status --tmux "$S")" ""
+# Its conversation runs elsewhere now (Claude Code in another terminal): not
+# resumed beside it.
+sleep 300 &
+elsewhere=$!
+printf '{"pid":%s,"sessionId":"sid-1","status":"idle"}\n' "$elsewhere" >"$AT/claude/sessions/$elsewhere.json"
+key 0d # enter, on the lost thread
+sleep 1.5
+ok "...not while its conversation runs elsewhere" "$(windows)|$(ls "$SD/lost")" "0 |tmux-${S}_sid-1.json"
+kill "$elsewhere" 2>/dev/null
+rm -f "$AT/claude/sessions/$elsewhere.json"
 key 0d # enter, on the lost thread
 waitfor '[ "$(panes 1 | wc -l | tr -d " ")" = 2 ]'
 AG=$(pane_at 1 1)
@@ -553,9 +563,9 @@ ok "...an empty name gives its agent's title back" "$(label2)" "02 Tidy the pars
 rm -f "$AT/args.$AG2"
 outside wvr restart "$AG2" >"$AT/restart.out" 2>&1
 waitfor '[ -f "$AT/args.$AG2" ]'
-ok "restart: the agent starts again in its pane, resuming its conversation, beside its nvim" \
-	"$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(pane_at 2 1)|$(panes 2 | wc -l | tr -d ' ')|$(jq -r .num "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)" \
-	"--resume $CID |$AG2|2|2" ||
+ok "restart: the agent starts again in its pane, resuming its conversation, beside its nvim, still bound to it" \
+	"$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(pane_at 2 1)|$(panes 2 | wc -l | tr -d ' ')|$(jq -r .num "$SD/tmux-${S}_$AG2.thread" 2>/dev/null)|$(head -n 1 "$SD/tmux-${S}_$AG2.nvim" 2>/dev/null)" \
+	"--resume $CID |$AG2|2|2|$(pane_at 2 0)" ||
 	sed 's/^/  restart: /' "$AT/restart.out"
 hookj "$AG2" "$(printf '{"session_id":"%s","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"UserPromptSubmit","prompt_id":"p1","prompt":"go on"}' "$CID" "$AT/repo")"
 rm -f "$AT/args.$AG2"

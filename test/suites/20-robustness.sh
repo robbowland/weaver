@@ -113,30 +113,32 @@ rm -f "$SD/weaver-busy-session_0.json"
 ok "...and ours kept" "$([ -f "$SD/${SK}_0.json" ] && echo kept)" "kept"
 
 # --- files of an earlier server of our session's name, that went: a new pane
-# of the same number must not take them for its own. A thread whose agent
-# never reported goes, a state without a pid is kept as lost; files written
-# since our session was made stay.
-printf '{"num":9,"name":"old","agent":"claude"}\n' >"$SD/${SK}_88.thread"
+# of the same number must not take them for its own, and its threads are
+# kept as lost, never dropped: one whose agent never reported (its record
+# knows no conversation), and a state without a pid; files written since our
+# session was made stay.
+printf '{"num":9,"name":"old","agent":"claude","created":88}\n' >"$SD/${SK}_88.thread"
 touch -t 202001010000 "$SD/${SK}_88.thread"
 printf '{"num":8,"name":"new","agent":"claude"}\n' >"$SD/${SK}_89.thread"
 jq -c 'del(.pid, .proc_start) | .pane = 87 | .session_id = "sid-87" | .ts = 1000' "$SD/${SK}_0.json" >"$SD/${SK}_87.json"
 printf '{"num":7,"name":"lost","agent":"claude"}\n' >"$SD/${SK}_87.thread"
 wvr gc >/dev/null
-ok "an earlier server's thread record: gone, ours kept" \
-	"$([ -f "$SD/${SK}_88.thread" ] && echo kept || echo gone)|$([ -f "$SD/${SK}_89.thread" ] && echo kept)" "gone|kept"
+ok "an earlier server's thread whose agent never reported: kept as lost, ours kept" \
+	"$([ -f "$SD/${SK}_88.thread" ] && echo kept || echo gone)|$(jq -r .thread.name "$SD/lost/${SK}_thread-88-9.json" 2>/dev/null)|$([ -f "$SD/${SK}_89.thread" ] && echo kept)" "gone|old|kept"
 ok "an earlier server's state without a pid: kept as lost" \
 	"$([ -f "$SD/${SK}_87.json" ] && echo kept || echo gone)|$(ls "$SD/lost" 2>/dev/null | grep -c sid-87)" "gone|1"
-rm -f "$SD/${SK}_89.thread" "$SD/lost/${SK}_sid-87.json"
-# ...nor does a new agent's first event there, before any sweep
-printf '{"num":9,"name":"old","agent":"claude"}\n' >"$SD/${SK}_88.thread"
+rm -f "$SD/${SK}_89.thread" "$SD/lost/${SK}_sid-87.json" "$SD/lost/${SK}_thread-88-9.json"
+# ...nor does a new agent's first event there, before any sweep: it knows
+# its conversation, and is kept as lost under it
+printf '{"num":9,"name":"old","agent":"claude","session_id":"sid-old"}\n' >"$SD/${SK}_88.thread"
 touch -t 202001010000 "$SD/${SK}_88.thread"
 printf '{"num":8,"name":"new","agent":"claude"}\n' >"$SD/${SK}_89.thread"
 hook 88 UserPromptSubmit "$T/repo" "" "hi" >/dev/null
 hook 89 UserPromptSubmit "$T/repo" "" "hi" >/dev/null
-ok "a new agent's first event: an earlier server's thread record is not its own" \
-	"$([ -f "$SD/${SK}_88.thread" ] && echo kept || echo gone)|$([ -f "$SD/${SK}_89.thread" ] && echo kept)" "gone|kept"
+ok "a new agent's first event: an earlier server's thread record is not its own, but kept as lost" \
+	"$([ -f "$SD/${SK}_88.thread" ] && echo kept || echo gone)|$(jq -r .state.session_id "$SD/lost/${SK}_sid-old.json" 2>/dev/null)|$([ -f "$SD/${SK}_89.thread" ] && echo kept)" "gone|sid-old|kept"
 settle
-rm -f "$SD/${SK}"_8[89].*
+rm -f "$SD/${SK}"_8[89].* "$SD/lost/${SK}_sid-old.json"
 
 # --- a pane that is gone is cleaned up, but only on a pane list that has our
 # own pane in it: never on a partial answer

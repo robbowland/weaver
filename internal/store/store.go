@@ -6,6 +6,7 @@ package store
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -169,51 +170,77 @@ func ReadState(sf string) (agent.Record, error) {
 }
 
 // UpdateState changes the agent state in file sf under its lock: read,
-// changed, written back whole (the rename releases the lock). False when
-// there was none to change.
+// changed, written back whole. False when there was none to change.
 func UpdateState(sf string, change func(*agent.Record)) bool {
-	lk := Lock(sf)
+	defer Lock(sf)()
 	st, err := ReadState(sf)
 	if err != nil {
-		os.Remove(lk)
 		return false
 	}
 	change(&st)
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if enc.Encode(st) != nil || os.WriteFile(lk, b.Bytes(), 0o644) != nil {
-		os.Remove(lk)
-		return false
-	}
-	return os.Rename(lk, sf) == nil
+	return Write(sf, st) == nil
 }
 
-// Lock serialises read-modify-write of state file sf:
-// sf.lock created exclusively holding our pid; a lock whose owner is gone is
-// removed; after ~2s, a private file instead. Its path.
-func Lock(sf string) string {
-	l := sf + ".lock"
+// UpdateThread changes the thread record in file f under its lock, as
+// UpdateState does a state.
+func UpdateThread(f string, change func(*Thread)) bool {
+	defer Lock(f)()
+	th, err := ReadThread(f)
+	if err != nil {
+		return false
+	}
+	change(&th)
+	return Write(f, th) == nil
+}
+
+// lockStale is how old a lock is that no holder can still mean: one whose
+// pid a process started since has taken.
+const lockStale = 10 * time.Second
+
+// Lock serialises read-modify-write of file f: f.lock, created
+// exclusively, holding our pid. A lock whose holder is gone, or older than
+// any holder holds one, is taken over (renamed away first, so of two that
+// would take it one does); after ~2s of a live holder, none (on we go).
+// What it returns releases it: removes the lock if it is still ours.
+func Lock(f string) (release func()) {
+	l := f + ".lock"
 	me := strconv.Itoa(os.Getpid())
 	for i := 1; ; i++ {
 		fh, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
-			// Without its owner, others wait the lock out.
-			_, _ = fh.WriteString(me + "\n")
-			_ = fh.Close()
-			return l
+			_, err = fh.WriteString(me + "\n")
+			if errors.Join(err, fh.Close()) == nil {
+				return func() {
+					if owner, _ := files.FirstLine(l); owner == me {
+						os.Remove(l)
+					}
+				}
+			}
+			os.Remove(l)
 		}
-		owner, _ := files.FirstLine(l)
-		if n, err := strconv.Atoi(owner); err == nil && n > 0 {
-			if syscall.Kill(n, 0) != nil {
-				if again, _ := files.FirstLine(l); again == owner {
-					os.Remove(l)
+		if st, err := os.Stat(l); err == nil {
+			owner, _ := files.FirstLine(l)
+			n, perr := strconv.Atoi(owner)
+			if perr != nil || n <= 0 || syscall.Kill(n, 0) != nil || time.Since(st.ModTime()) > lockStale {
+				// Not a writer's yet (half made), or its holder is gone.
+				if perr != nil && time.Since(st.ModTime()) < time.Second {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				away := l + "." + me
+				if os.Rename(l, away) == nil {
+					if again, _ := files.FirstLine(away); again != owner {
+						// Not the one we judged: put it back, unless one is
+						// there already.
+						_ = os.Link(away, l)
+					}
+					os.Remove(away)
 				}
 				continue
 			}
 		}
 		if i >= 100 {
-			return sf + "." + me + ".tmp"
+			return func() {}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

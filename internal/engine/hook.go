@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -117,19 +116,20 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane tmux.PaneID, agentNa
 	// The pane's first event: a thread record an earlier server left under
 	// its number is not this agent's.
 	if !files.Exists(h.sf) {
-		e.DropStaleThread(pane)
+		e.LoseStaleThread(pane)
 	}
 	if mode == "async" && !hooks.AsyncGate(ev, pk.State) {
 		return 0
 	}
-	lk := store.Lock(h.sf)
+	release := store.Lock(h.sf)
 	st, _ := os.ReadFile(h.sf)
 	if !h.parse(ev, st) {
-		os.Remove(lk)
+		release()
 		return 0
 	}
 	h.run(e, me)
-	writeState(e, h, lk)
+	writeState(e, h)
+	release()
 	afterWrite(e, h)
 	return h.rc
 }
@@ -388,8 +388,8 @@ func (h *hk) sess() agent.Record {
 	return agent.Record{}
 }
 
-// writeState writes the state file from the hook's fields through its lock, which the rename releases.
-func writeState(e *session.Env, h *hk, lk string) {
+// writeState writes the state file from the hook's fields (under its lock).
+func writeState(e *session.Env, h *hk) {
 	pane, _ := atoi(string(h.Pane))
 	since := h.Since
 	if since == "" {
@@ -426,14 +426,7 @@ func writeState(e *session.Env, h *hk, lk string) {
 			st.TurnRoots = append(st.TurnRoots, r)
 		}
 	}
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if enc.Encode(st) != nil || os.WriteFile(lk, b.Bytes(), 0o644) != nil {
-		os.Remove(lk)
-		return
-	}
-	bestEffort(os.Rename(lk, h.sf))
+	bestEffort(store.Write(h.sf, st))
 }
 
 // hookLog is the activity log's lines for this event (docs/design.md).
@@ -485,6 +478,9 @@ func (h *hk) hookLog(e *session.Env) {
 func afterWrite(e *session.Env, h *hk) {
 	if h.Sid != "" {
 		bestEffort(os.MkdirAll(e.LogDir, 0o755)) // else no log line
+	}
+	if h.Event == "SessionStart" {
+		e.ThreadLearns(h.Pane, h.Sid)
 	}
 	pf := e.PaneFile(h.Pane, "prompt")
 	if h.SnapPrev+h.SnapEnd != "" && files.Exists(pf) {

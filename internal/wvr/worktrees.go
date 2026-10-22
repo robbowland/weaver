@@ -50,8 +50,7 @@ func (e *Env) worktreesMade() []madeWorktree {
 func (e *Env) editWorktrees(edit func([]madeWorktree) []madeWorktree) {
 	f := e.worktreesFile()
 	bestEffort(os.MkdirAll(e.StateDir, 0o755))
-	l := store.Lock(f)
-	defer os.Remove(l)
+	defer store.Lock(f)()
 	var b strings.Builder
 	for _, w := range edit(e.worktreesMade()) {
 		fmt.Fprintf(&b, "%s\t%s\t%d\n", w.dir, w.repo, w.at)

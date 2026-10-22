@@ -591,14 +591,13 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		sid, _ := files.FirstLine(d + "/resume")
 		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
-		// A dead agent's files under this pane id (an earlier session's) go
-		// first: kept as lost when they are, else forgotten.
+		// Files under this pane id from another life of the session (an
+		// earlier server's, its pane numbers taken again) go first: kept as
+		// lost when they are, else forgotten. This life's are the thread's
+		// own, restarted in its pane: they stay (its nvim stays bound).
 		sf := e.StateFile(pane)
-		if files.Exists(sf) {
-			pk := session.Peek(sf)
-			if pk.Pid == "" || !session.AgentAlive(pk.Pid, pk.Start, nil) {
-				e.Retire(sf, pk.Pid)
-			}
+		if old, err := store.ReadState(sf); err == nil && !sameLife(old.Where, e.Where) {
+			e.Retire(sf, string(old.Pid))
 		}
 		if therr == nil {
 			th.Pane = &pn
@@ -610,32 +609,37 @@ func (e *Env) AgentPane(tok, agentName string) error {
 			bestEffort(store.Write(sf, st))
 		}
 		os.RemoveAll(d)
-		if kind == agent.Claude {
-			return run("--resume", sid)
-		}
-		return run("resume", sid)
+		return run(resumeArgs(kind, sid)...)
 	}
 	// Its pane again (enter on an exited agent): the conversation it was
 	// in, else the one weaver started it on.
 	sid := ""
 	if pane != "" {
 		st, _ := store.ReadState(e.StateFile(pane))
-		sid = st.SessionID
 		th, _ := store.ReadThread(e.ThreadFile(pane))
-		if sid == "" {
-			sid = th.SessionID
-		}
+		sid = cmp.Or(st.SessionID, th.SessionID)
 		cmdOf(th)
 	}
+	return run(resumeArgs(kind, sid)...)
+}
+
+// sameLife: is a state of life w (older ones have no session id) of life
+// here?
+func sameLife(w, here agent.Where) bool {
+	return w == here || w.Session == "" && w.Server == here.Server
+}
+
+// resumeArgs are the arguments that resume kind's conversation sid; none,
+// a fresh start, when it is not known (never another conversation's guess:
+// --continue, resume --last).
+func resumeArgs(kind agent.Kind, sid string) []string {
 	switch {
-	case kind == agent.Claude && sid != "":
-		return run("--resume", sid)
-	case kind == agent.Claude:
-		return run("--continue")
-	case sid != "":
-		return run("resume", sid)
+	case sid == "":
+		return nil
+	case kind == agent.Codex:
+		return []string{"resume", sid}
 	}
-	return run("resume", "--last")
+	return []string{"--resume", sid}
 }
 
 // threadRestore brings lost thread lf back (threadReopen), its record
@@ -696,12 +700,17 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	} else {
 		kind = agent.Claude
 	}
-	if s, err := os.Stat(dir); sid == "" || err != nil || !s.IsDir() {
+	if s, err := os.Stat(dir); err != nil || !s.IsDir() {
 		t := tildify(dir)
 		if t != "" {
 			t += " "
 		}
 		return "", fmt.Errorf("%s: its directory %sis gone", nm, t)
+	}
+	// One running elsewhere is refused, not resumed beside it: two
+	// processes would interleave one conversation.
+	if pid := e.ClaudeRunning()[sid]; kind == agent.Claude && sid != "" && pid != "" {
+		return "", fmt.Errorf("%s runs in Claude Code (pid %s) outside this session: /exit it there, then resume it", nm, pid)
 	}
 	unlock := e.numLock()
 	n, used := e.threadNum()

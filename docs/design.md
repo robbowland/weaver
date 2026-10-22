@@ -278,6 +278,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `created` | int | epoch s |
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
+| `session_id` | string | its conversation: Claude Code's from the start (weaver chooses it), any agent's from its SessionStart on; absent while unknown |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
 | `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan` or Codex's `--sandbox read-only`; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
@@ -430,7 +431,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 
 - **When:** where an agent's files would be forgotten for a dead pid
   (`AgentRows`, `GC`), `retire` keeps them as lost when the agent has a
-  thread record and a session id, its `end_reason` is not `prompt_input_exit`,
+  thread record (whether or not its conversation is known), its `end_reason` is not `prompt_input_exit`,
   `logout` or `clear` (ended on purpose), and its session has gone since its
   last event: the machine has started since its last event `ts`
   (`kern.boottime`), or no tmux server (weaver's, or the caller's) has that
@@ -444,11 +445,15 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   there, never forgets. Files with no pid to test are an earlier server's
   when the running session of their name was created after them: `GC`
   retires a state without a pid created before its last event `ts`, and
-  removes a thread record whose agent never reported (no state) written
-  before the session was made, as the pane's first event does
-  (`DropStaleThread`), so a new pane of that number never takes it for its
-  own.
-- **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json`, one object:
+  keeps as lost a thread record whose agent never reported (no state)
+  written before the session was made, as the pane's first event does
+  (`LoseStaleThread`), so a new pane of that number never takes it for its
+  own, and the thread is never dropped. A thread record learns its
+  conversation at its agent's SessionStart (`session_id`: Codex says its own
+  then, Claude Code's changes with /clear), so it can be resumed whether or
+  not its agent's state survives.
+- **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json` (a thread whose
+  conversation was never known: `<skey>_thread-<created>-<num>.json`), one object:
   `lost` (epoch s), `skey` (the session key it was lost from, `tmux-` first
   for a tmux session; records before 2026-10-15 call it `session`), `state`
   (the state file) and `thread` (the thread record). The pane's files go.
@@ -461,10 +466,16 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   else the thread's worktree, else `root`, else `cwd`. (`start_cwd` moves with
   the worktree tools, so an agent that entered a worktree resumes there.) `thread.json` (its record with
   `cmd` for now's agent command and its number when free, else the lowest
-  free), `state.json` (its state without pid, as `idle` and seen) and
-  `resume` (the session id) in place of `task`. The agent's pane takes the
-  record and the state for its pane id, then execs `claude --resume <id>`
-  (`codex resume <id>`); the nvim pane binds as for a new thread. The state
+  free), `state.json` (its state as a resumed agent starts it,
+  `agent.Record.Resumed`: the conversation's fields, idle and seen, in this
+  session's life) and `resume` (the session id) in place of `task`. The
+  agent's pane takes the record and the state for its pane id (first
+  retiring files under that pane id of another life of the session; its own
+  life's, as when it restarts in its pane, stay, its nvim still bound),
+  then execs `claude --resume <id>` (`codex resume <id>`; no conversation
+  known: the agent afresh, never `--continue` or `resume --last`, which
+  would guess another's); the nvim pane binds as for a new thread. A
+  conversation Claude Code runs elsewhere is refused, not resumed beside it. The state
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
   title and last reply, and its snapshot chain and activity log continue.
   A record whose directory is gone stays lost.

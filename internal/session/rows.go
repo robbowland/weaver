@@ -399,23 +399,23 @@ func (e *Env) Retire(f, pid string) {
 }
 
 // LostCheck: is the dead agent of state file f a thread lost with its
-// session? Only a thread with a session to resume, not ended on purpose,
-// whose session has gone since its last event.
+// session? A thread not ended on purpose whose session has gone since its
+// last event (whether or not its conversation is known: a thread lasts
+// until you close it).
 func (e *Env) LostCheck(f string) bool {
 	b := strings.TrimSuffix(f, ".json")
 	if !files.Exists(b+".thread") || !files.Exists(f) {
 		return false
 	}
 	s, err := store.ReadState(f)
-	if err != nil || s.SessionID == "" {
+	if err != nil {
 		return false
 	}
 	switch s.EndReason {
 	case "prompt_input_exit", "logout", "clear":
 		return false
 	}
-	base := filepath.Base(b)
-	return e.serverLost(base[:strings.LastIndexByte(base, '_')], s.TS, s.Where)
+	return e.serverLost(KeyOfFile(f), s.TS, s.Where)
 }
 
 // serverLost: did session key skey's session go since ts (epoch s), its
@@ -479,32 +479,46 @@ func (e *Env) Lose(f, pid string) bool {
 	if !files.Exists(f) {
 		return true
 	}
-	l := store.Lock(f)
-	defer os.Remove(l)
+	defer store.Lock(f)()
 	if pidOf(f) != pid {
 		return true
 	}
 	b := strings.TrimSuffix(f, ".json")
 	st, err := store.ReadState(f)
-	sid := st.SessionID
-	if err != nil || sid == "" {
-		return false
-	}
-	th, err := store.ReadThread(b + ".thread")
 	if err != nil {
 		return false
 	}
-	base := filepath.Base(b)
-	skey := base[:strings.LastIndexByte(base, '_')]
-	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
-	if store.Write(e.LostDir+"/"+skey+"_"+sid+".json", rec) != nil {
+	th, err := store.ReadThread(b + ".thread")
+	if err != nil || !e.keepLost(KeyOfFile(f), st, th) {
 		return false
 	}
-	for _, x := range []string{f, b + ".nvim", b + ".bash", b + ".prompt", b + ".thread"} {
-		os.Remove(x)
-	}
-	os.RemoveAll(b + ".opening")
+	removePaneFiles(b)
 	return true
+}
+
+// LoseThread keeps the thread of record f, whose agent never reported (it
+// has no state), as lost with its session, then removes its files.
+func (e *Env) LoseThread(f string) {
+	th, err := store.ReadThread(f)
+	if err == nil && !e.keepLost(KeyOfFile(f), agent.Record{}, th) {
+		return
+	}
+	removePaneFiles(strings.TrimSuffix(f, ".thread"))
+}
+
+// keepLost keeps thread th, with its agent's state st as it was, as lost
+// from session key skey: under its conversation's id (its state's, else its
+// record's), else, one never known, its thread's own; resumed, that one
+// starts afresh in its directory.
+func (e *Env) keepLost(skey string, st agent.Record, th store.Thread) bool {
+	st.SessionID = cmp.Or(st.SessionID, th.SessionID)
+	st.Agent = cmp.Or(st.Agent, string(th.Agent))
+	id := st.SessionID
+	if id == "" {
+		id = "thread-" + strconv.FormatInt(th.Created, 10) + "-" + strconv.Itoa(th.Num)
+	}
+	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
+	return store.Write(e.LostDir+"/"+skey+"_"+id+".json", rec) == nil
 }
 
 // Forget removes the files of the agent whose state file is f (its activity
@@ -513,14 +527,31 @@ func (e *Env) Forget(f, pid string) {
 	if !files.Exists(f) {
 		return
 	}
-	l := store.Lock(f)
-	defer os.Remove(l)
+	defer store.Lock(f)()
 	if pidOf(f) != pid {
 		return
 	}
-	b := strings.TrimSuffix(f, ".json")
-	for _, x := range []string{f, b + ".nvim", b + ".bash", b + ".prompt", b + ".thread"} {
-		os.Remove(x)
+	removePaneFiles(strings.TrimSuffix(f, ".json"))
+}
+
+// removePaneFiles removes the files weaver keeps for the agent in a pane,
+// b their path without extension (<skey>_<pane>): its state, thread record,
+// nvim binding, turn prompt, last Bash command and opening marker.
+func removePaneFiles(b string) {
+	for _, x := range []string{".json", ".nvim", ".bash", ".prompt", ".thread"} {
+		os.Remove(b + x)
 	}
 	os.RemoveAll(b + ".opening")
+}
+
+// KeyOfFile is the session key of per-pane file f (<skey>_<pane>.<ext>).
+func KeyOfFile(f string) string {
+	b := filepath.Base(f)
+	if i := strings.LastIndexByte(b, '.'); i > 0 {
+		b = b[:i]
+	}
+	if i := strings.LastIndexByte(b, '_'); i > 0 {
+		return b[:i]
+	}
+	return ""
 }
