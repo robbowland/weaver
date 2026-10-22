@@ -274,6 +274,12 @@ can supersede an earlier one, and says so.
 - 2026-10-15: A thread's window is named with its label (`01 task ·
   repo/branch`) as it opens, not when its agent first reports; the form and
   its pickers take the board's label grammar (`[ WEAVER :: NEW THREAD ]`).
+- 2026-10-22: The thread being made shows in a frame like the form's. The
+  form's popup has no border of tmux's (fzf draws the form's, with a label
+  that changes), so the lines that follow it (the worktree, Worktrunk's
+  report, a failure and its buttons) showed bare, unlike the form before
+  them and every card. weaver draws the frame itself rather than giving the
+  popup tmux's border, which would put a second border round the form.
 
 ## Work items and views
 

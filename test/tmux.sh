@@ -306,6 +306,21 @@ ok "...and its rows stay (branch and base say why they do not apply), so none mo
 key 1b # esc: the form goes, nothing made
 sleep 1
 ok "...esc: nothing made" "$(windows)" "0 1 "
+# The thread being made shows in a frame, as the form does: the form's
+# popup has no border of tmux's. (A row of it as tmux draws it: the edge,
+# colours and spaces, then the line.)
+n=$(grep -c 'what should the agent do' "$AT/screen.log")
+key 1b4e # Alt N
+waitfor '[ "$(grep -c "what should the agent do" "$AT/screen.log")" -gt "$n" ]'
+key "$(printf 'Frame it' | xxd -p)"
+sleep 0.3
+key 0d
+waitfor '[ "$(windows)" = "0 1 2 " ]' 100
+ok "form: the thread being made, framed as the form is" \
+	"$(perl -ne 'if (/│(?:\e\[[0-9;]*m| )*weaver: worktree for frame-it/) { print "framed\n"; exit }' "$AT/screen.log")" "framed"
+AGX=$(pane_at 2 1)
+tx run-shell -b -t "%$AGX" "wvr close --yes $AGX >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 1 " ]'
 
 # --- the mouse: a key's hint is its button, the status line's counts go to
 # their agents, and a right click opens the menu of what is under it

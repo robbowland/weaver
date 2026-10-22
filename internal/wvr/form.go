@@ -786,23 +786,30 @@ func (e *Env) New(args []string) error {
 		if i := strings.IndexByte(query, '\n'); i >= 0 {
 			query = query[:i]
 		}
-		err = e.threadCreate(t, loadForm(sf), nofocus)
-		if err == nil {
-			return nil
-		}
-		// The thread could not be made: say why, unless that is on screen.
-		if !errors.Is(err, cli.ErrSaid) {
-			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-		}
-		fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s\n", CRed, COff)
-		tt, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-		if err != nil {
-			return cli.ErrCancelled
-		}
-		c := choose(tt, "", []choice{{"⏎", "back to the form"}, {"esc", "cancel"}}, 0)
-		_ = tt.Close()
-		if c != 0 {
-			return cli.ErrCancelled
+		// The thread being made, framed as the form was.
+		fm := loadForm(sf)
+		err = framed(newFormLabel(fm), func(f *frame) error {
+			err := e.threadCreate(t, fm, nofocus)
+			if err == nil {
+				return nil
+			}
+			// It could not be made: say why, unless that is on screen.
+			if !errors.Is(err, cli.ErrSaid) {
+				fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+			}
+			fmt.Fprintf(os.Stderr, "\n%sweaver: no thread started.%s\n", CRed, COff)
+			tt, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+			if err != nil {
+				return cli.ErrCancelled
+			}
+			defer func() { _ = tt.Close() }()
+			if f.choose(tt, []choice{{"⏎", "back to the form"}, {"esc", "cancel"}}, 0) != 0 {
+				return cli.ErrCancelled
+			}
+			return errBackToForm
+		})
+		if !errors.Is(err, errBackToForm) {
+			return err
 		}
 	}
 }
@@ -829,6 +836,10 @@ func readKey() byte {
 	}
 	return b
 }
+
+// errBackToForm: a thread that could not be made, and you asked for the
+// form again.
+var errBackToForm = errors.New("back to the form")
 
 // newForm is the form until you start a thread it can start: the task, or
 // 130 when you cancel.

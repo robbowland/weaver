@@ -43,6 +43,12 @@ var (
 // the terminal went (or the card was left with a key no choice has, when
 // cs has no esc).
 func choose(t *os.File, pad string, cs []choice, def int) int {
+	return chooseIn(t, pad, "", cs, def)
+}
+
+// chooseIn is choose on a line that ends in right, drawn after the buttons
+// each time they are (a frame's edge, which clearing the line takes).
+func chooseIn(t *os.File, pad, right string, cs []choice, def int) int {
 	fd := int(t.Fd())
 	old, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
 	if err != nil {
@@ -82,7 +88,7 @@ func choose(t *os.File, pad string, cs []choice, def int) int {
 				b.WriteString(" " + CGrey + c.key + COff + " " + CDim + c.what + COff + " ")
 			}
 		}
-		fmt.Fprint(t, b.String())
+		fmt.Fprint(t, b.String()+right)
 	}
 	draw()
 	buf := make([]byte, 64)

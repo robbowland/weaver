@@ -869,7 +869,11 @@ else weaver's.
   that run weaver use `run-shell -b` with their output discarded (tmux shows a
   run-shell's output over the pane), passing `#{pane_id}`; alt+N is a
   `display-popup -B -E` 96 x 18, tall enough for the form's pickers, since a
-  popup cannot be resized. Pane splits arrive as `ESC [ 100 ; 9 ~` and
+  popup cannot be resized. Without tmux's border there, the form draws its
+  own (fzf's), and what follows it in the popup, the thread being made, is
+  drawn in a frame like it (`framed`): stderr goes through a pipe for the
+  while, so Worktrunk's and git's lines land inside too, cut to its width,
+  and a failure's buttons sit on a row of it (`frame.choose`). Pane splits arrive as `ESC [ 100 ; 9 ~` and
   `ESC [ 100 ; 10 ~`, sent by whatever keys the terminal binds to them
   (Ghostty's `csi:100;9~`), caught as `user-keys`.
 - **Config:** `config/tmux.conf`, then `~/.config/weaver/tmux.conf`; read with
