@@ -383,6 +383,19 @@ can supersede an earlier one, and says so.
   `search` action, not a reload of rows weaver ranks, since fzf holds
   typing while a reload finds the row it was on, and fast typing lost
   keys.
+- 2026-10-22: Quick filters (Rob: "maybe quick filters as well, like
+  assigned to me etc etc") are searches of the service, not narrowings of
+  what is loaded: what is assigned to you may be past every section's cap.
+  `f` picks one (fzf, as the form's pickers), and its answer is a section
+  of its own, SEARCH, first in the view and paged like the others, so the
+  sections stay what they are beside it. weaver's own searches come first,
+  then a repository's and a label's from what weaver has seen (a label
+  within the repositories it was seen in: alone it would search all of
+  GitHub), Linear's team likewise. GitHub's is asked of pull requests and
+  issues alike, so `s` shows the other kind's answer, and its heading says
+  how many there are; a review-asked filter finds no issues, which is
+  simpler than kinds of filter. The search is kept in the view's cache, so
+  a refresh asks it again; picking it again, or `esc`, ends it.
 
 ## Lost threads
 

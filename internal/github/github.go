@@ -373,11 +373,12 @@ func Parse(k Kind, s Section, after string, b []byte) (Result, error) {
 	return r, nil
 }
 
-// Fetch asks GitHub for every section of both kinds through gh, a request
-// each, all at once (a search takes about a second; GitHub answers aliased
-// ones in turn), within 30 s: each section's items, or why asking for it
-// failed.
-func Fetch() map[Kind][]Result {
+// Fetch asks GitHub for every section of both kinds through gh, and for
+// each of search (a search of your own, a Filter's) of both kinds, a
+// request each, all at once (a search takes about a second; GitHub answers
+// aliased ones in turn), within 30 s: what each found, or why asking for it
+// failed; the sections by kind, then the searches by kind.
+func Fetch(search ...Section) (map[Kind][]Result, map[Kind][]Result) {
 	type answer struct {
 		k Kind
 		i int
@@ -385,18 +386,62 @@ func Fetch() map[Kind][]Result {
 	}
 	ch := make(chan answer)
 	n := 0
+	asked := map[Kind][]Section{}
 	for _, k := range []Kind{PRs, Issues} {
-		for i := range Sections[k] {
+		asked[k] = append(append([]Section{}, Sections[k]...), search...)
+		for i, s := range asked[k] {
 			n++
-			go func() { ch <- answer{k, i, Ask(k, Sections[k][i], "")} }()
+			go func() { ch <- answer{k, i, Ask(k, s, "")} }()
 		}
 	}
-	out := map[Kind][]Result{PRs: make([]Result, len(Sections[PRs])), Issues: make([]Result, len(Sections[Issues]))}
+	out, found := map[Kind][]Result{}, map[Kind][]Result{}
+	for k, ss := range asked {
+		out[k] = make([]Result, len(ss))
+	}
 	for ; n > 0; n-- {
 		a := <-ch
 		out[a.k][a.i] = a.r
 	}
-	return out
+	for k, rs := range out {
+		out[k], found[k] = rs[:len(Sections[k])], rs[len(Sections[k]):]
+	}
+	return out, found
+}
+
+// Filter is a search of your own (a view's f): what it is called, and its
+// filters (GitHub's search syntax, as a section's), asked of pull requests
+// and issues alike.
+type Filter struct {
+	Title, Filters string
+}
+
+// Section is f as a section, of either kind.
+func (f Filter) Section() Section { return Section{Title: f.Title, Filters: f.Filters} }
+
+// Filters are the searches of your own the views offer before a
+// repository's and a label's.
+var Filters = []Filter{
+	{"assigned to me", "is:open assignee:@me sort:updated-desc"},
+	{"review asked of me", "is:open user-review-requested:@me sort:updated-desc"},
+	{"review asked of my teams", "is:open review-requested:@me -user-review-requested:@me sort:updated-desc"},
+	{"opened by me", "is:open author:@me sort:updated-desc"},
+	{"mentions me", "is:open mentions:@me sort:updated-desc"},
+}
+
+// RepoFilter is what is open in repository repo (owner/name).
+func RepoFilter(repo string) Filter {
+	return Filter{"repository " + repo, "is:open repo:" + repo + " sort:updated-desc"}
+}
+
+// LabelFilter is what is open with label in repos: a label is a
+// repository's, and alone it would search all of GitHub.
+func LabelFilter(label string, repos []string) Filter {
+	q, _ := json.Marshal(label)
+	f := "is:open label:" + string(q)
+	for _, r := range repos {
+		f += " repo:" + r
+	}
+	return Filter{"label " + label, f + " sort:updated-desc"}
 }
 
 // Ask asks GitHub for section s of kind k, its page after cursor after

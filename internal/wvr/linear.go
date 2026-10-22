@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -24,12 +25,16 @@ import (
 type linearSource struct{}
 
 // linCache is what Linear said last, in $STATE_DIR/linear.json: each
-// section's issues, and how asking for them went.
+// section's issues, and how asking for them went; and those of the view's
+// own search.
 type linCache struct {
 	// Fetched is an older weaver's: when it asked for every section, which
 	// is when its sections were read (settle).
 	Fetched time.Time       `json:"fetched,omitzero"`
 	Results []linear.Result `json:"results"`
+	// Search is the view's own search (f): none read yet just after it was
+	// asked for.
+	Search *linear.Result `json:"search,omitempty"`
 }
 
 // settle has an older weaver's cache say, section by section, when its
@@ -44,14 +49,42 @@ func (c *linCache) settle() {
 }
 
 // refreshed is c with a refresh's answer: every section as asked, but one
-// that failed with what that section (by its filter, wherever it was) had.
-func (c *linCache) refreshed(got []linear.Result) {
+// that failed with what that section (by its filter, wherever it was) had;
+// and the search's, if it is still the search.
+func (c *linCache) refreshed(got, found []linear.Result) {
 	for i, r := range got {
 		if j := slices.IndexFunc(c.Results, func(o linear.Result) bool { return o.Section == r.Section }); j >= 0 {
 			got[i].List = r.List.Since(c.Results[j].List)
 		}
 	}
 	c.Results = got
+	for _, r := range found {
+		c.found(r)
+	}
+}
+
+// found is c with r, the first page of a search, if that is still the
+// search: one that failed keeps what the search had.
+func (c *linCache) found(r linear.Result) {
+	if c.Search != nil && c.Search.Section == r.Section {
+		r.List = r.List.Since(c.Search.List)
+		c.Search = &r
+	}
+}
+
+// section is c's section key: its index, or the search's ("s").
+func (c linCache) section(key string) (linear.Result, bool) {
+	if key == searchKey {
+		if c.Search == nil {
+			return linear.Result{}, false
+		}
+		return *c.Search, true
+	}
+	i, ok := atoi(key)
+	if !ok || i >= len(c.Results) {
+		return linear.Result{}, false
+	}
+	return c.Results[i], true
 }
 
 func (linearSource) service() string     { return "Linear" }
@@ -91,43 +124,105 @@ func updateLinear(e *Env, change func(*linCache)) {
 func (linearSource) read(e *Env) itemData {
 	c := readLinear(e)
 	d := itemData{sections: map[string][]itemSection{}}
-	for i, r := range c.Results {
-		s := itemSection{key: strconv.Itoa(i), title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
+	section := func(key string, r linear.Result) itemSection {
+		s := itemSection{key: key, title: r.Title, total: r.Total, more: r.Next != "", fetched: r.Fetched, err: r.Err}
 		for _, it := range r.Items {
 			s.items = append(s.items, linItem(it))
 		}
+		return s
+	}
+	if c.Search != nil {
+		s := section(searchKey, *c.Search)
+		s.search = true
 		d.sections["issues"] = append(d.sections["issues"], s)
+	}
+	for i, r := range c.Results {
+		d.sections["issues"] = append(d.sections["issues"], section(strconv.Itoa(i), r))
 	}
 	return d
 }
 
-// fetch asks Linear again and keeps the answer (refreshed).
+// fetch asks Linear again, the search too, and keeps the answer
+// (refreshed).
 func (linearSource) fetch(e *Env) {
-	got := linear.Fetch()
-	updateLinear(e, func(c *linCache) { c.refreshed(got) })
+	var search []linear.Section
+	if s := readLinear(e).Search; s != nil {
+		search = append(search, s.Section)
+	}
+	got, found := linear.Fetch(search...)
+	updateLinear(e, func(c *linCache) { c.refreshed(got, found) })
 }
 
-// more reads the page after section key's (its index), and keeps it
-// (paged).
+// more reads the page after section key's, and keeps it (paged).
 func (linearSource) more(e *Env, _, key string) {
-	rs := readLinear(e).Results
-	i, ok := atoi(key)
-	if !ok || i >= len(rs) || rs[i].Next == "" {
+	r, ok := readLinear(e).section(key)
+	if !ok || r.Next == "" {
 		return
 	}
-	s, after := rs[i].Section, rs[i].Next
-	p := linear.Ask(s, after)
-	updateLinear(e, func(c *linCache) { c.paged(s, after, p.List) })
+	p := linear.Ask(r.Section, r.Next)
+	updateLinear(e, func(c *linCache) { c.paged(r.Section, r.Next, p.List) })
 }
 
 // paged is c with p, the page of section s read after cursor after, after
 // that section's issues, if it still ends there.
 func (c *linCache) paged(s linear.Section, after string, p page.List[linear.Issue]) {
+	id := func(it linear.Issue) string { return it.Identifier }
 	for i, r := range c.Results {
 		if r.Section == s {
-			c.Results[i].List = r.List.More(after, p, func(it linear.Issue) string { return it.Identifier })
+			c.Results[i].List = r.List.More(after, p, id)
 		}
 	}
+	if c.Search != nil && c.Search.Section == s {
+		c.Search.List = c.Search.List.More(after, p, id)
+	}
+}
+
+// filters are what f offers: weaver's searches of your own, then what is
+// open in each team weaver has seen.
+func (linearSource) filters(e *Env) []viewFilter {
+	c := readLinear(e)
+	var fs []viewFilter
+	add := func(s linear.Section) {
+		fs = append(fs, viewFilter{title: s.Title, set: func(e *Env) {
+			updateLinear(e, func(c *linCache) { c.Search = &linear.Result{Section: s} })
+		}})
+	}
+	for _, s := range linear.Filters {
+		add(s)
+	}
+	teams := map[string]string{}
+	for _, r := range append(c.Results, c.searched()...) {
+		for _, it := range r.Items {
+			if it.Team.Key != "" {
+				teams[it.Team.Key] = it.Team.Name
+			}
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(teams)) {
+		add(linear.TeamFilter(k, teams[k]))
+	}
+	return fs
+}
+
+// searched is the search's answer, if there is a search.
+func (c linCache) searched() []linear.Result {
+	if c.Search == nil {
+		return nil
+	}
+	return []linear.Result{*c.Search}
+}
+
+// find reads the first page of the search, and keeps it.
+func (linearSource) find(e *Env) {
+	if s := readLinear(e).Search; s != nil {
+		r := linear.Ask(s.Section, "")
+		updateLinear(e, func(c *linCache) { c.found(r) })
+	}
+}
+
+// clear ends the search.
+func (linearSource) clear(e *Env) {
+	updateLinear(e, func(c *linCache) { c.Search = nil })
 }
 
 // linPriority is an issue's priority as a signal: urgent and high stand out.

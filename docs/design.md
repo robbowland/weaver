@@ -965,7 +965,29 @@ item read) once its list has loaded (`<sock>.pos`, which its `load`
 event, `_items NAME loaded`, takes: till then fzf keeps the cursor on the
 row it was on). A section's total and age stay its first page's. Pages
 last until the next refresh, which asks for every section's first page
-again. Like home, it outlives installs of weaver:
+again.
+
+`f` opens a picker (`_items NAME filter`, run by fzf's `execute` in the
+view's pane) of searches of your own, each its source's (`viewFilter`):
+GitHub's assigned to me, review asked of me, review asked of my teams,
+opened by me and mentions me (`github.Filters`), then what is open in
+each repository weaver knows (its checkouts' in `$STATE_DIR/repos`, then
+the cached items'), then with each label it has seen, within the
+repositories it saw it in (a label alone would search all of GitHub);
+Linear's assigned to me, created by me and subscribed to
+(`linear.Filters`), then each team it has seen. The one picked is the
+cache's `search` (GitHub's, of both kinds; a review asked finds no
+issues), not read yet: the view's first section, `SEARCH · mentions me ·
+asking…`. The picker leaves `<sock>.find`, and once the view has loaded
+that, its load event (`_items NAME loaded`) starts `_items NAME find`,
+which reads the search's first page, keeps it if it is still the search,
+and reloads the views, the asking one's cursor on the first found (a
+reload of the answer before the view's own would be lost under it). A
+refresh asks the search again with the sections, and it pages as they do
+(its key `s`); its heading says what it found of the other kind (`issues:
+1 (s)`). Picked again, or `clear` at the picker's top, or `esc` in the view
+while it has one (`_items NAME esc`, which ends it before going back), ends
+it. Like home, it outlives installs of weaver:
 it writes `<sock>.born` as it starts, and once `wvr` resolves to a newer
 weaver (as home's), the first reload after (`_items NAME chrome`) or the
 view's own check aborts its fzf, and the view execs that weaver's `_items

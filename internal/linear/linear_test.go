@@ -68,9 +68,23 @@ func TestFetchSaysMore(t *testing.T) {
 		}
 		return issues("")
 	})
-	got := Fetch()
+	got, _ := Fetch()
 	if got[0].Next != "c30" || len(got[0].Items) != 2 || got[0].Err != "" || got[1].Next != "" || got[1].Err != "" {
 		t.Errorf("%+v", got)
+	}
+}
+
+// A search of your own is asked with the sections: a team's by its key.
+func TestFetchSearch(t *testing.T) {
+	fakeLinear(t, func(q string, _ map[string]any) string {
+		if strings.Contains(q, `team: { key: { eq: "ENG" } }`) {
+			return issues("", "ENG-7")
+		}
+		return issues("")
+	})
+	got, found := Fetch(TeamFilter("ENG", "Engineering"))
+	if len(got) != len(Sections) || len(found) != 1 || found[0].Title != "team Engineering" || len(found[0].Items) != 1 || found[0].Items[0].Identifier != "ENG-7" {
+		t.Errorf("%+v %+v", got, found)
 	}
 }
 
@@ -93,7 +107,7 @@ func TestAskPage(t *testing.T) {
 // Without a key, every section fails for that reason, and says so itself.
 func TestFetchNoKey(t *testing.T) {
 	noKey(t)
-	got := Fetch()
+	got, _ := Fetch()
 	if len(got) != len(Sections) {
 		t.Fatalf("%d sections", len(got))
 	}

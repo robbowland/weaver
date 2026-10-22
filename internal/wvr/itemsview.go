@@ -45,6 +45,13 @@ type itemSource interface {
 	// more reads the page after section key's of kind, and keeps it after
 	// the section's items until the next fetch.
 	more(e *Env, kind, key string)
+	// filters are the searches f offers: weaver's searches of your own,
+	// then what is open in each repository, label or team weaver knows.
+	filters(e *Env) []viewFilter
+	// find reads the view's search (a filter's set made it), and keeps it.
+	find(e *Env)
+	// clear ends the view's search.
+	clear(e *Env)
 	// service is where the items live: GitHub, Linear.
 	service() string
 	// guide is what its ? card says of its sections (Queue, Team, Mine,
@@ -60,18 +67,46 @@ type viewGuide struct {
 	readOnly                 string // what alt+m starts
 }
 
-// itemData is what a service said: its sections of each kind.
+// viewFilter is a search f offers: what the picker shows (a note beside
+// it), and what makes it the view's search, its source's own.
+type viewFilter struct {
+	title, note string
+	set         func(*Env)
+}
+
+// searchKey is the key of a view's own search (f) among its sections: it
+// comes first, as SEARCH.
+const searchKey = "s"
+
+// itemData is what a service said: its sections of each kind, the view's
+// own search first.
 type itemData struct {
 	sections map[string][]itemSection
+}
+
+// searched is the title of the view's own search, "" for none.
+func (d itemData) searched() string {
+	for _, ss := range d.sections {
+		for _, s := range ss {
+			if s.search {
+				return s.title
+			}
+		}
+	}
+	return ""
 }
 
 // itemSection is a section's items, how many there are in all (0: the
 // service does not say), whether there are more to read, when they were
 // read (zero: never) and why asking for them failed last ("": it did not).
-// key is what its source's more names it by.
+// key is what its source's more names it by; search, whether it is the
+// view's own search (its title as asked, and a note on what it found of
+// another kind).
 type itemSection struct {
 	key     string
 	title   string
+	search  bool
+	note    string
 	total   int
 	more    bool
 	items   []viewItem
@@ -115,24 +150,36 @@ func (d itemData) stale(limit time.Duration) bool {
 	return n == 0
 }
 
-// heading is section s's heading: its title, how many it shows of how
-// many (N+ when the service has more but does not count them), and, when
-// asking for it failed, that its items are from before.
+// heading is section s's heading: its title (the view's own search's,
+// SEARCH and it as asked), how many it shows of how many (N+ when the
+// service has more but does not count them), and, when asking for it
+// failed, that its items are from before.
 func (s itemSection) heading() string {
-	h := CGrey + strings.ToUpper(s.title)
-	if s.err != "" && s.fetched.IsZero() {
-		return h + COff + CDim + " · " + COff + CRed + "failed" + COff
+	title := strings.ToUpper(s.title)
+	if s.search {
+		title = "SEARCH · " + s.title
 	}
-	count := strconv.Itoa(len(s.items))
+	h := CGrey + title + COff
 	switch {
-	case s.total > len(s.items):
-		count += " of " + strconv.Itoa(s.total)
-	case s.more:
-		count += "+"
+	case s.err != "" && s.fetched.IsZero():
+		h += CDim + " · " + COff + CRed + "failed" + COff
+	case s.fetched.IsZero():
+		h += CDim + " · " + COff + asking
+	default:
+		count := strconv.Itoa(len(s.items))
+		switch {
+		case s.total > len(s.items):
+			count += " of " + strconv.Itoa(s.total)
+		case s.more:
+			count += "+"
+		}
+		h = CGrey + title + " · " + count + COff
+		if s.err != "" {
+			h += CDim + " · " + COff + CRed + "failed" + COff + CDim + ", as of " + age(int64(time.Since(s.fetched).Seconds())) + " ago" + COff
+		}
 	}
-	h += " · " + count + COff
-	if s.err != "" {
-		h += CDim + " · " + COff + CRed + "failed" + COff + CDim + ", as of " + age(int64(time.Since(s.fetched).Seconds())) + " ago" + COff
+	if s.note != "" {
+		h += CDim + " · " + s.note + COff
 	}
 	return h
 }
@@ -359,8 +406,9 @@ func (e *Env) itemRows(src itemSource) string {
 	wf, ww = min(wf, 22), min(ww, 24)
 	wt := max(w-2-1-3-2-wf-2-ww-2-3, 12)
 	for _, s := range sections {
-		// An empty section goes, but one that failed: it may not be empty.
-		if len(s.items) == 0 && s.err == "" {
+		// An empty section goes, but one that failed (it may not be empty)
+		// and the search, which says so.
+		if len(s.items) == 0 && s.err == "" && !s.search {
 			continue
 		}
 		if len(ls) > 0 {
@@ -427,7 +475,9 @@ func (e *Env) itemLabel(src itemSource) string {
 	kind := e.itemKind(src)
 	n := 0
 	for _, s := range src.read(e).sections[kind] {
-		n += len(s.items)
+		if !s.search {
+			n += len(s.items)
+		}
 	}
 	return strings.TrimSuffix(formLabel("WEAVER", src.label(kind)), " ") + " " + CGrey + strconv.Itoa(n) + COff + " "
 }
@@ -446,7 +496,11 @@ func (e *Env) itemFresh(src itemSource) string {
 	for _, s := range ss {
 		n += len(s.items)
 		if s.err != "" {
-			failed = append(failed, strings.ToUpper(s.title))
+			name := strings.ToUpper(s.title)
+			if s.search {
+				name = "SEARCH"
+			}
+			failed = append(failed, name)
 			if why == "" {
 				why = s.err
 			}
@@ -498,6 +552,10 @@ func (e *Env) itemHints(src itemSource) []choice {
 	if len(src.kinds()) > 1 {
 		hs = append(hs, choice{"s", strings.ToUpper(strings.Join(src.kinds(), "/"))})
 	}
+	hs = append(hs, choice{"f", "FILTER"})
+	if src.read(e).searched() != "" {
+		hs = append(hs, choice{"esc", "CLEAR"})
+	}
 	help := "HELP"
 	if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" && files.Exists(s+".help") {
 		help = "CARD"
@@ -521,8 +579,10 @@ func (e *Env) itemMenu(src itemSource, k string) []menuItem {
 	if searching() {
 		return ms
 	}
-	if s, ok := src.read(e).section(e.itemKind(src), rowKey(k)); ok && s.more {
-		ms = append(ms, menuItem{"more of " + strings.ToLower(s.title), "m", "m"})
+	d := src.read(e)
+	// No key of its own in the menu: m there is alt+m's.
+	if s, ok := d.section(e.itemKind(src), rowKey(k)); ok && s.more {
+		ms = append(ms, menuItem{"more of " + strings.ToLower(s.title), "", "m"})
 	}
 	if len(ms) > 0 {
 		ms = append(ms, menuItem{})
@@ -535,6 +595,10 @@ func (e *Env) itemMenu(src itemSource, k string) []menuItem {
 			}
 		}
 		ms = append(ms, menuItem{"show " + strings.ToLower(src.label(next)), "s", "s"})
+	}
+	ms = append(ms, menuItem{"filter", "f", "f"})
+	if d.searched() != "" {
+		ms = append(ms, menuItem{"clear the search", "", "Escape"})
 	}
 	return append(ms, menuItem{"refresh", "r", "C-r"}, menuItem{"help", "?", "?"})
 }
@@ -630,6 +694,8 @@ func (e *Env) itemHelp(src itemSource) string {
 		key("j k  g G", "move; first, last", "") +
 		key("o", "open it in "+src.service(), "") +
 		key("m", "more of its section", "(⏎ on the section's last line)") +
+		key("f", "a filter: a search of "+src.service()+" as SEARCH,", "first") +
+		strings.Repeat(" ", 2+helpCol) + d + "(yours, or a repository's, a label's, a team's)" + o + "\n" +
 		key("/", "search", "(esc: back)")
 	if len(src.kinds()) > 1 {
 		out += key("s", strings.ToLower(src.label(src.kinds()[0]))+" ↔ "+strings.ToLower(src.label(src.kinds()[1])), "")
@@ -637,8 +703,9 @@ func (e *Env) itemHelp(src itemSource) string {
 	out += key("tab  shift+tab", "the next, previous view", "(THREADS, GITHUB, LINEAR)")
 	out += key("ctrl+r", "ask "+src.service()+" again", "(it does every 5 minutes)") +
 		key("?", "this help", "(? again: back)") +
-		key("q  esc", "back to your thread", "") +
+		key("q  esc", "back to your thread", "(esc, with a SEARCH: clear it)") +
 		"\n" + g + "SECTIONS" + o + "\n" +
+		"  " + g + "SEARCH" + o + "  what f asked for, while you have it\n" +
 		"  " + g + "QUEUE" + o + "   " + gd.queue + "\n"
 	if gd.team != "" {
 		out += "  " + g + "TEAM" + o + "    " + gd.team + "\n"
@@ -678,7 +745,7 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 
 // itemKeys are the view's keys while browsing; searching (/) unbinds them so
 // they type.
-const itemKeys = "j,k,g,G,o,s,m,q,?,/"
+const itemKeys = "j,k,g,G,o,s,m,f,q,?,/"
 
 // itemMore is what m (and enter on a section's last line, at fzf's index n
 // of it) does: when the section line id is of has more, read its next page
@@ -709,11 +776,90 @@ func (e *Env) itemPage(src itemSource, id, n string) {
 	e.reloadItems(src)
 }
 
-// itemLoaded is what a view does as its list loads: its chrome, and the
-// cursor where a page read asked for it (`<sock>.pos`).
+// itemFilter is f: a picker of src's filters, the search it has first, to
+// clear it. The one picked becomes the view's search, read behind the view
+// once the view has shown it asking (`<sock>.find`, itemLoaded: a reload
+// of its answer before then would be lost under that one); picked again,
+// the search ends.
+func (e *Env) itemFilter(src itemSource) {
+	fs := src.filters(e)
+	cur := src.read(e).searched()
+	var b strings.Builder
+	at := ""
+	if cur != "" {
+		b.WriteString("x\tclear  " + CDim + cur + COff + "\n")
+	}
+	for i, f := range fs {
+		note := ""
+		if f.note != "" {
+			note = "  " + CDim + f.note + COff
+		}
+		fmt.Fprintf(&b, "%d\t%s%s\n", i, f.title, note)
+		if f.title == cur {
+			at = strconv.Itoa(i)
+		}
+	}
+	out := e.pick(b.String(), formLabel("WEAVER", "FILTER"), formPrompt("filter"), "a search of "+src.service(), at)
+	_, sel, _ := strings.Cut(out, "\n")
+	v, _, _ := strings.Cut(sel, "\t")
+	i, ok := atoi(v)
+	switch {
+	case v == "x", ok && i < len(fs) && fs[i].title == cur:
+		src.clear(e)
+	case ok && i < len(fs):
+		fs[i].set(e)
+		if s := os.Getenv("WEAVER_VIEW_SOCK"); s != "" {
+			bestEffort(os.WriteFile(s+".find", nil, 0o600))
+		} else {
+			e.itemFindBehind(src)
+		}
+	}
+}
+
+// itemFindBehind reads the view's search behind the view (`_items NAME
+// find`).
+func (e *Env) itemFindBehind(src itemSource) {
+	c := exec.Command(e.Self, "_items", src.name(), "find")
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	bestEffort(c.Start())
+}
+
+// itemFind reads the view's search and has every view show it, the view
+// that asked with its cursor on the first item found.
+func (e *Env) itemFind(src itemSource) {
+	src.find(e)
+	s, ok := src.read(e).section(e.itemKind(src), searchKey)
+	if asker := os.Getenv("WEAVER_VIEW_SOCK"); asker != "" && ok && len(s.items) > 0 {
+		// Under its heading, the first line.
+		bestEffort(os.WriteFile(asker+".pos", []byte("2\n"), 0o600))
+	}
+	e.reloadItems(src)
+}
+
+// itemEsc is what esc does in a view, its query cleared: searching, back
+// to its rows; else, with a SEARCH, the search ends; else back (to your
+// thread).
+func (e *Env) itemEsc(src itemSource, me, back string) string {
+	switch {
+	case searching():
+		return "change-with-nth(5)+hide-input+rebind(" + itemKeys + ")+transform(" + me + " chrome)\n"
+	case src.read(e).searched() != "":
+		src.clear(e)
+		return "reload-sync(" + me + " rows)+transform(" + me + " chrome)\n"
+	}
+	return back + "\n"
+}
+
+// itemLoaded is what a view does as its list loads: its chrome, the cursor
+// where a page read asked for it (`<sock>.pos`), and the search f asked
+// for read (`<sock>.find`).
 func (e *Env) itemLoaded(src itemSource) string {
 	out := e.itemChrome(src)
 	s := os.Getenv("WEAVER_VIEW_SOCK")
+	if s != "" && files.Exists(s+".find") {
+		os.Remove(s + ".find")
+		e.itemFindBehind(src)
+	}
 	if p, err := files.FirstLine(s + ".pos"); err == nil && s != "" {
 		os.Remove(s + ".pos")
 		if n, ok := atoi(p); ok {
@@ -803,6 +949,20 @@ func (e *Env) Items(args []string) error {
 	case "query":
 		fmt.Print(e.itemQuery(src, os.Getenv("FZF_QUERY")))
 		return nil
+	case "filter":
+		e.itemFilter(src)
+		return nil
+	case "find":
+		e.itemFind(src)
+		return nil
+	case "esc":
+		// In Alt y's popover (esc peek), back ends it.
+		back := "execute-silent(" + session.Quote(e.Self) + " go back)"
+		if ref == "peek" {
+			back = "abort"
+		}
+		fmt.Print(e.itemEsc(src, session.Quote(e.Self)+" _items "+src.name(), back))
+		return nil
 	case "":
 	default:
 		return fmt.Errorf("no _items %s %s", src.name(), sub)
@@ -834,6 +994,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	defer os.Remove(sock)
 	defer os.Remove(sock + ".help")
 	defer os.Remove(sock + ".pos")
+	defer os.Remove(sock + ".find")
 	defer os.Remove(sock + ".born")
 	sig := make(chan os.Signal, 2)
 	signal.Notify(sig, syscall.SIGHUP, syscall.SIGTERM)
@@ -865,10 +1026,12 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	fromAct, reviewAct := "execute-silent("+me+" from {2})", "execute-silent("+me+" from {2} --review)"
 	backAct := "execute-silent(" + q + " go back)"
 	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+me+" menu {1})"
+	peekArg := ""
 	if peek != "" {
 		// In the popover, what opens a dialog or goes elsewhere ends it.
 		fromAct, reviewAct = "print(from)+accept", "print(review)+accept"
 		backAct, nextAct, prevAct, menuAct = "abort", "print(next)+accept", "print(prev)+accept", "ignore"
+		peekArg = " peek"
 	}
 	// Alt N on an item, its thread; enter too, and on a section's last
 	// line, its next page.
@@ -915,7 +1078,10 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--bind", "ctrl-r:execute-silent(" + me + " fetch-bg)+change-header(" + asking + ")",
 			"--bind", "/:show-input+unbind(" + itemKeys + ")+transform(" + me + " chrome)",
 			// q and esc: back to your thread, as on home.
-			"--bind", `esc:clear-query+change-with-nth(5)+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '` + backAct + `'; else echo 'hide-input+rebind(` + itemKeys + `)+transform(` + me + ` chrome)'; fi}`,
+			// esc's own clear-query, so fzf searches again (a transform's
+			// leaves a key's search in place).
+			"--bind", "esc:clear-query+transform(" + me + " esc" + peekArg + ")",
+			"--bind", "f:execute(" + me + " filter)+" + reload,
 			"--bind", "q:" + backAct,
 			"--bind", "?:execute-silent(" + me + " help)+refresh-preview+transform(" + me + " chrome)",
 			// The footer's hints are buttons; a right click, the row's menu.

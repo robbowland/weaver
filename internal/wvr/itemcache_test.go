@@ -45,7 +45,7 @@ func TestRefreshKeepsFailedSection(t *testing.T) {
 		{Section: queue, List: page.List[github.Item]{Total: 1, Items: prs(3), Fetched: now}},
 		{Section: team, List: failed},
 		{Section: mine, List: failed},
-	}})
+	}}, nil)
 	got := c.Results[github.PRs]
 	if len(got) != 3 || got[0].Items[0].Number != 3 || got[0].Err != "" || !got[0].Fetched.Equal(now) {
 		t.Errorf("Queue, asked again: %+v", got)
@@ -169,5 +169,59 @@ func TestMoreLine(t *testing.T) {
 	}
 	if strings.TrimSpace(more) != "⏎ more · 2 left" {
 		t.Errorf("more line %q", more)
+	}
+}
+
+// The view's own search is a section of each kind, first, SEARCH: asking
+// until its first page comes, which a search changed since does not take,
+// and saying what it found of the other kind.
+func TestSearchSection(t *testing.T) {
+	e := viewEnv(t)
+	now := time.Now()
+	f := github.Filters[4]
+	updateGitHub(e, func(c *ghCache) {
+		c.Results = map[github.Kind][]github.Result{
+			github.PRs:    {{Section: github.Section{Title: "Queue"}, List: page.List[github.Item]{Total: 1, Items: prs(1), Fetched: now}}},
+			github.Issues: {{Section: github.Section{Title: "Queue"}, List: page.List[github.Item]{Fetched: now}}},
+		}
+		c.search(f.Section())
+	})
+	heading := func(kind string) string {
+		return reAnsi.ReplaceAllString(githubSource{}.read(e).sections[kind][0].heading(), "")
+	}
+	if h := heading("prs"); h != "SEARCH · mentions me · asking…" {
+		t.Errorf("asked: %q", h)
+	}
+	issue := github.Item{Kind: github.Issues, Repo: "o/r", Number: 9, Title: "i", Labels: []string{"bug"}}
+	updateGitHub(e, func(c *ghCache) {
+		c.found(github.PRs, github.Result{Section: f.Section(), List: page.List[github.Item]{Total: 2, Items: prs(50, 51), Fetched: now}})
+		c.found(github.Issues, github.Result{Section: f.Section(), List: page.List[github.Item]{Total: 1, Items: []github.Item{issue}, Fetched: now}})
+		c.found(github.PRs, github.Result{Section: github.Filters[0].Section(), List: page.List[github.Item]{Items: prs(99), Fetched: now}})
+	})
+	if h := heading("prs"); h != "SEARCH · mentions me · 2 · issues: 1 (s)" {
+		t.Errorf("found: %q", h)
+	}
+	if h := heading("issues"); h != "SEARCH · mentions me · 1 · pull requests: 2 (s)" {
+		t.Errorf("found, of issues: %q", h)
+	}
+	if d := (githubSource{}).read(e); d.searched() != "mentions me" || len(d.sections["prs"]) != 2 {
+		t.Errorf("%+v", d)
+	}
+	// f offers weaver's searches, then the repositories and labels it has
+	// seen, a label within its repositories.
+	var titles []string
+	for _, f := range (githubSource{}).filters(e) {
+		titles = append(titles, f.title+"|"+f.note)
+	}
+	if got := strings.Join(titles[len(github.Filters):], " "); got != "repository o/r| label bug|o/r" {
+		t.Errorf("filters %s", got)
+	}
+	(githubSource{}).filters(e)[0].set(e)
+	if s := readGitHub(e).Search[github.Issues]; s.Section != github.Filters[0].Section() || !s.Fetched.IsZero() {
+		t.Errorf("set: %+v", s)
+	}
+	(githubSource{}).clear(e)
+	if d := (githubSource{}).read(e); d.searched() != "" || len(d.sections["prs"]) != 1 {
+		t.Errorf("cleared: %+v", d)
 	}
 }

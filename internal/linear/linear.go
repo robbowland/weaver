@@ -288,30 +288,46 @@ func ask(key string, s Section, after string) Result {
 	return r
 }
 
-// Fetch asks Linear for every section, a request each, at once: each
-// section's issues, or why asking for it failed (every one, without a key).
-func Fetch() []Result {
-	out := make([]Result, len(Sections))
+// Fetch asks Linear for every section, and for each of search (a search
+// of your own), a request each, at once: each one's issues, or why asking
+// for it failed (every one, without a key); the sections, then the
+// searches.
+func Fetch(search ...Section) ([]Result, []Result) {
+	asked := append(append([]Section{}, Sections...), search...)
+	out := make([]Result, len(asked))
 	key, err := Key()
 	if err != nil {
-		for i, s := range Sections {
+		for i, s := range asked {
 			out[i] = Result{Section: s, List: page.Failed[Issue](err)}
 		}
-		return out
+		return out[:len(Sections)], out[len(Sections):]
 	}
 	type answer struct {
 		i int
 		r Result
 	}
 	ch := make(chan answer)
-	for i := range Sections {
-		go func() { ch <- answer{i, ask(key, Sections[i], "")} }()
+	for i, s := range asked {
+		go func() { ch <- answer{i, ask(key, s, "")} }()
 	}
-	for range Sections {
+	for range asked {
 		a := <-ch
 		out[a.i] = a.r
 	}
-	return out
+	return out[:len(Sections)], out[len(Sections):]
+}
+
+// Filters are the searches of your own the views offer before a team's.
+var Filters = []Section{
+	{"assigned to me", `{ assignee: { isMe: { eq: true } }, ` + open + ` }`},
+	{"created by me", `{ creator: { isMe: { eq: true } }, ` + open + ` }`},
+	{"subscribed to", `{ subscribers: { some: { isMe: { eq: true } } }, ` + open + ` }`},
+}
+
+// TeamFilter is what is open in the team of key (ENG), called name.
+func TeamFilter(key, name string) Section {
+	k, _ := json.Marshal(key)
+	return Section{"team " + name, `{ team: { key: { eq: ` + string(k) + ` } }, ` + open + ` }`}
 }
 
 // Get is issue id (ENG-42) with its comments, for a thread's prompt.

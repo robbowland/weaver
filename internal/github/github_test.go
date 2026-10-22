@@ -93,7 +93,8 @@ func TestFetchEachSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
-	got := Fetch()
+	search := Filters[4].Section()
+	got, found := Fetch(search)
 	for _, k := range []Kind{PRs, Issues} {
 		for i, r := range got[k] {
 			mine := r.Title == "Mine"
@@ -101,6 +102,19 @@ func TestFetchEachSection(t *testing.T) {
 				t.Errorf("%s %s: %+v", k, r.Title, r)
 			}
 		}
+		// A search of your own, of each kind, with them.
+		if len(found[k]) != 1 || found[k][0].Section != search || found[k][0].Err != "" || found[k][0].Fetched.IsZero() {
+			t.Errorf("%s search: %+v", k, found[k])
+		}
+	}
+}
+
+// A label is a repository's: its search is within the repositories it was
+// seen in, the label quoted.
+func TestLabelFilter(t *testing.T) {
+	f := LabelFilter("good first issue", []string{"o/r", "o/s"})
+	if f.Title != "label good first issue" || f.Filters != `is:open label:"good first issue" repo:o/r repo:o/s sort:updated-desc` {
+		t.Errorf("%+v", f)
 	}
 }
 

@@ -169,19 +169,25 @@ Each view groups its items like the board:
 A row shows the one thing to know about an item (changes requested, a check
 failing, draft, approved; for an issue, urgent or its state) and the thread
 it has, if any. The card says what `enter` does, then the item's fields and
-description. In a view, `s` switches GITHUB between pull requests and issues,
-`o` opens the item in the browser, `m` shows more of a section that shows
-only some (its heading says `20 of 57`, or `30+` for Linear; `enter` on its
-last line, `⏎ more`, does too) until the next refresh, `/` searches what the view holds (its
-number, whole title, author, repository, branch and labels; for Linear, its
-team and people), best match first, and a number or a reference (`45`,
-`#45`, `o/r#45`, `ENG-42`) finds that item first, exactly, and `ctrl+r`
-asks again. Each
-view refreshes every 5 minutes and shows what it last heard straight away,
-and how old that is. A section GitHub or Linear fails to answer keeps what
-it showed, its heading marked `failed` with how old that is, and the header
-says why. After you upgrade weaver, a view restarts in the new version, as
-home does ([Upgrading](#upgrading)).
+description.
+
+| Key | Does |
+| --- | --- |
+| `enter`, `alt+N` | A thread from the item, or go to the thread it has ([A thread from an item](#a-thread-from-an-item)) |
+| `alt+m` | A read-only thread from it |
+| `o` | Open it in the browser |
+| `s` | GITHUB: switch between pull requests and issues |
+| `m` | More of a section that shows only some (its heading says `20 of 57`, or `30+` for Linear), until the next refresh; `enter` on its last line, `⏎ more`, does too |
+| `f` | A filter: a search of your own, shown first as SEARCH; for GitHub, assigned to you, a review asked of you or your teams, opened by you, mentioning you, or what is open in a repository or with a label weaver has seen; for Linear, assigned to you, created by you, subscribed to, or a team's. `f` again offers to clear it |
+| `/` | Search what the view holds (its number, whole title, author, repository, branch and labels; for Linear, its team and people), best match first; a number or a reference (`45`, `#45`, `o/r#45`, `ENG-42`) finds that item first, exactly |
+| `esc` | End the SEARCH, if there is one; else back to your thread |
+| `ctrl+r` | Ask again |
+
+Each view refreshes every 5 minutes, its SEARCH too, and shows what it
+last heard straight away, and how old that is. A section GitHub or Linear
+fails to answer keeps what it showed, its heading marked `failed` with how
+old that is, and the header says why. After you upgrade weaver, a view
+restarts in the new version, as home does ([Upgrading](#upgrading)).
 
 ### A thread from an item
 

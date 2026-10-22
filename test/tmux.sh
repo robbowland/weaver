@@ -627,6 +627,9 @@ case "$1 $2" in
 	*'-user-review-requested:@me'*) echo '{"data":{"s":{"issueCount":0,"nodes":[]}}}'; exit ;;
 	*'review-requested:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":45,"title":"Add a flag","body":"Adds --name.","url":"https://github.com/o/r/pull/45","state":"OPEN","isDraft":false,"author":{"login":"alice"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"headRefName":"add-flag","baseRefName":"main","isCrossRepository":false,"reviewDecision":"REVIEW_REQUIRED","mergeable":"MERGEABLE","additions":1,"deletions":0,"changedFiles":1,"commits":{"totalCount":1},"comments":{"totalCount":1},"labels":{"nodes":[]},"assignees":{"nodes":[]},"reviewRequests":{"nodes":[]},"last":{"nodes":[]}}]}}}'; exit ;;
 	*'is:issue archived:false is:open assignee:@me'*) echo '{"data":{"s":{"issueCount":1,"nodes":[{"number":12,"title":"Fix the flaky test","body":"It fails on Mondays.","url":"https://github.com/o/r/issues/12","state":"OPEN","author":{"login":"dan"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}]}}}'; exit ;;
+	# f's mentions me: a pull request, and an issue.
+	*'is:issue archived:false is:open mentions:@me'*) page 1 "" '{"number":13,"title":"Mentioned in an issue","body":"","url":"https://github.com/o/r/issues/13","state":"OPEN","author":{"login":"erin"},"updatedAt":"2026-10-16T10:00:00Z","repository":{"nameWithOwner":"o/r"},"comments":{"totalCount":0},"labels":{"nodes":[]},"assignees":{"nodes":[]}}'; exit ;;
+	*'is:pr archived:false is:open mentions:@me'*) page 1 "" "$(pr 50 'Mentioned you')"; exit ;;
 	# Mine: three pull requests, a page each.
 	*'after: "m2"'*'is:pr archived:false is:open author:@me'*) page 3 "" "$(pr 48 'Tidy the rest')"; exit ;;
 	*'after: "m1"'*'is:pr archived:false is:open author:@me'*) page 3 m2 "$(pr 47 'Tidy more')"; exit ;;
@@ -732,6 +735,26 @@ key 6d # m
 waitfor 'v900 | grep -q "MINE · 3" && v900 | grep -q "Tidy the rest"'
 ok "...m on one of its items, the page after" "$(v900 | grep -c 'MINE · 3 ')|$(v900 | grep -c 'Tidy the rest')|$(v900 | grep -c '⏎ more')" "1|1|0"
 key 67 # g: back to the first
+waitfor '[ "$(v900 | grep -c "Add a flag")" = 2 ]'
+# f: a filter, whose search is a section first, SEARCH, of both kinds; esc
+# ends it.
+key 66 # f
+waitfor 'v900 | grep -q "WEAVER :: FILTER"'
+key "$(printf 'mentions' | xxd -p)"
+sleep 0.3
+key 0d
+waitfor 'v900 | grep -q "SEARCH · mentions me · 1 · issues: 1 (s)" && [ "$(v900 | grep -c "Mentioned you")" = 2 ]'
+ok "GITHUB: f, a filter: its search first, the cursor on what it found" \
+	"$(v900 | grep -c 'SEARCH · mentions me · 1 · issues: 1 (s)')|$(v900 | grep -c 'Mentioned you')" "1|2"
+key 73 # s: the issues
+waitfor 'v900 | grep -q "Mentioned in an issue"'
+ok "...of issues too" "$(v900 | grep -c 'SEARCH · mentions me · 1 · pull requests: 1 (s)')" "1"
+key 73 # s: the pull requests again
+waitfor 'v900 | grep -q "PULL REQUESTS"'
+key 1b # esc
+waitfor '! v900 | grep -q "SEARCH ·"'
+ok "...esc ends it" "$(v900 | grep -c 'SEARCH ·')|$(v900 | grep -c 'QUEUE · 1')" "0|1"
+key 67 # g
 waitfor '[ "$(v900 | grep -c "Add a flag")" = 2 ]'
 click 3 50
 waitfor '[ "$(where | cut -d " " -f 1)" = 0 ]'
