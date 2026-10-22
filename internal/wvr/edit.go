@@ -27,7 +27,7 @@ import (
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
 func (e *Env) openLeftOf(target tmux.PaneID, cwd, name string, argv ...string) (tmux.PaneID, error) {
-	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.Target(), "-c", cwd}, argv...)...)
+	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.Target(), "-c", tmux.Text(cwd)}, argv...)...)
 	if err != nil {
 		return "", fmt.Errorf("tmux split-window failed")
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Dialogs open as popups over where you are, each kind one size, so one
@@ -71,7 +72,7 @@ func (e *Env) popup(what string, z popupSize, opts, args []string) error {
 	c, _ := e.popupCmd(z, opts, args)
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
-		e.Tmux("display-message", "-d", "2500", "weaver: could not open "+what)
+		e.Say(2500, "weaver: could not open "+what)
 		return cli.ErrSaid
 	}
 	return nil
@@ -95,7 +96,7 @@ func (e *Env) popupCmd(z popupSize, opts, args []string) (*exec.Cmd, bool) {
 			}
 		}
 		if best != nil {
-			argv = append(argv, "-c", best[1])
+			argv = append(argv, "-c", tmux.Text(best[1]))
 			cw, _ = strconv.Atoi(best[2])
 			ch, _ = strconv.Atoi(best[3])
 			client = true
@@ -130,7 +131,7 @@ func (e *Env) Popup(args []string) error {
 			if err != nil {
 				msg = "weaver: " + err.Error()
 			}
-			e.Tmux("display-message", "-d", "3000", msg)
+			e.Say(3000, msg)
 			return nil
 		}
 		dir, _ := os.Getwd()
@@ -139,7 +140,7 @@ func (e *Env) Popup(args []string) error {
 		// Only a thread has a name to give it.
 		p, ok := paneArg(arg(args, 1))
 		if !ok || !files.Exists(e.ThreadFile(p)) {
-			e.Tmux("display-message", "-d", "3000", "weaver: only a thread can be renamed: adopt it first (a)")
+			e.Say(3000, "weaver: only a thread can be renamed: adopt it first (a)")
 			return nil
 		}
 		return e.popup("the prompt", nameSize, []string{"-B"}, []string{"rename", string(p)})

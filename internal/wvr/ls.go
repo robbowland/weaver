@@ -94,7 +94,8 @@ func (e *Env) ls(peek, at string) (string, error) {
 		quitAct = "execute-silent(" + q + " go back)"
 		// In the background, as a jump is: you land on its window (or are
 		// told why not), with no flash of the pane's own screen between.
-		resumeAct = "execute-silent(o=$(" + q + " resume {2} 2>&1) || tmux display-message -d 4000 \"$o\")+reload-sync(" + q + " _rows)"
+		// Its error as text, never a format (tmux.Text, in sed).
+		resumeAct = "execute-silent(o=$(" + q + " resume {2} 2>&1) || tmux display-message -d 4000 \"$(printf %s \"$o\" | sed 's/#/##/g')\")+reload-sync(" + q + " _rows)"
 	} else {
 		jumpAct, editAct, newAct, quitAct, resumeAct = "print(jump)+accept", "print(ctrl-e)+accept", "print(new)+accept",
 			"abort", "print(resume)+accept"

@@ -116,7 +116,7 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	if nofocus {
 		args = append(args, "-d")
 	}
-	args = append(args, "-P", "-F", "#{window_id} #{pane_id} #{window_width}", "-t", "="+e.Session+":", "-n", name, "-c", dir,
+	args = append(args, "-P", "-F", "#{window_id} #{pane_id} #{window_width}", "-t", "="+e.Session+":", "-n", tmux.Text(name), "-c", tmux.Text(dir),
 		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, string(kind))
 	out, err := e.Tmux(args...)
 	f := strings.Fields(string(out))
@@ -142,7 +142,7 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 func (e *Env) splitNvim(agentPane tmux.PaneID, dir string, total int, nvimEnv ...string) bool {
 	nvCols := max(total-agentCols(total)-1, 1)
 	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.Target(),
-		"-l", strconv.Itoa(nvCols), "-c", dir, "-e", "WEAVER_TMUX_SESSION=" + e.Session}
+		"-l", strconv.Itoa(nvCols), "-c", tmux.Text(dir), "-e", "WEAVER_TMUX_SESSION=" + e.Session}
 	for _, v := range nvimEnv {
 		sw = append(sw, "-e", v)
 	}
@@ -153,7 +153,7 @@ func (e *Env) splitNvim(agentPane tmux.PaneID, dir string, total int, nvimEnv ..
 	}
 	nv, _ := tmux.ParsePane(f[0])
 	e.bindNvim(agentPane, nv, f[1])
-	e.Tmux("select-pane", "-t", nv.Target(), "-T", "nvim: "+filepath.Base(dir))
+	e.Tmux("select-pane", "-t", nv.Target(), "-T", tmux.Text("nvim: "+filepath.Base(dir)))
 	return true
 }
 
@@ -1357,7 +1357,7 @@ func (e *Env) EndLeftovers(args []string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
-		e.Tmux("display-message", "-d", "4000", "-t", "="+e.Session+":", "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
+		e.SayToSession(4000, "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
 	}
 	return nil
 }

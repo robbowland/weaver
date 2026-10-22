@@ -770,6 +770,11 @@ else weaver's.
   `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
   shell), the nvim pane titled `nvim: <dir>`, the agent active. `alt+v`'s nvim is a
   `split-window -h -b -l 80%` on the agent's left.
+- **Text:** tmux reads a window's or pane's name, a start directory and a
+  message as a format (`#H`, `#{...}`, `#[...]`). What weaver did not write
+  itself (an item's title, an agent's, a branch, a path, an error) goes
+  through `tmux.Text` (each `#` doubled) and `Env.Say`, so it shows as
+  written and never draws a style or a button on the status line.
 - **Focus:** `select-window` and `select-pane` work from anywhere, and the
   focused pane (in a popup or `run-shell`) is the session's active pane.
   weaver's keys pass `#{pane_id}` to `run-shell` as well.

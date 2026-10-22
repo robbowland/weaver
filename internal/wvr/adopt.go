@@ -63,7 +63,7 @@ func (e *Env) Adopt(args []string) error {
 	if err != nil {
 		if picked {
 			// The picker's popup closes as this ends: said on the status line.
-			e.Tmux("display-message", "-d", "4000", "weaver: "+err.Error())
+			e.Say(4000, "weaver: "+err.Error())
 		}
 		return err
 	}
@@ -158,10 +158,10 @@ func (e *Env) adoptWindow(p tmux.PaneID, n int, label, dir string) tmux.WindowID
 		}
 	}
 	if own {
-		e.Tmux("rename-window", "-t", tab.Target(), label)
+		e.Tmux("rename-window", "-t", tab.Target(), tmux.Text(label))
 		e.threadPlace(tab, n)
 	} else {
-		args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", p.Target(), "-n", label}
+		args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", p.Target(), "-n", tmux.Text(label)}
 		if p != e.MyPane {
 			args = append(args, "-d")
 		}
@@ -270,7 +270,7 @@ func (e *Env) pickConversation() string {
 			CDim, c.ID, COff)
 	}
 	if n == 0 {
-		e.Tmux("display-message", "-d", "3000", "weaver: no conversation to adopt")
+		e.Say(3000, "weaver: no conversation to adopt")
 		return ""
 	}
 	out := e.pick(b.String(), formLabel("WEAVER", "ADOPT"), formPrompt("adopt"), "a conversation, or its session id", "")

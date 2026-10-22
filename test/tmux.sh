@@ -514,6 +514,19 @@ tx run-shell -b -t "%$AGF" "wvr close --yes $AGF >/dev/null 2>&1"
 waitfor '[ "$(windows)" = "0 " ]'
 ok "...and closing it closes the thread" "$(windows)|$(ls "$SD" | grep -c "tmux-${S}_$AGF\\.")" "0 |0"
 
+# --- a name tmux would read as formats (an issue's title, say) is shown as
+# written: its window's label, the same each time it is labelled again
+# (run-shell reads its own command as a format: ## is how it passes a #)
+tx run-shell -t "=$S:" "cd '$AT/repo' && wvr new --here --no-focus --name 'Fix ##H and ##{session_name} ##[fg=red]' 'tidy' >/dev/null 2>&1"
+waitfor '[ "$(panes 1 2>/dev/null | wc -l | tr -d " ")" = 2 ]'
+AGN=$(pane_at 1 1)
+label1() { tx display -p -t "=$S:1" '#{window_name}'; }
+waitfor '[ -n "$(label1)" ]'
+tx run-shell -t "=$S:" "wvr status --push >/dev/null 2>&1"
+ok "a name with #s: its window's label as written" "$(label1)" "01 Fix #H and #{session_name} ##… · repo/main"
+tx run-shell -b -t "%$AGN" "wvr close --yes $AGN >/dev/null 2>&1"
+waitfor '[ "$(windows)" = "0 " ]'
+
 # --- adopt: an agent you started by hand (here, beside home's board) becomes
 # a thread where it runs: a window of its own at its number, an nvim beside
 # it, never restarted; kept as threads are. A conversation that runs nowhere

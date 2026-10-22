@@ -77,7 +77,7 @@ func (e *Env) Restart(args []string) error {
 	}
 	msg := restartSummary(done, busy, failed)
 	fmt.Println(msg)
-	e.Tmux("display-message", "-d", "4000", msg)
+	e.Say(4000, msg)
 	e.PushStatus()
 	if len(failed) > 0 {
 		return errors.New(strings.Join(failed, "; "))
@@ -140,7 +140,7 @@ func (e *Env) restartAgent(p tmux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	if _, err := e.Tmux("respawn-pane", "-k", "-t", p.Target(), "-c", dir, "-e", "WEAVER_TMUX_SESSION="+e.Session,
+	if _, err := e.Tmux("respawn-pane", "-k", "-t", p.Target(), "-c", tmux.Text(dir), "-e", "WEAVER_TMUX_SESSION="+e.Session,
 		e.Self, "_agent", tok, string(kind)); err != nil {
 		os.RemoveAll(d)
 		return label, errors.New("tmux could not restart it")

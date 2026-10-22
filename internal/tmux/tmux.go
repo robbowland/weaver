@@ -20,6 +20,12 @@ func (p PaneID) Target() string { return "%" + string(p) }
 // Target is the window as tmux names it.
 func (w WindowID) Target() string { return "@" + string(w) }
 
+// Text is s as tmux takes it literally where it would expand formats: a
+// window's or pane's name, a start directory, a message. Text weaver does
+// not write (an issue's title, an agent's, a branch, a path) goes through
+// it, so its #{...} and #[...] stay what they say.
+func Text(s string) string { return strings.ReplaceAll(s, "#", "##") }
+
 // ParsePane is the pane s names: tmux's %3, zellij's terminal_3, or 3;
 // false when it names none.
 func ParsePane(s string) (PaneID, bool) {

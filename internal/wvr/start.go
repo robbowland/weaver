@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
+	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Start is `wvr [start [session]]` outside a session: attach to the
@@ -30,7 +31,7 @@ func (e *Env) Start(name string) error {
 	if name == "" {
 		name = "weaver"
 	}
-	tmux, err := exec.LookPath("tmux")
+	bin, err := exec.LookPath("tmux")
 	if err != nil {
 		return errors.New("tmux is not installed: wvr doctor --fix installs what weaver needs")
 	}
@@ -52,13 +53,13 @@ func (e *Env) Start(name string) error {
 		}
 		env = append(env, v)
 	}
-	base := append(append([]string{tmux}, e.TSock...), "-f", conf)
+	base := append(append([]string{bin}, e.TSock...), "-f", conf)
 	has := exec.Command(base[0], append(append([]string{}, base[1:]...), "has-session", "-t", "="+name)...)
 	has.Env = env
 	if has.Run() == nil {
-		return fmt.Errorf("tmux: %w", syscall.Exec(tmux, append(base, "source-file", conf, ";", "attach-session", "-t", "="+name), env))
+		return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "source-file", conf, ";", "attach-session", "-t", "="+name), env))
 	}
-	skey := "tmux-" + strings.ReplaceAll(name, "/", "_")
+	skey := session.KeyOf(name)
 	os.MkdirAll(e.StateDir, 0o755)
 	os.WriteFile(e.StateDir+"/"+skey+".layout", []byte("weaver\n"), 0o644)
 	os.Remove(e.StateDir + "/" + skey + ".last")
@@ -68,7 +69,7 @@ func (e *Env) Start(name string) error {
 	if os.Chdir("/") != nil {
 		return errors.New("cannot cd /")
 	}
-	return fmt.Errorf("tmux: %w", syscall.Exec(tmux, append(base, "new-session", "-s", name, "-n", "home", "-c", here, "-e", "WEAVER_TMUX_SESSION="+name,
+	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", "home", "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
 		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
 }
 
@@ -99,7 +100,7 @@ func (e *Env) Boot(sock string) {
 		e.StartViews()
 	}
 	if n := len(e.SweepWorktrees(io.Discard)); n > 0 {
-		e.Tmux("display-message", "-d", "4000", "-t", "="+e.Session+":", fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
+		e.SayToSession(4000, fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
 	}
 }
 

@@ -232,7 +232,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if names[string(r.Tab)+"\t"+label] {
 			continue
 		}
-		e.Tmux("rename-window", "-t", r.Tab.Target(), label)
+		e.Tmux("rename-window", "-t", r.Tab.Target(), tmux.Text(label))
 	}
 }
 

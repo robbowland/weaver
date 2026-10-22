@@ -377,7 +377,7 @@ func (e *Env) Next() {
 			fmt.Println("weaver: no agent needs you")
 			time.Sleep(time.Second)
 		} else {
-			e.Tmux("display-message", "-d", "2000", "weaver: no agent needs you")
+			e.Say(2000, "weaver: no agent needs you")
 		}
 		return
 	}
@@ -399,7 +399,7 @@ func (e *Env) Next() {
 	pick := (at + 1) % len(cs)
 	e.focus(cs[pick].pane)
 	e.MarkSeen(cs[pick].pane)
-	e.Tmux("display-message", "-d", "2500", fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
+	e.Say(2500, fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
 	e.PushStatus()
 }
 

@@ -26,3 +26,15 @@ func TestParsePanes(t *testing.T) {
 		t.Errorf("%+v", ps)
 	}
 }
+
+func TestText(t *testing.T) {
+	for in, want := range map[string]string{
+		"Fix #Header parsing":    "Fix ##Header parsing",
+		"#{p999:} #[fg=red]#(x)": "##{p999:} ##[fg=red]##(x)",
+		"plain":                  "plain",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("Text(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

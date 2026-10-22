@@ -73,7 +73,7 @@ func (e *Env) NvimPane(pane tmux.PaneID) tmux.PaneID {
 func (e *Env) RenamePane(p tmux.PaneID, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	args := []string{"select-pane", "-t", p.Target(), "-T", title}
+	args := []string{"select-pane", "-t", p.Target(), "-T", tmux.Text(title)}
 	if !e.InTmux {
 		args = append(append([]string{}, e.TSock...), args...)
 	}

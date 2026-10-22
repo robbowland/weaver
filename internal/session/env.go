@@ -118,6 +118,16 @@ func (e *Env) SessionWhere() agent.Where {
 	return agent.Where{Server: n, Session: ses}
 }
 
+// Say shows text on tmux's message line for ms milliseconds, on the client
+// at hand; SayToSession, on the session's clients. As text, never a format.
+func (e *Env) Say(ms int, text string) {
+	e.Tmux("display-message", "-d", strconv.Itoa(ms), tmux.Text(text))
+}
+
+func (e *Env) SayToSession(ms int, text string) {
+	e.Tmux("display-message", "-d", strconv.Itoa(ms), "-t", "="+e.Session+":", tmux.Text(text))
+}
+
 // RunTmux runs a tmux client with these arguments as they are.
 func RunTmux(args ...string) ([]byte, error) { return exec.Command("tmux", args...).Output() }
 
