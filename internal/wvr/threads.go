@@ -280,9 +280,9 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 // installed, else with git at Worktrunk's default path. Its directory,
 // whether this made it, and the base it was made from.
 func threadWorktree(repo, branch, base, from, note string) (string, bool, string, bool) {
-	create := !git.OK(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	create := !git.HasBranch(repo, branch)
 	if create {
-		if rm := git.PreferredRemote(repo); rm != "" && git.OK(repo, "show-ref", "--verify", "--quiet", "refs/remotes/"+rm+"/"+branch) {
+		if rm := git.PreferredRemote(repo); rm != "" && git.HasRemoteBranch(repo, rm, branch) {
 			create = false
 		}
 	}
@@ -411,7 +411,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 			}
 		}
 		// A pull request from a fork: its head, fetched as a branch here.
-		if isPR && pr.Fork && !git.OK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+		if isPR && pr.Fork && !git.HasBranch(fm.Repo, branch) {
 			if rm := git.PreferredRemote(fm.Repo); rm != "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: fetching %s's head%s\n", CGrey, pr.Label(), COff)
 				c := exec.Command("git", "-C", fm.Repo, "fetch", "--quiet", rm, "pull/"+strconv.Itoa(pr.Num)+"/head:"+branch)
@@ -424,7 +424,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		// A branch that is not here yet: fetch first (it may be on the
 		// remote), and find where it would start.
 		note := ""
-		if !git.OK(fm.Repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) {
+		if !git.HasBranch(fm.Repo, branch) {
 			base, note = e.threadBase(fm.Repo, fm)
 		}
 		var ok bool

@@ -284,10 +284,10 @@ func (e *Env) formFields(sf, task string) []formField {
 		case br == "":
 			add("branch", "branch", "from the task", CGrey+"from the task"+COff)
 			e.baseRow(fm, m, add)
-		case fm.Repo != "" && (m.Has("refs/heads/"+br) ||
+		case fm.Repo != "" && (m.HasBranch(br) ||
 			func() bool {
 				rm := git.PreferredRemote(fm.Repo)
-				return rm != "" && m.Has("refs/remotes/"+rm+"/"+br)
+				return rm != "" && m.HasRemoteBranch(rm, br)
 			}()):
 			add("branch", "branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff)
 			add("base", "base", "-  it carries on from the branch", CDim+"-"+COff+"  "+CGrey+"it carries on from the branch"+COff)

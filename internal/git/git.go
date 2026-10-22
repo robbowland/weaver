@@ -77,6 +77,20 @@ func remoteOf(repo string) string {
 	return first
 }
 
+// branchRef and remoteRef are git's names for branch b, here and on
+// remote rm.
+func branchRef(b string) string     { return "refs/heads/" + b }
+func remoteRef(rm, b string) string { return "refs/remotes/" + rm + "/" + b }
+
+// HasBranch: has repo a branch b? HasRemoteBranch: has it remote rm's?
+func HasBranch(repo, b string) bool {
+	return OK(repo, "show-ref", "--verify", "--quiet", branchRef(b))
+}
+
+func HasRemoteBranch(repo, rm, b string) bool {
+	return OK(repo, "show-ref", "--verify", "--quiet", remoteRef(rm, b))
+}
+
 // Refs are what a repository's refs say for the form, from one git call:
 // each ref that matched (its symref target, or "" for a plain ref).
 type Refs map[string]string
@@ -86,9 +100,9 @@ type Refs map[string]string
 // runs alongside (PreferredRemote is memoized).
 func RefFacts(repo, br string) Refs {
 	go PreferredRemote(repo)
-	pats := []string{"Refs/remotes/*/HEAD", "Refs/heads/main", "Refs/heads/master", "Refs/remotes/*/main", "Refs/remotes/*/master"}
+	pats := []string{remoteRef("*", "HEAD"), branchRef("main"), branchRef("master"), remoteRef("*", "main"), remoteRef("*", "master")}
 	if br != "" {
-		pats = append(pats, "Refs/heads/"+br, "Refs/remotes/*/"+br)
+		pats = append(pats, branchRef(br), remoteRef("*", br))
 	}
 	out, _ := exec.Command("git", append([]string{"-C", repo, "for-each-ref", "--format=%(refname)%09%(symref)"}, pats...)...).Output()
 	m := Refs{}
@@ -100,16 +114,18 @@ func RefFacts(repo, br string) Refs {
 	return m
 }
 
-func (m Refs) Has(r string) bool { _, ok := m[r]; return ok }
+func (m Refs) HasBranch(b string) bool { _, ok := m[branchRef(b)]; return ok }
+
+func (m Refs) HasRemoteBranch(rm, b string) bool { _, ok := m[remoteRef(rm, b)]; return ok }
 
 // RemoteDefault is remote's default branch (origin/main) from the refs: its
 // HEAD, else its main or master.
 func (m Refs) RemoteDefault(remote string) string {
-	if sym := m["Refs/remotes/"+remote+"/HEAD"]; strings.HasPrefix(sym, "Refs/remotes/") {
-		return strings.TrimPrefix(sym, "Refs/remotes/")
+	if b, ok := strings.CutPrefix(m[remoteRef(remote, "HEAD")], remoteRef(remote, "")); ok {
+		return remote + "/" + b
 	}
 	for _, b := range []string{"main", "master"} {
-		if m.Has("Refs/remotes/" + remote + "/" + b) {
+		if m.HasRemoteBranch(remote, b) {
 			return remote + "/" + b
 		}
 	}
@@ -121,12 +137,10 @@ func (m Refs) RemoteDefault(remote string) string {
 func (m Refs) LocalDefault(remote string) string {
 	r := ""
 	if remote != "" {
-		if sym := m["Refs/remotes/"+remote+"/HEAD"]; strings.HasPrefix(sym, "Refs/remotes/"+remote+"/") {
-			r = strings.TrimPrefix(sym, "Refs/remotes/"+remote+"/")
-		}
+		r, _ = strings.CutPrefix(m[remoteRef(remote, "HEAD")], remoteRef(remote, ""))
 	}
 	for _, b := range []string{r, "main", "master"} {
-		if b != "" && m.Has("Refs/heads/"+b) {
+		if b != "" && m.HasBranch(b) {
 			return b
 		}
 	}
@@ -136,11 +150,11 @@ func (m Refs) LocalDefault(remote string) string {
 // RemoteDefault is remote's default branch (origin/main): its HEAD, else
 // its main or master.
 func RemoteDefault(repo, remote string) string {
-	if r, ok := Line(repo, "symbolic-ref", "--quiet", "--short", "Refs/remotes/"+remote+"/HEAD"); ok {
+	if r, ok := Line(repo, "symbolic-ref", "--quiet", "--short", remoteRef(remote, "HEAD")); ok {
 		return r
 	}
 	for _, b := range []string{"main", "master"} {
-		if OK(repo, "show-ref", "--verify", "--quiet", "Refs/remotes/"+remote+"/"+b) {
+		if HasRemoteBranch(repo, remote, b) {
 			return remote + "/" + b
 		}
 	}
@@ -152,12 +166,12 @@ func RemoteDefault(repo, remote string) string {
 func LocalDefault(repo string) string {
 	r := ""
 	if rm := PreferredRemote(repo); rm != "" {
-		if h, ok := Line(repo, "symbolic-ref", "--quiet", "--short", "Refs/remotes/"+rm+"/HEAD"); ok {
+		if h, ok := Line(repo, "symbolic-ref", "--quiet", "--short", remoteRef(rm, "HEAD")); ok {
 			r = h[strings.IndexByte(h, '/')+1:]
 		}
 	}
 	for _, b := range []string{r, "main", "master"} {
-		if b != "" && OK(repo, "show-ref", "--verify", "--quiet", "Refs/heads/"+b) {
+		if b != "" && HasBranch(repo, b) {
 			return b
 		}
 	}
