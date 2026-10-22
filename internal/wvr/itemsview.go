@@ -336,17 +336,17 @@ func (e *Env) reloadItems(src itemSource) {
 // it can rest on). ref is what fzf keeps the cursor on across a reload
 // (--id-nth): an item's ref, another line's id after a '-'; never empty,
 // since fzf blocks until it finds the line it was on, and a line of no key
-// it never finds. search is the line a search shows and matches: the
-// item's number, its whole title and its terms, none of it cut to fit; the
-// other lines' is empty, so they go while you search.
+// it never finds. search is the line a search shows and matches: what an
+// item is searched by (its number, whole title and terms, none of it cut
+// to fit, and not its thread's number or cell, whose digits and brackets
+// match anything); the other lines' is empty, so they go while you search.
 func (e *Env) itemRows(src itemSource) string {
 	d := src.read(e)
 	ts := e.itemThreads()
 	cols, _ := lsSize()
 	// Less the border, fzf's gutter and the card's.
 	w := lsWidth(cols) - 8
-	type line struct{ id, ref, text, search string }
-	var ls []line
+	var ls []viewLine
 	now := time.Now()
 	sections := d.sections[e.itemKind(src)]
 	// The columns, as wide as their widest (within bounds).
@@ -364,9 +364,9 @@ func (e *Env) itemRows(src itemSource) string {
 			continue
 		}
 		if len(ls) > 0 {
-			ls = append(ls, line{id: "g" + s.key})
+			ls = append(ls, viewLine{id: "g" + s.key})
 		}
-		ls = append(ls, line{id: "h" + s.key, text: s.heading()})
+		ls = append(ls, viewLine{id: "h" + s.key, text: s.heading()})
 		for _, it := range s.items {
 			num, cell := "  ", "   "
 			if t, ok := threadOf(ts, it); ok {
@@ -374,16 +374,15 @@ func (e *Env) itemRows(src itemSource) string {
 			}
 			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + fitAnsi(it.fact, wf) + "  " +
 				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
-			search := CDim + num + COff + " " + cell + "  " + it.key + "  " + oneline.Line(it.title) + "  " +
-				CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
-			ls = append(ls, line{id: "i" + s.key, ref: it.ref, text: text, search: search})
+			search := it.key + "  " + oneline.Line(it.title) + "  " + CGrey + oneline.Line(strings.Join(it.terms, " · ")) + COff
+			ls = append(ls, viewLine{id: "i" + s.key, ref: it.ref, text: text, search: search})
 		}
 		if s.more {
 			left := ""
 			if s.total > len(s.items) {
 				left = " · " + strconv.Itoa(s.total-len(s.items)) + " left"
 			}
-			ls = append(ls, line{id: "m" + s.key, text: "       " + CGrey + "⏎" + COff + CDim + " more" + left + COff})
+			ls = append(ls, viewLine{id: "m" + s.key, text: "       " + CGrey + "⏎" + COff + CDim + " more" + left + COff})
 		}
 	}
 	rests := func(id string) bool { return id[0] == 'i' || id[0] == 'm' }
@@ -679,7 +678,7 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 
 // itemKeys are the view's keys while browsing; searching (/) unbinds them so
 // they type.
-const itemKeys = "j,k,g,G,o,s,m,q,?"
+const itemKeys = "j,k,g,G,o,s,m,q,?,/"
 
 // itemMore is what m (and enter on a section's last line, at fzf's index n
 // of it) does: when the section line id is of has more, read its next page
@@ -801,6 +800,9 @@ func (e *Env) Items(args []string) error {
 	case "page":
 		e.itemPage(src, ref, arg(args, 2))
 		return nil
+	case "query":
+		fmt.Print(e.itemQuery(src, os.Getenv("FZF_QUERY")))
+		return nil
 	case "":
 	default:
 		return fmt.Errorf("no _items %s %s", src.name(), sub)
@@ -896,7 +898,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			// Browsing, the rows as they come; searching, the best match
 			// first (ties as they come), on the search line.
 			"--tiebreak", "index", "--ansi", "--layout", "reverse", "--no-input",
-			"--bind", `change:transform:[ -n "$FZF_QUERY" ] && echo 'change-with-nth(6)' || echo 'change-with-nth(5)'`,
+			"--bind", "change:transform(" + me + " query)",
 			"--header", e.itemFresh(src), "--header-first", "--footer", e.itemFooter(src), "--footer-border", "none",
 			"--border", "sharp", "--border-label", e.itemLabel(src), "--border-label-pos", "3", "--highlight-line", "--pointer", " ", "--marker", " ", "--ellipsis", "…",
 			"--scrollbar", "│", "--color", FzfColors,

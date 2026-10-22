@@ -174,7 +174,9 @@ description. In a view, `s` switches GITHUB between pull requests and issues,
 only some (its heading says `20 of 57`, or `30+` for Linear; `enter` on its
 last line, `⏎ more`, does too) until the next refresh, `/` searches what the view holds (its
 number, whole title, author, repository, branch and labels; for Linear, its
-team and people), best match first, and `ctrl+r` asks again. Each
+team and people), best match first, and a number or a reference (`45`,
+`#45`, `o/r#45`, `ENG-42`) finds that item first, exactly, and `ctrl+r`
+asks again. Each
 view refreshes every 5 minutes and shows what it last heard straight away,
 and how old that is. A section GitHub or Linear fails to answer keeps what
 it showed, its heading marked `failed` with how old that is, and the header

@@ -937,12 +937,19 @@ the item's, else `-` and the row's id: fzf keeps the cursor on a row
 across a reload by it (`--track --id-nth 2`), and blocks until it finds
 the row it was on, so none is empty (a row of none, never found, left the
 view empty and deaf to its keys); prev and next the rows around a heading
-or gap the cursor steps to. search is a second line for search: the item's
-number (`#45`, `ENG-42`), its whole title and its terms (author,
-repository, head branch, labels; Linear's team, people and branch); the
-other rows' is empty. A query switches fzf to it (`change-with-nth(6)`,
-back to 5 when empty) and ranks the matches (`--tiebreak index`: ties in
-the rows' order), so the headings go and nothing cut to fit is missed.
+or gap the cursor steps to. search is a second line for search, what an
+item is searched by: its number (`#45`, `ENG-42`), its whole title and its
+terms (author, repository, head branch, labels; Linear's team, people and
+branch), and not its thread's number or cell, whose digits and brackets
+matched anything; the other rows' is empty. A query switches fzf to it
+(`change-with-nth(6)`, back to 5 when empty) and ranks the matches
+(`--tiebreak index`: ties in the rows' order), so the headings go and
+nothing cut to fit is missed. A query that reads as a key (`45`, `#45`,
+`o/r#45`, `ENG-42`; `_items NAME query`, on each change) is searched for
+exactly instead, through fzf's `search` action, the query shown as typed:
+the keys of the loaded items it names at the start of a search line
+(`^#45\ `, a longer match than any other, so first), or it anywhere
+(`'45`). The list stays, so typing is never held up by a reload.
 
 A section with more than it shows (GitHub: its search's `pageInfo`;
 Linear: its list's) keeps where its next page starts, and ends in its `m`

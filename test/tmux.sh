@@ -704,9 +704,24 @@ ok "GITHUB: / searches the number, the whole title, author, repository and branc
 key 1b # esc: the sections again
 waitfor 'tx capture-pane -p -t "=$S:900" | grep -q "QUEUE · 1"'
 ok "...esc: the sections again" "$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "1"
+# A reference, / typed in it, is searched for exactly; words, fuzzily.
+v900() { tx capture-pane -p -t "=$S:900"; }
+key 2f # /
+sleep 0.5
+key "$(printf 'o/r#45' | xxd -p)"
+waitfor 'v900 | grep -q "/ o/r#45" && v900 | grep -q "#45  Add a flag"'
+ok "GITHUB: / o/r#45, that pull request alone" "$(v900 | grep -c '#45  Add a flag')|$(v900 | grep -c 'Tidy up')" "1|0"
+key 1b # esc
+waitfor 'v900 | grep -q "QUEUE · 1"'
+key 2f # /
+sleep 0.5
+key "$(printf 'tidy' | xxd -p)"
+waitfor 'v900 | grep -q "#46  Tidy up"'
+ok "...words, fuzzily: / tidy" "$(v900 | grep -c '#46  Tidy up  @me')|$(v900 | grep -c 'Add a flag')" "1|0"
+key 1b # esc
+waitfor 'v900 | grep -q "QUEUE · 1"'
 # More than a section shows: its last line reads the next page (enter, the
 # cursor on the first it read), and m on any of its lines the one after.
-v900() { tx capture-pane -p -t "=$S:900"; }
 key 47 # G: the last line, Mine's more
 waitfor 'v900 | grep -q "MINE · 1 of 3" && v900 | grep -q "⏎ more · 2 left"'
 ok "GITHUB: a section with more, counted, ends in a line to read them" "$(v900 | grep -c 'MINE · 1 of 3')|$(v900 | grep -c '⏎ more · 2 left')" "1|1"

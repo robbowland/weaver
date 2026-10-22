@@ -374,6 +374,15 @@ can supersede an earlier one, and says so.
   stays what each section is, and a page read before it is never mixed
   with one after (a page is kept only if its section still ends where it
   was read from). Linear counts no list, so its heading says `30+`.
+- 2026-10-22: A view's `/` stays fzf's fuzzy match (Rob: "The fuzzy search
+  likely needs improving too"): fzf was not what fell short. Its search
+  line began with the thread's number and cell, so digits and short words
+  matched noise, and a number matched every item with those digits
+  anywhere. The line is now what people search by, and a query that reads
+  as a key is searched for exactly, the item it names first: through fzf's
+  `search` action, not a reload of rows weaver ranks, since fzf holds
+  typing while a reload finds the row it was on, and fast typing lost
+  keys.
 
 ## Lost threads
 
