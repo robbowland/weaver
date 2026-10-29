@@ -100,7 +100,7 @@ func (e *Env) Boot(sock string) {
 		e.StartViews()
 	}
 	if n := len(e.SweepWorktrees(io.Discard)); n > 0 {
-		e.SayToSession(4000, fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
+		e.Mux().SayToSession(4000, fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
 	}
 }
 

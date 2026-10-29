@@ -1444,7 +1444,7 @@ func (e *Env) EndLeftovers(args []string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
-		e.SayToSession(4000, "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
+		e.Mux().SayToSession(4000, "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
 	}
 	return nil
 }
@@ -1491,21 +1491,7 @@ func (e *Env) Send(args []string) error {
 			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
 		}
 	}
-	args2 := []string{"load-buffer", "-b", "weaver-send", "-"}
-	if !e.InTmux {
-		args2 = append(append([]string{}, e.TSock...), args2...)
-	}
-	c := exec.Command("tmux", args2...)
-	c.Stdin = strings.NewReader(string(text))
-	if c.Run() != nil {
-		return errors.New("tmux would not take the text")
-	}
-	if _, err := e.Tmux("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", want.Target()); err != nil {
-		return errors.New("tmux would not paste into pane " + string(want))
-	}
-	time.Sleep(200 * time.Millisecond)
-	e.Tmux("send-keys", "-t", want.Target(), "Enter")
-	return nil
+	return e.Mux().Type(want, string(text))
 }
 
 // toWeaverSession makes the session acted on, outside tmux, weaver's

@@ -18,25 +18,8 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
+	"github.com/robbowland/weaver/internal/tmux"
 )
-
-// CountsFmt is the status line's counts in tmux's colours: needs you, done,
-// working, each only when there are some.
-func CountsFmt(n, d, w int) string {
-	// Each a button (tmux's user ranges, which `wvr _click status` reads):
-	// to the agent that needs you, or home.
-	out := ""
-	if n > 0 {
-		out += "#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(n) + "#[norange]  "
-	}
-	if d > 0 {
-		out += "#[range=user|next]#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(d) + "#[norange]  "
-	}
-	if w > 0 {
-		out += "#[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] " + strconv.Itoa(w) + "#[norange]  "
-	}
-	return out
-}
 
 // StatusLine is `wvr status --tmux SESSION`: the counts PushStatus last
 // wrote for the session, in the status line's colours.
@@ -66,7 +49,7 @@ func StatusLine(args []string) string {
 			}
 		}
 	}
-	return CountsFmt(c[0], c[1], c[2])
+	return tmux.Counts(c[0], c[1], c[2])
 }
 
 // StatusText is plain `wvr status`: the session's counts as cells,
@@ -147,12 +130,10 @@ func (e *Env) pushStatus(labels bool) {
 	}
 	now := strconv.Itoa(need) + " " + strconv.Itoa(done) + " " + strconv.Itoa(work)
 	bestEffort(store.WriteAtomic(sf, []byte(now+"\n"))) // the counts again next time
-	// tmux's status line shows the session's @weaver-counts, and an option
-	// set redraws every client: set them when they change.
+	// Shown, they redraw every client (tmux's status line): set them when
+	// they change.
 	if labels || now != old {
-		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-counts", CountsFmt(need, done, work))
-		// Ctrl q asks first while a turn is under way (0: it quits at once).
-		e.Tmux("set-option", "-t", "="+e.Session+":", "@weaver-busy", strconv.Itoa(need+work))
+		e.Mux().Publish(need, done, work)
 	}
 	q := Quote(e.Self)
 	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")

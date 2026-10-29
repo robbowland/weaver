@@ -77,7 +77,7 @@ func (e *Env) Restart(args []string) error {
 	}
 	msg := restartSummary(done, busy, failed)
 	fmt.Println(msg)
-	e.Say(4000, msg)
+	e.Mux().Say(4000, msg)
 	e.PushStatus()
 	if len(failed) > 0 {
 		return errors.New(strings.Join(failed, "; "))

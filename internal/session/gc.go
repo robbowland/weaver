@@ -235,7 +235,7 @@ func (e *Env) GC() {
 	old(e.StateDir+"/trash", "*", month, true)
 	e.sweepOrphans()
 	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
-		e.SayToSession(4000, "weaver: ended "+Processes(n)+" left running by threads that have gone (gc.log)")
+		e.Mux().SayToSession(4000, "weaver: ended "+Processes(n)+" left running by threads that have gone (gc.log)")
 	}
 	e.sweepSockets(day)
 }

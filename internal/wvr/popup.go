@@ -3,14 +3,10 @@ package wvr
 import (
 	"errors"
 	"os"
-	"os/exec"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Dialogs open as popups over where you are, each kind one size, so one
@@ -56,60 +52,26 @@ func (z popupSize) of(cw, ch int) (int, int) {
 // formPopup opens `wvr ARGS` (the form) in a popup, in dir; the form draws
 // its own border.
 func (e *Env) formPopup(dir string, args ...string) error {
-	return e.popup("the form", formSize, []string{"-B", "-d", dir}, args)
+	return e.popup("the form", formSize, false, dir, args)
 }
 
-// cardPopup opens `wvr ARGS` (a card) in a popup with tmux's border.
+// cardPopup opens `wvr ARGS` (a card) in a popup with the multiplexer's
+// border.
 func (e *Env) cardPopup(args ...string) error {
-	return e.popup("the card", cardSize, nil, args)
+	return e.popup("the card", cardSize, true, "", args)
 }
 
-// popup opens wvr with args (what it shows) in a popup of size z (opts:
-// its border, its directory) on the client looking at the session, from a
-// process of its own, so whatever asked (a list, waiting on its command)
-// goes on at once.
-func (e *Env) popup(what string, z popupSize, opts, args []string) error {
-	c, _ := e.popupCmd(z, opts, args)
+// popup opens wvr with args (what it shows) in a popup of size z, bordered
+// or not, in dir, over where you are, from a process of its own, so
+// whatever asked (a list, waiting on its command) goes on at once.
+func (e *Env) popup(what string, z popupSize, border bool, dir string, args []string) error {
+	c, _ := e.Mux().Popup(z.of, border, dir, append([]string{e.Self}, args...))
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
-		e.Say(2500, "weaver: could not open "+what)
+		e.Mux().Say(2500, "weaver: could not open "+what)
 		return cli.ErrSaid
 	}
 	return nil
-}
-
-// popupCmd is tmux showing wvr with args in a popup of size z (opts: its
-// border, its directory) on the client looking at the session; tmux's
-// command returns when the popup closes. False when no client looks at the
-// session (what asked may have none: tmux's run-shell), so the popup goes
-// wherever tmux puts it, at the smallest size.
-func (e *Env) popupCmd(z popupSize, opts, args []string) (*exec.Cmd, bool) {
-	argv := []string{"display-popup"}
-	cw, ch := 0, 0
-	client := false
-	if out, err := e.Tmux("list-clients", "-t", "="+e.Session, "-F", "#{client_activity} #{client_name} #{client_width} #{client_height}"); err == nil {
-		at := ""
-		best := []string(nil)
-		for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if f := strings.Fields(l); len(f) == 4 && f[0] >= at {
-				best, at = f, f[0]
-			}
-		}
-		if best != nil {
-			argv = append(argv, "-c", tmux.Text(best[1]))
-			cw, _ = strconv.Atoi(best[2])
-			ch, _ = strconv.Atoi(best[3])
-			client = true
-		}
-	}
-	w, h := z.of(cw, ch)
-	argv = append(argv, "-E", "-w", strconv.Itoa(w), "-h", strconv.Itoa(h))
-	argv = append(append(argv, opts...), "--", e.Self)
-	argv = append(argv, args...)
-	if !e.InTmux {
-		argv = append(append([]string{}, e.TSock...), argv...)
-	}
-	return exec.Command("tmux", argv...), client
 }
 
 // Popup is `wvr _popup new|close|forget ...`: the board's n, x on a thread,
@@ -131,7 +93,7 @@ func (e *Env) Popup(args []string) error {
 			if err != nil {
 				msg = "weaver: " + err.Error()
 			}
-			e.Say(3000, msg)
+			e.Mux().Say(3000, msg)
 			return nil
 		}
 		dir, _ := os.Getwd()
@@ -140,10 +102,10 @@ func (e *Env) Popup(args []string) error {
 		// Only a thread has a name to give it.
 		p, ok := paneArg(arg(args, 1))
 		if !ok || !files.Exists(e.ThreadFile(p)) {
-			e.Say(3000, "weaver: only a thread can be renamed: adopt it first (a)")
+			e.Mux().Say(3000, "weaver: only a thread can be renamed: adopt it first (a)")
 			return nil
 		}
-		return e.popup("the prompt", nameSize, []string{"-B"}, []string{"rename", string(p)})
+		return e.popup("the prompt", nameSize, false, "", []string{"rename", string(p)})
 	}
 	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE] | rename PANE")
 }

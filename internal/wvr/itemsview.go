@@ -766,7 +766,7 @@ func (e *Env) itemFrom(src itemSource, ref string, review bool) error {
 	if t, ok := threadOf(e.itemThreads(), it); ok && t.pane != "" {
 		e.focus(t.pane)
 		e.MarkSeen(t.pane)
-		e.Say(2500, fmt.Sprintf("weaver: %s has thread %02d: went to it", it.where, t.num))
+		e.Mux().Say(2500, fmt.Sprintf("weaver: %s has thread %02d: went to it", it.where, t.num))
 		return nil
 	}
 	args := append([]string{}, it.from...)

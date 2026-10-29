@@ -63,7 +63,7 @@ func (e *Env) Adopt(args []string) error {
 	if err != nil {
 		if picked {
 			// The picker's popup closes as this ends: said on the status line.
-			e.Say(4000, "weaver: "+err.Error())
+			e.Mux().Say(4000, "weaver: "+err.Error())
 		}
 		return err
 	}
@@ -264,7 +264,7 @@ func (e *Env) pickConversation() string {
 			CDim, c.ID, COff)
 	}
 	if n == 0 {
-		e.Say(3000, "weaver: no conversation to adopt")
+		e.Mux().Say(3000, "weaver: no conversation to adopt")
 		return ""
 	}
 	out := e.pick(b.String(), formLabel("WEAVER", "ADOPT"), formPrompt("adopt"), "a conversation, or its session id", "")

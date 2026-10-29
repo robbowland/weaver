@@ -47,13 +47,13 @@ func hookBg(e *session.Env) {
 			nvimStateEvent(e, h)
 		}
 	}
-	// tmux: the window of an agent that has just finished is flagged, for
-	// config/tmux.conf's pane-focus-in hook to mark it seen when you look.
+	// The window of an agent that has just finished is marked, for it to
+	// be seen when you look (tmux: config/tmux.conf's pane-focus-in hook).
 	if h.State != h.Old.State {
 		if h.State == agent.StateDone {
-			e.Tmux("set-option", "-w", "-t", h.Pane.Target(), "@weaver-unseen", "1")
+			e.Mux().MarkUnseen(h.Pane, true)
 		} else if h.Old.State == agent.StateDone {
-			e.Tmux("set-option", "-w", "-u", "-t", h.Pane.Target(), "@weaver-unseen")
+			e.Mux().MarkUnseen(h.Pane, false)
 		}
 	}
 	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||

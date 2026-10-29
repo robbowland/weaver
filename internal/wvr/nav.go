@@ -145,7 +145,7 @@ func (e *Env) peek(cur tab) bool {
 	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())
 	os.Remove(f)
 	defer os.Remove(f)
-	c, ok := e.popupCmd(peekSize, []string{"-B"}, []string{"_peek", f, string(e.agentIn(cur.id))})
+	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.id))})
 	if !ok || c.Run() != nil {
 		return false
 	}
@@ -420,7 +420,7 @@ func (e *Env) Next() {
 			fmt.Println("weaver: no agent needs you")
 			time.Sleep(time.Second)
 		} else {
-			e.Say(2000, "weaver: no agent needs you")
+			e.Mux().Say(2000, "weaver: no agent needs you")
 		}
 		return
 	}
@@ -442,7 +442,7 @@ func (e *Env) Next() {
 	pick := (at + 1) % len(cs)
 	e.focus(cs[pick].pane)
 	e.MarkSeen(cs[pick].pane)
-	e.Say(2500, fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
+	e.Mux().Say(2500, fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
 	e.PushStatus()
 }
 
