@@ -22,7 +22,7 @@ func (e *Env) Rename(args []string) error {
 	}
 	var p mux.PaneID
 	if len(args) > 0 {
-		if q, ok := paneArg(args[0]); ok {
+		if q, ok := e.paneArg(args[0]); ok {
 			p, args = q, args[1:]
 		}
 	}

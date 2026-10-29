@@ -45,7 +45,7 @@ func (e *Env) Adopt(args []string) error {
 	var msg string
 	var err error
 	picked := false
-	switch p, ok := paneArg(which); {
+	switch p, ok := e.paneArg(which); {
 	case ok:
 		msg, err = e.adoptPane(p)
 	case which != "":
@@ -71,17 +71,21 @@ func (e *Env) Adopt(args []string) error {
 	return nil
 }
 
-// paneArg is which as a pane: %N, or a number of at most three digits (a
-// longer one is the start of a session id).
-func paneArg(which string) (mux.PaneID, bool) {
-	if strings.HasPrefix(which, "%") {
-		return tmux.ParsePane(which)
+// paneArg is which as a pane: %N, or a number. Pane numbers have no
+// length (tmux's grow with each pane its server opens, Rex's with each
+// block weaver meets), but a number of sidPrefix digits or more could be
+// the start of a session id (adopt's) or a name (rename's): it is a pane
+// only when weaver follows an agent there.
+func (e *Env) paneArg(which string) (mux.PaneID, bool) {
+	p, ok := tmux.ParsePane(which)
+	if !ok || strings.HasPrefix(which, "%") || len(p) < sidPrefix {
+		return p, ok
 	}
-	if len(which) > 3 {
-		return "", false
-	}
-	return tmux.ParsePane(which)
+	return p, e.agentOf(p) == p
 }
+
+// sidPrefix is the fewest characters of a session id that name it.
+const sidPrefix = 4
 
 // adoptPane makes the agent in pane p, which weaver follows but did not
 // start, a thread where it runs: its record (in the checkout it is in,
@@ -187,7 +191,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 // started in.
 func (e *Env) adoptConversation(which string) (string, error) {
 	match := func(sid string) bool {
-		return sid != "" && (sid == which || len(which) >= 4 && strings.HasPrefix(sid, which))
+		return sid != "" && (sid == which || len(which) >= sidPrefix && strings.HasPrefix(sid, which))
 	}
 	for _, r := range e.LostRows() {
 		if match(r.Sid) {
@@ -282,5 +286,5 @@ func (e *Env) pickConversation() string {
 
 // sessionIDish: could s be a session id, or the first 4+ characters of one?
 func sessionIDish(s string) bool {
-	return len(s) >= 4 && strings.Trim(s, "0123456789abcdefABCDEF-") == ""
+	return len(s) >= sidPrefix && strings.Trim(s, "0123456789abcdefABCDEF-") == ""
 }

@@ -88,7 +88,7 @@ func (e *Env) Popup(args []string) error {
 	case "adopt":
 		// An agent you started by hand becomes a thread where it is, said on
 		// the status line; anything else opens the picker of conversations.
-		if p, ok := paneArg(arg(args, 1)); ok && files.Exists(e.StateFile(p)) && !files.Exists(e.ThreadFile(p)) {
+		if p, ok := e.paneArg(arg(args, 1)); ok && files.Exists(e.StateFile(p)) && !files.Exists(e.ThreadFile(p)) {
 			msg, err := e.adoptPane(p)
 			if err != nil {
 				msg = "weaver: " + err.Error()
@@ -100,7 +100,7 @@ func (e *Env) Popup(args []string) error {
 		return e.formPopup(dir, "adopt")
 	case "rename":
 		// Only a thread has a name to give it.
-		p, ok := paneArg(arg(args, 1))
+		p, ok := e.paneArg(arg(args, 1))
 		if !ok || !files.Exists(e.ThreadFile(p)) {
 			e.Mux().Say(3000, "weaver: only a thread can be renamed: adopt it first (a)")
 			return nil

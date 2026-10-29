@@ -929,7 +929,7 @@ func (e *Env) Resume(args []string) error {
 	} else {
 		for _, r := range rows {
 			if which != r.Sid && which != r.Name && which != r.Num {
-				if len(which) < 4 || !strings.HasPrefix(r.Sid, which) {
+				if len(which) < sidPrefix || !strings.HasPrefix(r.Sid, which) {
 					continue
 				}
 			}

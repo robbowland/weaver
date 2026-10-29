@@ -53,7 +53,7 @@ func (e *Env) Restart(args []string) error {
 			panes = append(panes, session.PaneOfFile(f))
 		}
 	case which != "":
-		p, ok := paneArg(which)
+		p, ok := e.paneArg(which)
 		if !ok {
 			return errors.New(restartUsage)
 		}
