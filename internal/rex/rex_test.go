@@ -77,14 +77,19 @@ func server(t *testing.T) {
 			t.Errorf("the Rex server left %q", left)
 		}
 	})
-	for i := 0; ; i++ {
-		if call("server.status", map[string]any{}, nil) == nil {
-			return
-		}
+	for i := 0; call("server.status", map[string]any{}, nil) != nil; i++ {
 		if i == 50 {
 			t.Fatal("the Rex server did not start")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	// Its runtime file is in d, where serverPID reads it.
+	sum := sha256.Sum256([]byte("unix://" + sock))
+	if _, err := os.Stat(filepath.Join(run, "servers", hex.EncodeToString(sum[:]), "runtime.json")); err != nil {
+		t.Fatalf("the Rex server's runtime file: %v", err)
+	}
+	if pid := serverPID(); pid != srv.Process.Pid {
+		t.Fatalf("serverPID %d, the server's %d", pid, srv.Process.Pid)
 	}
 }
 
