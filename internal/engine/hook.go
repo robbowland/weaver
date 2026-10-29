@@ -94,6 +94,7 @@ func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, agent, me str
 // hook folds event ev into the state of the agent in pane.
 func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, agentName, me string) int {
 	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID}
+	me = knownPid(me)
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
 	}
@@ -225,6 +226,16 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	return h.Event != ""
 }
 
+// knownPid is pid as an agent's process weaver can follow; "" for none,
+// and for 1 or less, which is no agent (launchd, the parent of an orphaned
+// hook; 0, no process): recorded, it would read as dead, or as alive.
+func knownPid(pid string) string {
+	if n, ok := atoi(pid); ok && n > 1 {
+		return pid
+	}
+	return ""
+}
+
 func atoi(s string) (int, bool) {
 	if !digits(s) {
 		return 0, false
@@ -245,7 +256,7 @@ func (h *hk) run(e *session.Env, me string) {
 	}
 	h.Pid = me
 	if h.Pid == "" {
-		h.Pid = h.oPid()
+		h.Pid = knownPid(h.oPid())
 	}
 	h.ProcStart = h.Old.ProcStart
 	if h.Pid != "" && (h.Pid != h.oPid() || h.ProcStart == "") {
@@ -411,8 +422,8 @@ func writeState(e *session.Env, h *hk) {
 		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
 		TurnRoots: []string{}}
 	st.Files, st.Subagents, st.Tasks = orEmpty(h.Files), orEmpty(h.Subagents), orEmpty(h.Tasks)
-	if digits(h.Pid) {
-		st.Pid = json.Number(h.Pid)
+	if p := knownPid(h.Pid); p != "" {
+		st.Pid = json.Number(p)
 	}
 	if digits(h.Bg) {
 		st.Background, _ = atoi(h.Bg)

@@ -56,9 +56,7 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	} else {
 		pane = ""
 	}
-	if !digits(pid) {
-		pid = ""
-	}
+	pid = knownPid(pid)
 	if pane == "" {
 		pane = string(e.MyPane)
 	}
@@ -120,10 +118,11 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	return nil
 }
 
-// agentAncestor is the nearest ancestor of this process that is not a shell.
+// agentAncestor is the nearest ancestor of this process that is not a
+// shell; "" when there is none short of launchd (an orphaned hook's).
 func agentAncestor() string {
 	p := os.Getppid()
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 4 && p > 1; i++ {
 		k, err := unix.SysctlKinfoProc("kern.proc.pid", p)
 		if err != nil {
 			return ""
