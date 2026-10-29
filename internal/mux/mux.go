@@ -45,10 +45,13 @@ type Window struct {
 
 // Spawn is a program for a new pane: argv in Dir (empty: the
 // multiplexer's choice), with Env (KEY=VALUE) added to its environment.
+// Keep: the pane stays when the program exits, for what it said last to be
+// read (an agent's; tmux keeps it from the agent's side, KeepExited).
 type Spawn struct {
 	Argv []string
 	Dir  string
 	Env  []string
+	Keep bool
 }
 
 // NewWindow is a window to open: Spawn in its one pane, named Label, at
