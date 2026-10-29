@@ -166,7 +166,10 @@ func (e *Env) gcAgents() {
 	// Rex not answering of skey's session: held off, but for a file of ts
 	// from before the machine started, which no session outlives.
 	boot := BootTime()
-	rexHeld := func(a *rexAnswer, ts int64) bool { return !a.answered && !(boot > 0 && ts < boot) }
+	rexHeld := func(a *rexAnswer, ts int64) bool {
+		beforeBoot := boot > 0 && ts < boot
+		return !a.answered && !beforeBoot
+	}
 	// Does skey's session run, for a file of ts?
 	running := func(skey string, ts int64) bool {
 		if a, ok := onRex(skey); ok {

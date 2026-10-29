@@ -14,7 +14,9 @@ type recorder struct {
 	errs []string
 }
 
-func (r *recorder) Errorf(format string, args ...any) { r.errs = append(r.errs, fmt.Sprintf(format, args...)) }
+func (r *recorder) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
 
 // A server that does not stop once told is an error, and is killed: the
 // run never hangs on it.
