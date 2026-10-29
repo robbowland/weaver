@@ -9,6 +9,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // Peeked is a state file's state, pid and start, read without parsing it.
@@ -59,7 +60,7 @@ func (e *Env) NvimPane(pane mux.PaneID) mux.PaneID {
 		pid = ""
 	}
 	if pid != "" {
-		if n, _ := strconv.Atoi(pid); !PidAlive(n) {
+		if n, _ := strconv.Atoi(pid); !process.Alive(n) {
 			return ""
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -241,7 +242,7 @@ func (e *Env) gcAgents() {
 		alive := false
 		if len(ls) > 1 {
 			if n, ok := atoi(ls[1]); ok {
-				alive = PidAlive(n)
+				alive = process.Alive(n)
 			}
 		}
 		if !alive {

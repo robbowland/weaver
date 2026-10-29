@@ -20,6 +20,7 @@ import (
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -139,7 +140,7 @@ func (e *Env) fetchStart(repo, sf string) {
 		return
 	}
 	if p, err := files.FirstLine(f + ".pid"); err == nil {
-		if n, ok := atoi(p); ok && session.PidAlive(n) {
+		if n, ok := atoi(p); ok && process.Alive(n) {
 			return
 		}
 	}
@@ -472,7 +473,7 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 				v = "the default branch"
 			}
 		case pid != "":
-			if n, ok := atoi(pid); ok && session.PidAlive(n) {
+			if n, ok := atoi(pid); ok && process.Alive(n) {
 				note = "fetching…"
 			}
 		}

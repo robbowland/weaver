@@ -11,13 +11,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
@@ -237,7 +237,7 @@ func Lock(f string) (release func()) {
 		if st, err := os.Stat(l); err == nil {
 			owner, _ := files.FirstLine(l)
 			n, perr := strconv.Atoi(owner)
-			if perr != nil || n <= 0 || syscall.Kill(n, 0) != nil || time.Since(st.ModTime()) > lockStale {
+			if perr != nil || !process.Alive(n) || time.Since(st.ModTime()) > lockStale {
 				// Not a writer's yet (half made), or its holder is gone.
 				if perr != nil && time.Since(st.ModTime()) < time.Second {
 					time.Sleep(20 * time.Millisecond)

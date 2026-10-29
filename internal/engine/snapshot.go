@@ -12,6 +12,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 )
 
@@ -42,7 +43,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 			break
 		}
 		if owner, err := files.FirstLine(lockd + "/pid"); err == nil && owner != "" {
-			if p, ok := atoi(owner); ok && !session.PidAlive(p) {
+			if p, ok := atoi(owner); ok && !process.Alive(p) {
 				os.RemoveAll(lockd)
 				continue
 			}

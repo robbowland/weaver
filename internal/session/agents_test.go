@@ -19,15 +19,10 @@ func deadPid(t *testing.T) int {
 	return c.Process.Pid
 }
 
-// A recorded pid of 1 or less is no process weaver knows: kill(0, 0) would
-// signal this process's own group and succeed, so it is never alive.
-func TestPidAlive(t *testing.T) {
+// A recorded agent's pid of 1 or less is no process weaver knows (pid.Alive):
+// never alive; no pid at all cannot be checked, and is.
+func TestAgentAlive(t *testing.T) {
 	me := os.Getpid()
-	for pid, want := range map[int]bool{0: false, 1: false, -1: false, me: true, deadPid(t): false} {
-		if got := PidAlive(pid); got != want {
-			t.Errorf("PidAlive(%d) = %v, want %v", pid, got, want)
-		}
-	}
 	for pid, want := range map[string]bool{"0": false, "1": false, strconv.Itoa(me): true, "": true} {
 		if got := AgentAlive(pid, "", nil); got != want {
 			t.Errorf("AgentAlive(%q) = %v, want %v", pid, got, want)

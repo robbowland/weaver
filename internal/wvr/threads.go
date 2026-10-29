@@ -28,6 +28,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -238,7 +239,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 			break
 		}
 		pid, _ = files.FirstLine(f + ".pid")
-		if n, ok := atoi(pid); !ok || !session.PidAlive(n) {
+		if n, ok := atoi(pid); !ok || !process.Alive(n) {
 			break
 		}
 		if !said && time.Since(start) >= 300*time.Millisecond {
@@ -1473,7 +1474,7 @@ func (e *Env) EndLeftovers(args []string) error {
 			pids = append(pids, n)
 		}
 	}
-	for i := 0; i < 30 && slices.ContainsFunc(pids, session.PidAlive); i++ {
+	for i := 0; i < 30 && slices.ContainsFunc(pids, process.Alive); i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
