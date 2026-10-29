@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // A thread closed before its nvim is recorded as bound: its nvim is the
 // pane in the agent's window started for that agent (or, as before, for
 // the agent's token).
 func TestThreadNvimByToken(t *testing.T) {
-	panes := []tmux.Pane{
+	panes := []mux.Pane{
 		{ID: "4", Tab: "2", Cmd: "/bin/weaver nvim --thread 123"},
 		{ID: "5", Tab: "3", Cmd: "/bin/weaver nvim --thread 456"},
 		{ID: "6", Tab: "3", Cmd: "/bin/weaver _agent 456 claude"},
@@ -30,10 +30,10 @@ func TestThreadNvimByToken(t *testing.T) {
 	}
 	// Another window's nvim is not its own, nor is any pane of an agent
 	// weaver did not start.
-	if nv, _ := threadNvim(panes, tmux.Pane{ID: "8", Tab: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, mux.Pane{ID: "8", Tab: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
 		t.Errorf("another window's nvim: got %q", nv)
 	}
-	if nv, _ := threadNvim(panes, tmux.Pane{ID: "9", Tab: "3", Cmd: "claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, mux.Pane{ID: "9", Tab: "3", Cmd: "claude"}); nv != "" {
 		t.Errorf("not a thread's agent: got %q", nv)
 	}
 }

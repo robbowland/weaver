@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Rename is `wvr rename [PANE] [NAME...]`: the thread of the agent in PANE
@@ -20,7 +20,7 @@ func (e *Env) Rename(args []string) error {
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
-	var p tmux.PaneID
+	var p mux.PaneID
 	if len(args) > 0 {
 		if q, ok := paneArg(args[0]); ok {
 			p, args = q, args[1:]
@@ -60,7 +60,7 @@ func (e *Env) Rename(args []string) error {
 
 // retitle sets the title of the thread whose agent is pane p ("" for none:
 // its agent's own), and relabels its window and the boards.
-func (e *Env) retitle(p tmux.PaneID, title string) error {
+func (e *Env) retitle(p mux.PaneID, title string) error {
 	if !store.UpdateThread(e.ThreadFile(p), func(th *store.Thread) { th.Title = title }) {
 		return errors.New("cannot write its thread record")
 	}

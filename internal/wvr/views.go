@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/linear"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -180,9 +181,9 @@ func (e *Env) viewOf(name string) (view, error) {
 }
 
 // viewWindows are the session's view windows, by view name: window ids.
-func (e *Env) viewWindows() map[string]tmux.WindowID {
+func (e *Env) viewWindows() map[string]mux.WindowID {
 	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id} #{@weaver-view}")
-	ws := map[string]tmux.WindowID{}
+	ws := map[string]mux.WindowID{}
 	if err != nil {
 		return ws
 	}
@@ -197,16 +198,16 @@ func (e *Env) viewWindows() map[string]tmux.WindowID {
 
 // OpenView shows view name, started first if it is not running. Its
 // window id.
-func (e *Env) OpenView(name string) (tmux.WindowID, error) {
+func (e *Env) OpenView(name string) (mux.WindowID, error) {
 	return e.view(name, true)
 }
 
 // startView starts view name, if it is not running, without going there.
-func (e *Env) startView(name string) (tmux.WindowID, error) {
+func (e *Env) startView(name string) (mux.WindowID, error) {
 	return e.view(name, false)
 }
 
-func (e *Env) view(name string, show bool) (tmux.WindowID, error) {
+func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 	if id := e.viewWindows()[name]; id != "" {
 		if show {
 			e.Tmux("select-window", "-t", id.Target())

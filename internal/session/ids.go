@@ -6,15 +6,15 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/jsonx"
-	"github.com/robbowland/weaver/internal/tmux"
+	"github.com/robbowland/weaver/internal/mux"
 )
 
 // paneOfNum is the pane a record keeps as a number.
-func paneOfNum(n jsonx.Int) tmux.PaneID { return tmux.PaneID(strconv.Itoa(int(n))) }
+func paneOfNum(n jsonx.Int) mux.PaneID { return mux.PaneID(strconv.Itoa(int(n))) }
 
 // PaneOfFile is the pane of one of weaver's per-agent files
 // ($STATE_DIR/<skey>_<pane>.<ext>).
-func PaneOfFile(f string) tmux.PaneID {
+func PaneOfFile(f string) mux.PaneID {
 	b := f[:len(f)-len(filepath.Ext(f))]
-	return tmux.PaneID(b[strings.LastIndexByte(b, '_')+1:])
+	return mux.PaneID(b[strings.LastIndexByte(b, '_')+1:])
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/engine"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
@@ -26,7 +27,7 @@ import (
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
-func (e *Env) openLeftOf(target tmux.PaneID, cwd, name string, argv ...string) (tmux.PaneID, error) {
+func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (mux.PaneID, error) {
 	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.Target(), "-c", tmux.Text(cwd)}, argv...)...)
 	if err != nil {
 		return "", fmt.Errorf("tmux split-window failed")
@@ -39,7 +40,7 @@ func (e *Env) openLeftOf(target tmux.PaneID, cwd, name string, argv ...string) (
 // threadWidth: back to a thread's split once its nvim reopens beside the
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
-func (e *Env) threadWidth(agent tmux.PaneID) {
+func (e *Env) threadWidth(agent mux.PaneID) {
 	out, err := e.Tmux("list-panes", "-t", agent.Target())
 	if err != nil || strings.Count(strings.TrimRight(string(out), "\n"), "\n") != 1 {
 		return
@@ -55,7 +56,7 @@ func (e *Env) threadWidth(agent tmux.PaneID) {
 // editLock is one `wvr edit` per agent at a time, so a second Alt v finds
 // the nvim the first is opening. A lock older than 5s was left by a killed
 // process.
-func (e *Env) editLock(agent tmux.PaneID) func() {
+func (e *Env) editLock(agent mux.PaneID) func() {
 	d := e.PaneFile(agent, "opening")
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; i < 60; i++ {
@@ -81,7 +82,7 @@ func (e *Env) editLock(agent tmux.PaneID) func() {
 
 // focusedPane is the pane you are on (a popup or run-shell is not a pane:
 // the session's active one).
-func (e *Env) focusedPane() tmux.PaneID {
+func (e *Env) focusedPane() mux.PaneID {
 	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pane_id}")
 	if err != nil {
 		return ""
@@ -96,7 +97,7 @@ func (e *Env) focusedPane() tmux.PaneID {
 // Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
 func (e *Env) Edit(args []string) error {
-	full, target := false, tmux.PaneID("")
+	full, target := false, mux.PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--full":
@@ -118,7 +119,7 @@ func (e *Env) Edit(args []string) error {
 			return errors.New("cannot find the focused pane")
 		}
 	}
-	paneOf := func(ps []tmux.Pane, p tmux.PaneID) *tmux.Pane {
+	paneOf := func(ps []mux.Pane, p mux.PaneID) *mux.Pane {
 		for i := range ps {
 			if ps[i].ID == p {
 				return &ps[i]
@@ -127,7 +128,7 @@ func (e *Env) Edit(args []string) error {
 		return nil
 	}
 	agentPane := e.agentOf(target)
-	var newPane, nv tmux.PaneID
+	var newPane, nv mux.PaneID
 	if agentPane == "" {
 		cwd := ""
 		if p := paneOf(panes, target); p != nil {

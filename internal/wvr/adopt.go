@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -73,7 +74,7 @@ func (e *Env) Adopt(args []string) error {
 
 // paneArg is which as a pane: %N, or a number of at most three digits (a
 // longer one is the start of a session id).
-func paneArg(which string) (tmux.PaneID, bool) {
+func paneArg(which string) (mux.PaneID, bool) {
 	if strings.HasPrefix(which, "%") {
 		return tmux.ParsePane(which)
 	}
@@ -88,7 +89,7 @@ func paneArg(which string) (tmux.PaneID, bool) {
 // which close never offers to remove), and in the weaver session a window
 // of its own at its number, its nvim on its left. Nothing restarts: a turn
 // under way goes on.
-func (e *Env) adoptPane(p tmux.PaneID) (string, error) {
+func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	st, err := store.ReadState(e.StateFile(p))
 	if err != nil {
 		return "", fmt.Errorf("weaver follows no agent in pane %%%s", p)
@@ -140,7 +141,7 @@ func (e *Env) adoptPane(p tmux.PaneID) (string, error) {
 // broken out of the window it shares (home, a view, another thread's);
 // at its number, named label, with an nvim on its left in dir when it has
 // none. You go with it when it is the pane you are in. Its window.
-func (e *Env) adoptWindow(p tmux.PaneID, n int, label, dir string) tmux.WindowID {
+func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 	out, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{window_id}\t#{window_index}\t#{@weaver-view}")
 	f := strings.Split(strings.TrimRight(string(out), "\n"), "\t")
 	if err != nil || len(f) < 3 {

@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -22,7 +23,7 @@ import (
 
 // Panes lists the session's panes (tmux list-panes -s), retried twice: an
 // empty answer is no answer.
-func (e *Env) Panes() ([]tmux.Pane, bool) {
+func (e *Env) Panes() ([]mux.Pane, bool) {
 	for i := 0; i < 3; i++ {
 		out, err := e.Tmux("list-panes", "-s", "-t", "="+e.Session, "-F", tmux.PanesFormat)
 		if ps := tmux.ParsePanes(out); err == nil && len(ps) > 0 {
@@ -37,8 +38,8 @@ func (e *Env) Panes() ([]tmux.Pane, bool) {
 // navigation show it: its text with control characters made spaces.
 type Row struct {
 	State                                                             agent.State
-	Pane                                                              tmux.PaneID
-	Tab                                                               tmux.WindowID
+	Pane                                                              mux.PaneID
+	Tab                                                               mux.WindowID
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
 	Tabname, Agent, Bgtasks, Ttask, Tname                             string
 	Since                                                             int64 // epoch s
@@ -68,7 +69,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 	if !ok {
 		return nil, now
 	}
-	byID := map[tmux.PaneID]*tmux.Pane{}
+	byID := map[mux.PaneID]*mux.Pane{}
 	trusted := e.MyPane == ""
 	for i := range panes {
 		id := panes[i].ID

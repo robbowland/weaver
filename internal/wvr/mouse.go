@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -189,7 +190,7 @@ func (e *Env) navMenu() []menuItem {
 }
 
 // threadMenu is what can be done to the thread whose agent is pane a.
-func (e *Env) threadMenu(a tmux.PaneID) []menuItem {
+func (e *Env) threadMenu(a mux.PaneID) []menuItem {
 	if a == "" {
 		return nil
 	}

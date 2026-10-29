@@ -15,10 +15,10 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
@@ -276,7 +276,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 
 // Focus tells the nvim of the agent in pane p, which rec says (its kind
 // alone before it reports), to show file in root.
-func Focus(e *session.Env, p tmux.PaneID, rec agent.Record, root, file string) {
+func Focus(e *session.Env, p mux.PaneID, rec agent.Record, root, file string) {
 	now := time.Now()
 	h := &hk{Pane: p, AgentKind: rec.Agent, Sid: rec.SessionID, State: rec.State, Turn: rec.Turn, Now: now.Unix(), NowMs: now.UnixMilli()}
 	if h.AgentKind == "" {

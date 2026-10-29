@@ -8,9 +8,9 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // checkoutFor is the main checkout of GitHub repository owner/name, from
@@ -54,8 +54,8 @@ func (e *Env) checkoutFor(repo, first string) string {
 
 // threadOnBranch is the agent pane of a running thread of this session on
 // branch of repo, or "".
-func (e *Env) threadOnBranch(repo, branch string) tmux.PaneID {
-	live := map[tmux.PaneID]bool{}
+func (e *Env) threadOnBranch(repo, branch string) mux.PaneID {
+	live := map[mux.PaneID]bool{}
 	ps, _ := e.Panes()
 	for _, p := range ps {
 		if !p.Exited {

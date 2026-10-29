@@ -14,6 +14,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -73,7 +74,7 @@ func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 // life (server, session id).
 type paneLife struct {
 	skey  string
-	pane  tmux.PaneID
+	pane  mux.PaneID
 	where agent.Where
 }
 

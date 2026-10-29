@@ -6,19 +6,19 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // ThreadFile is the record of the thread whose agent is in pane p.
-func (e *Env) ThreadFile(p tmux.PaneID) string {
+func (e *Env) ThreadFile(p mux.PaneID) string {
 	return e.PaneFile(p, "thread")
 }
 
 // LoseStaleThread keeps pane p's thread record as lost when it was written
 // before this session was made: an earlier server's thread, whose agent
 // never reported, that a new pane of its number p is not.
-func (e *Env) LoseStaleThread(p tmux.PaneID) {
+func (e *Env) LoseStaleThread(p mux.PaneID) {
 	f := e.ThreadFile(p)
 	fi, err := os.Stat(f)
 	if err != nil || e.Session == "" {
@@ -35,7 +35,7 @@ func (e *Env) LoseStaleThread(p tmux.PaneID) {
 // has one that does not know it yet (Codex says its own at its first event;
 // Claude Code's changes with /clear): so it can be resumed whether or not
 // its agent's state survives.
-func (e *Env) ThreadLearns(p tmux.PaneID, sid string) {
+func (e *Env) ThreadLearns(p mux.PaneID, sid string) {
 	f := e.ThreadFile(p)
 	if sid == "" || !files.Exists(f) {
 		return

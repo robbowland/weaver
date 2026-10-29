@@ -8,6 +8,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -28,7 +29,7 @@ import (
 // is, its process, what it runs and where, its session (name, and which life
 // of it) and its terminal.
 type paneInfo struct {
-	id       tmux.PaneID
+	id       mux.PaneID
 	pid      int
 	cmd, cwd string
 	session  string
@@ -47,12 +48,12 @@ type codexPlace struct {
 // codexPane is where Codex session sid's hook goes, for a hook whose
 // environment names pane env, the session working in cwd; ok false when it
 // cannot tell.
-func codexPane(e *session.Env, env tmux.PaneID, sid, cwd string) (codexPlace, bool) {
+func codexPane(e *session.Env, env mux.PaneID, sid, cwd string) (codexPlace, bool) {
 	panes := serverPanes(e)
 	if p, ok := panes[env]; ok && ancestor(p.pid) {
 		return codexPlace{p, true}, true
 	}
-	codex := func(id tmux.PaneID) (paneInfo, bool) {
+	codex := func(id mux.PaneID) (paneInfo, bool) {
 		p, ok := panes[id]
 		return p, ok && p.cmd == "codex"
 	}
@@ -69,7 +70,7 @@ func codexPane(e *session.Env, env tmux.PaneID, sid, cwd string) (codexPlace, bo
 	}
 	// Two Codex panes in one directory: the one no other session holds.
 	if len(in) > 1 {
-		held := map[tmux.PaneID]bool{}
+		held := map[mux.PaneID]bool{}
 		ms, _ := filepath.Glob(filepath.Join(dir, "*"))
 		for _, m := range ms {
 			if s := filepath.Base(m); s != sid {
@@ -96,13 +97,13 @@ func codexPane(e *session.Env, env tmux.PaneID, sid, cwd string) (codexPlace, bo
 
 // boundPane is the pane session sid is bound to, when its binding is this
 // server's ("" otherwise: a server started since numbers its panes again).
-func boundPane(dir, sid string, panes map[tmux.PaneID]paneInfo) tmux.PaneID {
+func boundPane(dir, sid string, panes map[mux.PaneID]paneInfo) mux.PaneID {
 	if !validSid(sid) {
 		return ""
 	}
 	l, _ := files.FirstLine(filepath.Join(dir, sid))
 	id, srv, _ := strings.Cut(l, " ")
-	p, ok := panes[tmux.PaneID(id)]
+	p, ok := panes[mux.PaneID(id)]
 	if !ok || srv == "" || srv != strconv.Itoa(p.where.Server) {
 		return ""
 	}
@@ -119,10 +120,10 @@ func forgetCodexSession(e *session.Env, sid string) {
 }
 
 // serverPanes are the panes of this tmux server, by id.
-func serverPanes(e *session.Env) map[tmux.PaneID]paneInfo {
+func serverPanes(e *session.Env) map[mux.PaneID]paneInfo {
 	out, err := e.Tmux("list-panes", "-a", "-F",
 		"#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{pid}\t#{session_id}\t#{pane_tty}\t#{session_name}")
-	m := map[tmux.PaneID]paneInfo{}
+	m := map[mux.PaneID]paneInfo{}
 	if err != nil {
 		return m
 	}

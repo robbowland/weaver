@@ -5,20 +5,16 @@ package tmux
 import (
 	"strconv"
 	"strings"
+
+	"github.com/robbowland/weaver/internal/mux"
 )
 
-// PaneID is a pane by its number, as weaver's file names and records keep
-// it: tmux's %3 is "3".
-type PaneID string
-
-// WindowID is a window by its number: tmux's @12 is "12".
-type WindowID string
-
-// Target is the pane as tmux names it.
-func (p PaneID) Target() string { return "%" + string(p) }
-
-// Target is the window as tmux names it.
-func (w WindowID) Target() string { return "@" + string(w) }
+// PaneID, WindowID and Pane are mux's: tmux's %3 is "3", @12 is "12".
+type (
+	PaneID   = mux.PaneID
+	WindowID = mux.WindowID
+	Pane     = mux.Pane
+)
 
 // Text is s as tmux takes it literally where it would expand formats: a
 // window's or pane's name, a start directory, a message. Text weaver does
@@ -38,21 +34,6 @@ func ParsePane(s string) (PaneID, bool) {
 func ParseWindow(s string) (WindowID, bool) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "@")
 	return WindowID(s), digits(s)
-}
-
-// Pane is one pane of a session.
-type Pane struct {
-	ID       PaneID
-	Tab      WindowID
-	TabName  string
-	TabIndex int
-	Exited   bool
-	Cmd      string
-	W, H     int
-	X, Y     int
-	Title    string
-	Cwd      string
-	Focused  bool
 }
 
 const us = "\x1f"

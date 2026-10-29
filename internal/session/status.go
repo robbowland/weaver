@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -116,7 +117,7 @@ func (e *Env) pushStatus(labels bool) {
 	}
 	rows, at := e.AgentRows()
 	var need, done, work int
-	var seenNow []tmux.PaneID
+	var seenNow []mux.PaneID
 	for _, r := range rows {
 		if r.Pane == "" {
 			continue
@@ -230,7 +231,7 @@ func fzfClient(s string) *http.Client {
 
 // MarkSeen marks agent p seen (you looked at it): a StateDone no longer stands
 // out.
-func (e *Env) MarkSeen(p tmux.PaneID) {
+func (e *Env) MarkSeen(p mux.PaneID) {
 	sf := e.StateFile(p)
 	if !files.Exists(sf) {
 		return

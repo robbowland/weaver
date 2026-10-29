@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -185,8 +186,8 @@ func copyFile(from, to string) error {
 // weaver's server, and the one we run in) in it, but panes except (a
 // thread being closed: its agent, nvim and the pane closing it) and their
 // threads. Close's offer, its last check, and the sweep all ask it.
-func (e *Env) worktreeUsers(dir string, except ...tmux.PaneID) []string {
-	skip := map[tmux.PaneID]bool{}
+func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
+	skip := map[mux.PaneID]bool{}
 	for _, p := range except {
 		if p != "" {
 			skip[p] = true

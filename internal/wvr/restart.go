@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -46,7 +47,7 @@ func (e *Env) Restart(args []string) error {
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
-	var panes []tmux.PaneID
+	var panes []mux.PaneID
 	switch {
 	case all:
 		for _, f := range e.SessionFiles("thread") {
@@ -111,7 +112,7 @@ func restartSummary(done, busy, failed []string) string {
 // tmux's respawn-pane ends the agent there and runs the pane's `wvr _agent`
 // again, which resumes the conversation. The thread's label ("01"), and
 // errMidTurn when it is mid-turn and not forced.
-func (e *Env) restartAgent(p tmux.PaneID, force bool) (string, error) {
+func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	th, err := store.ReadThread(e.ThreadFile(p))
 	if err != nil {
 		return "%" + string(p), errors.New("not a thread (adopt it first)")

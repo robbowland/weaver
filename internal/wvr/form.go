@@ -18,6 +18,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -547,7 +548,7 @@ func checkThread(task string, fm form) string {
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) error {
 	var nameArg, repoArg, branch, base, agentArg, itemArg string
-	var from tmux.PaneID
+	var from mux.PaneID
 	var where Where
 	var itemKind items.GitHubKind
 	var task []string

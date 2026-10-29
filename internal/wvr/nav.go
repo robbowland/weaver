@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -23,7 +24,7 @@ import (
 // and tmux's hooks as you look (seen) or resize (fit).
 
 // focus moves your client to pane p (its window first).
-func (e *Env) focus(p tmux.PaneID) {
+func (e *Env) focus(p mux.PaneID) {
 	e.Tmux("select-window", "-t", p.Target(), ";", "select-pane", "-t", p.Target())
 }
 
@@ -43,7 +44,7 @@ func (e *Env) Goto(pane, tab string) {
 }
 
 type tab struct {
-	id         tmux.WindowID
+	id         mux.WindowID
 	name, view string
 	active     bool
 }
@@ -161,7 +162,7 @@ func (e *Env) Peek(args []string) error {
 }
 
 // agentIn is the agent of window w's thread; "" when it has none.
-func (e *Env) agentIn(w tmux.WindowID) tmux.PaneID {
+func (e *Env) agentIn(w mux.WindowID) mux.PaneID {
 	panes, _ := e.Panes()
 	for _, p := range panes {
 		if p.Tab == w && e.agentOf(p.ID) == p.ID {
@@ -173,7 +174,7 @@ func (e *Env) agentIn(w tmux.WindowID) tmux.PaneID {
 
 // toHome goes home from window cur (kept, when a thread's, for going back
 // to), made again first if it was closed.
-func (e *Env) toHome(cur tab, home tmux.WindowID) {
+func (e *Env) toHome(cur tab, home mux.WindowID) {
 	if cur.id != "" && cur.view == "" && cur.id != home {
 		bestEffort(os.WriteFile(e.lastFile(), []byte(string(cur.id)+"\n"), 0o644))
 	}
@@ -200,7 +201,7 @@ func (e *Env) GoView(step int) {
 }
 
 // selectHome shows home (window home), made again first if it was closed.
-func (e *Env) selectHome(home tmux.WindowID) {
+func (e *Env) selectHome(home mux.WindowID) {
 	if home == "" {
 		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {
 			e.Tmux("new-window", "-t", "="+e.Session+":", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home")
@@ -212,7 +213,7 @@ func (e *Env) selectHome(home tmux.WindowID) {
 
 // boardOn puts the boards' cursors on the thread whose window is w (its
 // row, as the board's own rows place it: _pos).
-func (e *Env) boardOn(w tmux.WindowID) {
+func (e *Env) boardOn(w mux.WindowID) {
 	p := e.agentIn(w)
 	if p == "" {
 		return
@@ -234,10 +235,10 @@ func (e *Env) Pos(pane string) string {
 }
 
 // where is the session's windows, the one you are on, and home.
-func (e *Env) where() ([]tab, tab, tmux.WindowID) {
+func (e *Env) where() ([]tab, tab, mux.WindowID) {
 	ts := e.tabs()
 	var cur tab
-	var home tmux.WindowID
+	var home mux.WindowID
 	for _, t := range ts {
 		if t.active && cur.id == "" {
 			cur = t
@@ -259,7 +260,7 @@ func (e *Env) GoBack() {
 	e.goBack(ts, cur, home)
 }
 
-func (e *Env) goBack(ts []tab, cur tab, home tmux.WindowID) {
+func (e *Env) goBack(ts []tab, cur tab, home mux.WindowID) {
 	if l, _ := files.FirstLine(e.lastFile()); l != "" {
 		last, _ := tmux.ParseWindow(l)
 		for _, t := range ts {
@@ -333,8 +334,8 @@ func (e *Env) Next() {
 	type c struct {
 		class int
 		since int64
-		pane  tmux.PaneID
-		tab   tmux.WindowID
+		pane  mux.PaneID
+		tab   mux.WindowID
 		label string
 	}
 	var cs []c
@@ -405,7 +406,7 @@ func (e *Env) Next() {
 
 // agentOf is the agent of pane p: the pane itself when it is an agent (it
 // has state, a thread record or an nvim), or the agent whose nvim it is.
-func (e *Env) agentOf(p tmux.PaneID) tmux.PaneID {
+func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 	if !digits(string(p)) {
 		return ""
 	}

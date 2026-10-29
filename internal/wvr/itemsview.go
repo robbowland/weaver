@@ -16,10 +16,10 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/markdown"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The views of work items, GITHUB and LINEAR: a service's items under
@@ -228,7 +228,7 @@ type cardField struct {
 
 // viewThread is a thread of this session, as a view matches it to an item.
 type viewThread struct {
-	pane  tmux.PaneID // its agent's
+	pane  mux.PaneID // its agent's
 	num   int
 	state agent.State
 	seen  bool

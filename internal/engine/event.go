@@ -10,6 +10,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -71,7 +72,7 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	// environment: its pane, session, server and terminal are the pane's
 	// it is placed in (codexPane), and one it cannot place is dropped.
 	if adapter == "codex" {
-		at, ok := codexPane(e, tmux.PaneID(pane), strip(n.Session), strip(n.Cwd))
+		at, ok := codexPane(e, mux.PaneID(pane), strip(n.Session), strip(n.Cwd))
 		if !ok {
 			return nil
 		}
@@ -104,7 +105,7 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	if pid == "" && adapter != "" && h.Event == "SessionStart" {
 		pid = agentAncestor()
 	}
-	rc := hook(e, h, mode, tmux.PaneID(pane), agent, pid)
+	rc := hook(e, h, mode, mux.PaneID(pane), agent, pid)
 	if bell {
 		bl := os.Getenv("WEAVER_BELL")
 		if bl == "" {

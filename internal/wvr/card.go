@@ -16,10 +16,10 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The dashboard's preview: an agent's resume card, its screen, the keys, or
@@ -203,7 +203,7 @@ func (e *Env) Preview(args []string) string {
 		}
 		return e.lostCard(pane, title)
 	}
-	p := tmux.PaneID(pane)
+	p := mux.PaneID(pane)
 	switch view {
 	case "help":
 		return Help()

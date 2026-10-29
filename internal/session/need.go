@@ -4,7 +4,7 @@ import (
 	"cmp"
 
 	"github.com/robbowland/weaver/internal/agent"
-	"github.com/robbowland/weaver/internal/tmux"
+	"github.com/robbowland/weaver/internal/mux"
 )
 
 // Need is what an agent asks of you, from its row: the board's groups, in
@@ -67,7 +67,7 @@ func (r Row) NotReporting(now int64) bool {
 
 // RowOf is pane p's agent as the board shows it, with when that was;
 // false when the session has none there.
-func (e *Env) RowOf(p tmux.PaneID) (Row, int64, bool) {
+func (e *Env) RowOf(p mux.PaneID) (Row, int64, bool) {
 	rows, now := e.AgentRows()
 	for _, r := range rows {
 		if r.Pane == p {
