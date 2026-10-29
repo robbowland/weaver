@@ -138,14 +138,13 @@ func (e *Env) GC() {
 	}
 	rexes := map[string]rexAnswer{}
 	onRex := func(skey string) (rexAnswer, bool) {
-		name, ok := strings.CutPrefix(skey, "rex-")
-		if !ok {
+		if !strings.HasPrefix(skey, "rex-") {
 			return rexAnswer{}, false
 		}
-		a, seen := rexes[name]
+		a, seen := rexes[skey]
 		if !seen {
-			a.s, a.running, a.answered = rex.Alive(e.RexDir(), name)
-			rexes[name] = a
+			a.s, a.running, a.answered = rex.Alive(e.RexDir(), skey)
+			rexes[skey] = a
 		}
 		return a, true
 	}

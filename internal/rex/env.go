@@ -69,27 +69,42 @@ func Lost(w agent.Where) bool {
 	return !Session{ID: w.Session}.Running()
 }
 
-// Alive is the session of weaver's name name (one weaver made, else the
-// one whose id it is): whether it runs, and whether Rex answered at all.
-func Alive(dir, name string) (s Session, running, answered bool) {
+// Alive is the session whose files are keyed skey (Key of its name): one
+// weaver made of a name with that key, else the one whose id the key holds
+// (a session weaver did not make is named by its id); whether it runs, and
+// whether Rex answered at all. By key, not by a name taken back out of
+// it: Key turns a name's / into _.
+func Alive(dir, skey string) (s Session, running, answered bool) {
+	live, err := sessions()
+	if err != nil {
+		return Session{}, false, false
+	}
+	id, name, ok := ids{dir}.keyed(skey)
+	if !ok {
+		name = strings.TrimPrefix(skey, "rex-")
+		id = "session:" + name
+	}
+	if live[id] {
+		return Session{ID: id, Name: name, Dir: dir}, true, true
+	}
+	return Session{}, false, true
+}
+
+// sessions are the ids of the sessions Rex runs.
+func sessions() (map[string]bool, error) {
 	var l struct {
 		Sessions []struct {
 			ID string `json:"session_id"`
 		} `json:"sessions"`
 	}
-	if call("session.list", map[string]any{}, &l) != nil {
-		return Session{}, false, false
+	if err := call("session.list", map[string]any{}, &l); err != nil {
+		return nil, err
 	}
-	id, ok := ids{dir}.named(name)
-	if !ok {
-		id = "session:" + name
-	}
+	live := map[string]bool{}
 	for _, x := range l.Sessions {
-		if x.ID == id {
-			return Session{ID: id, Name: name, Dir: dir}, true, true
-		}
+		live[x.ID] = true
 	}
-	return Session{}, false, true
+	return live, nil
 }
 
 // Named is weaver's Rex session name, when it runs.

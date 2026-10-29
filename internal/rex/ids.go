@@ -127,16 +127,29 @@ func (r ids) session(id string) (string, int64, bool) {
 
 // named is the Rex session weaver made last for name.
 func (r ids) named(name string) (string, bool) {
+	id, _, ok := r.latest(func(n string) bool { return n == name })
+	return id, ok
+}
+
+// keyed is the Rex session weaver made last whose name is keyed skey, and
+// that name.
+func (r ids) keyed(skey string) (string, string, bool) {
+	return r.latest(func(n string) bool { return Key(n) == skey })
+}
+
+// latest is the session weaver made last of a name that matches, and its
+// name.
+func (r ids) latest(match func(name string) bool) (string, string, bool) {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
-	var best string
+	var best, bestName string
 	var at int64 = -1
 	for _, d := range ents {
 		id := strings.Replace(d.Name(), "_", ":", 1)
-		if n, made, ok := r.session(id); ok && n == name && made > at {
-			best, at = id, made
+		if n, made, ok := r.session(id); ok && match(n) && made > at {
+			best, bestName, at = id, n, made
 		}
 	}
-	return best, best != ""
+	return best, bestName, best != ""
 }
 
 func (r ids) made(id, name string, at int64) error {

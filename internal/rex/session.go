@@ -144,20 +144,8 @@ func (s Session) Made() (int64, bool) {
 }
 
 func (s Session) Running() bool {
-	var l struct {
-		Sessions []struct {
-			ID string `json:"session_id"`
-		} `json:"sessions"`
-	}
-	if call("session.list", map[string]any{}, &l) != nil {
-		return false
-	}
-	for _, x := range l.Sessions {
-		if x.ID == s.ID {
-			return true
-		}
-	}
-	return false
+	live, err := sessions()
+	return err == nil && live[s.ID]
 }
 
 func (s Session) Quit() error { return s.callS("session.destroy", nil, nil) }
