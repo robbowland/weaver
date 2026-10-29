@@ -64,11 +64,16 @@ func TestOneFetchPerOperation(t *testing.T) {
 	if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(e.ThreadFile(agent), []byte(`{"num":1}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(e.PaneFile(agent, "nvim"), []byte(string(nvim)+"\n\n"), 0o644); err != nil {
-		t.Fatal(err)
+	// Both panes a thread's agent with its nvim bound (as two agents side by
+	// side would be): Fit sets each one's width, from one look at the
+	// windows.
+	for _, p := range [][2]mux.PaneID{{agent, nvim}, {nvim, agent}} {
+		if err := os.WriteFile(e.ThreadFile(p[0]), []byte(`{"num":1}`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(e.PaneFile(p[0], "nvim"), []byte(string(p[1])+"\n\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	fetches := func(what string, run func()) {
 		t.Helper()
