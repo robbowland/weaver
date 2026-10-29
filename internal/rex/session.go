@@ -525,10 +525,15 @@ func (s Session) Type(p mux.PaneID, text string) error {
 // on a clear screen with no cursor, then waits $2 seconds.
 const sayScript = `printf '\033[2J\033[H\033[?25l %s' "$1"; exec /bin/sleep "$2"`
 
+// sayLabel labels the block of weaver's message, for the next to find.
+const sayLabel = "weaver: message"
+
 // Say shows text for about ms milliseconds at the foot of the active
 // window, as tmux's message line does: a floating layer that takes no
 // focus (nor keys), whose program prints it and exits, which closes it.
-// Its control characters show as spaces.
+// It replaces the message shown before, in any window, so two are never
+// shown at once: Says hold a lock of their own (say) from looking for it
+// till theirs is made. Its control characters show as spaces.
 func (s Session) Say(ms int, text string) {
 	text = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -536,11 +541,21 @@ func (s Session) Say(ms int, text string) {
 		}
 		return r
 	}, text)
+	if unlock, err := s.ids().lockOn("say"); err == nil {
+		defer unlock()
+	}
 	cols, lines := 160, 48
 	if sn, err := s.snapshot(false); err == nil {
 		for _, w := range sn.View.Windows {
 			if c, l := sn.size(w); w.ID == sn.View.Active && c > 0 && l > 0 {
 				cols, lines = c, l
+			}
+			for _, l := range w.Layers {
+				for _, b := range l.Blocks {
+					if l.Kind == "floating" && b.Label == sayLabel {
+						_ = s.callS("block.close", map[string]any{"block_id": b.ID}, nil)
+					}
+				}
 			}
 		}
 	}
@@ -548,7 +563,7 @@ func (s Session) Say(ms int, text string) {
 	w, h := min(n, cols), min((n+cols-1)/cols, 3, lines)
 	fw, fh := float64(w)/float64(cols), float64(h)/float64(lines)
 	_ = s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
-		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "options": map[string]any{
+		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": sayLabel, "options": map[string]any{
 			"shell": "none", "size": map[string]any{"columns": w, "rows": h},
 			"exit":    map[string]any{"on_completion": true, "quick_exit_threshold_ms": 0},
 			"command": []string{"/bin/sh", "-c", sayScript, "sh", text, strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64)},

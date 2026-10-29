@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -462,6 +463,35 @@ func TestOnScreen(t *testing.T) {
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
+	}
+
+	// A message replaces the one still shown, as on a message line, even
+	// one said at the same moment: never two at once.
+	s.Say(5000, "the first message")
+	s.SayToSession(5000, "the second message")
+	if n := floating(t, s); n != 1 {
+		t.Errorf("%d messages shown at once", n)
+	}
+	for i := 0; !shows(t, s, "the second message"); i++ {
+		if i == 20 {
+			t.Fatal("the second message is not shown")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if shows(t, s, "the first message") {
+		t.Error("the first message is still shown")
+	}
+	var wg sync.WaitGroup
+	for _, m := range []string{"the third message", "the fourth message"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.Say(5000, m)
+		}()
+	}
+	wg.Wait()
+	if n := floating(t, s); n != 1 {
+		t.Errorf("%d messages said together shown at once", n)
 	}
 }
 

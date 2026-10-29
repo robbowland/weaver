@@ -185,11 +185,15 @@ func (r ids) write(kind, name, v string) error {
 }
 
 // lock is the registry's lock, held while a number is given or moved.
-func (r ids) lock() (func(), error) {
+func (r ids) lock() (func(), error) { return r.lockOn("lock") }
+
+// lockOn holds file name in dir locked (flock) till the func it gives is
+// called: one holder at a time, across weaver's processes.
+func (r ids) lockOn(name string) (func(), error) {
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(r.dir, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(filepath.Join(r.dir, name), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
 	}
