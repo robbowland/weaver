@@ -59,8 +59,9 @@ inside such a session opens a board of that session's agents.
 
 ### On Rex (experimental)
 
-With `WEAVER_MUX=rex`, weaver runs on [Rex](https://www.superlogical.com/rex)
-instead of tmux: `wvr` starts a Rex session named `weaver` (home in its first
+`wvr --rex` runs weaver on [Rex](https://www.superlogical.com/rex) instead
+of tmux (as `WEAVER_MUX=rex wvr` does; `wvr --tmux` is tmux, whatever
+`WEAVER_MUX` says): it starts a Rex session named `weaver` (home in its first
 window, a window per thread), or shows it when it is already running. Rex
 shows a session only when asked by an app with Remote Control on (Rex's
 settings, Rex Server); otherwise switch to it in Rex yourself.
@@ -598,7 +599,7 @@ Environment variables change weaver's defaults.
 | --- | --- | --- |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_SESSION` | `weaver` | The session `wvr` attaches to or starts |
-| `WEAVER_MUX` | `tmux` | `rex`: run on Rex ([On Rex](#on-rex-experimental)) |
+| `WEAVER_MUX` | `tmux` | `rex`: run on Rex, as `wvr --rex` does ([On Rex](#on-rex-experimental)) |
 | `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |

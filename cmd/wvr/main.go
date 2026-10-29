@@ -46,6 +46,7 @@ func main() {
 		_, err := setup.Runtime()
 		exit(err)
 	}
+	cmd, args = muxFlag(cmd, args)
 	c, ok := commands[cmd]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wvr.Usage)
@@ -245,6 +246,26 @@ var commands = map[string]command{
 	"linear":     {run: (*wvr.Env).Linear},
 	"_close":     {session: true, run: (*wvr.Env).CloseTail},
 	"_leftovers": {session: true, run: (*wvr.Env).EndLeftovers},
+}
+
+// muxFlag is `wvr --rex|--tmux [session]` and `wvr start --rex|--tmux
+// [session]`: start, on that multiplexer, as $WEAVER_MUX would say it (set
+// here for this process, before the environment is read). Any other
+// command is as it was.
+func muxFlag(cmd string, args []string) (string, []string) {
+	flag := cmd
+	if cmd == "start" && len(args) > 0 {
+		flag = args[0]
+	}
+	mux, ok := map[string]string{"--rex": "rex", "--tmux": "tmux"}[flag]
+	if !ok {
+		return cmd, args
+	}
+	if cmd == "start" {
+		args = args[1:]
+	}
+	os.Setenv("WEAVER_MUX", mux)
+	return "start", args
 }
 
 // start starts (or attaches to) a weaver session, named as given; inside

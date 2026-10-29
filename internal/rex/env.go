@@ -23,13 +23,17 @@ type Here struct {
 }
 
 // Chosen: does weaver act on Rex here? When $WEAVER_MUX says rex, or in a
-// session weaver made on Rex; never in a tmux pane ($TMUX).
+// session weaver made on Rex; never in a tmux pane ($TMUX), nor when
+// $WEAVER_MUX says tmux.
 func Chosen(dir string) bool {
 	if os.Getenv("TMUX") != "" {
 		return false
 	}
-	if os.Getenv("WEAVER_MUX") == "rex" {
+	switch os.Getenv("WEAVER_MUX") {
+	case "rex":
 		return true
+	case "tmux":
+		return false
 	}
 	_, _, ok := ids{dir}.session(os.Getenv("REX_SESSION"))
 	return ok && os.Getenv("REX_SESSION") != ""

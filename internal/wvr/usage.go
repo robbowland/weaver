@@ -40,6 +40,8 @@ const Usage = `usage: wvr [command]
                                ($WEAVER_SESSION) on weaver's own tmux server; inside
                                tmux: the dashboard
   start [session]              the same, for another session
+  --rex [session]              start (or show) the session on Rex instead of tmux
+                               (as WEAVER_MUX=rex; --tmux: on tmux, whatever it says)
   new [task...]                start a thread: a new window with nvim and an agent, in a new
                                worktree whose branch starts from the remote's default
                                branch, fetched; with no task, a form. Options: --name NAME
