@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
@@ -522,8 +521,10 @@ func (s Session) Type(p mux.PaneID, text string) error {
 }
 
 // sayScript prints $1, the text (an argument: the shell never reads it),
-// on a clear screen with no cursor, then waits $2 seconds.
-const sayScript = `printf '\033[2J\033[H\033[?25l %s' "$1"; exec /bin/sleep "$2"`
+// on a clear screen with no cursor and no wrapping (what does not fit is
+// cut at the right, never scrolling its start away), then waits $2
+// seconds.
+const sayScript = `printf '\033[2J\033[H\033[?25l\033[?7l %s' "$1"; exec /bin/sleep "$2"`
 
 // sayLabel labels the block of weaver's message, for the next to find.
 const sayLabel = "weaver: message"
@@ -533,7 +534,9 @@ const sayLabel = "weaver: message"
 // focus (nor keys), whose program prints it and exits, which closes it.
 // It replaces the message shown before, in any window, so two are never
 // shown at once: Says hold a lock of their own (say) from looking for it
-// till theirs is made. Its control characters show as spaces.
+// till theirs is made. It is one line, as wide as the text's columns
+// (wide characters two), cut at the window's width with its start kept.
+// Its control characters show as spaces.
 func (s Session) Say(ms int, text string) {
 	text = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -559,12 +562,12 @@ func (s Session) Say(ms int, text string) {
 			}
 		}
 	}
-	n := utf8.RuneCountInString(text) + 2
-	w, h := min(n, cols), min((n+cols-1)/cols, 3, lines)
-	fw, fh := float64(w)/float64(cols), float64(h)/float64(lines)
+	text = head(text, max(cols-2, 1))
+	w := min(width(text)+2, cols)
+	fw, fh := float64(w)/float64(cols), 1/float64(lines)
 	_ = s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
 		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": sayLabel, "options": map[string]any{
-			"shell": "none", "size": map[string]any{"columns": w, "rows": h},
+			"shell": "none", "size": map[string]any{"columns": w, "rows": 1},
 			"exit":    map[string]any{"on_completion": true, "quick_exit_threshold_ms": 0},
 			"command": []string{"/bin/sh", "-c", sayScript, "sh", text, strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64)},
 		}}}}, nil)
@@ -572,6 +575,67 @@ func (s Session) Say(ms int, text string) {
 
 // SayToSession is Say: what the session shows is its active window.
 func (s Session) SayToSession(ms int, text string) { s.Say(ms, text) }
+
+// head is text cut to n columns, an ellipsis ending it when cut: its start
+// always shows.
+func head(text string, n int) string {
+	if width(text) <= n {
+		return text
+	}
+	w := 0
+	for i, r := range text {
+		if w+cells(r) > n-1 {
+			return text[:i] + "…"
+		}
+		w += cells(r)
+	}
+	return text
+}
+
+// width is how many columns text takes in a terminal.
+func width(text string) int {
+	w := 0
+	for _, r := range text {
+		w += cells(r)
+	}
+	return w
+}
+
+// cells is how many columns rune r takes in a terminal: 2 for a wide one,
+// none for a mark or format character that joins another (but 1 for VS16,
+// which makes the symbol before it a wide emoji), else 1. It errs wide.
+func cells(r rune) int {
+	switch {
+	case r == 0xFE0F:
+		return 1
+	case unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf):
+		return 0
+	}
+	for _, x := range wide {
+		if r >= x[0] && r <= x[1] {
+			return 2
+		}
+	}
+	return 1
+}
+
+// wide are the runes a terminal shows two columns wide: East Asian wide
+// and fullwidth ones (Unicode's East_Asian_Width W and F) and emoji, a
+// few narrow ones with them rather than a wide one left out.
+var wide = [][2]rune{
+	{0x1100, 0x115F}, {0x231A, 0x231B}, {0x2329, 0x232A}, {0x23E9, 0x23EC}, {0x23F0, 0x23F0}, {0x23F3, 0x23F3},
+	{0x25FD, 0x25FE}, {0x2614, 0x2615}, {0x2648, 0x2653}, {0x267F, 0x267F}, {0x2693, 0x2693}, {0x26A1, 0x26A1},
+	{0x26AA, 0x26AB}, {0x26BD, 0x26BE}, {0x26C4, 0x26C5}, {0x26CE, 0x26CE}, {0x26D4, 0x26D4}, {0x26EA, 0x26EA},
+	{0x26F2, 0x26F3}, {0x26F5, 0x26F5}, {0x26FA, 0x26FA}, {0x26FD, 0x26FD}, {0x2705, 0x2705}, {0x270A, 0x270B},
+	{0x2728, 0x2728}, {0x274C, 0x274C}, {0x274E, 0x274E}, {0x2753, 0x2755}, {0x2757, 0x2757}, {0x2795, 0x2797},
+	{0x27B0, 0x27B0}, {0x27BF, 0x27BF}, {0x2B1B, 0x2B1C}, {0x2B50, 0x2B50}, {0x2B55, 0x2B55},
+	{0x2E80, 0x303E}, {0x3041, 0x33FF}, {0x3400, 0x4DBF}, {0x4E00, 0x9FFF}, {0xA000, 0xA4CF}, {0xA960, 0xA97F},
+	{0xAC00, 0xD7A3}, {0xF900, 0xFAFF}, {0xFE10, 0xFE19}, {0xFE30, 0xFE6F}, {0xFF00, 0xFF60}, {0xFFE0, 0xFFE6},
+	{0x16FE0, 0x16FE4}, {0x17000, 0x18CFF}, {0x1AFF0, 0x1B2FF},
+	{0x1F004, 0x1F004}, {0x1F0CF, 0x1F0CF}, {0x1F18E, 0x1F18E}, {0x1F191, 0x1F19A}, {0x1F200, 0x1F2FF},
+	{0x1F300, 0x1F64F}, {0x1F680, 0x1F6FF}, {0x1F7E0, 0x1F7EB}, {0x1F90C, 0x1F9FF}, {0x1FA70, 0x1FAFF},
+	{0x20000, 0x2FFFD}, {0x30000, 0x3FFFD},
+}
 
 func (s Session) MarkUnseen(mux.PaneID, bool) {}
 func (s Session) Publish(int, int, int)       {}

@@ -493,6 +493,75 @@ func TestOnScreen(t *testing.T) {
 	if n := floating(t, s); n != 1 {
 		t.Errorf("%d messages said together shown at once", n)
 	}
+
+	// A message's start is always on screen: one of wide characters, or
+	// longer than the window (80 columns here), keeps its head.
+	for _, text := range []string{"weaver: " + strings.Repeat("漢字", 20), "weaver: " + strings.Repeat("long ", 70)} {
+		s.Say(5000, text)
+		head := text[:len("weaver: ")+6]
+		for i := 0; !strings.HasPrefix(strings.TrimSpace(message(t, s)), head); i++ {
+			if i == 20 {
+				t.Fatalf("the message shows %q, not its start %q", message(t, s), head)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// A message is as wide as its columns, wide characters and emoji two,
+// marks none; cut, it keeps its start and says so.
+func TestWidth(t *testing.T) {
+	for text, want := range map[string]int{"weaver: ok": 10, "漢字": 4, "ｗｉｄｅ": 8, "é": 1, "👍": 2, "❤️": 2} {
+		if got := width(text); got != want {
+			t.Errorf("width(%q) %d, want %d", text, got, want)
+		}
+	}
+	for _, c := range []struct {
+		text string
+		n    int
+		want string
+	}{
+		{"weaver: ok", 10, "weaver: ok"},
+		{"weaver: 漢字漢字", 13, "weaver: 漢字…"},
+		{"weaver: 漢字漢字", 14, "weaver: 漢字…"},
+		{"weaver: long thread name", 12, "weaver: lon…"},
+	} {
+		if got := head(c.text, c.n); got != c.want || width(got) > c.n {
+			t.Errorf("head(%q, %d) %q, want %q", c.text, c.n, got, c.want)
+		}
+	}
+}
+
+// message is what weaver's message shows: the last of its lines, as many
+// as its terminal has rows; "" when there is none.
+func message(t *testing.T, s Session) string {
+	t.Helper()
+	v, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			for _, b := range l.Blocks {
+				if l.Kind != "floating" || b.Label != sayLabel {
+					continue
+				}
+				var sz struct {
+					Rows int `json:"rows"`
+				}
+				var f struct {
+					Content string `json:"content"`
+				}
+				if s.callS("block.method", map[string]any{"block_id": b.ID, "method": "size", "args": map[string]any{}}, &sz) != nil ||
+					s.callS("block.method", map[string]any{"block_id": b.ID, "method": "format", "args": map[string]any{"format": "text"}}, &f) != nil {
+					return ""
+				}
+				lines := strings.Split(strings.TrimRight(f.Content, "\n"), "\n")
+				return strings.Join(lines[max(len(lines)-sz.Rows, 0):], "\n")
+			}
+		}
+	}
+	return ""
 }
 
 // shows: does a floating layer of the session show text?
