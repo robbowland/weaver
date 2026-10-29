@@ -308,6 +308,9 @@ func (s Session) cols(p mux.PaneID) int {
 	return sz.Columns
 }
 
+// SplitLeft gives no pid (0): Rex starts the program through the user's
+// login shell, which becomes it only once its startup is done, so no
+// process is the program's when the block is made.
 func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, error) {
 	anchor, err := s.block(of)
 	if err != nil {
@@ -332,8 +335,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 		return "", 0, err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(n.Argv, " "))
-	pid, _ := s.PID(mux.PaneID(pn))
-	return mux.PaneID(pn), pid, nil
+	return mux.PaneID(pn), 0, nil
 }
 
 // BreakOut opens a window with a stand-in, moves p beside it and closes

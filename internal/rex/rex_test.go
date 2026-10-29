@@ -118,9 +118,16 @@ func TestSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nv, _, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "nvim: demo", Background: true})
+	nv, pid, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "nvim: demo", Background: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// A pid is the program's or none (0): Rex starts it through the
+	// user's shell, which has not yet become it.
+	if pid != 0 {
+		if out, _ := exec.Command("/bin/ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output(); strings.TrimSpace(string(out)) != "/bin/sleep 600" {
+			t.Errorf("the split's pid %d runs %q", pid, out)
+		}
 	}
 	ps, err := s.Panes()
 	if err != nil {
