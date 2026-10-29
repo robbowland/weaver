@@ -1,6 +1,9 @@
 package rex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -184,6 +187,32 @@ func TestSession(t *testing.T) {
 	}
 	if err := s.Quit(); err != nil || s.Running() {
 		t.Errorf("quit: %v, running %v", err, s.Running())
+	}
+}
+
+// The server's pid is read from the runtime file Rex keeps under the
+// hash of its endpoint, without a call and whatever else is there: here
+// a stale file of another server once on the same endpoint, which sorts
+// first, and no server to ask.
+func TestServerPID(t *testing.T) {
+	hermetic(t)
+	run := t.TempDir()
+	t.Setenv("REX_RUNTIME_DIR", run)
+	ep := "unix:///nowhere/rex.sock"
+	t.Setenv("REX_SERVER", ep)
+	sum := sha256.Sum256([]byte(ep))
+	for dir, pid := range map[string]int{hex.EncodeToString(sum[:]): os.Getpid(), "0000stale": os.Getppid()} {
+		d := filepath.Join(run, "servers", dir)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(map[string]any{"endpoint": ep, "pid": pid})
+		if err := os.WriteFile(filepath.Join(d, "runtime.json"), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := serverPID(); got != os.Getpid() {
+		t.Errorf("serverPID %d, want %d", got, os.Getpid())
 	}
 }
 

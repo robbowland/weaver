@@ -1,6 +1,8 @@
 package rex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -105,20 +107,20 @@ func cut(s string, n int) string {
 
 // serverPID is the pid of the Rex server $REX_SERVER names: from the
 // runtime file Rex keeps for it when there is one (no call: hooks ask),
-// else asked.
+// else asked. Rex keeps it at servers/<sha256 of the endpoint, in
+// hex>/runtime.json in its runtime directory, so that one file is read,
+// however many other servers left theirs.
 func serverPID() int {
 	if ep := os.Getenv("REX_SERVER"); ep != "" {
-		home, _ := os.UserHomeDir()
-		fs, _ := filepath.Glob(filepath.Join(home, "Library/Application Support/rex/servers/*/runtime.json"))
-		for _, f := range fs {
-			var r struct {
-				Endpoint string `json:"endpoint"`
-				Pid      int    `json:"pid"`
-			}
-			if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &r) == nil && r.Endpoint == ep && r.Pid > 0 &&
-				syscall.Kill(r.Pid, 0) == nil {
-				return r.Pid
-			}
+		sum := sha256.Sum256([]byte(ep))
+		var r struct {
+			Endpoint string `json:"endpoint"`
+			Pid      int    `json:"pid"`
+		}
+		f := filepath.Join(runtimeDir(), "servers", hex.EncodeToString(sum[:]), "runtime.json")
+		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &r) == nil && r.Endpoint == ep && r.Pid > 0 &&
+			syscall.Kill(r.Pid, 0) == nil {
+			return r.Pid
 		}
 	}
 	var st struct {
@@ -128,6 +130,16 @@ func serverPID() int {
 		return st.Pid
 	}
 	return 0
+}
+
+// runtimeDir is where Rex keeps its servers' runtime files:
+// $REX_RUNTIME_DIR, else its directory in Application Support.
+func runtimeDir() string {
+	if d := os.Getenv("REX_RUNTIME_DIR"); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library/Application Support/rex")
 }
 
 func (s Session) Life() agent.Where {
