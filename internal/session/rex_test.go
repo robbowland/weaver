@@ -81,7 +81,9 @@ func TestRexLostAndGC(t *testing.T) {
 		}
 	}
 	kept := func(p mux.PaneID) bool { return files.Exists(e.PaneFile(p, "thread")) }
-	lost := func(p mux.PaneID) bool { return files.Exists(filepath.Join(e.LostDir, skey+"_conv-"+string(p)+".json")) }
+	lost := func(p mux.PaneID) bool {
+		return files.Exists(filepath.Join(e.LostDir, skey+"_conv-"+string(p)+".json"))
+	}
 	check := func(when string, p mux.PaneID, wantKept, wantLost bool) {
 		t.Helper()
 		if k, l := kept(p), lost(p); k != wantKept || l != wantLost {
@@ -89,7 +91,7 @@ func TestRexLostAndGC(t *testing.T) {
 		}
 	}
 	// rex as weaver runs it, each call logged.
-	real, err := exec.LookPath(rex.Bin())
+	bin, err := exec.LookPath(rex.Bin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +99,7 @@ func TestRexLostAndGC(t *testing.T) {
 	if err := os.MkdirAll(dir+"/bin", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + real + "' \"$@\"\n"
+	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + bin + "' \"$@\"\n"
 	if err := os.WriteFile(dir+"/bin/rex", []byte(wrap), 0o755); err != nil {
 		t.Fatal(err)
 	}

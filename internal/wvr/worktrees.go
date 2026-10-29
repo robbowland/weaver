@@ -238,7 +238,8 @@ func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 			}
 			seen[f[0]+" "+f[1]] = true
 			p, ok := tmux.ParsePane(f[1])
-			if ok && !(skip[p] && ownServer(f[0])) && (f[3] == dir || strings.HasPrefix(f[3], dir+"/")) {
+			closing := ok && skip[p] && ownServer(f[0])
+			if ok && !closing && (f[3] == dir || strings.HasPrefix(f[3], dir+"/")) {
 				us = append(us, "pane "+string(p))
 			}
 		}

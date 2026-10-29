@@ -17,7 +17,7 @@ import (
 // fetch is a snapshot of the session): a thread's width set back, a
 // window fitted, an agent adopted in the window it has to itself.
 func TestOneFetchPerOperation(t *testing.T) {
-	real, err := exec.LookPath("tmux")
+	tmuxBin, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Skip("no tmux")
 	}
@@ -29,21 +29,21 @@ func TestOneFetchPerOperation(t *testing.T) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + real + "' \"$@\"\n"
+	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + tmuxBin + "' \"$@\"\n"
 	if err := os.WriteFile(bin+"/tmux", []byte(wrap), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 	tm := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command(real, append([]string{"-S", sock, "-f", "/dev/null"}, args...)...).Output()
+		out, err := exec.Command(tmuxBin, append([]string{"-S", sock, "-f", "/dev/null"}, args...)...).Output()
 		if err != nil {
 			t.Fatalf("tmux %v: %v", args, err)
 		}
 		return strings.TrimSpace(string(out))
 	}
 	tm("new-session", "-d", "-s", "s", "-x", "200", "-y", "50", "/bin/sleep 600")
-	t.Cleanup(func() { _ = exec.Command(real, "-S", sock, "kill-server").Run() })
+	t.Cleanup(func() { _ = exec.Command(tmuxBin, "-S", sock, "kill-server").Run() })
 	pane := func(s string) mux.PaneID {
 		t.Helper()
 		p, ok := tmux.ParsePane(s)
