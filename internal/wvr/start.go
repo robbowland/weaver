@@ -95,8 +95,12 @@ func (e *Env) startRex(name string) error {
 	s, ok := rex.Named(e.RexDir(), name)
 	if !ok {
 		skey := rex.Key(name)
-		os.MkdirAll(e.StateDir, 0o755)
-		os.WriteFile(e.StateDir+"/"+skey+".layout", []byte("weaver\n"), 0o644)
+		if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(e.StateDir+"/"+skey+".layout", []byte("weaver\n"), 0o644); err != nil {
+			return err
+		}
 		os.Remove(e.StateDir + "/" + skey + ".last")
 		here, _ := os.Getwd()
 		if s, err = rex.Start(e.RexDir(), name, here, []string{e.Self, "home"}); err != nil {

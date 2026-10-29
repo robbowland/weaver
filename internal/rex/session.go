@@ -71,12 +71,17 @@ func (s Session) blockMethod(p mux.PaneID, method string, args map[string]any, o
 
 // layout is one terminal running sp, labelled label: its environment
 // through env(1), since Rex sets none of its own, with WEAVER_MUX=rex so
-// what weaver runs there acts on Rex.
+// what weaver runs there acts on Rex, and WEAVER_WVR the weaver that
+// started it. (Rex runs a command after the login shell's startup, whose
+// PATH may put another wvr first: Homebrew's ahead of install.sh's.)
 func layout(sp mux.Spawn, label string) map[string]any {
 	opts := map[string]any{}
 	if len(sp.Argv) > 0 {
-		cmd := append([]string{"/usr/bin/env", "WEAVER_MUX=rex"}, sp.Env...)
-		opts["command"] = append(cmd, sp.Argv...)
+		cmd := []string{"/usr/bin/env", "WEAVER_MUX=rex"}
+		if self, err := os.Executable(); err == nil {
+			cmd = append(cmd, "WEAVER_WVR="+self)
+		}
+		opts["command"] = append(append(cmd, sp.Env...), sp.Argv...)
 	}
 	if sp.Dir != "" {
 		opts["cwd"] = sp.Dir

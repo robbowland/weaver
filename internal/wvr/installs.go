@@ -29,18 +29,21 @@ func (e *Env) markBorn(born string) {
 }
 
 // successor is the weaver a board or view marked in born starts again in,
-// if it is not the one it runs: the wvr on $PATH (else this binary), when
-// that is another file than the one it started as, or changed since. A few
-// stats, for chrome asks on every reload. An older weaver's born (empty)
-// says only when.
+// if it is not the one it runs: $WEAVER_WVR, the weaver that started its
+// pane (on Rex, whose login shells may put another wvr first on PATH),
+// else the wvr on $PATH (else this binary), when that is another file than
+// the one it started as, or changed since. A few stats, for chrome asks on
+// every reload. An older weaver's born (empty) says only when.
 func (e *Env) successor(born string) (string, bool) {
 	b, err := os.Stat(born)
 	if err != nil {
 		return "", false
 	}
-	now, err := exec.LookPath("wvr")
-	if err != nil || !filepath.IsAbs(now) {
-		now = e.Self
+	now := os.Getenv("WEAVER_WVR")
+	if !filepath.IsAbs(now) {
+		if now, err = exec.LookPath("wvr"); err != nil || !filepath.IsAbs(now) {
+			now = e.Self
+		}
 	}
 	path, err := filepath.EvalSymlinks(now)
 	if err != nil {

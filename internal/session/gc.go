@@ -189,7 +189,7 @@ func (e *Env) GC() {
 				if err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
 					continue
 				}
-				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Where.Session && rexShows(a.s, paneOfNum(st.Pane))) {
+				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Session && rexShows(a.s, paneOfNum(st.Pane))) {
 					continue
 				}
 				e.Retire(f, pid)
