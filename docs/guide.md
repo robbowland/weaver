@@ -76,6 +76,10 @@ from what Claude Code reports to it, and the board shows the rest. Inside a
 tmux pane, weaver uses that tmux, so weaver on tmux in a Rex terminal works
 as before.
 
+Weaver does not follow Codex on Rex yet (its hooks would never reach the
+thread), so it says so rather than start, resume, adopt or restart a Codex
+thread there.
+
 ## Threads
 
 A thread is one task for one agent, in a window of its own: the agent's

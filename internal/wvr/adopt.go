@@ -105,6 +105,9 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("weaver cannot resume a %s agent, so cannot keep it as a thread", st.Agent)
 	}
+	if err := e.followable(kind); err != nil {
+		return "", err
+	}
 	if sid == "" {
 		return "", errors.New("its agent has not said which conversation it is in yet")
 	}

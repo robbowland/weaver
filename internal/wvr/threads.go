@@ -478,9 +478,26 @@ func threadItem(it items.Item) *store.ThreadItem {
 	return &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
 }
 
+// errCodexOnRex: Codex runs its hooks in a daemon its sessions share, and
+// weaver finds the pane of a hook's event among tmux's (engine.codexPane),
+// so a Codex thread on Rex would never report.
+var errCodexOnRex = errors.New("weaver does not follow Codex on Rex yet: its thread would never report (start it with Claude Code, or run weaver on tmux)")
+
+// followable is why weaver cannot keep a kind agent as a thread in this
+// session; nil when it can.
+func (e *Env) followable(kind agent.Kind) error {
+	if kind == agent.Codex && e.OnRex() {
+		return errCodexOnRex
+	}
+	return nil
+}
+
 // threadCreate starts the thread for task and the form's fields: its
 // worktree (unless here), then its window. Prints where it went.
 func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
+	if err := e.followable(fm.Agent); err != nil {
+		return err
+	}
 	var it items.Item
 	if fm.Item != nil {
 		it = fm.Item.Item
@@ -810,6 +827,9 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		kind = k
 	} else {
 		kind = agent.Claude
+	}
+	if err := e.followable(kind); err != nil {
+		return "", fmt.Errorf("%s: %w", nm, err)
 	}
 	if s, err := os.Stat(dir); err != nil || !s.IsDir() {
 		t := tildify(dir)

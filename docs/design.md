@@ -193,7 +193,11 @@ two, the one no other session is bound to), bound to it from then on. Its
 `pid` is that pane's process, and its session, key, `server`,
 `tmux_session` and bell are that pane's, not the daemon's environment's. A
 SessionEnd drops the binding, and GC old ones after a month. Neither found,
-the event is dropped: never filed under `$TMUX_PANE`'s pane.
+the event is dropped: never filed under `$TMUX_PANE`'s pane. A hook run in a
+Rex session's environment is placed in no pane (only tmux's panes are
+looked among, and its files and key would be a tmux pane's while weaver
+acted on the Rex session), so weaver refuses a Codex thread on Rex: `wvr
+new`, resuming, adopting and restarting one say so.
 
 | Field | For | Meaning |
 | --- | --- | --- |

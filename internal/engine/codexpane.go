@@ -47,8 +47,14 @@ type codexPlace struct {
 
 // codexPane is where Codex session sid's hook goes, for a hook whose
 // environment names pane env, the session working in cwd; ok false when it
-// cannot tell.
+// cannot tell. Its panes are tmux's: a hook run in a Rex session's
+// environment goes to none (weaver does not follow Codex on Rex), never
+// to a tmux pane that shares its number or its directory, whose files and
+// key it would write while acting on the Rex session.
 func codexPane(e *session.Env, env mux.PaneID, sid, cwd string) (codexPlace, bool) {
+	if e.RexID != "" {
+		return codexPlace{}, false
+	}
 	panes := serverPanes(e)
 	if p, ok := panes[env]; ok && ancestor(p.pid) {
 		return codexPlace{p, true}, true

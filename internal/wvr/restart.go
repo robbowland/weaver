@@ -129,6 +129,9 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	if !ok {
 		kind = agent.Claude
 	}
+	if err := e.followable(kind); err != nil {
+		return label, err
+	}
 	tok := token()
 	d := e.opening(tok)
 	if err := os.MkdirAll(d, 0o755); err != nil {
