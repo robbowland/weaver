@@ -66,7 +66,7 @@ func hookBg(e *session.Env) {
 		}
 	}
 	if h.NV != "" && h.Root != h.Old.Root && sameRoot(h) {
-		e.RenamePane(h.NV, "nvim: "+filepath.Base(h.Root))
+		e.Mux().Title(h.NV, "nvim: "+filepath.Base(h.Root))
 	}
 	if h.MarkDir != h.Old.MarkedRoot || h.MarkDir != "" && h.Marker != h.Old.Marker {
 		if h.Old.MarkedRoot != "" && h.Old.MarkedRoot != h.MarkDir {
@@ -269,7 +269,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 	}
 	nvimEditEvent(e, h, "edit", r, newest, h.Tool)
 	if r != h.Old.Root {
-		e.RenamePane(h.NV, "nvim: "+filepath.Base(r))
+		e.Mux().Title(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true
 }

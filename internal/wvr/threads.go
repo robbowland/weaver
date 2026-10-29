@@ -131,25 +131,18 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // returns; the agent at its width, with the focus (not gone to when
 // nofocus), nvim with nvimEnv too. Its window id.
 func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
-	args := []string{"new-window"}
-	if nofocus {
-		args = append(args, "-d")
-	}
-	args = append(args, "-P", "-F", "#{window_id} #{pane_id} #{window_width}", "-t", "="+e.Session+":", "-n", tmux.Text(name), "-c", tmux.Text(dir),
-		"-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "_agent", tok, string(kind))
-	out, err := e.Tmux(args...)
-	f := strings.Fields(string(out))
-	if err != nil || len(f) < 3 {
+	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
+		Spawn: mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir},
+		Label: name, At: -1, Background: nofocus,
+	})
+	if err != nil {
 		return "", false
 	}
-	tab, _ := tmux.ParseWindow(f[0])
-	agentPane, _ := tmux.ParsePane(f[1])
-	total, ok := atoi(f[2])
-	if !ok {
+	if total <= 0 {
 		total = 200
 	}
 	if !e.splitNvim(agentPane, dir, total, nvimEnv...) {
-		e.Tmux("kill-window", "-t", tab.Target())
+		e.Mux().CloseWindow(tab)
 		return "", false
 	}
 	return tab, true
@@ -159,20 +152,14 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 // of agentPane, in dir, nvimEnv in its environment, the agent keeping its
 // width of the total columns; bound to the agent before this returns.
 func (e *Env) splitNvim(agentPane mux.PaneID, dir string, total int, nvimEnv ...string) bool {
-	nvCols := max(total-agentCols(total)-1, 1)
-	sw := []string{"split-window", "-d", "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", agentPane.Target(),
-		"-l", strconv.Itoa(nvCols), "-c", tmux.Text(dir), "-e", "WEAVER_TMUX_SESSION=" + e.Session}
-	for _, v := range nvimEnv {
-		sw = append(sw, "-e", v)
-	}
-	out, err := e.Tmux(append(sw, e.Self, "nvim", "--fresh", string(agentPane))...)
-	f := strings.Fields(string(out))
-	if err != nil || len(f) < 2 {
+	nv, pid, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
+		Spawn: mux.Spawn{Argv: []string{e.Self, "nvim", "--fresh", string(agentPane)}, Dir: dir, Env: nvimEnv},
+		Cols:  max(total-agentCols(total)-1, 1), Title: "nvim: " + filepath.Base(dir), Background: true,
+	})
+	if err != nil {
 		return false
 	}
-	nv, _ := tmux.ParsePane(f[0])
-	e.bindNvim(agentPane, nv, f[1])
-	e.Tmux("select-pane", "-t", nv.Target(), "-T", tmux.Text("nvim: "+filepath.Base(dir)))
+	e.bindNvim(agentPane, nv, strconv.Itoa(pid))
 	return true
 }
 
@@ -191,7 +178,7 @@ func (e *Env) bindNvim(agent, nv mux.PaneID, pid string) {
 // (home is 0), when free.
 func (e *Env) threadPlace(tab mux.WindowID, n int) {
 	if e.WeaverSession() {
-		e.Tmux("move-window", "-d", "-s", tab.Target(), "-t", "="+e.Session+":"+strconv.Itoa(n))
+		e.Mux().Place(tab, n)
 	}
 }
 
@@ -615,17 +602,13 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	return nil
 }
 
-// keepExited has tmux keep agent pane p when its agent exits, as its
-// thread lasts until you close it: what the agent said last (a broken
-// install, a bad flag, a goodbye) stays to be read, and the board shows it
-// exited, R to start it again, x to close the thread, rather than its pane
-// going and leaving nvim alone in the window.
+// keepExited keeps agent pane p when its agent exits, as its thread lasts
+// until you close it: what the agent said last (a broken install, a bad
+// flag, a goodbye) stays to be read, and the board shows it exited, R to
+// start it again, x to close the thread, rather than its pane going and
+// leaving nvim alone in the window.
 func (e *Env) keepExited(p mux.PaneID, kind agent.Kind) {
-	t := p.Target()
-	e.Tmux("set-option", "-p", "-t", t, "remain-on-exit", "on", ";",
-		"set-option", "-p", "-t", t, "remain-on-exit-format", "weaver: "+string(kind)+
-			" exited#{?pane_dead_signal, on signal #{pane_dead_signal},#{?#{!=:#{pane_dead_status},0}, with status #{pane_dead_status},}}"+
-			" · on the board, R starts it again, x closes the thread")
+	e.Mux().KeepExited(p, "weaver: "+string(kind)+" exited", "on the board, R starts it again, x closes the thread")
 }
 
 // AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
@@ -1376,11 +1359,9 @@ func (e *Env) CloseTail(a []string) error {
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
 	// Closing the thread you are looking at: home, where the rest are, not
 	// whichever window tmux would show next.
-	if out, err := e.Tmux("display-message", "-p", "-t", agent.Target(), "#{window_id}"); err == nil {
-		if w, ok := tmux.ParseWindow(string(out)); ok {
-			if _, cur, home := e.where(); cur.id == w && home != w {
-				e.selectHome(home)
-			}
+	if ap, ok := e.findPane(agent); ok {
+		if _, cur, home := e.where(); cur.id == ap.Tab && home != ap.Tab {
+			e.selectHome(home)
 		}
 	}
 	// Their shells, so that what they left running is launchd's (below).
@@ -1390,9 +1371,9 @@ func (e *Env) CloseTail(a []string) error {
 			shells = append(shells, n)
 		}
 	}
-	e.Tmux("kill-pane", "-t", agent.Target())
+	e.Mux().Close(agent)
 	if nv != "" {
-		e.Tmux("kill-pane", "-t", nv.Target())
+		e.Mux().Close(nv)
 	}
 	if digits(tok) {
 		os.RemoveAll(e.opening(tok))

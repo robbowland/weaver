@@ -24,9 +24,7 @@ import (
 // and tmux's hooks as you look (seen) or resize (fit).
 
 // focus moves your client to pane p (its window first).
-func (e *Env) focus(p mux.PaneID) {
-	e.Tmux("select-window", "-t", p.Target(), ";", "select-pane", "-t", p.Target())
-}
+func (e *Env) focus(p mux.PaneID) { e.Mux().Focus(p) }
 
 // Goto is `wvr _goto PANE TAB`: jump to an agent from the home board
 // (which stays) and count it as seen; with no PANE, to the tab.
@@ -34,7 +32,7 @@ func (e *Env) Goto(pane, tab string) {
 	p, ok := tmux.ParsePane(pane)
 	if !ok {
 		if w, ok := tmux.ParseWindow(tab); ok {
-			e.Tmux("select-window", "-t", w.Target())
+			e.Mux().Show(w)
 		}
 		return
 	}
@@ -47,6 +45,51 @@ type tab struct {
 	id         mux.WindowID
 	name, view string
 	active     bool
+}
+
+// findPane is pane p as the session's panes list it: its window, and where.
+func (e *Env) findPane(p mux.PaneID) (mux.Pane, bool) {
+	ps, _ := e.Mux().Panes()
+	for _, q := range ps {
+		if q.ID == p {
+			return q, true
+		}
+	}
+	return mux.Pane{}, false
+}
+
+// windowPanes are the panes of window w.
+func (e *Env) windowPanes(w mux.WindowID) []mux.PaneID {
+	ps, _ := e.Mux().Panes()
+	var in []mux.PaneID
+	for _, q := range ps {
+		if q.Tab == w {
+			in = append(in, q.ID)
+		}
+	}
+	return in
+}
+
+// viewOfWindow is the view window w shows; empty for none.
+func (e *Env) viewOfWindow(w mux.WindowID) string {
+	ws, _ := e.Mux().Windows()
+	for _, x := range ws {
+		if x.ID == w {
+			return x.View
+		}
+	}
+	return ""
+}
+
+// windowWidth is window w's columns.
+func (e *Env) windowWidth(w mux.WindowID) (int, bool) {
+	ws, _ := e.Mux().Windows()
+	for _, x := range ws {
+		if x.ID == w && x.Width > 0 {
+			return x.Width, true
+		}
+	}
+	return 0, false
 }
 
 func (e *Env) tabs() []tab {
@@ -191,15 +234,23 @@ func (e *Env) GoView(step int) {
 	e.statusClick(order[((at+step)%len(order)+len(order))%len(order)])
 }
 
+// showHome shows home, made again first if it was closed.
+func (e *Env) showHome() {
+	_, _, home := e.where()
+	e.selectHome(home)
+}
+
 // selectHome shows home (window home), made again first if it was closed.
 func (e *Env) selectHome(home mux.WindowID) {
 	if home == "" {
-		if _, err := e.Tmux("new-window", "-t", "="+e.Session+":0", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home"); err != nil {
-			e.Tmux("new-window", "-t", "="+e.Session+":", "-n", "home", "-e", "WEAVER_TMUX_SESSION="+e.Session, e.Self, "home")
+		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: "home", At: 0}
+		if _, _, _, err := e.Mux().OpenWindow(w); err != nil {
+			w.At = -1
+			e.Mux().OpenWindow(w)
 		}
 		return
 	}
-	e.Tmux("select-window", "-t", home.Target())
+	e.Mux().Show(home)
 }
 
 // boardOn puts the boards' cursors on the thread whose window is w (its
@@ -256,13 +307,13 @@ func (e *Env) goBack(ts []tab, cur tab, home mux.WindowID) {
 		last, _ := tmux.ParseWindow(l)
 		for _, t := range ts {
 			if t.id == last && t.view == "" && t.id != home {
-				e.Tmux("select-window", "-t", last.Target())
+				e.Mux().Show(last)
 				return
 			}
 		}
 	}
 	if home != "" && cur.id != home {
-		e.Tmux("select-window", "-t", home.Target())
+		e.Mux().Show(home)
 	}
 }
 
@@ -444,16 +495,13 @@ func (e *Env) Seen(window string) {
 		e.MarkSeen(a)
 	}
 	left := false
-	if ps, err := e.Tmux("list-panes", "-t", win.Target(), "-F", "#{pane_id}"); err == nil {
-		for _, id := range strings.Fields(string(ps)) {
-			p, _ := tmux.ParsePane(id)
-			if l, _ := files.FirstLine(e.StateFile(p)); doneUnseen(l) {
-				left = true
-			}
+	for _, q := range e.windowPanes(win) {
+		if l, _ := files.FirstLine(e.StateFile(q)); doneUnseen(l) {
+			left = true
 		}
 	}
 	if !left {
-		e.Tmux("set-option", "-w", "-u", "-t", win.Target(), "@weaver-unseen")
+		e.Mux().MarkUnseen(p, false)
 	}
 	e.PushStatus()
 }
@@ -493,24 +541,18 @@ func (e *Env) Fit(window string) {
 	if !ok {
 		return
 	}
-	out, err := e.Tmux("list-panes", "-t", win.Target(), "-F", "#{pane_id}")
-	if err != nil {
-		return
-	}
-	ps := strings.Fields(string(out))
-	for _, id := range ps {
-		p, _ := tmux.ParsePane(id)
+	ps := e.windowPanes(win)
+	for _, p := range ps {
 		if !files.Exists(e.ThreadFile(p)) {
 			continue
 		}
 		if e.NvimPane(p) == "" || len(ps) != 2 {
 			continue
 		}
-		t, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{window_width}")
-		total, ok := atoi(strings.TrimSpace(string(t)))
-		if err != nil || !ok {
+		total, ok := e.windowWidth(win)
+		if !ok {
 			continue
 		}
-		e.Tmux("resize-pane", "-t", p.Target(), "-x", strconv.Itoa(agentCols(total)))
+		e.Mux().SetWidth(p, agentCols(total))
 	}
 }

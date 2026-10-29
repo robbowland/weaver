@@ -12,7 +12,6 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Restarting: a thread's agent started again where it is, resuming its
@@ -141,8 +140,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	if _, err := e.Tmux("respawn-pane", "-k", "-t", p.Target(), "-c", tmux.Text(dir), "-e", "WEAVER_TMUX_SESSION="+e.Session,
-		e.Self, "_agent", tok, string(kind)); err != nil {
+	if err := e.Mux().Respawn(p, mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir}); err != nil {
 		os.RemoveAll(d)
 		return label, errors.New("tmux could not restart it")
 	}

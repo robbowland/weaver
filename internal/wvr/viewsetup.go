@@ -84,10 +84,10 @@ func (e *Env) ViewSetup(name string) error {
 		case k == 'h' || k == 'H':
 			e.setHidden(name, true)
 			e.SetStrip()
-			e.Tmux("select-window", "-t", "="+e.Session+":0")
+			e.showHome()
 			return nil
 		case k == 0x1b || k == 'q':
-			e.Tmux("select-window", "-t", "="+e.Session+":0")
+			e.showHome()
 		}
 	}
 }

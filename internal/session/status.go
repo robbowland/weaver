@@ -18,7 +18,6 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // CountsFmt is the status line's counts in tmux's colours: needs you, done,
@@ -262,7 +261,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if names[string(r.Tab)+"\t"+label] {
 			continue
 		}
-		e.Tmux("rename-window", "-t", r.Tab.Target(), tmux.Text(label))
+		e.Mux().Label(r.Tab, label)
 	}
 }
 

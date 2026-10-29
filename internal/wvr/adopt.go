@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -142,43 +141,37 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 // at its number, named label, with an nvim on its left in dir when it has
 // none. You go with it when it is the pane you are in. Its window.
 func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
-	out, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{window_id}\t#{window_index}\t#{@weaver-view}")
-	f := strings.Split(strings.TrimRight(string(out), "\n"), "\t")
-	if err != nil || len(f) < 3 {
+	ap, ok := e.findPane(p)
+	if !ok {
 		return ""
 	}
-	tab, _ := tmux.ParseWindow(f[0])
+	tab := ap.Tab
 	nv := e.NvimPane(p)
-	own := f[1] != "0" && f[2] == ""
+	own := ap.TabIndex != 0 && e.viewOfWindow(tab) == ""
 	if own {
-		ps, _ := e.Tmux("list-panes", "-t", tab.Target(), "-F", "#{pane_id}")
-		for _, l := range strings.Fields(string(ps)) {
-			if q, _ := tmux.ParsePane(l); q != p && q != nv {
+		for _, q := range e.windowPanes(tab) {
+			if q != p && q != nv {
 				own = false
 			}
 		}
 	}
 	if own {
-		e.Tmux("rename-window", "-t", tab.Target(), tmux.Text(label))
+		e.Mux().Label(tab, label)
 		e.threadPlace(tab, n)
 	} else {
-		args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", p.Target(), "-n", tmux.Text(label)}
-		if p != e.MyPane {
-			args = append(args, "-d")
-		}
-		out, err := e.Tmux(append(args, "-t", "="+e.Session+":"+strconv.Itoa(n))...)
+		focus := p == e.MyPane
+		w, err := e.Mux().BreakOut(p, label, n, focus)
 		if err != nil {
-			// Its number is another window's: where tmux puts it.
-			out, err = e.Tmux(args...)
+			// Its number is another window's: where the multiplexer puts it.
+			w, err = e.Mux().BreakOut(p, label, -1, focus)
 		}
 		if err != nil {
 			return ""
 		}
-		tab, _ = tmux.ParseWindow(string(out))
+		tab = w
 	}
 	if nv == "" {
-		w, _ := e.Tmux("display-message", "-p", "-t", tab.Target(), "#{window_width}")
-		total, ok := atoi(strings.TrimSpace(string(w)))
+		total, ok := e.windowWidth(tab)
 		if !ok {
 			total = 200
 		}

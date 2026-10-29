@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Views: the weaver session's windows beside home that show work from
@@ -206,7 +204,7 @@ func (e *Env) startView(name string) (mux.WindowID, error) {
 func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 	if id := e.viewWindows()[name]; id != "" {
 		if show {
-			e.Tmux("select-window", "-t", id.Target())
+			e.Mux().Show(id)
 		}
 		return id, nil
 	}
@@ -224,20 +222,13 @@ func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 	if name == "linear" {
 		idx++
 	}
-	args := []string{"new-window", "-P", "-F", "#{window_id}"}
-	if !show {
-		args = append(args, "-d")
-	}
-	args = append(args, "-t", "="+e.Session+":"+strconv.Itoa(idx), "-n", tmux.Text(v.label), "-c", tmux.Text(v.dir), "-e", "WEAVER_TMUX_SESSION="+e.Session)
-	for _, x := range v.env {
-		args = append(args, "-e", x)
-	}
-	out, err := e.Tmux(append(args, v.argv...)...)
+	id, _, _, err := e.Mux().OpenWindow(mux.NewWindow{
+		Spawn: mux.Spawn{Argv: v.argv, Dir: v.dir, Env: v.env},
+		Label: v.label, View: name, At: idx, Background: !show,
+	})
 	if err != nil {
 		return "", fmt.Errorf("tmux could not open the %s view", v.label)
 	}
-	id, _ := tmux.ParseWindow(string(out))
-	e.Tmux("set-option", "-w", "-t", id.Target(), "@weaver-view", name)
 	// A session started before its views (or an older weaver) has no strip.
 	e.SetStrip()
 	return id, nil

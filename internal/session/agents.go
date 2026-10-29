@@ -1,19 +1,15 @@
 package session
 
 import (
-	"context"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Peeked is a state file's state, pid and start, read without parsing it.
@@ -68,15 +64,4 @@ func (e *Env) NvimPane(pane mux.PaneID) mux.PaneID {
 		}
 	}
 	return mux.PaneID(nv)
-}
-
-// RenamePane titles a pane (the nvim beside an agent), bounded.
-func (e *Env) RenamePane(p mux.PaneID, title string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	args := []string{"select-pane", "-t", p.Target(), "-T", tmux.Text(title)}
-	if !e.InTmux {
-		args = append(append([]string{}, e.TSock...), args...)
-	}
-	bestEffort(exec.CommandContext(ctx, "tmux", args...).Run()) // a title, nothing more
 }

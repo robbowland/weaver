@@ -28,29 +28,23 @@ import (
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
 func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (mux.PaneID, error) {
-	out, err := e.Tmux(append([]string{"split-window", "-h", "-b", "-l", "80%", "-P", "-F", "#{pane_id}", "-t", target.Target(), "-c", tmux.Text(cwd)}, argv...)...)
-	if err != nil {
-		return "", fmt.Errorf("tmux split-window failed")
-	}
-	p, _ := tmux.ParsePane(string(out))
-	e.RenamePane(p, name)
-	return p, nil
+	p, _, err := e.Mux().SplitLeft(target, mux.NewSplit{Spawn: mux.Spawn{Argv: argv, Dir: cwd}, Title: name})
+	return p, err
 }
 
 // threadWidth: back to a thread's split once its nvim reopens beside the
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
 func (e *Env) threadWidth(agent mux.PaneID) {
-	out, err := e.Tmux("list-panes", "-t", agent.Target())
-	if err != nil || strings.Count(strings.TrimRight(string(out), "\n"), "\n") != 1 {
+	ap, ok := e.findPane(agent)
+	if !ok || len(e.windowPanes(ap.Tab)) != 2 {
 		return
 	}
-	t, err := e.Tmux("display-message", "-p", "-t", agent.Target(), "#{window_width}")
-	total, ok := atoi(strings.TrimSpace(string(t)))
-	if err != nil || !ok {
+	total, ok := e.windowWidth(ap.Tab)
+	if !ok {
 		return
 	}
-	e.Tmux("resize-pane", "-t", agent.Target(), "-x", strconv.Itoa(agentCols(total)))
+	e.Mux().SetWidth(agent, agentCols(total))
 }
 
 // editLock is one `wvr edit` per agent at a time, so a second Alt v finds
@@ -218,7 +212,7 @@ func (e *Env) Edit(args []string) error {
 		} else if newPane != "" {
 			p = newPane
 		}
-		e.Tmux("resize-pane", "-Z", "-t", p.Target())
+		e.Mux().Zoom(p)
 	}
 	return nil
 }
