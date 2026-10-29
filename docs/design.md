@@ -499,7 +499,11 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   session runs on is not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps
-  there, never forgets. Files with no pid to test are an earlier server's
+  there, never forgets. When the check cannot tell (Rex not answering),
+  neither the hook nor a resumed thread's agent (`AgentPane`, retiring
+  another life's files under its pane) keeps anything, and their writes
+  replace that pane's old files all the same; on Rex that is practically
+  never another thread's, since its pane numbers are never given twice. Files with no pid to test are an earlier server's
   when the running session of their name was created after them: `GC`
   retires a state without a pid created before its last event `ts`, and
   keeps as lost a thread record whose agent never reported (no state)
@@ -932,7 +936,9 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `rex/lock`, never twice; `Respawn` points the pane's number at the block
   that takes its place, holding `rex/lock` from before that block is made
   until its number names it, so the program it starts, asking its number
-  however soon, gets the pane's. Beside them: `cmd/<num>` the argv weaver started a
+  however soon, gets the pane's; one that fails once the block is made
+  closes it and leaves the old pane as it was, its number and all. Beside
+  them: `cmd/<num>` the argv weaver started a
   block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
   window was given (home 0, a thread its number, a view 900 and on: Rex
   orders windows, it does not index them, so `Place` moves a window before
@@ -945,9 +951,15 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `$REX_SERVER`, `servers/<SHA-256 of the endpoint, hex>/runtime.json` in
   `$REX_RUNTIME_DIR`, else `~/Library/Application Support/rex` (its endpoint
   and pid checked), so hooks make no call; without one it asks the server
-  (`server.status`). `rex.Lost` is a session no longer on the server
-  running; while Rex does not answer, weaver takes nothing for lost (see
+  (`server.status`). `rex.Lost` says whether a life has gone and whether it
+  could tell: gone when its server's process has ended (no call), when
+  another server runs, or when the session is no longer on it; not known
+  when a call that takes fails, when weaver takes nothing for lost (see
   [Lost threads](#lost-threads)).
+- **Codex:** not followed on Rex. Its hooks' events are placed among tmux's
+  panes whatever started its daemon, and act on tmux; a Codex running in a
+  Rex block keeps its directory from naming a tmux pane (see [Events from
+  other agents](#events-from-other-agents)).
 - **Rex:** each look at the session is one `rex do` (its view, and each
   terminal's size, with `Panes` its directory and processes too); every
   other method one `rex api call`. A pane's environment goes through
@@ -962,10 +974,15 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   and closes the stand-in. `SplitLeft` gives pid 0, not known yet (Rex runs
   a command through the login shell, whose pid it would be): `wvr nvim`
   records its own pid as it starts. Rex has no message line: `Say` and
-  `SayToSession` show their text in a small floating layer at the foot of
-  the active window that takes no focus (`focus: false`) and closes on its
-  own after its time (what the session shows is its active window, so both
-  are the same). `Looking` claims no pane and says it cannot tell (nothing
+  `SayToSession` show their text as one line in a small floating layer at
+  the foot of the active window that takes no focus (`focus: false`) and
+  closes on its own after its time (what the session shows is its active
+  window, so both are the same). It is sized by the text's columns (wide
+  characters two), and text wider than the window is cut keeping its start,
+  ending in `…`. A new message replaces the one before: its block is
+  labelled `weaver: message`, and each `Say` closes those it finds before
+  opening its own, under a lock of its own (`$STATE_DIR/rex/say`), so two
+  at once never both show. `Looking` claims no pane and says it cannot tell (nothing
   in Rex's API says which session an app shows, and the app stays attached
   to every session it has shown), so on Rex an agent is marked seen only by
   weaver's own moves to it (`_goto`, alt+1 and the like). Rex has no
