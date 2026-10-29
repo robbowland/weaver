@@ -72,7 +72,8 @@ Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `alt+j`/`alt+k` and `alt+h`/`alt+l` as weaver's tmux does.
 
 Rex has no status line or message line: Rex shows each agent's state itself,
-from what Claude Code reports to it, and the board shows the rest. Inside a
+from what Claude Code reports to it, the board shows the rest, and weaver's
+messages show for a moment at the foot of the window. Inside a
 tmux pane, weaver uses that tmux, so weaver on tmux in a Rex terminal works
 as before.
 

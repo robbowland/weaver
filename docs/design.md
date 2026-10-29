@@ -915,7 +915,9 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   so `rex` numbers them: `$STATE_DIR/rex/n/<num>` is the block or window a
   number names, `u/<id>` (`:` as `_`) the number of an id, given under
   `rex/lock`, never twice; `Respawn` points the pane's number at the block
-  that takes its place. Beside them: `cmd/<num>` the argv weaver started a
+  that takes its place, holding `rex/lock` from before that block is made
+  until its number names it, so the program it starts, asking its number
+  however soon, gets the pane's. Beside them: `cmd/<num>` the argv weaver started a
   block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
   window was given (home 0, a thread its number, a view 900 and on: Rex
   orders windows, it does not index them, so `Place` moves a window before
@@ -923,9 +925,14 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `sessions/<id>` the name weaver gave a session it made, and when.
 - **Keys:** files are keyed `tmux-<name>` or `rex-<name>`; a Rex session
   weaver did not make is named by its id.
-- **Where:** on Rex, `agent.Where` is the Rex server's pid (from Rex's
-  runtime file, `serverPID`, so hooks make no call) and the session's id;
-  `rex.Lost` is a session no longer on the server running.
+- **Where:** on Rex, `agent.Where` is the Rex server's pid and the
+  session's id. `serverPID` reads the pid from Rex's runtime file for
+  `$REX_SERVER`, `servers/<SHA-256 of the endpoint, hex>/runtime.json` in
+  `$REX_RUNTIME_DIR`, else `~/Library/Application Support/rex` (its endpoint
+  and pid checked), so hooks make no call; without one it asks the server
+  (`server.status`). `rex.Lost` is a session no longer on the server
+  running; while Rex does not answer, weaver takes nothing for lost (see
+  [Lost threads](#lost-threads)).
 - **Rex:** each look at the session is one `rex do` (its view, and each
   terminal's size, with `Panes` its directory and processes too); every
   other method one `rex api call`. A pane's environment goes through
@@ -934,9 +941,20 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   command after the login shell's startup). `Spawn.Keep` makes a pane stay
   when its program exits (Rex is told as it is made; tmux by
   `KeepExited`). A popup is a floating layer, its command `rex wait` on
-  it. `BreakOut` opens a window with a stand-in, moves the pane beside it
-  and closes the stand-in. Rex has no message line, status line or window
-  marks: `Say`, `SayToSession`, `Publish`, `Strip` and `MarkUnseen` do
+  it, made only when an app is attached to the session: otherwise `Popup`
+  says false, makes nothing, and gives a command whose `Start` fails with
+  why. `BreakOut` opens a window with a stand-in, moves the pane beside it
+  and closes the stand-in. `SplitLeft` gives pid 0, not known yet (Rex runs
+  a command through the login shell, whose pid it would be): `wvr nvim`
+  records its own pid as it starts. Rex has no message line: `Say` and
+  `SayToSession` show their text in a small floating layer at the foot of
+  the active window that takes no focus (`focus: false`) and closes on its
+  own after its time (what the session shows is its active window, so both
+  are the same). `Looking` claims no pane and says it cannot tell (nothing
+  in Rex's API says which session an app shows, and the app stays attached
+  to every session it has shown), so on Rex an agent is marked seen only by
+  weaver's own moves to it (`_goto`, alt+1 and the like). Rex has no
+  status line or window marks: `Publish`, `Strip` and `MarkUnseen` do
   nothing there.
 - **Start:** `wvr` with `$WEAVER_MUX=rex` makes the Rex session (home its
   first window, `want` 0) unless one weaver made of that name runs, asks
