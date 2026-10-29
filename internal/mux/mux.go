@@ -100,7 +100,9 @@ type Mux interface {
 	Panes() ([]Pane, error)
 	// Windows are the session's windows.
 	Windows() ([]Window, error)
-	// Looking are the panes the multiplexer's clients show.
+	// Looking are the panes the multiplexer's clients show. An error when
+	// it cannot tell (Rex does not say what its app shows): no pane is
+	// known to be looked at, and none is known not to be.
 	Looking() ([]PaneID, error)
 	// Active is the session's active pane.
 	Active() (PaneID, bool)
@@ -112,7 +114,8 @@ type Mux interface {
 	// OpenWindow opens a window: its id, its pane and its width.
 	OpenWindow(w NewWindow) (WindowID, PaneID, int, error)
 	// SplitLeft opens a pane on the left of pane of: the new pane and the
-	// pid of its process.
+	// pid of its process, 0 when that is not known yet (Rex starts it
+	// through the user's shell).
 	SplitLeft(of PaneID, s NewSplit) (PaneID, int, error)
 	// BreakOut moves pane p to a window of its own, named label, at index at
 	// when at >= 0 (an error when that is taken); focus goes with it.
