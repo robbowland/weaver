@@ -407,7 +407,7 @@ func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 			return "", errors.New("rex: no pane made")
 		}
 		return out.Blocks[0], nil
-	}); err != nil {
+	}, func(id string) { _ = s.callS("block.close", map[string]any{"block_id": id}, nil) }); err != nil {
 		return err
 	}
 	_ = s.ids().note("cmd", string(p), strings.Join(sp.Argv, " "))

@@ -270,6 +270,52 @@ func TestRespawnNumber(t *testing.T) {
 	}
 }
 
+// A Respawn that fails once the new block is made leaves the pane as it
+// was: the new block closed, the pane's number still the old block's.
+// Here the registry cannot keep the new block's number.
+func TestRespawnFails(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	s, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	w, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "01 demo", At: 1, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, _ := s.block(p)
+	u := filepath.Join(dir, "u")
+	if err := os.Chmod(u, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(u, 0o755) })
+	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: true}); err == nil {
+		t.Fatal("Respawn kept no number, yet did not fail")
+	}
+	if err := os.Chmod(u, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if now, _ := s.block(p); now != old {
+		t.Errorf("pane %q names %q, was %q", p, now, old)
+	}
+	ps, err := s.Panes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in []mux.PaneID
+	for _, x := range ps {
+		if x.Tab == w {
+			in = append(in, x.ID)
+		}
+	}
+	if len(in) != 1 {
+		t.Errorf("the window has panes %q, want only %q", in, p)
+	}
+}
+
 // TestRespawnedProgram is the program TestRespawnNumber starts: it writes
 // the pane it finds itself in, as weaver does (FromEnv).
 func TestRespawnedProgram(t *testing.T) {

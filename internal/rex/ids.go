@@ -85,8 +85,9 @@ func (r ids) id(n string) (string, bool) {
 // block started in the place of n's. The lock is held from before start
 // till n names the block, so its program, asking its number however soon
 // (num, which waits for the lock to give one), gets n, never one of its
-// own.
-func (r ids) replace(n string, start func() (string, error)) error {
+// own. When n cannot be kept for the block, drop closes it, and n names
+// the old block still: a failed replace leaves one block, the old.
+func (r ids) replace(n string, start func() (string, error), drop func(id string)) error {
 	unlock, err := r.lock()
 	if err != nil {
 		return err
@@ -96,13 +97,20 @@ func (r ids) replace(n string, start func() (string, error)) error {
 	if err != nil {
 		return err
 	}
-	if old, ok := r.id(n); ok && old != id {
-		os.Remove(r.path("u", fileName(old)))
-	}
-	if err := r.write("n", n, id); err != nil {
+	old, had := r.id(n)
+	if err := r.write("u", fileName(id), n); err != nil {
+		drop(id)
 		return err
 	}
-	return r.write("u", fileName(id), n)
+	if err := r.write("n", n, id); err != nil {
+		os.Remove(r.path("u", fileName(id)))
+		drop(id)
+		return err
+	}
+	if had && old != id {
+		os.Remove(r.path("u", fileName(old)))
+	}
+	return nil
 }
 
 // note keeps what weaver knows of number n under kind (cmd, want, view);
