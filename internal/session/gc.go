@@ -163,9 +163,14 @@ func (e *Env) gcAgents() {
 		_, ok := PaneIn(a.panes, p)
 		return a.listErr != nil || ok
 	}
-	running := func(skey string) bool {
+	// Rex not answering of skey's session: held off, but for a file of ts
+	// from before the machine started, which no session outlives.
+	boot := BootTime()
+	rexHeld := func(a *rexAnswer, ts int64) bool { return !a.answered && !(boot > 0 && ts < boot) }
+	// Does skey's session run, for a file of ts?
+	running := func(skey string, ts int64) bool {
 		if a, ok := onRex(skey); ok {
-			return !a.answered || a.running
+			return a.running || rexHeld(a, ts)
 		}
 		ask()
 		// Nobody answered: keep everything.
@@ -203,7 +208,7 @@ func (e *Env) gcAgents() {
 				if err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
 					continue
 				}
-				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Session && rexShows(a, paneOfNum(st.Pane))) {
+				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (rexHeld(a, st.TS) || a.running && a.s.ID == st.Session && rexShows(a, paneOfNum(st.Pane))) {
 					continue
 				}
 				e.Retire(f, pid)
@@ -215,7 +220,7 @@ func (e *Env) gcAgents() {
 				e.Retire(f, "")
 				continue
 			}
-			if !running(skey) && now-ts > 3600 {
+			if !running(skey, ts) && now-ts > 3600 {
 				e.Retire(f, "")
 				continue
 			}
@@ -250,7 +255,7 @@ func (e *Env) gcAgents() {
 		}
 		skey := KeyOfFile(f)
 		fi, err := os.Stat(f)
-		if err == nil && (!running(skey) || madeAfter(skey, fi.ModTime().Unix())) {
+		if err == nil && (!running(skey, fi.ModTime().Unix()) || madeAfter(skey, fi.ModTime().Unix())) {
 			e.LoseThread(f)
 		}
 	}

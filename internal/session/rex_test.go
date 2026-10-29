@@ -154,7 +154,8 @@ func TestRexLostAndGC(t *testing.T) {
 
 	// Rex not answering. A life whose server has stopped is gone, asked or
 	// not; one whose server runs on cannot be told, and nothing of it is
-	// lost or retired.
+	// lost or retired, but what is from before the machine started, which
+	// no session outlives.
 	stop()
 	if err := os.RemoveAll(e.LostDir); err != nil {
 		t.Fatal(err)
@@ -171,9 +172,16 @@ func TestRexLostAndGC(t *testing.T) {
 	}
 	thread("9002", "-", now)
 	thread("9003", "", now-7200)
+	before := BootTime() - 7200
+	thread("9101", dead, before)
+	thread("9102", "", before)
+	thread("9103", "-", before)
 	e.gcAgents()
 	e.Retire(e.StateFile(shown[0]), dead)
 	for _, p := range append(shown, "9002", "9003") {
 		check("no answer", p, true, false)
+	}
+	for _, p := range []mux.PaneID{"9101", "9102", "9103"} {
+		check("no answer, from before the machine started", p, false, true)
 	}
 }
