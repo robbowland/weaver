@@ -377,13 +377,40 @@ func TestKeysPwd(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	script := strings.ReplaceAll(string(src), "@WVR@", "/usr/bin/true") + "\nreturn pwd({ block_id = rex.args.block })\n"
+	script := strings.NewReplacer("@WVR@", "/usr/bin/true", "@SESSIONS@", t.TempDir()).Replace(string(src)) +
+		"\nreturn pwd({ block_id = rex.args.block })\n"
 	var got string
 	if err := do(s.ID, script, map[string]any{"block": b}, &got); err != nil {
 		t.Fatal(err)
 	}
 	if got != here {
 		t.Errorf("pwd %q, want %q", got, here)
+	}
+}
+
+// weaver's keys are weaver's only in the Rex sessions it made (its record
+// of them, the registry's sessions/): in any other, the key is the
+// terminal's, for a weaver on tmux there to read. config/rex.lua's weavers.
+func TestKeysWeavers(t *testing.T) {
+	server(t)
+	src, err := os.ReadFile("../../config/rex.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	script := strings.NewReplacer("@WVR@", "/usr/bin/true", "@SESSIONS@", dir+"/sessions").Replace(string(src)) +
+		"\nreturn { weavers({ session_id = rex.args.mine }), weavers({ session_id = rex.args.other }), weavers({}) }\n"
+	var got []bool
+	if err := do(s.ID, script, map[string]any{"mine": s.ID, "other": "session:not-weavers"}, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []bool{true, false, false}) {
+		t.Errorf("weavers: weaver's session, another, none = %v, want [true false false]", got)
 	}
 }
 

@@ -133,7 +133,10 @@ func (e *Env) writeRexKeys() (string, bool, error) {
 	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
 		return f, false, err
 	}
-	if err := store.WriteAtomic(f, []byte(strings.ReplaceAll(string(src), "@WVR@", e.Self))); err != nil {
+	// Inside Lua strings: a path's \ and " escaped.
+	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace
+	keys := strings.NewReplacer("@WVR@", lua(e.Self), "@SESSIONS@", lua(e.RexDir()+"/sessions")).Replace(string(src))
+	if err := store.WriteAtomic(f, []byte(keys)); err != nil {
 		return f, false, err
 	}
 	init, _ := os.ReadFile(filepath.Join(filepath.Dir(f), "init.lua"))

@@ -6,6 +6,8 @@
 --
 -- then `rex config reload`. What runs is wvr's, at its own path:
 local wvr = "@WVR@"
+-- weaver's record of the Rex sessions it made, one file each:
+local sessions = "@SESSIONS@"
 
 local terminal = "com.superlogical.terminal"
 
@@ -47,16 +49,37 @@ local function inView(ctx)
   return false
 end
 
-rex.bind("alt+y", function(ctx) run(ctx, { "go", "home" }, pwd(ctx)); return true end)
-rex.bind("alt+shift+n", function(ctx)
+-- weavers: is the key pressed in a Rex session weaver made? Rex's
+-- configuration is one for every session; elsewhere the key is the
+-- terminal's (a weaver on tmux in a Rex terminal reads its own Alt keys).
+local function weavers(ctx)
+  local id = (ctx.session_id or ""):gsub(":", "_")
+  local f = id ~= "" and io.open(sessions .. "/" .. id)
+  if f then
+    f:close()
+    return true
+  end
+  return false
+end
+
+-- key binds k to fn in weaver's sessions; fn returns false to let the key
+-- through there too.
+local function key(k, fn)
+  rex.bind(k, function(ctx)
+    if not weavers(ctx) then return false end
+    return fn(ctx) ~= false
+  end)
+end
+
+key("alt+y", function(ctx) run(ctx, { "go", "home" }, pwd(ctx)) end)
+key("alt+shift+n", function(ctx)
   if inView(ctx) then return false end
   run(ctx, { "_popup", "new" }, pwd(ctx))
-  return true
 end)
-rex.bind("alt+v", function(ctx) run(ctx, { "edit" }); return true end)
-rex.bind("alt+shift+v", function(ctx) run(ctx, { "edit", "--full" }); return true end)
-rex.bind("alt+1", function(ctx) run(ctx, { "next" }); return true end)
-rex.bind("alt+j", "client.tab.next")
-rex.bind("alt+k", "client.tab.previous")
-rex.bind("alt+h", "pane.focus.left")
-rex.bind("alt+l", "pane.focus.right")
+key("alt+v", function(ctx) run(ctx, { "edit" }) end)
+key("alt+shift+v", function(ctx) run(ctx, { "edit", "--full" }) end)
+key("alt+1", function(ctx) run(ctx, { "next" }) end)
+key("alt+j", function() rex.session.focus_next_window{} end)
+key("alt+k", function() rex.session.focus_previous_window{} end)
+key("alt+h", function() rex.session.focus_direction{ direction = "left" } end)
+key("alt+l", function() rex.session.focus_direction{ direction = "right" } end)

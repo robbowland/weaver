@@ -264,7 +264,9 @@ func muxFlag(cmd string, args []string) (string, []string) {
 	if cmd == "start" {
 		args = args[1:]
 	}
-	os.Setenv("WEAVER_MUX", mux)
+	if err := os.Setenv("WEAVER_MUX", mux); err != nil {
+		exit(err)
+	}
 	return "start", args
 }
 
