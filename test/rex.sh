@@ -13,8 +13,12 @@ command -v rex >/dev/null || { echo "SKIP rex is not installed"; exit 0; }
 # A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
 AT=$(mktemp -d /tmp/weaver-rex.XXXXXX)
 S=wr$$
-unset TMUX TMUX_PANE REX_SESSION REX_BLOCK WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
-export REX_SERVER=unix://$AT/r.sock WEAVER_MUX=rex WEAVER_SESSION=$S
+unset TMUX TMUX_PANE WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
+# Every Rex variable but where rex is (REX_BIN_DIR) is the caller's: gone.
+# Rex keeps a server's runtime files under REX_RUNTIME_DIR: here, never in
+# your Rex's directory, and rex never falls back to your server.
+for v in $(compgen -e | grep '^REX_' | grep -v '^REX_BIN_DIR$'); do unset "$v"; done
+export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock WEAVER_MUX=rex WEAVER_SESSION=$S
 export XDG_STATE_HOME=$AT/state XDG_CONFIG_HOME=$AT/config XDG_DATA_HOME=$AT/data CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_VIEWS= WEAVER_SELF_SETUP=0 EDITOR=nvim VISUAL=nvim TERM=xterm-256color
 [ -f "$HERE/nvim/init.lua" ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
