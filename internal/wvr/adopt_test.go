@@ -9,6 +9,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -20,8 +21,7 @@ import (
 func TestCodexRefusedOnRex(t *testing.T) {
 	dir := t.TempDir()
 	// Whatever runs past the refusal finds no Rex.
-	t.Setenv("REX_SERVER", "unix://"+dir+"/no-rex.sock")
-	t.Setenv("WEAVER_MUX", "")
+	rextest.NoRex(t)
 	e := &Env{&session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock",
 		Session: "w", SKey: "rex-w", RexID: "session:w", TSock: []string{"-S", dir + "/no-tmux.sock"}}}
 	if err := e.followable(agent.Claude); err != nil {

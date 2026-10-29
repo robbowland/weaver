@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -133,6 +134,8 @@ func TestWorktreeUsersOwnPanes(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("no tmux")
 	}
+	// No Rex answers (the Rex session's own panes are none).
+	rextest.NoRex(t)
 	tmp := t.TempDir()
 	dir, _ := filepath.EvalSymlinks(tmp)
 	w := dir + "/wt"
@@ -168,7 +171,6 @@ func TestWorktreeUsersOwnPanes(t *testing.T) {
 	}
 	weaver, wpid := server("weaver", true)
 	outer, opid := server("outer", false)
-	t.Setenv("REX_SERVER", "unix://"+tmp+"/no-rex.sock")
 	env := func(rexID string, inTmux bool, srv string) *Env {
 		e := &session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SKey: "tmux-weaver", RexID: rexID, InTmux: inTmux,
 			TSock: []string{"-S", weaver}}
