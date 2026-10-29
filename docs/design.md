@@ -474,8 +474,14 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   life of the session any more: none of its name, or one on another server
   (the state's `server`), or one made again on the same server (another
   `tmux_session`; for older states without one, one created after `ts`;
-  without `server` either, one created after `ts`). Anything else is forgotten as
-  before; a pane closed while its session runs on is not lost. The hook does
+  without `server` either, one created after `ts`). A Rex session's has gone
+  when the machine has started since, or `rex.Lost` says so; while Rex does
+  not answer, neither: its files stay as they are for a later look (one taken
+  for lost while it runs would be resumed twice, one taken for not lost
+  forgotten), and `GC` neither retires nor loses anything of a Rex session
+  it cannot ask about, looking at each session's panes once a run. Anything
+  else is forgotten as before; a pane closed while its session runs on is
+  not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps
   there, never forgets. Files with no pid to test are an earlier server's

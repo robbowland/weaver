@@ -409,9 +409,14 @@ func (e *Env) LostRows() []LostRow {
 }
 
 // Retire: the agent of state file f (pid) is gone: its thread lost with its
-// session is kept, anything else forgotten.
+// session is kept, anything else forgotten. When whether its session went
+// cannot be told (Rex not answering), nothing yet: a later look decides.
 func (e *Env) Retire(f, pid string) {
-	if e.LostCheck(f) && e.Lose(f, pid) {
+	lost, known := e.lostCheck(f)
+	switch {
+	case !known:
+		return
+	case lost && e.Lose(f, pid):
 		return
 	}
 	e.Forget(f, pid)
@@ -420,19 +425,25 @@ func (e *Env) Retire(f, pid string) {
 // LostCheck: is the dead agent of state file f a thread lost with its
 // session? A thread not ended on purpose whose session has gone since its
 // last event (whether or not its conversation is known: a thread lasts
-// until you close it).
+// until you close it). Not when that cannot be told.
 func (e *Env) LostCheck(f string) bool {
+	lost, known := e.lostCheck(f)
+	return lost && known
+}
+
+// lostCheck is LostCheck, and whether it could tell.
+func (e *Env) lostCheck(f string) (lost, known bool) {
 	b := strings.TrimSuffix(f, ".json")
 	if !files.Exists(b+".thread") || !files.Exists(f) {
-		return false
+		return false, true
 	}
 	s, err := store.ReadState(f)
 	if err != nil {
-		return false
+		return false, true
 	}
 	switch s.EndReason {
 	case "prompt_input_exit", "logout", "clear":
-		return false
+		return false, true
 	}
 	return e.serverLost(KeyOfFile(f), s.TS, s.Where)
 }
@@ -444,18 +455,23 @@ func (e *Env) LostCheck(f string) bool {
 // it any more: no session of its name, or one on another server, or one
 // made again on the same server (another id; older states, without one: a
 // session made after ts). A Rex session: when the machine has started
-// since, or rex.Lost. Any other key (zellij's, from before weaver ran on
-// tmux) never is.
-func (e *Env) serverLost(skey string, ts int64, w agent.Where) bool {
+// since, or rex.Lost; known false while Rex does not answer, when it is
+// neither (a thread taken for lost while it runs would be resumed twice,
+// and one taken for not lost forgotten). Any other key (zellij's, from
+// before weaver ran on tmux) never is.
+func (e *Env) serverLost(skey string, ts int64, w agent.Where) (lost, known bool) {
 	rexKey := strings.HasPrefix(skey, "rex-")
 	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
-		return false
+		return false, true
 	}
 	if b := BootTime(); b > 0 && ts < b {
-		return true
+		return true, true
 	}
 	if rexKey {
-		return rex.Lost(w)
+		if _, _, answered := rex.Alive(e.RexDir(), skey); !answered {
+			return false, false
+		}
+		return rex.Lost(w), true
 	}
 	ss, _ := e.tmuxSessions()
 	for _, s := range ss {
@@ -465,18 +481,18 @@ func (e *Env) serverLost(skey string, ts int64, w agent.Where) bool {
 		switch {
 		case w.Server == 0:
 			if s.created <= ts {
-				return false
+				return false, true
 			}
 		case s.where.Server != w.Server:
 		case w.Session != "":
 			if s.where.Session == w.Session {
-				return false
+				return false, true
 			}
 		case s.created <= ts:
-			return false
+			return false, true
 		}
 	}
-	return true
+	return true, true
 }
 
 var rePid = []byte(`"pid":`)

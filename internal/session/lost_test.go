@@ -32,10 +32,10 @@ func TestServerLostAcrossABoot(t *testing.T) {
 	w := agent.Where{Server: srv, Session: tm("display-message", "-p", "-t", "=s:", "#{session_id}")}
 	e := &Env{TSock: []string{"-S", sock}}
 
-	if e.serverLost("tmux-s", time.Now().Unix(), w) {
+	if lost, _ := e.serverLost("tmux-s", time.Now().Unix(), w); lost {
 		t.Error("its server runs on: lost")
 	}
-	if !e.serverLost("tmux-s", BootTime()-60, w) {
+	if lost, _ := e.serverLost("tmux-s", BootTime()-60, w); !lost {
 		t.Error("it reported before the machine started, on a server with the same pid: not lost")
 	}
 }
@@ -68,13 +68,13 @@ func TestServerLostSessionMadeAgain(t *testing.T) {
 	tm("new-session", "-d", "-s", "s")
 	now := agent.Where{Server: srv, Session: tm("display-message", "-p", "-t", "=s:", "#{session_id}")}
 
-	if !e.serverLost("tmux-s", then, old) {
+	if lost, _ := e.serverLost("tmux-s", then, old); !lost {
 		t.Error("its session was quit and made again: not lost")
 	}
-	if !e.serverLost("tmux-s", then, agent.Where{Server: srv}) {
+	if lost, _ := e.serverLost("tmux-s", then, agent.Where{Server: srv}); !lost {
 		t.Error("an older state (no session id), from before the session was made again: not lost")
 	}
-	if e.serverLost("tmux-s", time.Now().Unix(), now) {
+	if lost, _ := e.serverLost("tmux-s", time.Now().Unix(), now); lost {
 		t.Error("the session it runs in: lost")
 	}
 }
