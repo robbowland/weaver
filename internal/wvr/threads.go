@@ -1391,7 +1391,8 @@ func (e *Env) CloseTail(a []string) error {
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
 	// Closing the thread you are looking at: home, where the rest are, not
 	// whichever window tmux would show next.
-	if ap, ok := e.findPane(agent); ok {
+	ps, _ := e.Mux().Panes()
+	if ap, ok := session.PaneIn(ps, agent); ok {
 		if _, cur, home := e.where(); cur.id == ap.Tab && home != ap.Tab {
 			e.selectHome(home)
 		}

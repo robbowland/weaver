@@ -148,15 +148,18 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 // at its number, named label, with an nvim on its left in dir when it has
 // none. You go with it when it is the pane you are in. Its window.
 func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
-	ap, ok := e.findPane(p)
+	ps, _ := e.Mux().Panes()
+	ap, ok := session.PaneIn(ps, p)
 	if !ok {
 		return ""
 	}
 	tab := ap.Tab
 	nv := e.NvimPane(p)
-	own := ap.TabIndex != 0 && e.viewOfWindow(tab) == ""
+	ws, _ := e.Mux().Windows()
+	win, _ := windowIn(ws, tab)
+	own := ap.TabIndex != 0 && win.View == ""
 	if own {
-		for _, q := range e.windowPanes(tab) {
+		for _, q := range windowPanes(ps, tab) {
 			if q != p && q != nv {
 				own = false
 			}
@@ -178,7 +181,11 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 		tab = w
 	}
 	if nv == "" {
-		total, ok := e.windowWidth(tab)
+		// The width of its window: one it was just broken out to is asked.
+		total, ok := win.Width, win.Width > 0
+		if tab != win.ID {
+			total, ok = e.windowWidth(tab)
+		}
 		if !ok {
 			total = 200
 		}

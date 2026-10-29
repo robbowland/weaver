@@ -17,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -36,8 +37,9 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
 func (e *Env) threadWidth(agent mux.PaneID) {
-	ap, ok := e.findPane(agent)
-	if !ok || len(e.windowPanes(ap.Tab)) != 2 {
+	ps, _ := e.Mux().Panes()
+	ap, ok := session.PaneIn(ps, agent)
+	if !ok || len(windowPanes(ps, ap.Tab)) != 2 {
 		return
 	}
 	total, ok := e.windowWidth(ap.Tab)
@@ -109,19 +111,11 @@ func (e *Env) Edit(args []string) error {
 			return errors.New("cannot find the focused pane")
 		}
 	}
-	paneOf := func(ps []mux.Pane, p mux.PaneID) *mux.Pane {
-		for i := range ps {
-			if ps[i].ID == p {
-				return &ps[i]
-			}
-		}
-		return nil
-	}
 	agentPane := e.agentOf(target)
 	var newPane, nv mux.PaneID
 	if agentPane == "" {
 		cwd := ""
-		if p := paneOf(panes, target); p != nil {
+		if p, ok := session.PaneIn(panes, target); ok {
 			cwd = p.Cwd
 		}
 		if st, err := os.Stat(cwd); cwd == "" || err != nil || !st.IsDir() {
@@ -162,7 +156,7 @@ func (e *Env) Edit(args []string) error {
 		nv = e.NvimPane(agentPane)
 		// Reuse the agent's nvim while its pane is alive, even when nvim does
 		// not answer: never a second one.
-		if p := paneOf(panes, nv); nv != "" && p != nil && !p.Exited {
+		if p, ok := session.PaneIn(panes, nv); nv != "" && ok && !p.Exited {
 			unlock()
 			engine.Focus(e.Env, agentPane, rec, root, file)
 			e.focus(nv)

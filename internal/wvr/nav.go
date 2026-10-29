@@ -47,20 +47,12 @@ type tab struct {
 	active     bool
 }
 
-// findPane is pane p as the session's panes list it: its window, and where.
-func (e *Env) findPane(p mux.PaneID) (mux.Pane, bool) {
-	ps, _ := e.Mux().Panes()
-	for _, q := range ps {
-		if q.ID == p {
-			return q, true
-		}
-	}
-	return mux.Pane{}, false
-}
+// The session's panes and windows are fetched once for all an operation
+// looks up in them (on Rex each fetch is a snapshot of the session), then
+// looked up in that: session.PaneIn, windowPanes, windowIn.
 
-// windowPanes are the panes of window w.
-func (e *Env) windowPanes(w mux.WindowID) []mux.PaneID {
-	ps, _ := e.Mux().Panes()
+// windowPanes are the panes of window w among ps.
+func windowPanes(ps []mux.Pane, w mux.WindowID) []mux.PaneID {
 	var in []mux.PaneID
 	for _, q := range ps {
 		if q.Tab == w {
@@ -70,26 +62,21 @@ func (e *Env) windowPanes(w mux.WindowID) []mux.PaneID {
 	return in
 }
 
-// viewOfWindow is the view window w shows; empty for none.
-func (e *Env) viewOfWindow(w mux.WindowID) string {
-	ws, _ := e.Mux().Windows()
+// windowIn is window w among ws.
+func windowIn(ws []mux.Window, w mux.WindowID) (mux.Window, bool) {
 	for _, x := range ws {
 		if x.ID == w {
-			return x.View
+			return x, true
 		}
 	}
-	return ""
+	return mux.Window{}, false
 }
 
-// windowWidth is window w's columns.
+// windowWidth is window w's columns, as the session's windows list it now.
 func (e *Env) windowWidth(w mux.WindowID) (int, bool) {
 	ws, _ := e.Mux().Windows()
-	for _, x := range ws {
-		if x.ID == w && x.Width > 0 {
-			return x.Width, true
-		}
-	}
-	return 0, false
+	x, ok := windowIn(ws, w)
+	return x.Width, ok && x.Width > 0
 }
 
 func (e *Env) tabs() []tab {
@@ -495,7 +482,8 @@ func (e *Env) Seen(window string) {
 		e.MarkSeen(a)
 	}
 	left := false
-	for _, q := range e.windowPanes(win) {
+	ps, _ := e.Mux().Panes()
+	for _, q := range windowPanes(ps, win) {
 		if l, _ := files.FirstLine(e.StateFile(q)); doneUnseen(l) {
 			left = true
 		}
@@ -541,17 +529,21 @@ func (e *Env) Fit(window string) {
 	if !ok {
 		return
 	}
-	ps := e.windowPanes(win)
+	all, _ := e.Mux().Panes()
+	ps := windowPanes(all, win)
+	if len(ps) != 2 {
+		return
+	}
+	total := 0
 	for _, p := range ps {
-		if !files.Exists(e.ThreadFile(p)) {
+		if !files.Exists(e.ThreadFile(p)) || e.NvimPane(p) == "" {
 			continue
 		}
-		if e.NvimPane(p) == "" || len(ps) != 2 {
-			continue
-		}
-		total, ok := e.windowWidth(win)
-		if !ok {
-			continue
+		if total == 0 {
+			var ok bool
+			if total, ok = e.windowWidth(win); !ok {
+				return
+			}
 		}
 		e.Mux().SetWidth(p, agentCols(total))
 	}

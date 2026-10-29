@@ -33,6 +33,17 @@ func (e *Env) Panes() ([]mux.Pane, bool) {
 	return nil, false
 }
 
+// PaneIn is pane p among ps, panes as a multiplexer listed them (once for
+// all an operation looks up: on Rex each list is a snapshot).
+func PaneIn(ps []mux.Pane, p mux.PaneID) (mux.Pane, bool) {
+	for _, q := range ps {
+		if q.ID == p {
+			return q, true
+		}
+	}
+	return mux.Pane{}, false
+}
+
 // Row is an agent of the session as the board, the status line and the
 // navigation show it: its text with control characters made spaces.
 type Row struct {
