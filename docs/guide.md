@@ -69,7 +69,10 @@ Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `~/.config/rex/weaver.lua` as it starts, and says to load it by adding
 `require("weaver")` to `~/.config/rex/init.lua` and running
 `rex config reload`. It binds `alt+y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`,
-`alt+j`/`alt+k` and `alt+h`/`alt+l` as weaver's tmux does.
+`alt+j`/`alt+k` and `alt+h`/`alt+l` as weaver's tmux does. Unlike tmux's,
+which only weaver's own server reads, Rex's configuration is one for every
+session: once loaded, these keys are weaver's in all your Rex sessions,
+not only weaver's.
 
 Rex has no status line or message line: Rex shows each agent's state itself,
 from what Claude Code reports to it, the board shows the rest, and weaver's
