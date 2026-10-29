@@ -562,6 +562,24 @@ can supersede an earlier one, and says so.
   `go home` that opened it, waiting on tmux's popup to close, then does it:
   a file between them carries the choice as wvr commands, which keeps each
   key's meaning the board's own.
+- 2026-10-29: weaver can run on Rex as well as tmux (`WEAVER_MUX=rex`),
+  while Rob tries Rex; tmux stays the default. Much of weaver on tmux is
+  what a terminal multiplexer app already does: its status line, popups,
+  keys and bell, a done agent's mark. Rex is pre-1.0 and one server holds
+  every pane, which is why Herdr was set aside, so it is an option, not
+  the base. What weaver needs of a multiplexer is one interface,
+  `mux.Mux`, with tmux and Rex behind it (design.md); weaver's own
+  policy (numbers, state, what counts as seen) stays out of both.
+- 2026-10-29: On Rex, panes keep weaver's numbers. Weaver's files, records,
+  the Neovim side and its commands name panes by number (tmux's `%3` is
+  3), and Rex names blocks by UUID, so the Rex backend gives each block and
+  window it meets the next number, in a registry of its own, rather than
+  every record changing to strings. A block started in another's place
+  takes its number, as a respawned tmux pane keeps its id.
+- 2026-10-29: On Rex, threads are windows of one Rex session, as on tmux:
+  moving between them is the server's (focus a window), where switching
+  Rex sessions is the app's, which Rex lets a command ask for only with
+  Remote Control on.
 
 ## Performance and packaging
 

@@ -57,6 +57,25 @@ Outside weaver's tmux, those keys do nothing.
 Agents you start by hand in any tmux session also report to weaver, and `wvr`
 inside such a session opens a board of that session's agents.
 
+### On Rex (experimental)
+
+With `WEAVER_MUX=rex`, weaver runs on [Rex](https://www.superlogical.com/rex)
+instead of tmux: `wvr` starts a Rex session named `weaver` (home in its first
+window, a window per thread), or shows it when it is already running. Rex
+shows a session only when asked by an app with Remote Control on (Rex's
+settings, Rex Server); otherwise switch to it in Rex yourself.
+
+Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
+`~/.config/rex/weaver.lua` as it starts, and says to load it by adding
+`require("weaver")` to `~/.config/rex/init.lua` and running
+`rex config reload`. It binds `alt+y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`,
+`alt+j`/`alt+k` and `alt+h`/`alt+l` as weaver's tmux does.
+
+Rex has no status line or message line: Rex shows each agent's state itself,
+from what Claude Code reports to it, and the board shows the rest. Inside a
+tmux pane, weaver uses that tmux, so weaver on tmux in a Rex terminal works
+as before.
+
 ## Threads
 
 A thread is one task for one agent, in a window of its own: the agent's
@@ -565,6 +584,7 @@ Environment variables change weaver's defaults.
 | --- | --- | --- |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_SESSION` | `weaver` | The session `wvr` attaches to or starts |
+| `WEAVER_MUX` | `tmux` | `rex`: run on Rex ([On Rex](#on-rex-experimental)) |
 | `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |

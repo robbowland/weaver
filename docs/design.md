@@ -24,6 +24,7 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
+| `$STATE_DIR/rex/` | on Rex, weaver's numbers for its blocks and windows, and what Rex does not keep of them (see [Multiplexers](#multiplexers)) |
 
 ## State file
 
@@ -881,6 +882,52 @@ else weaver's.
   starts or attaches a session, so an install reaches a running server. Every
   setting may be read twice: array options take explicit indices
   (`terminal-features[90]`).
+
+## Multiplexers
+
+Weaver acts on its session through `mux.Mux` (`internal/mux`), which
+`Env.Mux` returns: `tmux.Session` (`internal/tmux`), or with
+`$WEAVER_MUX=rex`, or in a Rex session weaver made, `rex.Session`
+(`internal/rex`). Inside a tmux pane (`$TMUX`), tmux always. A method that
+steers what you see (focus, names, widths, marks) is best-effort and says
+nothing of failing. What only tmux runs (its menus, its hooks:
+`_seen`, `_fit`, `_menu`, `_click`) and the sweeps of tmux processes
+(`gc`, leftovers) use tmux directly (`Env.Tmux`, `Env.TmuxSession`).
+
+- **Ids:** `mux.PaneID` and `mux.WindowID` are what weaver's files keep,
+  numbers: tmux's `%3` and `@12` are `3` and `12` (`tmux.Target`,
+  `tmux.WindowTarget` give them back). Rex's blocks and windows are UUIDs,
+  so `rex` numbers them: `$STATE_DIR/rex/n/<num>` is the block or window a
+  number names, `u/<id>` (`:` as `_`) the number of an id, given under
+  `rex/lock`, never twice; `Respawn` points the pane's number at the block
+  that takes its place. Beside them: `cmd/<num>` the argv weaver started a
+  block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
+  window was given (home 0, a thread its number, a view 900 and on: Rex
+  orders windows, it does not index them, so `Place` moves a window before
+  the first placed further on), `view/<num>` its view, and
+  `sessions/<id>` the name weaver gave a session it made, and when.
+- **Keys:** files are keyed `tmux-<name>` or `rex-<name>`; a Rex session
+  weaver did not make is named by its id.
+- **Where:** on Rex, `agent.Where` is the Rex server's pid (from Rex's
+  runtime file, `serverPID`, so hooks make no call) and the session's id;
+  `rex.Lost` is a session no longer on the server running.
+- **Rex:** each look at the session is one `rex do` (its view, and each
+  terminal's size, with `Panes` its directory and processes too); every
+  other method one `rex api call`. A pane's environment goes through
+  `env(1)`, Rex setting none: `WEAVER_MUX=rex`, and `WEAVER_WVR`, the
+  weaver that started it, which home follows ahead of PATH (Rex runs a
+  command after the login shell's startup). `Spawn.Keep` makes a pane stay
+  when its program exits (Rex is told as it is made; tmux by
+  `KeepExited`). A popup is a floating layer, its command `rex wait` on
+  it. `BreakOut` opens a window with a stand-in, moves the pane beside it
+  and closes the stand-in. Rex has no message line, status line or window
+  marks: `Say`, `SayToSession`, `Publish`, `Strip` and `MarkUnseen` do
+  nothing there.
+- **Start:** `wvr` with `$WEAVER_MUX=rex` makes the Rex session (home its
+  first window, `want` 0) unless one weaver made of that name runs, asks
+  the app to show it (`session.select`, with Remote Control on), and
+  writes `config/rex.lua`, run by its own path, to
+  `~/.config/rex/weaver.lua` for init.lua to `require`.
 
 ## Setting itself up
 
