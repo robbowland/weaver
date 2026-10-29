@@ -12,6 +12,21 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 )
 
+// hermetic clears what weaver, Rex and tmux read from the environment,
+// all but where rex is (REX_BIN_DIR): a test is the same in a weaver pane,
+// a Rex terminal or tmux as anywhere else.
+func hermetic(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "TMUX" || k == "TMUX_PANE" || strings.HasPrefix(k, "WEAVER_") ||
+			strings.HasPrefix(k, "REX_") && k != "REX_BIN_DIR" {
+			t.Setenv(k, "")
+			os.Unsetenv(k)
+		}
+	}
+}
+
 // server starts a Rex server of the test's own (skipped without rex) and
 // points rex at it.
 func server(t *testing.T) {
@@ -19,6 +34,7 @@ func server(t *testing.T) {
 	if _, err := exec.LookPath(Bin()); err != nil {
 		t.Skip("rex is not installed")
 	}
+	hermetic(t)
 	// A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
 	d, err := os.MkdirTemp("/tmp", "wvr-rex")
 	if err != nil {
@@ -36,7 +52,6 @@ func server(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = srv.Process.Kill(); _ = srv.Wait() })
 	t.Setenv("REX_SERVER", "unix://"+sock)
-	t.Setenv("TMUX", "")
 	for i := 0; ; i++ {
 		if call("server.status", map[string]any{}, nil) == nil {
 			return
@@ -155,12 +170,12 @@ func TestSession(t *testing.T) {
 
 // A pane's number comes from its block, the same each time it is asked.
 func TestFromEnv(t *testing.T) {
+	hermetic(t)
 	dir := t.TempDir()
 	r := ids{dir}
 	if err := r.made("session:abc", "weaver", 1); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMUX", "")
 	t.Setenv("REX_SERVER", "unix:///nowhere")
 	t.Setenv("REX_SESSION", "session:abc")
 	t.Setenv("REX_BLOCK", "block:def")
