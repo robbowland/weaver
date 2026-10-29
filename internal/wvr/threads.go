@@ -160,17 +160,26 @@ func (e *Env) splitNvim(agentPane mux.PaneID, dir string, total int, nvimEnv ...
 	if err != nil {
 		return false
 	}
-	e.bindNvim(agentPane, nv, strconv.Itoa(pid))
+	e.bindNvim(agentPane, nv, pid)
 	return true
 }
 
 // bindNvim records nvim pane nv (process pid) as agent's:
-// <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim.)
-func (e *Env) bindNvim(agent, nv mux.PaneID, pid string) {
+// <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim,
+// and records itself as it starts.) A pid of 1 or less is the
+// multiplexer not saying (Rex may not): the pane alone, never a pid, and
+// never over the record nvim made of itself in that pane.
+func (e *Env) bindNvim(agent, nv mux.PaneID, pid int) {
 	os.MkdirAll(e.StateDir, 0o755)
 	nf := e.PaneFile(agent, "nvim")
+	p := ""
+	if pid > 1 {
+		p = strconv.Itoa(pid)
+	} else if l, err := files.FirstLine(nf); err == nil && l == string(nv) {
+		return
+	}
 	tmp := nf + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(string(nv)+"\n"+pid+"\n"), 0o644) == nil {
+	if os.WriteFile(tmp, []byte(string(nv)+"\n"+p+"\n"), 0o644) == nil {
 		os.Rename(tmp, nf)
 	}
 }
@@ -229,7 +238,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 			break
 		}
 		pid, _ = files.FirstLine(f + ".pid")
-		if n, ok := atoi(pid); !ok || syscall.Kill(n, 0) != nil {
+		if n, ok := atoi(pid); !ok || !session.PidAlive(n) {
 			break
 		}
 		if !said && time.Since(start) >= 300*time.Millisecond {
@@ -242,7 +251,9 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	case "0":
 		return fetchDone
 	case "":
-		if n, ok := atoi(pid); ok {
+		// Its group (a pid of 1 or less names none: kill(-1) is every
+		// process).
+		if n, ok := atoi(pid); ok && n > 1 {
 			bestEffort(syscall.Kill(-n, syscall.SIGTERM))
 		}
 		os.Remove(f + ".pid")
@@ -1441,7 +1452,7 @@ func (e *Env) EndLeftovers(args []string) error {
 			pids = append(pids, n)
 		}
 	}
-	for i := 0; i < 30 && slices.ContainsFunc(pids, func(p int) bool { return syscall.Kill(p, 0) == nil }); i++ {
+	for i := 0; i < 30 && slices.ContainsFunc(pids, session.PidAlive); i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {

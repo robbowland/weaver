@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -43,7 +42,7 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 			break
 		}
 		if owner, err := files.FirstLine(lockd + "/pid"); err == nil && owner != "" {
-			if p, ok := atoi(owner); ok && syscall.Kill(p, 0) != nil {
+			if p, ok := atoi(owner); ok && !session.PidAlive(p) {
 				os.RemoveAll(lockd)
 				continue
 			}

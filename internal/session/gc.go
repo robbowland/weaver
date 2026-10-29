@@ -218,7 +218,7 @@ func (e *Env) GC() {
 		alive := false
 		if len(ls) > 1 {
 			if n, ok := atoi(ls[1]); ok {
-				alive = AgentAlive(ls[1], "", nil) && n > 0
+				alive = PidAlive(n)
 			}
 		}
 		if !alive {

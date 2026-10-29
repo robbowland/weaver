@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
@@ -41,7 +40,8 @@ func Peek(sf string) Peeked {
 	return p
 }
 
-// NvimPane is the agent's nvim pane, when that nvim still runs.
+// NvimPane is the agent's nvim pane, when that nvim still runs (its
+// record without a pid, when it has not recorded itself yet: its pane).
 func (e *Env) NvimPane(pane mux.PaneID) mux.PaneID {
 	b, err := os.ReadFile(e.PaneFile(pane, "nvim"))
 	if err != nil {
@@ -59,7 +59,7 @@ func (e *Env) NvimPane(pane mux.PaneID) mux.PaneID {
 		pid = ""
 	}
 	if pid != "" {
-		if n, _ := strconv.Atoi(pid); syscall.Kill(n, 0) != nil {
+		if n, _ := strconv.Atoi(pid); !PidAlive(n) {
 			return ""
 		}
 	}

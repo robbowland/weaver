@@ -3,6 +3,7 @@ package wvr
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -92,5 +93,44 @@ func TestThreadNum(t *testing.T) {
 	n, used := e.threadNum()
 	if n != 2 || !used[1] || !used[3] || used[2] || used[4] {
 		t.Errorf("threadNum = %d %v, want 2 with 1 and 3 used", n, used)
+	}
+}
+
+// A thread's nvim bound with a pid the multiplexer did not say (0, as Rex
+// may give) is recorded by its pane alone, and never over the record that
+// nvim made of itself as it started; a known pid is recorded.
+func TestBindNvimUnknownPid(t *testing.T) {
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-w"}}
+	nf := e.PaneFile("5", "nvim")
+	read := func() string {
+		t.Helper()
+		b, err := os.ReadFile(nf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	e.bindNvim("5", "6", 0)
+	if got := read(); got != "6\n\n" {
+		t.Errorf("unknown pid, no record: %q, want the pane alone", got)
+	}
+	own := "6\n" + strconv.Itoa(os.Getpid()) + "\n"
+	if err := os.WriteFile(nf, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.bindNvim("5", "6", 0)
+	if got := read(); got != own {
+		t.Errorf("unknown pid over nvim's own record: %q, want %q", got, own)
+	}
+	if err := os.WriteFile(nf, []byte("3\n4242\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.bindNvim("5", "6", 1)
+	if got := read(); got != "6\n\n" {
+		t.Errorf("unknown pid over another pane's record: %q, want the pane alone", got)
+	}
+	e.bindNvim("5", "6", 4321)
+	if got := read(); got != "6\n4321\n" {
+		t.Errorf("known pid: %q", got)
 	}
 }

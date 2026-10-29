@@ -319,14 +319,21 @@ func BootTime() int64 {
 	return tv.Sec
 }
 
+// PidAlive: does process pid, as weaver recorded it, run? A pid of 1 or
+// less is none weaver could have recorded (kill(0, 0) signals this
+// process's own group, and always succeeds; 1 is launchd): unknown, so
+// never alive.
+func PidAlive(pid int) bool { return pid > 1 && syscall.Kill(pid, 0) == nil }
+
 // AgentAlive: is process pid (started at start, as ps prints it, if known)
-// still running? kill -0 alone would trust a reused pid.
+// still running? kill -0 alone would trust a reused pid. No pid at all
+// cannot be checked: it is.
 func AgentAlive(pid, start string, starts map[int]string) bool {
 	n, err := strconv.Atoi(pid)
 	if err != nil || !digits(pid) {
 		return true
 	}
-	if syscall.Kill(n, 0) != nil {
+	if !PidAlive(n) {
 		return false
 	}
 	if start == "" {

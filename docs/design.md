@@ -10,7 +10,7 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | --- | --- |
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in tmux pane `%<pane>` of session `<skey>` (`tmux-` and the session name with `/` as `_`); one JSON object on one line |
-| `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid |
+| `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid, empty while not known (the nvim writes its own as it starts); a pid of 1 or less is no process, never a live nvim |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
 | `$STATE_DIR/<skey>.status` | the session's counts for its status line: `needs-you done-unseen working` |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
