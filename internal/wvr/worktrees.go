@@ -183,9 +183,10 @@ func copyFile(from, to string) error {
 
 // worktreeUsers is what uses worktree dir, as close's card says it:
 // threads (open in any session, or lost) working there, and panes (on
-// weaver's server, and the one we run in) in it, but panes except (a
-// thread being closed: its agent, nvim and the pane closing it) and their
-// threads. Close's offer, its last check, and the sweep all ask it.
+// weaver's server, the one we run in, and on Rex the session's) in it, but
+// panes except (a thread being closed: its agent, nvim and the pane
+// closing it, all this session's) and their threads. Close's offer, its
+// last check, and the sweep all ask it.
 func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 	skip := map[mux.PaneID]bool{}
 	for _, p := range except {
@@ -209,19 +210,35 @@ func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 			us = append(us, fmt.Sprintf("lost thread %02d", l.Thread.Num))
 		}
 	}
+	// A pane number names a pane of one multiplexer, and on tmux of one
+	// server: those closing are skipped only on the session's own. On Rex
+	// that is no tmux server; in tmux, $TMUX's (by its pid, when $TMUX
+	// says it); outside, weaver's own, the only one listed.
+	ownServer := func(pid string) bool {
+		switch {
+		case e.RexID != "":
+			return false
+		case e.InTmux && e.Where.Server > 0:
+			return pid == strconv.Itoa(e.Where.Server)
+		}
+		return true
+	}
 	seen := map[string]bool{}
 	panes := func(args ...string) {
-		out, err := session.RunTmux(append(args, "list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_path}")...)
+		out, err := session.RunTmux(append(args, "list-panes", "-a", "-F", "#{pid} #{pane_id} #{pane_dead} #{pane_current_path}")...)
 		if err != nil {
 			return
 		}
 		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			f := strings.SplitN(l, " ", 3)
-			if len(f) != 3 || f[1] == "1" || seen[f[0]] {
+			f := strings.SplitN(l, " ", 4)
+			// The same server may be listed twice (weaver's is the one we
+			// run in); another's pane of the same number is another pane.
+			if len(f) != 4 || f[2] == "1" || seen[f[0]+" "+f[1]] {
 				continue
 			}
-			seen[f[0]] = true
-			if p, ok := tmux.ParsePane(f[0]); ok && !skip[p] && (f[2] == dir || strings.HasPrefix(f[2], dir+"/")) {
+			seen[f[0]+" "+f[1]] = true
+			p, ok := tmux.ParsePane(f[1])
+			if ok && !(skip[p] && ownServer(f[0])) && (f[3] == dir || strings.HasPrefix(f[3], dir+"/")) {
 				us = append(us, "pane "+string(p))
 			}
 		}

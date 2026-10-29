@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -121,5 +122,78 @@ func TestWorktreeUsers(t *testing.T) {
 	put(e.LostDir+"/tmux-a_s.json", store.Lost{Thread: store.Thread{Num: 7, Worktree: w}})
 	if got := strings.Join(e.worktreeUsers(w, "4"), ", "); got != "thread 03, lost thread 07" {
 		t.Errorf("users: %q", got)
+	}
+}
+
+// The panes being closed are the session's: a pane of the same number on
+// another tmux server, or on tmux when the session is Rex's, is another
+// pane, and still uses the worktree. Weaver's own server listed twice (the
+// one we run in) counts each pane once.
+func TestWorktreeUsersOwnPanes(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("no tmux")
+	}
+	tmp := t.TempDir()
+	dir, _ := filepath.EvalSymlinks(tmp)
+	w := dir + "/wt"
+	if err := os.MkdirAll(w, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A server with pane %0, and with more %1, in the worktree: its pid.
+	server := func(name string, more bool) (string, string) {
+		t.Helper()
+		sock := tmp + "/" + name + ".sock"
+		tm := func(args ...string) string {
+			t.Helper()
+			out, err := exec.Command("tmux", append([]string{"-S", sock, "-f", "/dev/null"}, args...)...).Output()
+			if err != nil {
+				t.Fatalf("tmux %v: %v", args, err)
+			}
+			return strings.TrimSpace(string(out))
+		}
+		tm("new-session", "-d", "-s", name, "-c", w, "/bin/sleep 600")
+		t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() })
+		want := w
+		if more {
+			tm("new-window", "-d", "-c", w, "/bin/sleep 600")
+			want += "\n" + w
+		}
+		for i := 0; tm("list-panes", "-a", "-F", "#{pane_current_path}") != want; i++ {
+			if i == 50 {
+				t.Fatal("the panes never ran in the worktree")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return sock, tm("display-message", "-p", "#{pid}")
+	}
+	weaver, wpid := server("weaver", true)
+	outer, opid := server("outer", false)
+	t.Setenv("REX_SERVER", "unix://"+tmp+"/no-rex.sock")
+	env := func(rexID string, inTmux bool, srv string) *Env {
+		e := &session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SKey: "tmux-weaver", RexID: rexID, InTmux: inTmux,
+			TSock: []string{"-S", weaver}}
+		e.Where.Server, _ = strconv.Atoi(srv)
+		return &Env{e}
+	}
+	users := func(e *Env) string { return strings.Join(e.worktreeUsers(w, "0"), ", ") }
+
+	// Outside tmux, in weaver's own session: its %0 closing.
+	if got := users(env("", false, "")); got != "pane 1" {
+		t.Errorf("weaver's session: %q, want pane 1", got)
+	}
+	// Inside it, weaver's server listed twice.
+	t.Setenv("TMUX", weaver+","+wpid+",0")
+	if got := users(env("", true, wpid)); got != "pane 1" {
+		t.Errorf("inside weaver's session: %q, want pane 1", got)
+	}
+	// In another server's session, its %0 closing: weaver's %0 is in use.
+	t.Setenv("TMUX", outer+","+opid+",0")
+	if got := users(env("", true, opid)); got != "pane 0, pane 1" {
+		t.Errorf("another server's session: %q, want weaver's pane 0 and pane 1", got)
+	}
+	// On Rex, its pane 0 closing: tmux's %0 is another pane.
+	t.Setenv("TMUX", "")
+	if got := users(env("session:x", false, "")); got != "pane 0, pane 1" {
+		t.Errorf("a Rex session: %q, want tmux's pane 0 and pane 1", got)
 	}
 }

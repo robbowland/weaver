@@ -448,8 +448,10 @@ it, it is a linked worktree (not the main checkout), not locked, `git status
 HEAD is an ancestor of `origin/HEAD`, `upstream/HEAD`, `main` or `master`, or
 of its upstream with nothing unpushed, and nothing else uses it
 (`worktreeUsers`, which the sweep asks too: a thread of any session working
-there, a lost one, a pane in it on weaver's server or yours; not the thread
-being closed). It checks again after the agent has exited, and never forces:
+there, a lost one, a pane in it on weaver's server or yours, or on Rex the
+session's; not the thread being closed, whose panes are skipped only where
+they are: a pane of the same number on another server, or on tmux when the
+session is Rex's, is another pane). It checks again after the agent has exited, and never forces:
 Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
 worktree themselves. Its ignored files, which removing it would take (an
 `.env`, local settings; not whole ignored directories a build makes again,
