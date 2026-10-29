@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -198,28 +199,33 @@ func (s Session) Active() (mux.PaneID, bool) {
 	return "", false
 }
 
-// Looking is the session's active pane while an app is attached to it:
-// Rex does not say which session an app shows.
-func (s Session) Looking() ([]mux.PaneID, error) {
+// errUnseen is why Looking knows no pane.
+var errUnseen = errors.New("rex: Rex does not say which session an app shows")
+
+// Looking is no pane, and errUnseen: Rex does not say which session an
+// app shows (it stays attached to every session it has shown), so no pane
+// is known to be on screen.
+func (s Session) Looking() ([]mux.PaneID, error) { return nil, errUnseen }
+
+// client is a client attached to a session, as session.list_clients
+// gives it.
+type client struct {
+	Info struct {
+		Kind string `json:"kind"`
+	} `json:"info"`
+	State string `json:"connection_state"`
+}
+
+// app: is c an app with a connection? Rex has a missing or unknown state
+// taken as connected: only lost is not.
+func (c client) app() bool { return c.Info.Kind == "app" && c.State != "lost" }
+
+// attached: is an app attached to the session? It may be showing another.
+func (s Session) attached() bool {
 	var l struct {
-		Clients []struct {
-			Info struct {
-				Kind string `json:"kind"`
-			} `json:"info"`
-			State string `json:"connection_state"`
-		} `json:"clients"`
+		Clients []client `json:"clients"`
 	}
-	if err := s.callS("session.list_clients", nil, &l); err != nil {
-		return nil, err
-	}
-	for _, c := range l.Clients {
-		if c.Info.Kind == "app" && c.State == "connected" {
-			if p, ok := s.Active(); ok {
-				return []mux.PaneID{p}, nil
-			}
-		}
-	}
-	return nil, nil
+	return s.callS("session.list_clients", nil, &l) == nil && slices.ContainsFunc(l.Clients, client.app)
 }
 
 func (s Session) PID(p mux.PaneID) (int, bool) {
@@ -551,7 +557,6 @@ func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string
 			}
 		}
 	}
-	looking, _ := s.Looking()
 	if cols <= 0 || lines <= 0 {
 		cols, lines = 160, 48
 	}
@@ -568,5 +573,5 @@ func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string
 	if err := s.callS("session.new_layer", in, &out); err != nil || len(out.Blocks) == 0 {
 		return exec.Command("false"), false
 	}
-	return rexCmd("wait", "-s", s.ID, out.Blocks[0]), len(looking) > 0
+	return rexCmd("wait", "-s", s.ID, out.Blocks[0]), s.attached()
 }

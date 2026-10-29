@@ -26,7 +26,7 @@ func hermetic(t *testing.T) {
 		if k == "TMUX" || k == "TMUX_PANE" || strings.HasPrefix(k, "WEAVER_") ||
 			strings.HasPrefix(k, "REX_") && k != "REX_BIN_DIR" {
 			t.Setenv(k, "")
-			os.Unsetenv(k)
+			_ = os.Unsetenv(k)
 		}
 	}
 }
@@ -187,6 +187,44 @@ func TestSession(t *testing.T) {
 	}
 	if err := s.Quit(); err != nil || s.Running() {
 		t.Errorf("quit: %v, running %v", err, s.Running())
+	}
+}
+
+// What is on screen: Rex does not say which session an app shows, so no
+// pane is known to be looked at, though the session has an active one.
+func TestOnScreen(t *testing.T) {
+	server(t)
+	s, err := Start(t.TempDir(), "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	if _, ok := s.Active(); !ok {
+		t.Fatal("no active pane")
+	}
+	if ps, err := s.Looking(); len(ps) > 0 || err == nil {
+		t.Errorf("looking: %q %v", ps, err)
+	}
+}
+
+// An app is attached unless its connection is lost: Rex says to take a
+// missing or unknown state as connected. No other client counts.
+func TestApp(t *testing.T) {
+	for in, want := range map[string]bool{
+		`{"info":{"kind":"app"},"connection_state":"connected"}`: true,
+		`{"info":{"kind":"app"}}`:                                true,
+		`{"info":{"kind":"app"},"connection_state":"resuming"}`:  true,
+		`{"info":{"kind":"app"},"connection_state":"lost"}`:      false,
+		`{"info":{"kind":"cli"},"connection_state":"connected"}`: false,
+		`{"connection_state":"connected"}`:                       false,
+	} {
+		var c client
+		if err := json.Unmarshal([]byte(in), &c); err != nil {
+			t.Fatal(err)
+		}
+		if c.app() != want {
+			t.Errorf("%s: app %v, want %v", in, !want, want)
+		}
 	}
 }
 
