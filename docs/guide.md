@@ -109,7 +109,7 @@ says so.
 
 ### Working in a thread
 
-The Neovim on the left belongs to the thread's agent: it follows the agent's
+The Neovim on the left belongs to the thread's agent: it reloads the agent's
 edits, shows its state and reviews its turns ([Neovim](#neovim)). If you quit
 it, `alt+v` brings it back on the left, with the agent at its usual width,
 as long as nothing else is in the window.
@@ -408,25 +408,10 @@ command away. Edits you make between turns are their own commit.
 
 The Neovim weaver opens for an agent loads your own config, then:
 
-- **follows the agent, politely.** An edit by the agent, its subagents or its
-  Bash commands is followed only once you have been idle for about three
-  seconds in normal mode, in a file window, and not reviewing a diff. Until
-  then the bar shows it as `→ file`, and `<leader>aj` goes there at once. It
-  never types into Neovim, and never replaces a buffer with unsaved changes,
-  a terminal, quickfix or a git window. It brings other tabs up to date
-  without switching to them. Of the files it opened that are out of sight,
-  it keeps the ten most recent loaded (`vim.g.weaver_follow_keep`); older
-  ones are unloaded, unless you typed in them, and a language server left
-  serving none of your buffers is stopped, so a long thread's Neovim doesn't
-  grow without end.
-- **gives each worktree its own tab**, closed when the worktree is removed. A
-  new worktree takes a tab with nothing in it (the start screen, or an empty
-  one) before it opens another.
 - **reloads files** as soon as they change on disk, never over unsaved
   changes.
 - **shows the agent at the top of each file window**: its state, turn, task
-  progress, the edit waiting to be followed, and what it was asked or is
-  waiting on. Once a turn is over, it shows how many files changed and the
+  progress, and what it was asked or is waiting on. Once a turn is over, it shows how many files changed and the
   key to review them (`2 files ␣at`).
 
 ### Reviewing
@@ -451,8 +436,6 @@ Neovim's directory; inside the view, a key works on the view's worktree.
 | `<leader>ac` | `:AgentChanges turn` | The last turn's hunks in quickfix (any scope works) |
 | `<leader>al` | `:AgentLog` | The agent's activity, turn by turn |
 | `<leader>aw` | `:AgentWhy` | Which turn and prompt last changed this line (`!` opens that turn) |
-| `<leader>aj` | `:AgentJump` | Go to the agent's latest edit now |
-| `<leader>af` | `:AgentFollow` | Turn following on or off |
 | `<leader>an` | `:AgentNote` | Note this line, or the selected lines, for the agent |
 | `<leader>as` | `:AgentSend` | Send your notes to the agent (`!`: even while it works) |
 
@@ -464,7 +447,7 @@ it (`wvr send`). It sends only when the agent is waiting for your next
 prompt; while the agent works or waits on a dialog, the notes stay for later.
 `:AgentNotes` lists them in quickfix, and `:AgentNotesClear` drops them.
 
-In a review, `gf` opens the file at the same line in its own worktree's tab.
+In a review, `gf` opens the file at the same line in the tab you came from.
 Untracked files the agent created are listed like any other, without touching
 your index. In diffview-plus's file panel, `w` marks a file reviewed and `H`
 hides the reviewed ones.

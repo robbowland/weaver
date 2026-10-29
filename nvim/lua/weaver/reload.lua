@@ -161,33 +161,10 @@ function M.stop_all()
   end
 end
 
--- Where a reload changed a buffer: the first line of the first changed hunk,
--- kept with the time, so following can put the cursor on the agent's edit.
-local before = {}
-
-local function changed_line(old, new)
-  local ok, hunks = pcall(vim.diff, table.concat(old, '\n') .. '\n', table.concat(new, '\n') .. '\n', {
-    result_type = 'indices',
-  })
-  if not ok or not hunks or #hunks == 0 then
-    return nil
-  end
-  local h = hunks[1]
-  -- { start_a, count_a, start_b, count_b }; a pure deletion has count_b 0.
-  return math.max(1, h[3] + (h[4] == 0 and 1 or 0))
-end
-
-function M.last_change(buf)
-  local c = vim.b[buf].weaver_change
-  if type(c) == 'table' and c.line and c.at and (uv.now() - c.at) < 10000 then
-    return c.line
-  end
-end
-
 function M.setup()
-  -- With 'autoread' on, nvim reloads an unchanged buffer without asking
-  -- FileChangedShell, so the change could not be located. The handler below
-  -- makes the same choice (reload unless you have unsaved changes).
+  -- 'autoread' off, so every reload goes through the FileChangedShell
+  -- handler below: one place decides (reload unless you have unsaved
+  -- changes, and say when a file was deleted).
   if M.autoread == nil then
     M.autoread = vim.o.autoread
   end
@@ -237,22 +214,7 @@ function M.setup()
           util.msg('kept your unsaved changes; ' .. name .. ' changed on disk', util.WARN)
         end)
       else
-        before[ev.buf] = api.nvim_buf_get_lines(ev.buf, 0, -1, false)
         vim.v.fcs_choice = 'reload'
-      end
-    end,
-  })
-
-  api.nvim_create_autocmd('FileChangedShellPost', {
-    group = util.group,
-    callback = function(ev)
-      local old = before[ev.buf]
-      before[ev.buf] = nil
-      if old and api.nvim_buf_is_valid(ev.buf) then
-        local line = changed_line(old, api.nvim_buf_get_lines(ev.buf, 0, -1, false))
-        if line then
-          vim.b[ev.buf].weaver_change = { line = line, at = uv.now() }
-        end
       end
     end,
   })

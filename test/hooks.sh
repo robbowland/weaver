@@ -44,7 +44,7 @@ mkdir -p "$T"
 mkdir -p "$AT/bin" "$AT/state" "$AT/claude/sessions"
 # Everything the server runs (its keys' run-shell, its panes) inherits these:
 # the run's own state, never yours.
-export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude WEAVER_FOLLOW_IDLE_MS=300
+export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude
 export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 : >"$WORKTRUNK_CONFIG_PATH"
 export WEAVER_SELF_SETUP=0 _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim

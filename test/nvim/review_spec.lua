@@ -116,7 +116,7 @@ T.run(function()
   C.event({ ev = 'edit', root = R.a, file = R.a .. '/src/other.txt', sid = sid })
   T.ok('...then shows what changes after it', shows({ 'M other.txt' }), { 'M other.txt' })
 
-  -- gf in the diff: the file at the same line, in its worktree's tab.
+  -- gf in the diff: the file at the same line, in the tab you came from.
   T.wait(5000, function()
     return C.lua([[
       for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -132,7 +132,7 @@ T.run(function()
   C.cmd('3')
   C.input('gf')
   T.ok(
-    'gf: the file at the same line, in the tab of its worktree',
+    'gf: the file at the same line, in the tab you came from',
     C.wait_for(2000, "return vim.fn.tabpagenr() .. '|' .. vim.fn.expand('%:t') .. '|' .. vim.fn.line('.')", '1|other.txt|3'),
     '1|other.txt|3'
   )
@@ -185,7 +185,11 @@ T.run(function()
   -- The agent, or a subagent, edits in another worktree: reviews are of that
   -- one, though this nvim's directory is still worktree a.
   T.write(R.b .. '/src/app.txt', { 'line one', 'line two, in b', 'line three' })
+  local where = "return #vim.api.nvim_list_tabpages() .. '|' .. vim.api.nvim_buf_get_name(0)"
+  local before = C.lua(where)
   C.event({ ev = 'edit', root = R.b, file = R.b .. '/src/app.txt', sid = sid })
+  T.settle(300)
+  T.ok('an edit opens no file and no tab', C.lua(where), before)
   C.cmd('AgentReview uncommitted')
   T.ok("another worktree: the review is of the agent's", shows({ 'M app.txt' }), { 'M app.txt' })
 

@@ -364,24 +364,24 @@ function M.view_root()
   end
 end
 
--- gf: the file in the tab of its own worktree -----------------------------------
+-- gf: the file in the tab you came from -----------------------------------------
 
-local function deepest_tab_for(path)
-  local best, len
-  for _, tab in ipairs(api.nvim_list_tabpages()) do
+-- The tab you came to the review from, else any tab without a review.
+local function file_tab()
+  local tabs = api.nvim_list_tabpages()
+  local last = tabs[fn.tabpagenr('#')]
+  if last and not util.diffview_view(last) then
+    return last
+  end
+  for _, tab in ipairs(tabs) do
     if not util.diffview_view(tab) then
-      local cwd = util.real(util.tab_cwd(tab))
-      if cwd and util.under(path, cwd) and (not len or #cwd > len) then
-        best, len = tab, #cwd
-      end
+      return tab
     end
   end
-  return best
 end
 
 -- Open the file under the cursor (diff window or file panel) at the same line
--- in the tab whose working directory holds it, else in a new tab rooted at
--- its worktree. The review stays open.
+-- in the tab you came from, else in a new tab. The review stays open.
 function M.goto_file()
   local view = require('diffview.lib').get_current_view()
   local file = view and view.infer_cur_file and view:infer_cur_file()
@@ -401,7 +401,7 @@ function M.goto_file()
     end
   end
   pcall(function() file.layout:restore_winopts() end)
-  local tab = deepest_tab_for(path)
+  local tab = file_tab()
   if tab then
     api.nvim_set_current_tabpage(tab)
     local win = util.window_for(tab, path)
@@ -412,10 +412,6 @@ function M.goto_file()
     end
   else
     vim.cmd('tabnew')
-    local top = view.adapter and view.adapter.ctx and view.adapter.ctx.toplevel
-    if top then
-      vim.cmd('silent tcd ' .. fn.fnameescape(top))
-    end
   end
   if not util.same_path(api.nvim_buf_get_name(0), path) then
     vim.cmd('silent keepalt edit ' .. fn.fnameescape(path))

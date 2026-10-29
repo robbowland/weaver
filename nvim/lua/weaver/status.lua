@@ -1,7 +1,6 @@
 -- The agent's state as this nvim knows it, and the bar that shows it: a
--- winbar on normal file windows (state, turn, prompt, and the edit waiting to
--- be followed). Seeded once from the state file, then kept current by the
--- hook's events.
+-- winbar on normal file windows (state, turn and prompt). Seeded once from
+-- the state file, then kept current by the hook's events.
 local M = {}
 
 local api = vim.api
@@ -241,19 +240,13 @@ function M.text()
     parts[#parts + 1] = 'turn ' .. a.turn
   end
   parts[#parts + 1] = tasks_label()
-  local pending = require('weaver.follow').pending_label()
-  if pending then
-    parts[#parts + 1] = '→ ' .. pending
-  end
   return table.concat(parts, ' · ')
 end
 
--- The winbar: state and turn, then the edit waiting to be followed (the one
--- thing you may act on), then what the agent waits on (needs you), runs
+-- The winbar: state and turn, then what the agent waits on (needs you), runs
 -- (working) or was asked, dim, cut to the window's width.
 function M.winbar()
   local a = M.agent
-  local follow = require('weaver.follow')
   local parts, width = {}, 0
   local function add(text, hl)
     parts[#parts + 1] = '%#' .. hl .. '#' .. esc(text)
@@ -282,14 +275,6 @@ function M.winbar()
     end
   else
     add('weaver', 'WeaverBarFaint')
-  end
-  local pending = follow.pending_label()
-  if pending then
-    add('  → ', 'WeaverBarInk')
-    add(pending, 'WeaverBarInk')
-    add(' ' .. follow.jump_key_label(), 'WeaverBarFaint')
-  elseif not follow.enabled() then
-    add('  following off', 'WeaverBarFaint')
   end
   local about
   if a.state == 'needs-you' then

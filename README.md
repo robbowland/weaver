@@ -4,7 +4,7 @@
 needs you.**
 
 weaver gives each task its own tmux window, called a *thread*: the agent
-(Claude Code or Codex) on the right and a Neovim that follows its edits on the
+(Claude Code or Codex) on the right and a Neovim that reviews its work on the
 left, in a git worktree of its own. One board shows every thread and what it
 is doing. One key jumps to the agent that has waited on you longest. And your
 threads come back after tmux crashes or the machine restarts.
@@ -43,7 +43,7 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
   from you, with what each is waiting on or doing.
 - **Go straight to the one that's waiting.** `alt+1` jumps to the agent that
   has needed you longest; press it again for the next.
-- **Review as it works.** The Neovim beside each agent follows its edits,
+- **Review as it works.** The Neovim beside each agent reloads its edits,
   shows each turn's diff, and sends your line notes back to the agent.
 - **Start from a pull request or an issue.** Views of your GitHub pull
   requests and issues, and your Linear issues, start a thread on the right
@@ -181,9 +181,8 @@ conversations.
 
 ## Neovim
 
-The Neovim beside each agent loads your own config, then follows the agent:
-after you have been idle for a few seconds, it opens the file the agent just
-edited. It never types for you or replaces a buffer with unsaved changes.
+The Neovim beside each agent loads your own config, then reloads the files
+the agent changes, never over your unsaved changes.
 
 weaver snapshots the worktree at the start and end of every turn, so you can
 review exactly what each turn changed:

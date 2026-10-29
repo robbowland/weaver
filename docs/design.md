@@ -79,7 +79,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed |
-| `focus` | `root`, `file` (may be `""`) | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): go there now unless that would take over typing, a diff review or unsaved changes |
+| `focus` | `root`, `file` (may be `""`) | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): where the agent is, for the review keys |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
 `AgentFollow(root, file)` and `AgentChecktime()` remain as aliases for one

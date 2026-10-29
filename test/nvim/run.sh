@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd -P)
 SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/weaver-nvim-test.XXXXXX") || exit 1
 export XDG_STATE_HOME="$SCRATCH/state" XDG_CONFIG_HOME="$SCRATCH/config" XDG_CACHE_HOME="$SCRATCH/cache"
 mkdir -p "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
-unset VIMINIT WEAVER_PANE WEAVER_STATE WEAVER_BIN WEAVER_BASE WEAVER_FOLLOW_IDLE_MS
+unset VIMINIT WEAVER_PANE WEAVER_STATE WEAVER_BIN WEAVER_BASE
 
 [ $# -gt 0 ] || set -- "$HERE"/*_spec.lua
 failed=0

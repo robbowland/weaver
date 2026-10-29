@@ -149,6 +149,16 @@ can supersede an earlier one, and says so.
   once the agent's edits had opened worktree tabs beside it, and a
   worktree's tab opened for a `root` event stayed `[No Name]` until a file
   came.
+- 2026-10-29: Following is gone, and with it `:AgentJump`, `:AgentFollow`,
+  the bar's `→ file` and the tab per worktree; this supersedes the entries
+  on following, start screens and blank tabs above. Rob hides the tab line
+  and moves with file pickers, so the tabs piled up unseen: one nvim whose
+  agent had sent subagents into ten worktrees held 18 tabs, each keeping a
+  TypeScript, ESLint, CSS and Emmet server alive (14 GB, swap full).
+  Unloading old hidden buffers did not help, since each tab kept its file in
+  sight. What Rob wanted from it was a review of the worktree the agent is
+  in, which reviews now find without tabs. Files still reload as the agent
+  edits; 'autoread' stays off so that one handler decides every reload.
 
 ## Dashboard
 

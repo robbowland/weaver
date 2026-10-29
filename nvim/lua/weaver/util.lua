@@ -140,11 +140,6 @@ function M.toplevel(dir)
   return top and M.real(top) or nil
 end
 
--- The tab-local (or global) working directory of TAB.
-function M.tab_cwd(tab)
-  return fn.getcwd(-1, api.nvim_tabpage_get_number(tab))
-end
-
 -- The repository the current tab works in: its cwd's, else the current file's.
 function M.current_root()
   local root = M.toplevel(fn.getcwd())
@@ -181,7 +176,7 @@ function M.plain_window(win)
 end
 
 -- Start screens a plugin draws in place of an empty buffer (snacks.nvim,
--- dashboard-nvim, alpha, mini.starter): nothing to lose, so following may
+-- dashboard-nvim, alpha, mini.starter): nothing to lose, so a file may
 -- replace them like an empty file window.
 local START_SCREENS = { snacks_dashboard = true, dashboard = true, alpha = true, starter = true, ministarter = true }
 
@@ -193,7 +188,7 @@ function M.start_screen(win)
   return vim.bo[buf].buftype == 'nofile' and START_SCREENS[vim.bo[buf].filetype] == true and not vim.bo[buf].modified
 end
 
--- A window following may show a file in: a normal file window, or a start
+-- A window weaver may show a file in: a normal file window, or a start
 -- screen.
 function M.replaceable(win)
   return M.plain_window(win) or M.start_screen(win)

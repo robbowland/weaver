@@ -137,7 +137,7 @@ function M.render(entries)
       lines[#lines + 1] = ('  %s  %-11s %s'):format(os.date('%H:%M:%S', e.t or 0), kind, text)
       hls[#lines] = hl
       if e.ev == 'edit' or (e.ev == 'bash' and e.file) then
-        actions[#lines] = { file = e.file, root = e.root }
+        actions[#lines] = { file = e.file }
       end
     end
   end
@@ -195,13 +195,7 @@ local function act()
       util.msg('not on disk: ' .. util.short(a.file), util.WARN)
       return
     end
-    local follow = require('weaver.follow')
-    local tab = a.root and follow.tab_for(a.root) or nil
-    if tab then
-      api.nvim_set_current_tabpage(tab)
-    else
-      vim.cmd('wincmd p')
-    end
+    vim.cmd('wincmd p')
     local win = util.window_for(api.nvim_get_current_tabpage(), a.file) or api.nvim_get_current_win()
     api.nvim_set_current_win(win)
     vim.cmd('edit ' .. fn.fnameescape(a.file))

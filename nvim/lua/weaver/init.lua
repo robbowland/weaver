@@ -7,7 +7,7 @@ local M = {}
 local api = vim.api
 local util = require('weaver.util')
 
-local modules = { 'status', 'reload', 'follow', 'review' }
+local modules = { 'status', 'reload', 'review' }
 
 local STRING_FIELDS = {
   'sid', 'root', 'file', 'tool', 'agent_id', 'prompt', 'waiting', 'title', 'ref', 'commit', 'point', 'agent',
@@ -42,16 +42,6 @@ function M.dispatch(ev)
   local kind = ev.ev
   if kind == 'edit' or kind == 'checktime' or kind == 'snapshot' then
     require('weaver.reload').checktime()
-  end
-  if kind == 'edit' or kind == 'root' then
-    require('weaver.follow').on_event(ev)
-  elseif kind == 'focus' then
-    require('weaver.follow').on_focus(ev)
-  end
-  if kind == 'root' then
-    require('weaver.follow').prune_tabs()
-  end
-  if kind == 'edit' or kind == 'checktime' or kind == 'snapshot' then
     require('weaver.review').poke()
   end
   require('weaver.log').refresh()
@@ -86,12 +76,6 @@ end
 
 local function commands()
   local cmd = api.nvim_create_user_command
-  cmd('AgentFollow', function() require('weaver.follow').toggle() end, {
-    desc = 'weaver: toggle following the agent',
-  })
-  cmd('AgentJump', function() require('weaver.follow').jump() end, {
-    desc = "weaver: go to the agent's latest edit now",
-  })
   cmd('AgentReview', function(o) require('weaver.review').open(o.args ~= '' and o.args or 'branch') end, {
     nargs = '?',
     complete = complete_scope,
@@ -133,8 +117,6 @@ local function commands()
 end
 
 M.KEYS = {
-  { 'j', 'AgentJump', "Jump to the agent's edit" },
-  { 'f', 'AgentFollow', 'Toggle following' },
   { 't', 'AgentReview turn', 'Review last turn' },
   { 'u', 'AgentReview uncommitted', 'Review uncommitted' },
   { 'b', 'AgentReview branch', 'Review branch' },
@@ -170,7 +152,6 @@ local function keys()
     pcall(wk.add, { { prefix, group = 'agent' } })
   end
   local leader = vim.g.mapleader == ' ' and '␣' or (vim.g.mapleader or '\\')
-  vim.g.weaver_jump_key_label = ((prefix .. 'j'):gsub('<[Ll]eader>', leader))
   vim.g.weaver_review_key_label = ((prefix .. 't'):gsub('<[Ll]eader>', leader))
 end
 
