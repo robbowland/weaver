@@ -230,6 +230,15 @@ func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 	if e.InTmux {
 		panes()
 	}
+	// On Rex, the session's own panes (its numbers are not tmux's).
+	if e.RexID != "" {
+		ps, _ := e.Mux().Panes()
+		for _, p := range ps {
+			if !p.Exited && !skip[p.ID] && (p.Cwd == dir || strings.HasPrefix(p.Cwd, dir+"/")) {
+				us = append(us, "pane "+string(p.ID))
+			}
+		}
+	}
 	return us
 }
 

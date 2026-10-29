@@ -14,17 +14,19 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
-// Env is where weaver runs: its tmux session, the pane it runs in, and
-// where its files live.
+// Env is where weaver runs: its session (on tmux, or on Rex), the pane it
+// runs in, and where its files live.
 type Env struct {
-	Session   string      // the tmux session's name; empty outside one
-	SKey      string      // the session's key in file names: tmux-<name> for tmux
+	Session   string      // the session's name; empty outside one
+	SKey      string      // the session's key in file names: tmux-<name>, rex-<name>
+	RexID     string      // on Rex, the session's id; empty on tmux
 	MyPane    mux.PaneID  // the pane weaver runs in; empty in a popup
 	InTmux    bool        // inside a tmux client's pane ($TMUX)
-	Where     agent.Where // the life of the session its agents run in ($TMUX's, or the pane an event is from)
+	Where     agent.Where // the life of the session its agents run in ($TMUX's, Rex's, or the pane an event is from)
 	StateDir  string
 	LogDir    string
 	LostDir   string
@@ -61,6 +63,14 @@ func Load() *Env {
 		e.TSock = []string{"-L", "weaver"}
 	}
 	e.Self = Executable()
+	if rex.Chosen(e.RexDir()) {
+		h := rex.FromEnv(e.RexDir())
+		e.RexID, e.Session, e.MyPane, e.Where = h.ID, h.Name, h.Pane, h.Where
+		if e.Session != "" {
+			e.SKey = rex.Key(e.Session)
+		}
+		return e
+	}
 	h := tmux.FromEnv()
 	e.InTmux, e.Session, e.MyPane, e.Where = h.Inside, h.Session, h.Pane, h.Where
 	if e.Session != "" {
@@ -88,9 +98,24 @@ func Executable() string {
 	return p
 }
 
-// Mux is the session weaver acts on, on its multiplexer: the tmux session
-// e.Session, on the server weaver is in, else weaver's own.
-func (e *Env) Mux() mux.Mux { return e.TmuxSession() }
+// Mux is the session weaver acts on, on its multiplexer: on Rex, the
+// session e.RexID; else the tmux session e.Session, on the server weaver
+// is in, else weaver's own.
+func (e *Env) Mux() mux.Mux {
+	if e.RexID != "" {
+		return rex.Session{ID: e.RexID, Name: e.Session, Dir: e.RexDir()}
+	}
+	return e.TmuxSession()
+}
+
+// OnRex: does weaver act on Rex? In a Rex session ($WEAVER_MUX=rex, or a
+// session weaver made there), or outside any with $WEAVER_MUX=rex.
+func (e *Env) OnRex() bool {
+	return e.RexID != "" || !e.InTmux && os.Getenv("WEAVER_MUX") == "rex"
+}
+
+// RexDir is where weaver keeps what it knows of Rex (rex's registry).
+func (e *Env) RexDir() string { return e.StateDir + "/rex" }
 
 // TmuxSession is the session as tmux, for what only tmux has: its hooks'
 // and menus' commands, and its own commands in Tmux.

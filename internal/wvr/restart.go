@@ -140,7 +140,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	if err := e.Mux().Respawn(p, mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir}); err != nil {
+	if err := e.Mux().Respawn(p, mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir, Keep: true}); err != nil {
 		os.RemoveAll(d)
 		return label, errors.New("tmux could not restart it")
 	}

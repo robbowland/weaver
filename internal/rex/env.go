@@ -56,6 +56,42 @@ func FromEnv(dir string) Here {
 	return h
 }
 
+// Lost: has the session life w gone? Its server is not the one running
+// (or none runs), or the session is no longer on it. Unknown (no session
+// in w): not lost.
+func Lost(w agent.Where) bool {
+	if w.Session == "" {
+		return false
+	}
+	if pid := serverPID(); pid == 0 || w.Server != 0 && pid != w.Server {
+		return true
+	}
+	return !Session{ID: w.Session}.Running()
+}
+
+// Alive is the session of weaver's name name (one weaver made, else the
+// one whose id it is): whether it runs, and whether Rex answered at all.
+func Alive(dir, name string) (s Session, running, answered bool) {
+	var l struct {
+		Sessions []struct {
+			ID string `json:"session_id"`
+		} `json:"sessions"`
+	}
+	if call("session.list", map[string]any{}, &l) != nil {
+		return Session{}, false, false
+	}
+	id, ok := ids{dir}.named(name)
+	if !ok {
+		id = "session:" + name
+	}
+	for _, x := range l.Sessions {
+		if x.ID == id {
+			return Session{ID: id, Name: name, Dir: dir}, true, true
+		}
+	}
+	return Session{}, false, true
+}
+
 // Named is weaver's Rex session name, when it runs.
 func Named(dir, name string) (Session, bool) {
 	id, ok := ids{dir}.named(name)

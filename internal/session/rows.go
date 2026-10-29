@@ -16,6 +16,7 @@ import (
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 	"golang.org/x/sys/unix"
 )
@@ -424,14 +425,19 @@ func (e *Env) LostCheck(f string) bool {
 // started since may have the old one's pid), or no server has that life of
 // it any more: no session of its name, or one on another server, or one
 // made again on the same server (another id; older states, without one: a
-// session made after ts). Any other key (zellij's, from before weaver ran
-// on tmux) never is.
+// session made after ts). A Rex session: when the machine has started
+// since, or rex.Lost. Any other key (zellij's, from before weaver ran on
+// tmux) never is.
 func (e *Env) serverLost(skey string, ts int64, w agent.Where) bool {
-	if !strings.HasPrefix(skey, "tmux-") {
+	rexKey := strings.HasPrefix(skey, "rex-")
+	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
 		return false
 	}
 	if b := BootTime(); b > 0 && ts < b {
 		return true
+	}
+	if rexKey {
+		return rex.Lost(w)
 	}
 	ss, _ := e.tmuxSessions()
 	for _, s := range ss {

@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -68,6 +69,12 @@ func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 		add("list-sessions", "-F", format)
 	}
 	return ss, ok
+}
+
+// rexShows: is pane p one of Rex session s's? (Not known: it is.)
+func rexShows(s rex.Session, p mux.PaneID) bool {
+	ps, err := s.Panes()
+	return err != nil || slices.ContainsFunc(ps, func(x mux.Pane) bool { return x.ID == p })
 }
 
 // paneLife is a pane of a life of a session: its key, its id, and which
@@ -124,7 +131,28 @@ func (e *Env) GC() {
 			asked = true
 		}
 	}
+	// A Rex session's (rex-<name>), as Rex says, once a run.
+	type rexAnswer struct {
+		s                 rex.Session
+		running, answered bool
+	}
+	rexes := map[string]rexAnswer{}
+	onRex := func(skey string) (rexAnswer, bool) {
+		name, ok := strings.CutPrefix(skey, "rex-")
+		if !ok {
+			return rexAnswer{}, false
+		}
+		a, seen := rexes[name]
+		if !seen {
+			a.s, a.running, a.answered = rex.Alive(e.RexDir(), name)
+			rexes[name] = a
+		}
+		return a, true
+	}
 	running := func(skey string) bool {
+		if a, ok := onRex(skey); ok {
+			return !a.answered || a.running
+		}
 		ask()
 		// Nobody answered: keep everything.
 		return !answered || slices.ContainsFunc(sessions, func(s tmuxSession) bool { return s.key == skey })
@@ -132,6 +160,10 @@ func (e *Env) GC() {
 	// Is skey's session one made after ts: another life of it, the one a
 	// file of ts knew having gone? (A name on two servers: the earlier.)
 	madeAfter := func(skey string, ts int64) bool {
+		if a, ok := onRex(skey); ok {
+			made, known := a.s.Made()
+			return a.running && known && ts > 0 && made > ts
+		}
 		ask()
 		made := int64(0)
 		for _, s := range sessions {
@@ -153,7 +185,11 @@ func (e *Env) GC() {
 				if shown == nil {
 					shown = e.panesShown()
 				}
-				if st, err := store.ReadState(f); err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
+				st, err := store.ReadState(f)
+				if err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
+					continue
+				}
+				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Where.Session && rexShows(a.s, paneOfNum(st.Pane))) {
 					continue
 				}
 				e.Retire(f, pid)

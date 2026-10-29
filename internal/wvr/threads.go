@@ -28,6 +28,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -132,7 +133,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // nofocus), nvim with nvimEnv too. Its window id.
 func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
-		Spawn: mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir},
+		Spawn: mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir, Keep: true},
 		Label: name, At: -1, Background: nofocus,
 	})
 	if err != nil {
@@ -1494,16 +1495,25 @@ func (e *Env) Send(args []string) error {
 	return e.Mux().Type(want, string(text))
 }
 
-// toWeaverSession makes the session acted on, outside tmux, weaver's
-// ($WEAVER_SESSION, else weaver) on weaver's own tmux server; inside tmux it
-// is the one you are in. An error when it is not running.
+// toWeaverSession makes the session acted on, outside one, weaver's
+// ($WEAVER_SESSION, else weaver): on Rex with $WEAVER_MUX=rex, else on
+// weaver's own tmux server; inside one it is the one you are in. An error
+// when it is not running.
 func (e *Env) toWeaverSession() error {
 	if e.Session == "" {
 		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
-		e.Session, e.SKey = name, "tmux-"+strings.ReplaceAll(name, "/", "_")
+		if e.OnRex() {
+			s, ok := rex.Named(e.RexDir(), name)
+			if !ok {
+				return errors.New("no Rex session " + name + " of weaver's is running (start it with `wvr`)")
+			}
+			e.Session, e.SKey, e.RexID = name, rex.Key(name), s.ID
+			return nil
+		}
+		e.Session, e.SKey = name, session.KeyOf(name)
 	}
 	if !e.Mux().Running() {
-		return errors.New("no tmux session " + e.Session + " is running (start it with `wvr`)")
+		return errors.New("no session " + e.Session + " is running (start it with `wvr`)")
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
+	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
 
@@ -30,6 +33,9 @@ func (e *Env) Start(name string) error {
 	}
 	if name == "" {
 		name = "weaver"
+	}
+	if e.OnRex() {
+		return e.startRex(name)
 	}
 	bin, err := exec.LookPath("tmux")
 	if err != nil {
@@ -71,6 +77,63 @@ func (e *Env) Start(name string) error {
 	}
 	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", "home", "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
 		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
+}
+
+// startRex is Start on Rex ($WEAVER_MUX=rex): weaver's Rex session name,
+// made with home in its first window when it is not running, then shown in
+// the Rex app, which it can be only with Remote Control on in Rex's
+// settings (else wvr says where it is). Weaver's keys for Rex are written
+// each time (~/.config/rex/weaver.lua) for init.lua to load.
+func (e *Env) startRex(name string) error {
+	e.SelfSetup()
+	keys, loaded, err := e.writeRexKeys()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "weaver: could not write weaver's keys for Rex: "+err.Error())
+	} else if !loaded {
+		fmt.Fprintf(os.Stderr, "weaver: for its keys, add require(\"weaver\") to %s, then run rex config reload\n", tildify(filepath.Join(filepath.Dir(keys), "init.lua")))
+	}
+	s, ok := rex.Named(e.RexDir(), name)
+	if !ok {
+		skey := rex.Key(name)
+		os.MkdirAll(e.StateDir, 0o755)
+		os.WriteFile(e.StateDir+"/"+skey+".layout", []byte("weaver\n"), 0o644)
+		os.Remove(e.StateDir + "/" + skey + ".last")
+		here, _ := os.Getwd()
+		if s, err = rex.Start(e.RexDir(), name, here, []string{e.Self, "home"}); err != nil {
+			return fmt.Errorf("weaver could not start on Rex (is Rex running?): %w", err)
+		}
+	}
+	if s.ShowInApp() != nil {
+		fmt.Printf("weaver: the %s session runs in Rex: switch to it there (with Remote Control on in Rex's settings, wvr shows it)\n", name)
+	}
+	return nil
+}
+
+// writeRexKeys writes weaver's keys for Rex (config/rex.lua, run by this
+// wvr) to weaver.lua beside Rex's init.lua: its path, and whether init.lua
+// loads it.
+func (e *Env) writeRexKeys() (string, bool, error) {
+	dir, err := setup.Runtime()
+	if err != nil {
+		return "", false, err
+	}
+	src, err := os.ReadFile(dir + "/config/rex.lua")
+	if err != nil {
+		return "", false, err
+	}
+	conf := os.Getenv("XDG_CONFIG_HOME")
+	if conf == "" {
+		conf = os.Getenv("HOME") + "/.config"
+	}
+	f := filepath.Join(conf, "rex", "weaver.lua")
+	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+		return f, false, err
+	}
+	if err := store.WriteAtomic(f, []byte(strings.ReplaceAll(string(src), "@WVR@", e.Self))); err != nil {
+		return f, false, err
+	}
+	init, _ := os.ReadFile(filepath.Join(filepath.Dir(f), "init.lua"))
+	return f, strings.Contains(string(init), `require("weaver")`) || strings.Contains(string(init), `require "weaver"`), nil
 }
 
 // Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
