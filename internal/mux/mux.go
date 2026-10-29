@@ -14,14 +14,8 @@ import (
 // is "3".
 type PaneID string
 
-// WindowID is a window by its number: tmux's @12 is "12".
+// WindowID is a window as the multiplexer names it: tmux's @12 is "12".
 type WindowID string
-
-// Target is the pane as tmux names it.
-func (p PaneID) Target() string { return "%" + string(p) }
-
-// Target is the window as tmux names it.
-func (w WindowID) Target() string { return "@" + string(w) }
 
 // Pane is one pane of a session.
 type Pane struct {

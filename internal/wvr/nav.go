@@ -477,7 +477,7 @@ func (e *Env) Seen(window string) {
 	if !ok {
 		return
 	}
-	out, err := e.Tmux("display-message", "-p", "-t", win.Target(), "#{window_active}:#{session_attached}:#{pane_id}")
+	out, err := e.Tmux("display-message", "-p", "-t", tmux.WindowTarget(win), "#{window_active}:#{session_attached}:#{pane_id}")
 	if err != nil {
 		return
 	}

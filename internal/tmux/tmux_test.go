@@ -13,7 +13,7 @@ func TestIDs(t *testing.T) {
 			t.Errorf("ParsePane(%q) = %q %v, want %q %v", c.in, p, ok, c.want, c.ok)
 		}
 	}
-	if w, ok := ParseWindow("@12\n"); w != "12" || !ok || w.Target() != "@12" {
+	if w, ok := ParseWindow("@12\n"); w != "12" || !ok || WindowTarget(w) != "@12" {
 		t.Errorf("ParseWindow: %q %v", w, ok)
 	}
 }

@@ -195,10 +195,10 @@ func (e *Env) threadMenu(a mux.PaneID) []menuItem {
 		return nil
 	}
 	return []menuItem{
-		{"nvim", "v", e.menuRun("edit", a.Target())},
-		{"rename thread", "r", e.menuRun("_popup", "rename", a.Target())},
-		{"restart agent", "R", e.menuRun("restart", a.Target())},
-		{"close thread", "x", e.menuRun("_popup", "close", a.Target())},
+		{"nvim", "v", e.menuRun("edit", tmux.Target(a))},
+		{"rename thread", "r", e.menuRun("_popup", "rename", tmux.Target(a))},
+		{"restart agent", "R", e.menuRun("restart", tmux.Target(a))},
+		{"close thread", "x", e.menuRun("_popup", "close", tmux.Target(a))},
 	}
 }
 
@@ -231,7 +231,7 @@ func (e *Env) Menu(args []string) {
 			ms = append(t, menuItem{})
 		}
 		if out, err := e.Tmux("display-message", "-p", "#{buffer_size}"); err == nil && strings.TrimSpace(string(out)) != "" {
-			ms = append(ms, menuItem{"paste", "p", "paste-buffer -p -t " + p.Target()}, menuItem{})
+			ms = append(ms, menuItem{"paste", "p", "paste-buffer -p -t " + tmux.Target(p)}, menuItem{})
 		}
 		ms = append(ms, e.navMenu()...)
 		ms = append(ms, menuItem{}, quit)

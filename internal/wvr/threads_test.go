@@ -65,7 +65,7 @@ func TestThreadNumSkipsLeftovers(t *testing.T) {
 
 // Weaver's per-agent files are named by their pane.
 func TestPaneOfFile(t *testing.T) {
-	if p := session.PaneOfFile("/s/tmux-w_1_42.thread"); p != "42" || p.Target() != "%42" {
+	if p := session.PaneOfFile("/s/tmux-w_1_42.thread"); p != "42" {
 		t.Errorf("paneOfFile: %q", p)
 	}
 }

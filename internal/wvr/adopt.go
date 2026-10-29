@@ -128,7 +128,7 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	where := ""
 	if e.WeaverSession() {
 		if tab := e.adoptWindow(p, n, session.ThreadLabel(n, cmp.Or(about, name), root), root); tab != "" {
-			where = " (window " + tab.Target() + ")"
+			where = " (window " + string(tab) + ")"
 		}
 	}
 	e.PushStatusAndLabels()

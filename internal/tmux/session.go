@@ -123,13 +123,13 @@ func (s Session) Active() (mux.PaneID, bool) {
 }
 
 func (s Session) PID(p mux.PaneID) (int, bool) {
-	out, err := s.Run("display-message", "-p", "-t", p.Target(), "#{pane_pid}")
+	out, err := s.Run("display-message", "-p", "-t", Target(p), "#{pane_pid}")
 	n, perr := strconv.Atoi(strings.TrimSpace(string(out)))
 	return n, err == nil && perr == nil
 }
 
 func (s Session) Screen(p mux.PaneID) []byte {
-	out, _ := s.Run("capture-pane", "-p", "-e", "-t", p.Target())
+	out, _ := s.Run("capture-pane", "-p", "-e", "-t", Target(p))
 	return out
 }
 
@@ -162,7 +162,7 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	p, _ := ParsePane(f[1])
 	width, _ := strconv.Atoi(f[2])
 	if w.View != "" {
-		s.Run("set-option", "-w", "-t", id.Target(), "@weaver-view", w.View)
+		s.Run("set-option", "-w", "-t", WindowTarget(id), "@weaver-view", w.View)
 	}
 	return id, p, width, nil
 }
@@ -176,7 +176,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 	if n.Cols > 0 {
 		cols = strconv.Itoa(n.Cols)
 	}
-	args = append(args, "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", of.Target(), "-l", cols)
+	args = append(args, "-h", "-b", "-P", "-F", "#{pane_id} #{pane_pid}", "-t", Target(of), "-l", cols)
 	out, err := s.Run(append(args, s.spawn(n.Spawn)...)...)
 	f := strings.Fields(string(out))
 	if err != nil || len(f) < 2 {
@@ -191,7 +191,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 }
 
 func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.WindowID, error) {
-	args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", p.Target(), "-n", Text(label)}
+	args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", Target(p), "-n", Text(label)}
 	if !focus {
 		args = append(args, "-d")
 	}
@@ -207,44 +207,44 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.W
 }
 
 func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
-	_, err := s.Run(append([]string{"respawn-pane", "-k", "-t", p.Target()}, s.spawn(sp)...)...)
+	_, err := s.Run(append([]string{"respawn-pane", "-k", "-t", Target(p)}, s.spawn(sp)...)...)
 	return err
 }
 
 func (s Session) KeepExited(p mux.PaneID, what, hint string) {
-	t := p.Target()
+	t := Target(p)
 	s.Run("set-option", "-p", "-t", t, "remain-on-exit", "on", ";",
 		"set-option", "-p", "-t", t, "remain-on-exit-format", Text(what)+
 			"#{?pane_dead_signal, on signal #{pane_dead_signal},#{?#{!=:#{pane_dead_status},0}, with status #{pane_dead_status},}}"+
 			" · "+Text(hint))
 }
 
-func (s Session) Close(p mux.PaneID)         { s.Run("kill-pane", "-t", p.Target()) }
-func (s Session) CloseWindow(w mux.WindowID) { s.Run("kill-window", "-t", w.Target()) }
+func (s Session) Close(p mux.PaneID)         { s.Run("kill-pane", "-t", Target(p)) }
+func (s Session) CloseWindow(w mux.WindowID) { s.Run("kill-window", "-t", WindowTarget(w)) }
 
 func (s Session) Place(w mux.WindowID, at int) {
-	s.Run("move-window", "-d", "-s", w.Target(), "-t", s.at(at))
+	s.Run("move-window", "-d", "-s", WindowTarget(w), "-t", s.at(at))
 }
 
 func (s Session) Label(w mux.WindowID, label string) {
-	s.Run("rename-window", "-t", w.Target(), Text(label))
+	s.Run("rename-window", "-t", WindowTarget(w), Text(label))
 }
 
 // Title titles pane p, waiting at most 2 s: a title, nothing more.
 func (s Session) Title(p mux.PaneID, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	s.cmd(ctx, "select-pane", "-t", p.Target(), "-T", Text(title)).Run()
+	s.cmd(ctx, "select-pane", "-t", Target(p), "-T", Text(title)).Run()
 }
 
 func (s Session) SetWidth(p mux.PaneID, cols int) {
-	s.Run("resize-pane", "-t", p.Target(), "-x", strconv.Itoa(cols))
+	s.Run("resize-pane", "-t", Target(p), "-x", strconv.Itoa(cols))
 }
 
-func (s Session) Zoom(p mux.PaneID)   { s.Run("resize-pane", "-Z", "-t", p.Target()) }
-func (s Session) Show(w mux.WindowID) { s.Run("select-window", "-t", w.Target()) }
+func (s Session) Zoom(p mux.PaneID)   { s.Run("resize-pane", "-Z", "-t", Target(p)) }
+func (s Session) Show(w mux.WindowID) { s.Run("select-window", "-t", WindowTarget(w)) }
 func (s Session) Focus(p mux.PaneID) {
-	s.Run("select-window", "-t", p.Target(), ";", "select-pane", "-t", p.Target())
+	s.Run("select-window", "-t", Target(p), ";", "select-pane", "-t", Target(p))
 }
 func (s Session) Say(ms int, text string) {
 	s.Run("display-message", "-d", strconv.Itoa(ms), Text(text))
@@ -262,11 +262,11 @@ func (s Session) Type(p mux.PaneID, text string) error {
 	if c.Run() != nil {
 		return errors.New("tmux would not take the text")
 	}
-	if _, err := s.Run("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", p.Target()); err != nil {
+	if _, err := s.Run("paste-buffer", "-p", "-d", "-b", "weaver-send", "-t", Target(p)); err != nil {
 		return errors.New("tmux would not paste into pane " + string(p))
 	}
 	time.Sleep(200 * time.Millisecond)
-	s.Run("send-keys", "-t", p.Target(), "Enter")
+	s.Run("send-keys", "-t", Target(p), "Enter")
 	return nil
 }
 
@@ -274,9 +274,9 @@ func (s Session) Type(p mux.PaneID, text string) error {
 // pane-focus-in hook, which marks its agent seen when you look.
 func (s Session) MarkUnseen(p mux.PaneID, on bool) {
 	if on {
-		s.Run("set-option", "-w", "-t", p.Target(), "@weaver-unseen", "1")
+		s.Run("set-option", "-w", "-t", Target(p), "@weaver-unseen", "1")
 	} else {
-		s.Run("set-option", "-w", "-u", "-t", p.Target(), "@weaver-unseen")
+		s.Run("set-option", "-w", "-u", "-t", Target(p), "@weaver-unseen")
 	}
 }
 

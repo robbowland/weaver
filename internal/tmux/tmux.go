@@ -16,6 +16,12 @@ type (
 	Pane     = mux.Pane
 )
 
+// Target is pane p as tmux names it: "3" is %3.
+func Target(p PaneID) string { return "%" + string(p) }
+
+// WindowTarget is window w as tmux names it: "12" is @12.
+func WindowTarget(w WindowID) string { return "@" + string(w) }
+
 // Text is s as tmux takes it literally where it would expand formats: a
 // window's or pane's name, a start directory, a message. Text weaver does
 // not write (an issue's title, an agent's, a branch, a path) goes through
