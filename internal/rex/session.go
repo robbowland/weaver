@@ -479,30 +479,9 @@ func (s Session) SetWidth(p mux.PaneID, cols int) {
 	if err != nil {
 		return
 	}
-	for _, w := range sn.View.Windows {
-		for _, l := range w.Layers {
-			sp := l.Layout
-			if l.Kind != "tiled" || sp == nil || sp.Split == nil || sp.Split.Direction != "horizontal" ||
-				sp.Split.Before == nil || sp.Split.After == nil || sp.Split.Before.Block == "" || sp.Split.After.Block == "" {
-				continue
-			}
-			total, _ := sn.size(w)
-			if total <= 0 {
-				return
-			}
-			var ratio float64
-			switch b {
-			case sp.Split.Before.Block:
-				ratio = float64(cols) / float64(total)
-			case sp.Split.After.Block:
-				ratio = float64(total-cols) / float64(total)
-			default:
-				continue
-			}
-			_ = s.callS("session.resize_pane", map[string]any{"before_block_id": sp.Split.Before.Block,
-				"after_block_id": sp.Split.After.Block, "direction": "horizontal", "ratio": min(max(ratio, 0.05), 0.95)}, nil)
-			return
-		}
+	if before, after, ratio, ok := sn.border(b, cols); ok {
+		_ = s.callS("session.resize_pane", map[string]any{"before_block_id": before, "after_block_id": after,
+			"direction": "horizontal", "ratio": ratio}, nil)
 	}
 }
 

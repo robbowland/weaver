@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -268,6 +270,35 @@ func TestRespawnedProgram(t *testing.T) {
 	}
 	if err := os.Rename(filepath.Join(td, "pane.new"), filepath.Join(td, "pane")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A pane's width is set in its own window, whatever the windows before it:
+// here one of blocks that are not terminals, whose width is not known.
+func TestBorder(t *testing.T) {
+	split := func(a, b string, at float64) string {
+		return `{"kind":"tiled","layout":{"split":{"direction":"horizontal","ratio":` + strconv.FormatFloat(at, 'f', -1, 64) +
+			`,"before":{"block_id":"` + a + `","rect":[0,0,` + strconv.FormatFloat(at, 'f', -1, 64) + `,1]},` +
+			`"after":{"block_id":"` + b + `","rect":[` + strconv.FormatFloat(at, 'f', -1, 64) + `,0,` + strconv.FormatFloat(1-at, 'f', -1, 64) + `,1]}}},`
+	}
+	in := `{"view":{"windows":[
+		{"window_id":"window:a","layers":[` + split("block:a1", "block:a2", 0.5) + `"blocks":[
+			{"block_id":"block:a1","creator_name":"com.example.other"},{"block_id":"block:a2","creator_name":"com.example.other"}]}]},
+		{"window_id":"window:b","layers":[` + split("block:b1", "block:b2", 0.25) + `"blocks":[
+			{"block_id":"block:b1","creator_name":"` + terminal + `"},{"block_id":"block:b2","creator_name":"` + terminal + `"}]}]}]},
+		"blocks":{"block:b1":{"size":{"columns":25,"rows":50}},"block:b2":{"size":{"columns":75,"rows":50}}}}`
+	var sn snapshot
+	if err := json.Unmarshal([]byte(in), &sn); err != nil {
+		t.Fatal(err)
+	}
+	for b, want := range map[string]float64{"block:b1": 0.3, "block:b2": 0.7} {
+		before, after, ratio, ok := sn.border(b, 30)
+		if !ok || before != "block:b1" || after != "block:b2" || math.Abs(ratio-want) > 1e-9 {
+			t.Errorf("%s: %q %q %v %v, want ratio %v", b, before, after, ratio, ok, want)
+		}
+	}
+	if _, _, _, ok := sn.border("block:a1", 30); ok {
+		t.Error("a pane in a window of no known width was given one")
 	}
 }
 

@@ -165,6 +165,35 @@ func (sn snapshot) size(w window) (int, int) {
 	return 0, 0
 }
 
+// border is the border to move for block b to be cols wide, when b and
+// another block split a window side by side: the blocks either side of it
+// and its ratio. The window holding b alone counts.
+func (sn snapshot) border(b string, cols int) (before, after string, ratio float64, ok bool) {
+	for _, w := range sn.View.Windows {
+		for _, l := range w.Layers {
+			sp := l.Layout
+			if l.Kind != "tiled" || sp == nil || sp.Split == nil || sp.Split.Direction != "horizontal" ||
+				sp.Split.Before == nil || sp.Split.After == nil || sp.Split.Before.Block == "" || sp.Split.After.Block == "" {
+				continue
+			}
+			before, after = sp.Split.Before.Block, sp.Split.After.Block
+			if b != before && b != after {
+				continue
+			}
+			total, _ := sn.size(w)
+			if total <= 0 {
+				return "", "", 0, false
+			}
+			ratio = float64(cols) / float64(total)
+			if b == after {
+				ratio = float64(total-cols) / float64(total)
+			}
+			return before, after, min(max(ratio, 0.05), 0.95), true
+		}
+	}
+	return "", "", 0, false
+}
+
 // place is where weaver put window number n (home 0, a thread its number,
 // a view 900 and on); -1 when weaver put it nowhere.
 func (s Session) place(n string) int {
