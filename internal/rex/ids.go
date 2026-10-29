@@ -81,15 +81,22 @@ func (r ids) id(n string) (string, bool) {
 	return id, err == nil && id != ""
 }
 
-// repoint has number n name id from now on: a block started in the place
-// of n's.
-func (r ids) repoint(n, id string) error {
+// replace has number n name the block start makes (its id) from now on: a
+// block started in the place of n's. The lock is held from before start
+// till n names the block, so its program, asking its number however soon
+// (num, which waits for the lock to give one), gets n, never one of its
+// own.
+func (r ids) replace(n string, start func() (string, error)) error {
 	unlock, err := r.lock()
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	if old, ok := r.id(n); ok {
+	id, err := start()
+	if err != nil {
+		return err
+	}
+	if old, ok := r.id(n); ok && old != id {
 		os.Remove(r.path("u", fileName(old)))
 	}
 	if err := r.write("n", n, id); err != nil {

@@ -377,7 +377,8 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.W
 }
 
 // Respawn starts sp in a block beside p's, which it then closes, and has
-// p name the new block: Rex starts no program again in a block.
+// p name the new block (before its program can learn otherwise): Rex
+// starts no program again in a block.
 func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 	old, err := s.block(p)
 	if err != nil {
@@ -395,17 +396,19 @@ func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 			}
 		}
 	}
-	var out struct {
-		Blocks []string `json:"block_ids"`
-	}
-	if err := s.callS("session.new_split", map[string]any{"anchor_id": old, "direction": "horizontal", "side": "after",
-		"ratio": 0.5, "layout": layout(sp, label)}, &out); err != nil {
-		return err
-	}
-	if len(out.Blocks) == 0 {
-		return errors.New("rex: no pane made")
-	}
-	if err := s.ids().repoint(string(p), out.Blocks[0]); err != nil {
+	if err := s.ids().replace(string(p), func() (string, error) {
+		var out struct {
+			Blocks []string `json:"block_ids"`
+		}
+		if err := s.callS("session.new_split", map[string]any{"anchor_id": old, "direction": "horizontal", "side": "after",
+			"ratio": 0.5, "layout": layout(sp, label)}, &out); err != nil {
+			return "", err
+		}
+		if len(out.Blocks) == 0 {
+			return "", errors.New("rex: no pane made")
+		}
+		return out.Blocks[0], nil
+	}); err != nil {
 		return err
 	}
 	_ = s.ids().note("cmd", string(p), strings.Join(sp.Argv, " "))
