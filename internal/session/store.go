@@ -2,8 +2,6 @@ package session
 
 import (
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
@@ -24,9 +22,7 @@ func (e *Env) LoseStaleThread(p mux.PaneID) {
 	if err != nil || e.Session == "" {
 		return
 	}
-	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{session_created}")
-	made, _ := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
-	if err == nil && made > fi.ModTime().Unix() {
+	if made, ok := e.Mux().Made(); ok && made > fi.ModTime().Unix() {
 		e.LoseThread(f)
 	}
 }

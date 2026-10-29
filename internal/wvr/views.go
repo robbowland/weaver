@@ -182,15 +182,11 @@ func (e *Env) viewOf(name string) (view, error) {
 
 // viewWindows are the session's view windows, by view name: window ids.
 func (e *Env) viewWindows() map[string]mux.WindowID {
-	out, err := e.Tmux("list-windows", "-t", "="+e.Session, "-F", "#{window_id} #{@weaver-view}")
+	all, _ := e.Mux().Windows()
 	ws := map[string]mux.WindowID{}
-	if err != nil {
-		return ws
-	}
-	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		id, v, _ := strings.Cut(l, " ")
-		if w, ok := tmux.ParseWindow(id); ok && v != "" {
-			ws[v] = w
+	for _, w := range all {
+		if w.View != "" {
+			ws[w.View] = w.ID
 		}
 	}
 	return ws

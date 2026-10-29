@@ -101,25 +101,19 @@ func Executable() string {
 	return p
 }
 
-// Tmux runs tmux on the server weaver is in, else weaver's own; its output.
-func (e *Env) Tmux(args ...string) ([]byte, error) {
-	if !e.InTmux {
-		args = append(append([]string{}, e.TSock...), args...)
-	}
-	return exec.Command("tmux", args...).Output()
+// Mux is the session weaver acts on, on its multiplexer: the tmux session
+// e.Session, on the server weaver is in, else weaver's own.
+func (e *Env) Mux() mux.Mux { return e.TmuxSession() }
+
+// TmuxSession is the session as tmux, for what only tmux has: its hooks'
+// and menus' commands, and its own commands in Tmux.
+func (e *Env) TmuxSession() tmux.Session {
+	return tmux.Session{Name: e.Session, Sock: e.TSock, Inside: e.InTmux}
 }
 
-// SessionWhere is the life of this session as tmux says now (zero when it
-// does not): what an agent started in it runs in.
-func (e *Env) SessionWhere() agent.Where {
-	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pid} #{session_id}")
-	srv, ses, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
-	n, _ := strconv.Atoi(srv)
-	if err != nil || n <= 0 || !strings.HasPrefix(ses, "$") {
-		return agent.Where{}
-	}
-	return agent.Where{Server: n, Session: ses}
-}
+// Tmux runs tmux on the server weaver is in, else weaver's own; its output.
+// For what only tmux does (its menus, its hooks): the rest is Mux's.
+func (e *Env) Tmux(args ...string) ([]byte, error) { return e.TmuxSession().Run(args...) }
 
 // SockDirReady makes weaver's socket directory, or checks the one there:
 // a directory (not a link) of yours, for you alone. What weaver keeps in it

@@ -188,12 +188,11 @@ func (e *Env) cardHold() (hold bool, unmark string) {
 // onScreen: is this list's pane one a client shows? (A popover has no
 // pane of its own: it shows while it runs.)
 func (e *Env) onScreen() bool {
-	p := os.Getenv("TMUX_PANE")
-	if p == "" {
+	if e.MyPane == "" {
 		return true
 	}
-	out, err := e.Tmux("list-clients", "-F", "#{pane_id}")
-	return err != nil || slices.Contains(strings.Fields(string(out)), p)
+	ps, err := e.Mux().Looking()
+	return err != nil || slices.Contains(ps, e.MyPane)
 }
 
 // cardRoom is where the card goes in a dashboard cols x lines with a list of

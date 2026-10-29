@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -111,10 +112,7 @@ func (e *Env) PushStatus() { e.pushStatus(false) }
 func (e *Env) PushStatusAndLabels() { e.pushStatus(true) }
 
 func (e *Env) pushStatus(labels bool) {
-	clients := " "
-	if out, err := e.Tmux("list-clients", "-F", "#{pane_id}"); err == nil {
-		clients = " " + strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(string(out), "\n"), "%", ""), "\n", " ") + " "
-	}
+	looking, _ := e.Mux().Looking()
 	rows, at := e.AgentRows()
 	var need, done, work int
 	var seenNow []mux.PaneID
@@ -127,8 +125,8 @@ func (e *Env) pushStatus(labels bool) {
 			need++
 		case NeedLook:
 			// Done while you look at it (its pane or its nvim): seen at once.
-			if strings.Contains(clients, " "+string(r.Pane)+" ") ||
-				strings.Contains(clients, " "+string(e.NvimPane(r.Pane))+" ") && e.NvimPane(r.Pane) != "" {
+			if slices.Contains(looking, r.Pane) ||
+				slices.Contains(looking, e.NvimPane(r.Pane)) && e.NvimPane(r.Pane) != "" {
 				seenNow = append(seenNow, r.Pane)
 			} else {
 				done++

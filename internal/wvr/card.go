@@ -217,8 +217,7 @@ func (e *Env) Preview(args []string) string {
 		if n, ok := cli.EnvInt("FZF_PREVIEW_LINES"); ok {
 			lines = n
 		}
-		scr, _ := e.Tmux("capture-pane", "-p", "-e", "-t", p.Target())
-		ls := strings.Split(strings.TrimSuffix(string(scr), "\n"), "\n")
+		ls := strings.Split(strings.TrimSuffix(string(e.Mux().Screen(p)), "\n"), "\n")
 		last := 0
 		for i, l := range ls {
 			if strings.TrimSpace(l) != "" {

@@ -865,7 +865,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 // session, and the session id.
 func (e *Env) writeResume(d string, th store.Thread, st agent.Record, sid string) error {
 	if store.Write(d+"/thread.json", th) != nil ||
-		store.Write(d+"/state.json", st.Resumed(time.Now().Unix(), e.SessionWhere())) != nil ||
+		store.Write(d+"/state.json", st.Resumed(time.Now().Unix(), e.Mux().Life())) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		return errors.New("cannot write its records")
 	}
@@ -1386,10 +1386,8 @@ func (e *Env) CloseTail(a []string) error {
 	// Their shells, so that what they left running is launchd's (below).
 	var shells []int
 	for _, p := range []mux.PaneID{agent, nv} {
-		if out, err := e.Tmux("display-message", "-p", "-t", p.Target(), "#{pane_pid}"); p != "" && err == nil {
-			if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n > 1 {
-				shells = append(shells, n)
-			}
+		if n, ok := e.Mux().PID(p); p != "" && ok && n > 1 {
+			shells = append(shells, n)
 		}
 	}
 	e.Tmux("kill-pane", "-t", agent.Target())
@@ -1537,7 +1535,7 @@ func (e *Env) toWeaverSession() error {
 		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
 		e.Session, e.SKey = name, "tmux-"+strings.ReplaceAll(name, "/", "_")
 	}
-	if _, err := e.Tmux("has-session", "-t", "="+e.Session); err != nil {
+	if !e.Mux().Running() {
 		return errors.New("no tmux session " + e.Session + " is running (start it with `wvr`)")
 	}
 	return nil
@@ -1606,7 +1604,7 @@ func (e *Env) Quit(args []string) error {
 			return cli.ErrCancelled
 		}
 	}
-	if _, err := e.Tmux("kill-session", "-t", "="+name); err != nil {
+	if err := e.Mux().Quit(); err != nil {
 		return errors.New("tmux could not quit " + name)
 	}
 	return nil

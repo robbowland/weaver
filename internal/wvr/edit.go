@@ -83,11 +83,7 @@ func (e *Env) editLock(agent mux.PaneID) func() {
 // focusedPane is the pane you are on (a popup or run-shell is not a pane:
 // the session's active one).
 func (e *Env) focusedPane() mux.PaneID {
-	out, err := e.Tmux("display-message", "-p", "-t", "="+e.Session+":", "#{pane_id}")
-	if err != nil {
-		return ""
-	}
-	p, _ := tmux.ParsePane(string(out))
+	p, _ := e.Mux().Active()
 	if p == e.MyPane {
 		return ""
 	}

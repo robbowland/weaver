@@ -17,16 +17,14 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
-// Panes lists the session's panes (tmux list-panes -s), retried twice: an
-// empty answer is no answer.
+// Panes lists the session's panes, retried twice: an empty answer is no
+// answer.
 func (e *Env) Panes() ([]mux.Pane, bool) {
 	for i := 0; i < 3; i++ {
-		out, err := e.Tmux("list-panes", "-s", "-t", "="+e.Session, "-F", tmux.PanesFormat)
-		if ps := tmux.ParsePanes(out); err == nil && len(ps) > 0 {
+		if ps, err := e.Mux().Panes(); err == nil && len(ps) > 0 {
 			return ps, true
 		}
 		time.Sleep(100 * time.Millisecond)
