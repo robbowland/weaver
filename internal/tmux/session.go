@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -357,4 +358,35 @@ func (s Session) Popup(size func(cols, lines int) (int, int), border bool, dir s
 	}
 	args = append(append(args, "--"), argv...)
 	return s.cmd(context.Background(), args...), client
+}
+
+// Here is where weaver runs, as tmux tells it: in a tmux client's pane
+// ($TMUX), the session, the pane and the session's life; outside tmux,
+// nothing.
+type Here struct {
+	Inside  bool
+	Session string
+	Pane    mux.PaneID
+	Where   agent.Where
+}
+
+// FromEnv is where weaver runs, from tmux's environment: the session from
+// $WEAVER_TMUX_SESSION, which weaver's sessions set for their panes, else
+// asked of tmux.
+func FromEnv() Here {
+	h := Here{Inside: os.Getenv("TMUX") != "", Where: agent.ParseWhere(os.Getenv("TMUX"))}
+	h.Pane, _ = ParsePane(os.Getenv("TMUX_PANE"))
+	if !h.Inside {
+		return h
+	}
+	h.Session = os.Getenv("WEAVER_TMUX_SESSION")
+	if h.Session == "" {
+		args := []string{"display-message", "-p"}
+		if p := os.Getenv("TMUX_PANE"); p != "" {
+			args = append(args, "-t", p)
+		}
+		out, _ := exec.Command("tmux", append(args, "#S")...).Output()
+		h.Session = strings.TrimRight(string(out), "\n")
+	}
+	return h
 }

@@ -61,21 +61,8 @@ func Load() *Env {
 		e.TSock = []string{"-L", "weaver"}
 	}
 	e.Self = Executable()
-	e.MyPane, _ = tmux.ParsePane(os.Getenv("TMUX_PANE"))
-	e.InTmux = os.Getenv("TMUX") != ""
-	e.Where = agent.ParseWhere(os.Getenv("TMUX"))
-	if e.InTmux {
-		// weaver's tmux sessions set it for their panes; anywhere else, ask.
-		e.Session = os.Getenv("WEAVER_TMUX_SESSION")
-		if e.Session == "" {
-			args := []string{"display-message", "-p"}
-			if p := os.Getenv("TMUX_PANE"); p != "" {
-				args = append(args, "-t", p)
-			}
-			out, _ := exec.Command("tmux", append(args, "#S")...).Output()
-			e.Session = strings.TrimRight(string(out), "\n")
-		}
-	}
+	h := tmux.FromEnv()
+	e.InTmux, e.Session, e.MyPane, e.Where = h.Inside, h.Session, h.Pane, h.Where
 	if e.Session != "" {
 		e.SKey = KeyOf(e.Session)
 	}
