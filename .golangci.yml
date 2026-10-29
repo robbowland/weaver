@@ -21,6 +21,7 @@ linters:
     errcheck:
       exclude-functions:
         - (*github.com/robbowland/weaver/internal/session.Env).Tmux
+        - (github.com/robbowland/weaver/internal/tmux.Session).Run
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln

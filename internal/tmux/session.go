@@ -234,7 +234,7 @@ func (s Session) Label(w mux.WindowID, label string) {
 func (s Session) Title(p mux.PaneID, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	s.cmd(ctx, "select-pane", "-t", Target(p), "-T", Text(title)).Run()
+	_ = s.cmd(ctx, "select-pane", "-t", Target(p), "-T", Text(title)).Run() // a title, nothing more
 }
 
 func (s Session) SetWidth(p mux.PaneID, cols int) {

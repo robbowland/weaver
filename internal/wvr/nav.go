@@ -246,7 +246,7 @@ func (e *Env) selectHome(home mux.WindowID) {
 		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: "home", At: 0}
 		if _, _, _, err := e.Mux().OpenWindow(w); err != nil {
 			w.At = -1
-			e.Mux().OpenWindow(w)
+			_, _, _, _ = e.Mux().OpenWindow(w) // 0 is taken: wherever it goes; nothing more to try
 		}
 		return
 	}
