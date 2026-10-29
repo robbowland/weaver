@@ -114,10 +114,13 @@ func TestSession(t *testing.T) {
 		t.Fatalf("home: %+v %v", ws, err)
 	}
 
-	w, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: true},
+	w, p, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: true},
 		Label: "01 demo", At: 1, Background: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if ws, _ := s.Windows(); !slices.ContainsFunc(ws, func(x mux.Window) bool { return x.ID == w && x.Width == width && width > 0 }) {
+		t.Errorf("window %q is %d wide: %+v", w, width, ws)
 	}
 	nv, pid, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "nvim: demo", Background: true})
 	if err != nil {

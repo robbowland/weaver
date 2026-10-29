@@ -251,9 +251,11 @@ func (s Session) Screen(p mux.PaneID) []byte {
 // taken: is place at another live window's than skip?
 func (s Session) taken(at int, skip string) bool {
 	v, err := s.view()
-	if err != nil {
-		return false
-	}
+	return err == nil && s.takenIn(v, at, skip)
+}
+
+// takenIn is taken, among the windows of view v.
+func (s Session) takenIn(v view, at int, skip string) bool {
 	for _, w := range v.Windows {
 		if n, ok := s.ids().known(w.ID); ok && w.ID != skip && s.place(n) == at {
 			return true
@@ -290,15 +292,8 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	if w.At >= 0 {
 		s.Place(mux.WindowID(wn), w.At)
 	}
-	width := 0
-	if sn, err := s.snapshot(false); err == nil {
-		for _, x := range sn.View.Windows {
-			if x.ID == out.Window {
-				width, _ = sn.size(x)
-			}
-		}
-	}
-	return mux.WindowID(wn), mux.PaneID(pn), width, nil
+	// Its one pane fills it: the window is as wide as the pane.
+	return mux.WindowID(wn), mux.PaneID(pn), s.cols(mux.PaneID(pn)), nil
 }
 
 // cols is pane p's columns.
@@ -442,11 +437,14 @@ func (s Session) CloseWindow(w mux.WindowID) {
 // windows: before the first that weaver placed further on.
 func (s Session) Place(w mux.WindowID, at int) {
 	id, err := s.window(w)
-	if err != nil || s.taken(at, id) {
+	if err != nil {
+		return
+	}
+	v, err := s.view()
+	if err == nil && s.takenIn(v, at, id) {
 		return
 	}
 	_ = s.ids().note("want", string(w), strconv.Itoa(at))
-	v, err := s.view()
 	if err != nil {
 		return
 	}
