@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -277,6 +278,51 @@ func TestRespawnedProgram(t *testing.T) {
 	}
 	if err := os.Rename(filepath.Join(td, "pane.new"), filepath.Join(td, "pane")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Alt N's form starts in the directory the pane reported (OSC 7, a
+// file:// URL), its escapes undone: config/rex.lua's pwd.
+func TestKeysPwd(t *testing.T) {
+	server(t)
+	src, err := os.ReadFile("../../config/rex.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	here := filepath.Join(t.TempDir(), "a b%c")
+	if err := os.Mkdir(here, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	report := "file://myhost" + (&url.URL{Path: here}).EscapedPath()
+	s, err := Start(t.TempDir(), "demo", "/", []string{"/bin/sh", "-c", `printf '\033]7;%s\007' "$1"; exec /bin/sleep 600`, "sh", report})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	b := ""
+	for i := 0; ; i++ {
+		if sn, err := s.snapshot(true); err == nil {
+			for id, in := range sn.Blocks {
+				if in.Pwd != nil && in.Pwd.Pwd == report {
+					b = id
+				}
+			}
+		}
+		if b != "" {
+			break
+		}
+		if i == 50 {
+			t.Fatal("the pane reported no directory")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	script := strings.ReplaceAll(string(src), "@WVR@", "/usr/bin/true") + "\nreturn pwd({ block_id = rex.args.block })\n"
+	var got string
+	if err := do(s.ID, script, map[string]any{"block": b}, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != here {
+		t.Errorf("pwd %q, want %q", got, here)
 	}
 }
 

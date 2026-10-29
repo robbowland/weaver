@@ -9,12 +9,18 @@ local wvr = "@WVR@"
 
 local terminal = "com.superlogical.terminal"
 
--- The directory the pane a key was pressed in last reported (a file://
--- URL), for a new thread's form to start from.
+-- The directory the pane a key was pressed in last reported, for a new
+-- thread's form to start from: a file:// URL's path, its %XX escapes
+-- undone (a space is %20), else a plain path as it is.
 local function pwd(ctx)
   local r = ctx.block_id and rex.block.call(terminal, "pwd", { block_id = ctx.block_id })
   local url = r and r.pwd or ""
-  return (url:gsub("^file://[^/]*", ""))
+  local path = url:match("^file://[^/]*(/.*)$")
+  if path then
+    return (path:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+  end
+  if url:find("://", 1, true) then return "" end
+  return url
 end
 
 -- run runs wvr with args for the session the key was pressed in, as tmux's
