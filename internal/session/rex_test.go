@@ -60,19 +60,26 @@ func TestRexLostAndGC(t *testing.T) {
 	now := time.Now().Unix()
 	dead := strconv.Itoa(deadPid(t))
 
-	// A thread in pane p: its record, and (pid: its agent's, "" for none
-	// reported; "-" for no state at all) its agent's state as of ts.
+	// A thread in pane p as of ts: its record, and (pid: its agent's, ""
+	// for none reported; "-" for no state at all) its agent's state, in
+	// life where.
+	where := life
 	thread := func(p mux.PaneID, pid string, ts int64) {
 		t.Helper()
 		n, _ := strconv.Atoi(string(p))
 		sid := "conv-" + string(p)
-		if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: n, Name: "t" + string(p), Agent: agent.Claude, SessionID: sid}); err != nil {
+		f := e.PaneFile(p, "thread")
+		if err := store.Write(f, store.Thread{Num: n, Name: "t" + string(p), Agent: agent.Claude, SessionID: sid}); err != nil {
+			t.Fatal(err)
+		}
+		at := time.Unix(ts, 0)
+		if err := os.Chtimes(f, at, at); err != nil {
 			t.Fatal(err)
 		}
 		if pid == "-" {
 			return
 		}
-		st := agent.Record{Pane: jsonx.Int(n), Agent: "claude", State: agent.StateIdle, TS: ts, SessionID: sid, Where: life}
+		st := agent.Record{Pane: jsonx.Int(n), Agent: "claude", State: agent.StateIdle, TS: ts, SessionID: sid, Where: where}
 		if pid != "" {
 			st.Pid = json.Number(pid)
 		}
@@ -145,19 +152,25 @@ func TestRexLostAndGC(t *testing.T) {
 		check("gone", p, false, true)
 	}
 
-	// Rex not answering: nothing is lost or retired.
+	// Rex not answering. A life whose server has stopped is gone, asked or
+	// not; one whose server runs on cannot be told, and nothing of it is
+	// lost or retired.
 	stop()
 	if err := os.RemoveAll(e.LostDir); err != nil {
 		t.Fatal(err)
+	}
+	if lost, known := e.serverLost(skey, now, life); !lost || !known {
+		t.Errorf("its server stopped: serverLost %v, known %v", lost, known)
+	}
+	where = agent.Where{Server: os.Getpid(), Session: s.ID}
+	if lost, known := e.serverLost(skey, now, where); lost || known {
+		t.Errorf("no answer: serverLost %v, known %v", lost, known)
 	}
 	for _, p := range shown {
 		thread(p, dead, now)
 	}
 	thread("9002", "-", now)
 	thread("9003", "", now-7200)
-	if lost, known := e.serverLost(skey, now, life); lost || known {
-		t.Errorf("no answer: serverLost %v, known %v", lost, known)
-	}
 	e.gcAgents()
 	e.Retire(e.StateFile(shown[0]), dead)
 	for _, p := range append(shown, "9002", "9003") {

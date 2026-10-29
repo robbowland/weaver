@@ -455,10 +455,10 @@ func (e *Env) lostCheck(f string) (lost, known bool) {
 // it any more: no session of its name, or one on another server, or one
 // made again on the same server (another id; older states, without one: a
 // session made after ts). A Rex session: when the machine has started
-// since, or rex.Lost; known false while Rex does not answer, when it is
-// neither (a thread taken for lost while it runs would be resumed twice,
-// and one taken for not lost forgotten). Any other key (zellij's, from
-// before weaver ran on tmux) never is.
+// since, else as rex.Lost says, known false while Rex does not answer,
+// when it is neither (a thread taken for lost while it runs would be
+// resumed twice, and one taken for not lost forgotten). Any other key
+// (zellij's, from before weaver ran on tmux) never is.
 func (e *Env) serverLost(skey string, ts int64, w agent.Where) (lost, known bool) {
 	rexKey := strings.HasPrefix(skey, "rex-")
 	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
@@ -468,10 +468,7 @@ func (e *Env) serverLost(skey string, ts int64, w agent.Where) (lost, known bool
 		return true, true
 	}
 	if rexKey {
-		if _, _, answered := rex.Alive(e.RexDir(), skey); !answered {
-			return false, false
-		}
-		return rex.Lost(w), true
+		return rex.Lost(w)
 	}
 	ss, _ := e.tmuxSessions()
 	for _, s := range ss {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -56,17 +57,30 @@ func FromEnv(dir string) Here {
 	return h
 }
 
-// Lost: has the session life w gone? Its server is not the one running
-// (or none runs), or the session is no longer on it. Unknown (no session
-// in w): not lost.
-func Lost(w agent.Where) bool {
-	if w.Session == "" {
-		return false
+// Lost: has the session life w gone, and does Rex say? Gone when its
+// server's process has ended (no call), when the server running is
+// another, or when the session is no longer on it. Not known when Rex does
+// not answer what that takes, whichever call fails: never gone for that.
+// A life with no session: not lost.
+func Lost(w agent.Where) (lost, known bool) {
+	switch {
+	case w.Session == "":
+		return false, true
+	case w.Server > 1 && syscall.Kill(w.Server, 0) != nil:
+		return true, true
 	}
-	if pid := serverPID(); pid == 0 || w.Server != 0 && pid != w.Server {
-		return true
+	pid := serverPID()
+	switch {
+	case pid == 0:
+		return false, false
+	case w.Server != 0 && pid != w.Server:
+		return true, true
 	}
-	return !Session{ID: w.Session}.Running()
+	live, err := sessions()
+	if err != nil {
+		return false, false
+	}
+	return !live[w.Session], true
 }
 
 // Alive is the session whose files are keyed skey (Key of its name): one
