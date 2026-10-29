@@ -205,6 +205,39 @@ func TestOnScreen(t *testing.T) {
 	if ps, err := s.Looking(); len(ps) > 0 || err == nil {
 		t.Errorf("looking: %q %v", ps, err)
 	}
+
+	// No app is attached: a popup cannot show, so none is made, and its
+	// command fails to start, as its caller learns.
+	c, ok := s.Popup(func(c, l int) (int, int) { return c / 2, l / 2 }, false, "", []string{"/bin/sleep", "600"})
+	if ok {
+		t.Error("a popup shows with no app attached")
+	}
+	if err := c.Start(); err == nil {
+		_ = c.Process.Kill()
+		_ = c.Wait()
+		t.Error("a popup that cannot show started")
+	}
+	if n := floating(t, s); n > 0 {
+		t.Errorf("%d floating layers left", n)
+	}
+}
+
+// floating is how many floating layers the session's windows have.
+func floating(t *testing.T, s Session) int {
+	t.Helper()
+	v, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			if l.Kind == "floating" {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // An app is attached unless its connection is lost: Rex says to take a

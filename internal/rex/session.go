@@ -545,8 +545,12 @@ func (s Session) Strip([]mux.StripItem)       {}
 
 // Popup opens argv in a floating layer over the active window, sized by
 // size from the window's columns and lines; the command waits for it to
-// end. False when no app is attached to the session.
+// end. With no app attached to the session, or no layer made, nothing is
+// shown: false, and a command that fails to start.
 func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string, argv []string) (*exec.Cmd, bool) {
+	if !s.attached() {
+		return failed(errors.New("rex: no app is attached to the session")), false
+	}
 	sn, err := s.snapshot(false)
 	cols, lines, active := 0, 0, ""
 	if err == nil {
@@ -570,8 +574,14 @@ func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string
 	var out struct {
 		Blocks []string `json:"block_ids"`
 	}
-	if err := s.callS("session.new_layer", in, &out); err != nil || len(out.Blocks) == 0 {
-		return exec.Command("false"), false
+	if err := s.callS("session.new_layer", in, &out); err != nil {
+		return failed(err), false
 	}
-	return rexCmd("wait", "-s", s.ID, out.Blocks[0]), s.attached()
+	if len(out.Blocks) == 0 {
+		return failed(errors.New("rex: no popup made")), false
+	}
+	return rexCmd("wait", "-s", s.ID, out.Blocks[0]), true
 }
+
+// failed is a command whose Start returns err.
+func failed(err error) *exec.Cmd { return &exec.Cmd{Err: err} }
