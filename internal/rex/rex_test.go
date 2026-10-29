@@ -33,6 +33,12 @@ func hermetic(t *testing.T) {
 			_ = os.Unsetenv(k)
 		}
 	}
+	// rex falls back from a server it cannot reach to the one in its
+	// runtime directory: the test's own, with none in it unless the test
+	// starts one, never the user's.
+	run := t.TempDir()
+	t.Setenv("REX_RUNTIME_DIR", run)
+	t.Setenv("REX_SERVER", "unix://"+run+"/none.sock")
 }
 
 // server starts a Rex server of the test's own (skipped without rex) and
@@ -663,6 +669,9 @@ func TestFromEnv(t *testing.T) {
 	t.Setenv("REX_SERVER", "unix:///nowhere")
 	t.Setenv("REX_SESSION", "session:abc")
 	t.Setenv("REX_BLOCK", "block:def")
+	if p := serverPID(); p != 0 {
+		t.Fatalf("reached a Rex server the test did not start (pid %d)", p)
+	}
 	h := FromEnv(dir)
 	if !h.Inside || h.Name != "weaver" || h.Pane == "" || h.ID != "session:abc" {
 		t.Fatalf("%+v", h)

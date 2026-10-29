@@ -45,6 +45,7 @@ cleanup() {
 	kill "$server" 2>/dev/null
 	wait "$server" 2>/dev/null
 	pkill -f -- "--listen /tmp/weaver-$(id -u)/rex-${S}_" 2>/dev/null
+	rm -f /tmp/weaver-$(id -u)/rex-${S}[._]*
 	rm -rf "$AT"
 }
 trap cleanup EXIT
