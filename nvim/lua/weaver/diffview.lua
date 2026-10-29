@@ -356,14 +356,12 @@ function M.refresh()
   end
 end
 
--- The repository a key press is about: the view's when you are in it, else
--- the current tab's.
-function M.root_here()
+-- The view's repository when you are in it, else nil.
+function M.view_root()
   local cur = M.current()
   if cur and cur.tabpage == api.nvim_get_current_tabpage() then
     return util.real(cur.adapter.ctx.toplevel)
   end
-  return util.current_root()
 end
 
 -- gf: the file in the tab of its own worktree -----------------------------------

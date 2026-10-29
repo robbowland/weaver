@@ -132,8 +132,14 @@ function M.resolve(scope, root)
   return spec
 end
 
+-- The repository a review is of: the view's when you are in it, else the
+-- one the agent (or a subagent) works in, else the current tab's.
+function M.root()
+  return dv.view_root() or require('weaver.status').worktree() or util.current_root()
+end
+
 local function here_spec(scope)
-  local root = dv.root_here()
+  local root = M.root()
   if not root then
     return nil, 'not in a git repository'
   end
@@ -183,7 +189,7 @@ end
 
 -- :AgentReviewed
 function M.mark_reviewed()
-  local root = dv.root_here()
+  local root = M.root()
   local bin = util.weaver_bin()
   if not root or not bin then
     util.msg(root and 'cannot find weaver' or 'not in a git repository', util.WARN)

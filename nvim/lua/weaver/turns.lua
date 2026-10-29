@@ -193,7 +193,7 @@ end
 
 function M.pick()
   local sid = sid_or_warn()
-  local root = sid and util.current_root()
+  local root = sid and require('weaver.review').root()
   if not root then
     if sid then
       util.msg('not in a git repository', util.WARN)

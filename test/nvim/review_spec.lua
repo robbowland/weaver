@@ -182,5 +182,12 @@ T.run(function()
   C.cmd('AgentReview uncommitted')
   T.ok('...and closed again', C.wait_for(3000, 'return #vim.api.nvim_list_tabpages()', 1), 1)
 
+  -- The agent, or a subagent, edits in another worktree: reviews are of that
+  -- one, though this nvim's directory is still worktree a.
+  T.write(R.b .. '/src/app.txt', { 'line one', 'line two, in b', 'line three' })
+  C.event({ ev = 'edit', root = R.b, file = R.b .. '/src/app.txt', sid = sid })
+  C.cmd('AgentReview uncommitted')
+  T.ok("another worktree: the review is of the agent's", shows({ 'M app.txt' }), { 'M app.txt' })
+
   C.close()
 end)

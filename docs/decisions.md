@@ -84,6 +84,14 @@ can supersede an earlier one, and says so.
   task progress while the agent works (`tasks` in the state file).
 - 2026-10-15: Old session chains and the private indexes nothing has used
   for a month are pruned (see [Snapshots](design.md#snapshots)).
+- 2026-10-29: A review is of the worktree the agent, or one of its
+  subagents, last edited or moved to (the root of `edit`, `root` and `focus`
+  events; a snapshot's root is any worktree its turn touched, so it does not
+  count), whatever Neovim's directory; inside the view, of the view's. It had
+  been the current tab's, so only following's tab per worktree pointed a
+  review at a subagent's worktree. Rob wants the review of the agent he
+  picks in Claude Code's agent list, but Claude Code tells hooks nothing of
+  that selection, so the latest edit is the nearest signal.
 
 ## Neovim
 

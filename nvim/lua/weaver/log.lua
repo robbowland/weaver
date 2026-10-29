@@ -206,7 +206,7 @@ local function act()
     api.nvim_set_current_win(win)
     vim.cmd('edit ' .. fn.fnameescape(a.file))
   elseif a.turn then
-    local root = util.current_root()
+    local root = require('weaver.review').root()
     local sid = require('weaver.status').agent.sid
     if not root or not sid then
       return

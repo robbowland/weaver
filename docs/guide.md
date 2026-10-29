@@ -435,7 +435,9 @@ Reviews open in one
 [diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) view. A
 scope's key opens the view; pressing it again from elsewhere brings the view
 back, refreshed; pressing it inside the view closes it; and another scope's
-key replaces it. The view refreshes itself as the agent edits.
+key replaces it. The view refreshes itself as the agent edits. A review is of
+the worktree the agent, or one of its subagents, last edited, whatever
+Neovim's directory; inside the view, a key works on the view's worktree.
 
 | Key | Command | Shows |
 | --- | --- | --- |

@@ -14,8 +14,11 @@ M.agent = {}
 
 local seq = 0
 
--- Fields an event or the state file may carry, copied as they are.
+-- Fields an event or the state file may carry, copied as they are, except
+-- root: only the events in MOVES say where the agent is (a snapshot's root
+-- is any worktree its turn touched).
 local FIELDS = { 'state', 'turn', 'title', 'prompt', 'waiting', 'root', 'agent', 'doing' }
+local MOVES = { edit = true, root = true, focus = true }
 
 -- The files the agent edited this session, in order, each once (at most
 -- 200, like the state file's list).
@@ -136,7 +139,7 @@ function M.update(ev)
     M.agent = { sid = ev.sid }
   end
   for _, k in ipairs(FIELDS) do
-    if ev[k] ~= nil then
+    if ev[k] ~= nil and (k ~= 'root' or MOVES[ev.ev]) then
       M.agent[k] = ev[k]
     end
   end
@@ -158,6 +161,13 @@ end
 function M.refresh_from_file()
   take_state_file()
   return M.agent
+end
+
+-- The repository the agent works in: where it, or one of its subagents,
+-- last edited or moved to. nil before it has, or once that worktree is gone.
+function M.worktree()
+  local root = M.agent.root
+  return type(root) == 'string' and util.toplevel(root) or nil
 end
 
 -- The files the agent edited this session, in order.
