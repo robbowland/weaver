@@ -24,6 +24,15 @@ import (
 // is the session's (then bound to it). Its agent is that pane's process, and
 // its tmux session, server and terminal are that pane's, not the daemon's.
 // One it cannot place is no pane's: never the daemon's own pane's.
+//
+// Neither the hook's input (its session, directory and transcript) nor its
+// process (the daemon's child) says where its session runs, and the
+// daemon's environment is any session's, a Rex block's too: a hook is
+// placed by tmux's panes alone, whatever started the daemon. A Codex in a
+// Rex block (weaver does not follow Codex on Rex) is told only by its
+// process: codex, with a Rex block's environment. While one runs in a
+// directory, the directory names no tmux pane, for it may be that one's
+// session (a tmux pane's bound to it before still is).
 
 // paneInfo is a pane of this tmux server as a Codex hook needs it: which it
 // is, its process, what it runs and where, its session (name, and which life
@@ -45,16 +54,22 @@ type codexPlace struct {
 	inPane bool
 }
 
+// env is e acting on the tmux pane at: on tmux entirely (a daemon a Rex
+// block started has a Rex environment), and, for a hook run in the
+// daemon, in the pane's session and life.
+func (at codexPlace) env(e *session.Env) *session.Env {
+	pe := *e
+	pe.RexID = ""
+	if !at.inPane {
+		pe.Session, pe.SKey, pe.Where = at.pane.session, session.KeyOf(at.pane.session), at.pane.where
+	}
+	return &pe
+}
+
 // codexPane is where Codex session sid's hook goes, for a hook whose
 // environment names pane env, the session working in cwd; ok false when it
-// cannot tell. Its panes are tmux's: a hook run in a Rex session's
-// environment goes to none (weaver does not follow Codex on Rex), never
-// to a tmux pane that shares its number or its directory, whose files and
-// key it would write while acting on the Rex session.
+// cannot tell.
 func codexPane(e *session.Env, env mux.PaneID, sid, cwd string) (codexPlace, bool) {
-	if e.RexID != "" {
-		return codexPlace{}, false
-	}
 	panes := serverPanes(e)
 	if p, ok := panes[env]; ok && ancestor(p.pid) {
 		return codexPlace{p, true}, true
@@ -91,7 +106,7 @@ func codexPane(e *session.Env, env mux.PaneID, sid, cwd string) (codexPlace, boo
 		}
 		in = free
 	}
-	if len(in) != 1 {
+	if len(in) != 1 || rexCodexIn(at) {
 		return codexPlace{}, false
 	}
 	if validSid(sid) && os.MkdirAll(dir, 0o755) == nil {
@@ -117,6 +132,55 @@ func boundPane(dir, sid string, panes map[mux.PaneID]paneInfo) mux.PaneID {
 }
 
 func validSid(sid string) bool { return sid != "" && !strings.ContainsAny(sid, "/.") }
+
+// rexCodexIn: does a Codex of yours run in a Rex block in directory at?
+// Its process says so: codex, its environment a Rex block's ($REX_BLOCK;
+// one with $TMUX runs in tmux, a tmux in a Rex block), its directory the
+// one it started in ($PWD, or its --cd). One whose environment the kernel
+// will not give is taken for tmux's, as before.
+func rexCodexIn(at string) bool {
+	if at == "" {
+		return false
+	}
+	ks, err := unix.SysctlKinfoProcSlice("kern.proc.uid", os.Getuid())
+	if err != nil {
+		return false
+	}
+	for _, k := range ks {
+		if unix.ByteSliceToString(k.Proc.P_comm[:]) != "codex" {
+			continue
+		}
+		argv, env, ok := session.ProcArgs(int(k.Proc.P_pid))
+		if ok && env["REX_BLOCK"] != "" && env["TMUX"] == "" && realPath(codexDir(argv, env["PWD"])) == at {
+			return true
+		}
+	}
+	return false
+}
+
+// codexDir is the directory a Codex run as argv from pwd works in: its
+// -C/--cd, else pwd.
+func codexDir(argv []string, pwd string) string {
+	dir := ""
+	for i := 1; i < len(argv); i++ {
+		switch a := argv[i]; {
+		case (a == "-C" || a == "--cd") && i+1 < len(argv):
+			dir = argv[i+1]
+			i++
+		case strings.HasPrefix(a, "--cd="):
+			dir = strings.TrimPrefix(a, "--cd=")
+		case strings.HasPrefix(a, "-C") && len(a) > 2:
+			dir = a[2:]
+		}
+	}
+	switch {
+	case dir == "":
+		return pwd
+	case filepath.IsAbs(dir) || pwd == "":
+		return dir
+	}
+	return filepath.Join(pwd, dir)
+}
 
 // forgetCodexSession drops session sid's binding to its pane (it ended).
 func forgetCodexSession(e *session.Env, sid string) {

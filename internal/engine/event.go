@@ -70,18 +70,17 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	tty := "/dev/tty"
 	// Codex's hooks may run in its shared app server, with another pane's
 	// environment: its pane, session, server and terminal are the pane's
-	// it is placed in (codexPane), and one it cannot place is dropped.
+	// it is placed in (codexPane), and one it cannot place is dropped. That
+	// is a tmux pane, so it acts on tmux, even from a daemon a Rex block
+	// started.
 	if adapter == "codex" {
 		at, ok := codexPane(e, mux.PaneID(pane), strip(n.Session), strip(n.Cwd))
 		if !ok {
 			return nil
 		}
-		pane = string(at.pane.id)
+		pane, e = string(at.pane.id), at.env(e)
 		if !at.inPane {
 			pid, tty = strconv.Itoa(at.pane.pid), at.pane.tty
-			pe := *e
-			pe.Session, pe.SKey, pe.Where = at.pane.session, session.KeyOf(at.pane.session), at.pane.where
-			e = &pe
 		}
 		if h.Event == "SessionEnd" {
 			defer forgetCodexSession(e, strip(n.Session))

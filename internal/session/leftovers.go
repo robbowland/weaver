@@ -268,15 +268,22 @@ func runsFrom(tree []proc, dir string) bool {
 
 // readProc is process pid's arguments and environment (kern.procargs2).
 func readProc(pid int) (proc, bool) {
-	b, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return proc{}, false
-	}
-	argv, env, ok := parseProcArgs(b)
+	argv, env, ok := ProcArgs(pid)
 	if !ok {
 		return proc{}, false
 	}
 	return proc{pid: pid, argv: argv, env: env}, true
+}
+
+// ProcArgs are process pid's arguments and environment, as the kernel
+// keeps them (kern.procargs2); false when it will not say (another user's
+// process, or one macOS keeps them of).
+func ProcArgs(pid int) ([]string, map[string]string, bool) {
+	b, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return nil, nil, false
+	}
+	return parseProcArgs(b)
 }
 
 // parseProcArgs reads kern.procargs2's layout: argc (int32), the program's

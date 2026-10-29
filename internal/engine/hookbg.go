@@ -30,6 +30,7 @@ func hookBg(e *session.Env) {
 		return
 	}
 	bestEffort(os.Unsetenv("WEAVER_BG"))
+	h.actOn(e)
 	h.sf = e.StateFile(h.Pane)
 	if h.FollowBash != "" {
 		followBash(e, h)
@@ -80,6 +81,16 @@ func hookBg(e *session.Env) {
 		e.GC()
 	}
 	hookSnapshots(e, h)
+}
+
+// actOn has e act on the session the hook acted on, not the one its
+// environment names (a Codex daemon's hook placed in a tmux pane has a Rex
+// block's, or another session's). A run started by an older weaver says
+// none: its environment's, as then.
+func (h *hk) actOn(e *session.Env) {
+	if h.Session != "" {
+		e.Session, e.SKey, e.RexID = h.Session, h.SKey, h.RexID
+	}
 }
 
 // sameRoot: is h's root still the agent's? A later hook may have moved it

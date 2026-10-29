@@ -193,11 +193,24 @@ two, the one no other session is bound to), bound to it from then on. Its
 `pid` is that pane's process, and its session, key, `server`,
 `tmux_session` and bell are that pane's, not the daemon's environment's. A
 SessionEnd drops the binding, and GC old ones after a month. Neither found,
-the event is dropped: never filed under `$TMUX_PANE`'s pane. A hook run in a
-Rex session's environment is placed in no pane (only tmux's panes are
-looked among, and its files and key would be a tmux pane's while weaver
-acted on the Rex session), so weaver refuses a Codex thread on Rex: `wvr
-new`, resuming, adopting and restarting one say so.
+the event is dropped: never filed under `$TMUX_PANE`'s pane.
+
+Neither a hook's input (its session, `cwd` and transcript) nor its process
+(the daemon's child) says where its session runs, and the daemon's
+environment is any session's, a Rex block's too: placing goes by tmux's
+panes alone, whatever started the daemon, so a tmux Codex thread reports
+whoever started it. A placed event acts on tmux entirely (no Rex session
+id: its keys, files and multiplexer calls are the tmux pane's), and so does
+its background run, which takes the session the hook acted on (`hk`'s
+`Session`, `SKey`, `RexID`) rather than its own environment's. A Codex in a
+Rex block is told only by its process: `codex`, its environment a Rex
+block's (`$REX_BLOCK`, no `$TMUX`), its directory `$PWD` or its `--cd`.
+While one runs in a directory, the directory names no tmux pane (the event
+may be its session's), and an unbound tmux Codex there waits to be placed
+until it has gone; a binding made before still places. A Codex weaver
+cannot read the environment of counts as tmux's. Weaver does not follow
+Codex on Rex, so it refuses a Codex thread there: `wvr new`, resuming,
+adopting and restarting one say so.
 
 | Field | For | Meaning |
 | --- | --- | --- |
