@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
@@ -20,10 +22,10 @@ import (
 
 // Session is the Rex session ID as weaver acts on it (mux.Mux). Weaver
 // calls it Name (its files' key is Key(Name)) and keeps its numbers for
-// Rex's blocks and windows in Dir. Rex has no message line, status line or
-// window marks: Say, SayToSession, Publish, Strip and MarkUnseen do
-// nothing (Rex shows an agent's state itself, from what Claude Code
-// reports to it).
+// Rex's blocks and windows in Dir. Rex has no status line or window marks:
+// Publish, Strip and MarkUnseen do nothing (Rex shows an agent's state
+// itself, from what Claude Code reports to it). Nor has it a message
+// line: Say shows its text in a floating layer of its own.
 type Session struct {
 	ID   string
 	Name string
@@ -521,8 +523,43 @@ func (s Session) Type(p mux.PaneID, text string) error {
 	return err
 }
 
-func (s Session) Say(int, string)             {}
-func (s Session) SayToSession(int, string)    {}
+// sayScript prints $1, the text (an argument: the shell never reads it),
+// on a clear screen with no cursor, then waits $2 seconds.
+const sayScript = `printf '\033[2J\033[H\033[?25l %s' "$1"; exec /bin/sleep "$2"`
+
+// Say shows text for about ms milliseconds at the foot of the active
+// window, as tmux's message line does: a floating layer that takes no
+// focus (nor keys), whose program prints it and exits, which closes it.
+// Its control characters show as spaces.
+func (s Session) Say(ms int, text string) {
+	text = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, text)
+	cols, lines := 160, 48
+	if sn, err := s.snapshot(false); err == nil {
+		for _, w := range sn.View.Windows {
+			if c, l := sn.size(w); w.ID == sn.View.Active && c > 0 && l > 0 {
+				cols, lines = c, l
+			}
+		}
+	}
+	n := utf8.RuneCountInString(text) + 2
+	w, h := min(n, cols), min((n+cols-1)/cols, 3, lines)
+	fw, fh := float64(w)/float64(cols), float64(h)/float64(lines)
+	_ = s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
+		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "options": map[string]any{
+			"shell": "none", "size": map[string]any{"columns": w, "rows": h},
+			"exit":    map[string]any{"on_completion": true, "quick_exit_threshold_ms": 0},
+			"command": []string{"/bin/sh", "-c", sayScript, "sh", text, strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64)},
+		}}}}, nil)
+}
+
+// SayToSession is Say: what the session shows is its active window.
+func (s Session) SayToSession(ms int, text string) { s.Say(ms, text) }
+
 func (s Session) MarkUnseen(mux.PaneID, bool) {}
 func (s Session) Publish(int, int, int)       {}
 func (s Session) Strip([]mux.StripItem)       {}

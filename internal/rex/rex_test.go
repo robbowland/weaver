@@ -385,6 +385,53 @@ func TestOnScreen(t *testing.T) {
 	if n := floating(t, s); n > 0 {
 		t.Errorf("%d floating layers left", n)
 	}
+
+	// A message shows its text as it is, over the active window, for about
+	// the time given, and takes no focus (nor keys).
+	text := `it's $HOME; "$(echo not run)" ` + "`x`"
+	for name, say := range map[string]func(int, string){"Say": s.Say, "SayToSession": s.SayToSession} {
+		before, _ := s.Active()
+		start := time.Now()
+		say(1000, text)
+		for i := 0; !shows(t, s, text); i++ {
+			if i == 20 {
+				t.Fatalf("%s: the text is not shown", name)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if now, _ := s.Active(); now != before {
+			t.Errorf("%s: the focus went from %q to %q", name, before, now)
+		}
+		for floating(t, s) > 0 {
+			if time.Since(start) > 4*time.Second {
+				t.Fatalf("%s: the message stays", name)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// shows: does a floating layer of the session show text?
+func shows(t *testing.T, s Session, text string) bool {
+	t.Helper()
+	v, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			for _, b := range l.Blocks {
+				var f struct {
+					Content string `json:"content"`
+				}
+				if l.Kind == "floating" && s.callS("block.method", map[string]any{"block_id": b.ID, "method": "format",
+					"args": map[string]any{"format": "text"}}, &f) == nil && strings.Contains(f.Content, text) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // floating is how many floating layers the session's windows have.
