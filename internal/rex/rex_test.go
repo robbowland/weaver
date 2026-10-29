@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -46,12 +47,30 @@ func server(t *testing.T) {
 		t.Fatal(err)
 	}
 	sock := filepath.Join(d, "s.sock")
+	// Its runtime files in d, not the user's Rex directory.
+	run := filepath.Join(d, "run")
+	t.Setenv("REX_RUNTIME_DIR", run)
+	t.Setenv("REX_SERVER", "unix://"+sock)
 	srv := exec.Command(Bin(), "server", "run", "--listen", "unix://"+sock, "--state-dir", filepath.Join(d, "state"), "--config", conf)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = srv.Process.Kill(); _ = srv.Wait() })
-	t.Setenv("REX_SERVER", "unix://"+sock)
+	// Stopped, not killed, so that Rex removes its runtime file as it goes.
+	t.Cleanup(func() {
+		done := make(chan error, 1)
+		go func() { done <- srv.Wait() }()
+		_ = srv.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			_ = srv.Process.Kill()
+			<-done
+			t.Error("the Rex server did not stop")
+		}
+		if left, _ := filepath.Glob(filepath.Join(run, "servers", "*", "runtime.json")); len(left) > 0 {
+			t.Errorf("the Rex server left %q", left)
+		}
+	})
 	for i := 0; ; i++ {
 		if call("server.status", map[string]any{}, nil) == nil {
 			return
