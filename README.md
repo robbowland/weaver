@@ -58,7 +58,9 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
   [Codex](https://github.com/openai/codex), installed and signed in.
 - A terminal that sends Option as Alt, since weaver's keys are Alt keys. In
   Ghostty, set `macos-option-as-alt = true`; in iTerm2, set the Option key to
-  `Esc+`.
+  `Esc+`; in Rex, run Change Option Key Behavior from its command palette and
+  have Option send Alt (its default, Automatic, sends Alt only on a U.S.
+  keyboard layout, and types special characters on any other).
 
 Homebrew installs everything else weaver uses: tmux, Neovim, fzf,
 [Worktrunk](https://worktrunk.dev) for worktrees, and gh.

@@ -65,6 +65,12 @@ window, a window per thread), or shows it when it is already running. Rex
 shows a session only when asked by an app with Remote Control on (Rex's
 settings, Rex Server); otherwise switch to it in Rex yourself.
 
+weaver's keys are Alt keys, in Rex as anywhere: run Change Option Key
+Behavior from Rex's command palette and have Option send Alt. Rex's default,
+Automatic, sends Alt only on a U.S. keyboard layout; on any other (ABC,
+British, ...) Option types special characters, `alt+y` types `¥`, and only
+`cmd+y` reaches weaver's tmux, as the Meta it reads Rex's Cmd as.
+
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `~/.config/rex/weaver.lua` as it starts, and says to load it by adding
 `require("weaver")` to `~/.config/rex/init.lua` and running
