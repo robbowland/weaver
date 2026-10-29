@@ -71,12 +71,6 @@ func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
 	return ss, ok
 }
 
-// rexShows: is pane p one of Rex session s's? (Not known: it is.)
-func rexShows(s rex.Session, p mux.PaneID) bool {
-	ps, err := s.Panes()
-	return err != nil || slices.ContainsFunc(ps, func(x mux.Pane) bool { return x.ID == p })
-}
-
 // paneLife is a pane of a life of a session: its key, its id, and which
 // life (server, session id).
 type paneLife struct {
@@ -122,6 +116,13 @@ func (e *Env) panesShown() map[paneLife]bool {
 // States of other keys (zellij's, from before weaver ran on tmux only) go
 // the same way as their agents do.
 func (e *Env) GC() {
+	e.gcAgents()
+	e.gcFiles()
+}
+
+// gcAgents is GC's agents, their nvims' bindings and their threads: of
+// every session, each asked once a run.
+func (e *Env) gcAgents() {
 	now := time.Now().Unix()
 	var sessions []tmuxSession
 	answered, asked := false, false
@@ -131,22 +132,36 @@ func (e *Env) GC() {
 			asked = true
 		}
 	}
-	// A Rex session's (rex-<name>), as Rex says, once a run.
+	// A Rex session's (rex-<name>), as Rex says, once a run: whether it
+	// runs, and its panes when asked (each a snapshot of the session).
 	type rexAnswer struct {
 		s                 rex.Session
 		running, answered bool
+		panes             []mux.Pane
+		listed            bool
+		listErr           error
 	}
-	rexes := map[string]rexAnswer{}
-	onRex := func(skey string) (rexAnswer, bool) {
+	rexes := map[string]*rexAnswer{}
+	onRex := func(skey string) (*rexAnswer, bool) {
 		if !strings.HasPrefix(skey, "rex-") {
-			return rexAnswer{}, false
+			return nil, false
 		}
-		a, seen := rexes[skey]
-		if !seen {
+		a := rexes[skey]
+		if a == nil {
+			a = &rexAnswer{}
 			a.s, a.running, a.answered = rex.Alive(e.RexDir(), skey)
 			rexes[skey] = a
 		}
 		return a, true
+	}
+	// Is pane p one of a's? (Not known: it is.)
+	rexShows := func(a *rexAnswer, p mux.PaneID) bool {
+		if !a.listed {
+			a.panes, a.listErr = a.s.Panes()
+			a.listed = true
+		}
+		_, ok := PaneIn(a.panes, p)
+		return a.listErr != nil || ok
 	}
 	running := func(skey string) bool {
 		if a, ok := onRex(skey); ok {
@@ -188,7 +203,7 @@ func (e *Env) GC() {
 				if err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
 					continue
 				}
-				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Session && rexShows(a.s, paneOfNum(st.Pane))) {
+				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (!a.answered || a.running && a.s.ID == st.Session && rexShows(a, paneOfNum(st.Pane))) {
 					continue
 				}
 				e.Retire(f, pid)
@@ -239,6 +254,11 @@ func (e *Env) GC() {
 			e.LoseThread(f)
 		}
 	}
+}
+
+// gcFiles is GC's old files, the nvims a server that went left running,
+// leftovers and dead sockets.
+func (e *Env) gcFiles() {
 	old := func(dir, pat string, age time.Duration, all bool) {
 		ms, _ := filepath.Glob(filepath.Join(dir, pat))
 		for _, m := range ms {
