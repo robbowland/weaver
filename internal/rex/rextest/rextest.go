@@ -41,10 +41,14 @@ func NoRex(t testing.TB) string {
 	return d
 }
 
+// stopWait is how long a server has to stop once told.
+var stopWait = 10 * time.Second
+
 // Server starts a Rex server of the test's own (the test is skipped
 // without rex), as NoRex points rex. It stops as the test ends, or when
 // stop is called (no Rex answers from then on): SIGTERM, then waited for,
-// so that Rex removes its runtime file; one left is an error.
+// so that Rex removes its runtime file; one left is an error, and so is a
+// server still running 10 s on, which is then killed.
 func Server(t testing.TB) (stop func()) {
 	t.Helper()
 	bin := rex.Bin()
@@ -65,8 +69,16 @@ func Server(t testing.TB) (stop func()) {
 	var once sync.Once
 	stop = func() {
 		once.Do(func() {
+			done := make(chan error, 1)
+			go func() { done <- srv.Wait() }()
 			_ = srv.Process.Signal(syscall.SIGTERM)
-			_ = srv.Wait()
+			select {
+			case <-done:
+			case <-time.After(stopWait):
+				t.Errorf("the Rex server did not stop in %s", stopWait)
+				_ = srv.Process.Kill()
+				<-done
+			}
 			if left, _ := filepath.Glob(filepath.Join(run, "servers", "*", "runtime.json")); len(left) > 0 {
 				t.Errorf("the Rex server left %q", left)
 			}
