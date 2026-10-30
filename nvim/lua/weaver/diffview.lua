@@ -12,7 +12,9 @@
 --   { kind = 'index' }                   the worktree against the index
 --   { kind = 'worktree', base = rev }    the worktree against a commit
 --   { kind = 'branch', base = rev }      the worktree against the merge base
---   { kind = 'commits', from = rev, to = rev }
+--   { kind = 'commits', from = rev, to = rev, follow? }
+-- With follow, from and to name refs that move (an agent's chain), read
+-- again at each refresh.
 --
 -- diffview hides untracked files whenever the left side is a commit, and
 -- `git diff <commit>` calls a file that is in the commit but untracked
@@ -285,6 +287,18 @@ local function refresh(view)
   end
 end
 
+-- diffview reads a comparison's revisions once, as commits. Have VIEW read
+-- them again at each refresh, so a comparison of refs that move follows
+-- them (diffview then replaces the entries whose commits changed).
+local function follow_revs(view)
+  view.adapter.refresh_revs = function(self, rev_arg, left, right)
+    local l, r = self:parse_revs(rev_arg, {})
+    if l and r and (l.commit ~= left.commit or r.commit ~= right.commit) then
+      return l, r
+    end
+  end
+end
+
 local function open_new(spec, ident)
   local lib = require('diffview.lib')
   local args, private_index = compare_args(spec.compare)
@@ -296,6 +310,9 @@ local function open_new(spec, ident)
   local view = lib.diffview_open(args)
   if not view then
     return nil
+  end
+  if spec.compare.follow then
+    follow_revs(view)
   end
   if view.tabpage and api.nvim_tabpage_is_valid(view.tabpage) then
     -- diffview reused an identical untagged view: adopt it.

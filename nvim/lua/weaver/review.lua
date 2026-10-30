@@ -170,6 +170,17 @@ function M.open_turn(root, turn)
   })
 end
 
+-- One agent's own changes in a worktree, from :AgentDiffs (an item of
+-- weaver.agents): its chain's tip against its start, followed as it moves.
+function M.open_agent(it)
+  return dv.show({
+    key = 'agent ' .. it.agent,
+    root = it.root,
+    label = it.name .. ' in ' .. fn.fnamemodify(it.root, ':t'),
+    compare = { kind = 'commits', from = it.ref .. '^', to = it.ref, follow = true },
+  })
+end
+
 -- :AgentChanges [scope]: every hunk of a scope in quickfix, to step through
 -- in your own buffers.
 function M.changes(scope)

@@ -23,13 +23,47 @@ function M.path()
   end
 end
 
+-- What the whole log says of its agents, kept beyond the last MAX_ENTRIES:
+-- chains ({ root, agent, t }[], each once, as they started: docs/design.md,
+-- Agent chains) and info (by subagent id: { type, desc, running, since }).
+local function new_agents()
+  return { chains = {}, seen = {}, info = {} }
+end
+
+local function note_agent(idx, e)
+  local id = e.agent_id
+  if type(id) ~= 'string' or id == '' then
+    return
+  end
+  if e.ev == 'snapshot' and e.point == 'agent' and type(e.root) == 'string' then
+    local key = e.root .. '\0' .. id
+    if not idx.seen[key] then
+      idx.seen[key] = true
+      idx.chains[#idx.chains + 1] = { root = e.root, agent = id, t = e.t }
+    end
+    return
+  end
+  local info = idx.info[id] or {}
+  idx.info[id] = info
+  if e.ev == 'agent' then
+    info.type, info.desc = e.agent_type or info.type, e.desc or info.desc
+  elseif e.ev == 'subagent' then
+    info.type = info.type or e.agent_type
+    if e.phase == 'start' then
+      info.running, info.since = true, e.t
+    elseif e.phase == 'stop' then
+      info.running = false
+    end
+  end
+end
+
 -- The log as read so far, so each refresh reads only what was appended:
 -- { path, offset (bytes read), partial (an unfinished last line), entries
--- (oldest first, the last MAX_ENTRIES) }.
-local cache = { entries = {} }
+-- (oldest first, the last MAX_ENTRIES), agents (see new_agents) }.
+local cache = { entries = {}, agents = new_agents() }
 
 local function reset(path)
-  cache = { path = path, offset = 0, partial = '', entries = {} }
+  cache = { path = path, offset = 0, partial = '', entries = {}, agents = new_agents() }
 end
 
 -- The log's entries, oldest first.
@@ -64,12 +98,20 @@ function M.read(path)
     local ok, e = pcall(vim.json.decode, line, { luanil = { object = true, array = true } })
     if ok and type(e) == 'table' and e.ev then
       cache.entries[#cache.entries + 1] = e
+      note_agent(cache.agents, e)
     end
   end
   if #cache.entries > MAX_ENTRIES then
     cache.entries = vim.list_slice(cache.entries, #cache.entries - MAX_ENTRIES + 1)
   end
   return cache.entries
+end
+
+-- What the agent session's whole log says of its agents (see new_agents),
+-- read up to now.
+function M.agents()
+  M.read(M.path())
+  return cache.agents
 end
 
 local function one(s, n)
@@ -101,7 +143,10 @@ local function describe(e)
   elseif ev == 'subagent' then
     return 'subagent', (e.phase or '') .. ' ' .. (e.agent_type or '') .. ' ' .. one(e.desc, 80), 'Comment'
   elseif ev == 'snapshot' then
-    return 'snapshot', (e.point or '') .. ' ' .. fn.fnamemodify(e.root or '', ':t') .. ' ' .. (e.commit or ''):sub(1, 7), 'WeaverBarFaint'
+    local who = e.agent_id and (' ' .. e.agent_id) or ''
+    return 'snapshot', (e.point or '') .. who .. ' ' .. fn.fnamemodify(e.root or '', ':t') .. ' ' .. (e.commit or ''):sub(1, 7), 'WeaverBarFaint'
+  elseif ev == 'agent' then
+    return 'subagent', (e.agent_type or '') .. ' ' .. one(e.desc, 80) .. ' · ' .. (e.agent_id or ''), 'Comment'
   elseif ev == 'session' then
     return 'session', e.source or '', 'WeaverBarFaint'
   elseif ev == 'cwd' then

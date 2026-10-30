@@ -92,6 +92,9 @@ local function commands()
   cmd('AgentTurns', function() require('weaver.turns').pick() end, {
     desc = "weaver: pick one of the agent's turns and review its diff",
   })
+  cmd('AgentDiffs', function() require('weaver.agents').pick() end, {
+    desc = "weaver: pick an agent (the main thread or a subagent) and a worktree, and review its own changes there",
+  })
   cmd('AgentLog', function() require('weaver.log').open() end, {
     desc = "weaver: the agent's activity log",
   })
@@ -124,6 +127,7 @@ M.KEYS = {
   { 'm', 'AgentReview mine', "Review the agent's files" },
   { 'R', 'AgentReviewed', 'Mark reviewed' },
   { 'T', 'AgentTurns', 'Pick a turn' },
+  { 'a', 'AgentDiffs', "Pick an agent's changes" },
   { 'l', 'AgentLog', 'Activity log' },
   { 'w', 'AgentWhy', 'Why is this line here' },
   { 'c', 'AgentChanges turn', 'Last turn hunks in quickfix' },

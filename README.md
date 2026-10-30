@@ -191,6 +191,8 @@ review exactly what each turn changed:
 
 - `<leader>at` reviews the agent's last turn, and `<leader>ab` the whole
   branch.
+- `<leader>aa` picks one agent, the main thread or a subagent, and reviews
+  only its own changes, in whichever worktree it made them, as it works.
 - `<leader>an` notes a line for the agent, and `<leader>as` sends your notes
   as its next prompt.
 

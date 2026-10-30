@@ -467,11 +467,26 @@ Neovim's directory; inside the view, a key works on the view's worktree.
 | `<leader>am` | `:AgentReview mine` | Only the files this agent changed |
 | `<leader>aR` | `:AgentReviewed` | Mark the worktree reviewed as it is now |
 | `<leader>aT` | `:AgentTurns` | Pick a turn and review its own diff |
+| `<leader>aa` | `:AgentDiffs` | Pick an agent, the main thread or a subagent, and a worktree it changed: its own changes there |
 | `<leader>ac` | `:AgentChanges turn` | The last turn's hunks in quickfix (any scope works) |
 | `<leader>al` | `:AgentLog` | The agent's activity, turn by turn |
 | `<leader>aw` | `:AgentWhy` | Which turn and prompt last changed this line (`!` opens that turn) |
 | `<leader>an` | `:AgentNote` | Note this line, or the selected lines, for the agent |
 | `<leader>as` | `:AgentSend` | Send your notes to the agent (`!`: even while it works) |
+
+A turn's diff mixes the main thread with every subagent working in that
+worktree, and misses subagents in other worktrees. `<leader>aa` lists each
+agent's own changes instead: the main thread's, and each subagent's under
+the task it was given, in every worktree it changed, with what it added and
+removed, the agents still at work first. Picking one reviews just that
+agent's files there, since just before its first change: your edits, and
+other agents' files in the same worktree, stay out. The view compares two
+snapshots rather than opening the worktree's files, so no language server
+starts for another worktree, and it follows the agent as it works. Two
+agents editing one file share it: the file shows as the agent last left it.
+An agent's Bash changes show when Claude Code says what a command changed,
+which it does in auto mode, or with `"bashEditDiffEnabled": true` in its
+settings; without that, only its edits do.
 
 As you review, note what the agent should change. `<leader>an` on a line or a
 selection, in a review or in any file of its Neovim, asks for the note and
