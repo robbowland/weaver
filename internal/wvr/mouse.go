@@ -279,7 +279,7 @@ func boardMenu(kind string) []menuItem {
 	case strings.HasPrefix(kind, "a"):
 		ms = []menuItem{{"jump to it", "", "Enter"}, {"nvim", "v", "C-e"}}
 		if !searching() {
-			ms = append(ms, menuItem{"rename", "r", "r"}, menuItem{"restart agent", "R", "R"}, menuItem{"close", "x", "x"})
+			ms = append(ms, menuItem{"rename", "r", "r"}, menuItem{"restart agent", "R", "R"}, menuItem{"hold", "h", "h"}, menuItem{"close", "x", "x"})
 		}
 	case strings.HasPrefix(kind, "l"):
 		ms = []menuItem{{"resume", "", "Enter"}}

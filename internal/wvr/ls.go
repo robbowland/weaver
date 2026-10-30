@@ -33,7 +33,7 @@ func fzfCmd(args []string, env ...string) *exec.Cmd {
 
 // lsKeys are the dashboard's keys while browsing; searching (/) unbinds
 // them so they type.
-const lsKeys = "j,k,g,G,n,x,a,r,R,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
+const lsKeys = "j,k,g,G,n,x,h,a,r,R,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
@@ -108,6 +108,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 	adoptAct := "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent(" + q + " _popup adopt)'; else printf '%s2})\\n' 'execute-silent(" + q + " _popup adopt {'; fi"
 	// In place, on its own row (modes.go), in the popover too.
 	renameAct := "transform:case {1} in a*) " + q + " _mode rename {2} ;; esac"
+	holdAct := "transform:case {1} in a*) " + q + " _mode hold {2} ;; esac"
 	restartAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " restart {2})' ;; esac"
 	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+q+" _menu board {1})"
 	if peek != "" {
@@ -201,7 +202,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "focus:" + focusRefresh("transform(COLOR=1 "+q+" _refresh)") + `+transform:case {1} in a*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n "$t" ] || t={5} ;; *) t={5}; [ -n "$t" ] || t={4} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last,q:" + quitAct,
 			// An edit open (modes.go) is done; else the row's thread.
-			"--bind", "enter,double-click:transform:case \"$FZF_PROMPT\" in rename\\ *) " + q + " _modedone \"$FZF_PROMPT\" \"$FZF_QUERY\" ;; " +
+			"--bind", "enter,double-click:transform:case \"$FZF_PROMPT\" in rename\\ *|hold\\ *) " + q + " _modedone \"$FZF_PROMPT\" \"$FZF_QUERY\" ;; " +
 				"*) case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; esac ;; esac",
 		}
 		for _, r := range [][3]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}} {
@@ -217,6 +218,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "x:"+closeAct,
 			"--bind", "a:"+adoptAct,
 			"--bind", "r:"+renameAct,
+			"--bind", "h:"+holdAct,
 			"--bind", "R:"+restartAct,
 			"--bind", "v,e,ctrl-e:transform:case {1} in a*) echo '"+editAct+"' ;; esac",
 			"--bind", "s:transform("+q+" _view screen)",

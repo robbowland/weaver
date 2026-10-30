@@ -73,12 +73,15 @@ func (it ThreadItem) Name() string {
 
 // Lost is a thread lost with its session (docs/design.md, Lost threads):
 // when, which session, and its agent's state and thread record as they
-// were.
+// were. Held is when you put it on hold yourself (wvr hold), and Note what
+// you said is next; a held thread is never brought back on its own.
 type Lost struct {
 	Lost   jsonx.Int    `json:"lost"`
 	SKey   string       `json:"skey"`
 	State  agent.Record `json:"state"`
 	Thread Thread       `json:"thread"`
+	Held   jsonx.Int    `json:"held,omitempty"`
+	Note   string       `json:"note,omitempty"`
 	// Session is older records' name for SKey.
 	Session string `json:"session,omitempty"`
 }

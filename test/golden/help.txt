@@ -5,6 +5,8 @@ KEYS
   n               new thread (wvr new)
   x               close the thread, its nvim and its window
                   (and offers to remove a merged worktree)
+  h               hold it: say what's next; its agent and nvim close,
+                  its worktree stays, and it waits under HELD
   a               adopt: an agent you started by hand becomes a thread;
                   elsewhere, pick a conversation to resume as one
   r               rename the thread (empty: its agent's title)
@@ -24,7 +26,7 @@ THREADS
 
   ×2  two agents share the worktree: their turn diffs mix
 
-LOST (its session went: a crash, or quit)
+LOST (its session went: a crash, or quit)  HELD (you held it)
   ⏎               resume it in a new window (wvr resume)
   x               forget it (its worktree goes once nothing in it is unsaved)
 

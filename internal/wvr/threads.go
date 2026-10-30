@@ -899,7 +899,8 @@ func (e *Env) ResumeSession() {
 	}
 	var ls []l
 	for _, r := range e.LostRows() {
-		if r.Skey == e.SKey || r.Skey == also {
+		// A thread you put on hold waits for you.
+		if r.Held == "" && (r.Skey == e.SKey || r.Skey == also) {
 			n := 999
 			if v, ok := atoi(r.Num); ok {
 				n = v
@@ -948,15 +949,22 @@ func (e *Env) Resume(args []string) error {
 				wh += "/" + w.Branch
 			}
 			lost, _ := strconv.ParseInt(r.Lost, 10, 64)
-			fmt.Printf("%3s  %-32s %-28s %4s ago  %s\n", r.Num, r.Name, wh, age(now-lost), oneline.Cut(r.Sid, 8))
+			held := ""
+			if r.Held != "" {
+				held = "  held: " + cmp.Or(r.Note, "-")
+			}
+			fmt.Printf("%3s  %-32s %-28s %4s ago  %s%s\n", r.Num, r.Name, wh, age(now-lost), oneline.Cut(r.Sid, 8), held)
 		}
 		fmt.Println("wvr resume NAME (a number, or a session id) brings one back; --all, every one")
 		return nil
 	}
 	var match []string
 	if all {
+		// What the session lost, not what you put on hold.
 		for _, r := range rows {
-			match = append(match, r.File)
+			if r.Held == "" {
+				match = append(match, r.File)
+			}
 		}
 	} else {
 		for _, r := range rows {
@@ -1167,11 +1175,14 @@ func threadNvim(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 // agent (the focused one) with its nvim, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
 func (e *Env) Close(args []string) error {
-	yes, rmwt, target := false, false, mux.PaneID("")
+	yes, rmwt, hold, target := false, false, false, mux.PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--yes" || a == "-y":
 			yes = true
+		case a == "--hold":
+			// wvr hold's: unasked and unsaid, its worktree left as it is.
+			yes, hold = true, true
 		case a == "--remove-worktree":
 			rmwt = true
 		case strings.HasPrefix(a, "-"):
@@ -1286,6 +1297,9 @@ func (e *Env) Close(args []string) error {
 		}
 	}
 	var out io.Writer = os.Stdout
+	if hold {
+		out = io.Discard
+	}
 	var tty *os.File
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
@@ -1341,7 +1355,7 @@ func (e *Env) Close(args []string) error {
 		}
 	}
 	remove := "0"
-	if removable {
+	if removable && !hold {
 		if rmwt {
 			remove = "1"
 		} else if t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {

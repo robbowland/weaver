@@ -110,6 +110,8 @@ func Help() string {
 		helpRow("n", "new thread", "(wvr new)") +
 		helpRow("x", "close the thread, its nvim and its window", "") +
 		more + d + "(and offers to remove a merged worktree)" + o + "\n" +
+		helpRow("h", "hold it: say what's next; its agent and nvim close,", "") +
+		more + d + "its worktree stays, and it waits under HELD" + o + "\n" +
 		helpRow("a", "adopt: an agent you started by hand becomes a thread;", "") +
 		more + d + "elsewhere, pick a conversation to resume as one" + o + "\n" +
 		helpRow("r", "rename the thread", "(empty: its agent's title)") +
@@ -129,7 +131,7 @@ func Help() string {
 		"\n" +
 		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
 		"\n" +
-		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "\n" +
+		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "  " + g + "HELD" + o + " " + d + "(you held it)" + o + "\n" +
 		helpRow("⏎", "resume it in a new window", "(wvr resume)") +
 		helpRow("x", "forget it", "(its worktree goes once nothing in it is unsaved)") +
 		"\n" +
@@ -491,6 +493,12 @@ func (e *Env) lostCard(sid, title string) string {
 		dir = "…" + string(r[len(r)-n+1:])
 	}
 	ls := []string{"lost" + CDim + " · " + COff + cardAge(now-lost) + CDim + " · its session went" + COff, ""}
+	if lo.Held > 0 {
+		ls = []string{"held" + CDim + " · " + COff + cardAge(now-int64(lo.Held)) + CDim + " · you held it" + COff, ""}
+		if lo.Note != "" {
+			ls = append(ls, field(w, "next", lo.Note, CInk, 3)...)
+		}
+	}
 	ls = append(ls, field(w, "asked", lo.Task(), "", 4)...)
 	if l := st.LastMessage; l != "" {
 		ls = append(ls, field(w, "said", l, CGrey, 6)...)

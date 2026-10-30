@@ -584,6 +584,17 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   (the state file) and `thread` (the thread record). The pane's files go.
   Readers take its directory and key through `lostDir` and its `skey`, where
   an empty field counts as none.
+- **Held:** a thread you put on hold (`wvr hold [PANE] [NOTE]`, the
+  board's `h`) is a lost record of the same name with `held` (epoch s) and
+  `note` (what is next, one line), written under its state file's lock
+  before its agent and nvim are closed as `wvr close --hold` closes them:
+  unasked, its worktree never offered for removal. The board lists it under
+  HELD, last, newest first, its note as its fact, its cell `[=]`, and its age
+  a shade brighter after a week; it is hidden while an agent with its
+  session id still runs (being closed). Neither the session starting (its
+  lost threads brought back) nor `wvr resume --all` takes a held thread;
+  `wvr resume WHICH` and the board's `enter` do, as a lost one's, and `x`
+  forgets it.
 - **Resume:** `wvr resume [--all] [WHICH]` (WHICH: a session id or its first
   4+ characters, a thread name, or a number; alone it lists them). Each is
   claimed by moving its record into `new/<skey>_<token>/` (so two resumes never

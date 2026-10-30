@@ -283,7 +283,9 @@ Agents are grouped under these headings:
   their state, since you watch them less closely; each row's cell still
   shows its state, and `alt+1` still goes to one that needs you;
 - **LOST**: threads whose session went, and that weaver hasn't brought back
-  ([Keeping threads](#keeping-threads)).
+  ([Keeping threads](#keeping-threads));
+- **HELD**: threads you put on hold, each with what's next
+  ([Putting a thread on hold](#putting-a-thread-on-hold)).
 
 Each row shows the thread's number and name, its state as a cell (`[!]`,
 `[x]`, `[/]`, `[ ]`, `[-]`), one fact about it (what it waits on, the command
@@ -305,7 +307,8 @@ its agent again on its conversation, `x` closes the thread.
 | `j` `k`, `g` `G` | Move; first, last |
 | `/` | Search (`esc` to go back) |
 | `n` | Start a thread (`wvr new`) |
-| `x` | Close the thread (`wvr close`); on a lost thread, forget it |
+| `x` | Close the thread (`wvr close`); on a lost or held thread, forget it |
+| `h` | Hold the thread: say what's next, and it waits under HELD ([Putting a thread on hold](#putting-a-thread-on-hold)) |
 | `r` | Rename the thread ([Renaming a thread](#renaming-a-thread)) |
 | `R` | Restart its agent, resuming its conversation ([Restarting an agent](#restarting-an-agent)) |
 | `a` | Adopt the agent, if you started it by hand; elsewhere, pick a conversation to resume as a thread ([Adopting](#adopting-a-conversation)) |
@@ -344,6 +347,24 @@ the machine restarts while a thread's agent runs, weaver keeps the thread as
 
 An agent you ended yourself (`/exit`), or whose window you closed while the
 session ran on, is not lost.
+
+### Putting a thread on hold
+
+A thread you are not working on but would lose something by closing (a
+conversation with the context you'll want back) can wait under HELD
+instead. `h` on its row asks, in the board's search line, what is next for
+when you come back; `enter` holds it: its agent and Neovim close, its
+worktree and branch stay as they are, and its row moves to HELD with your
+note. Nothing brings it back on its own, not even `wvr` starting the
+session again: `enter` on it resumes it in a new window, on its
+conversation, and `x` forgets it. A hold past a week shows its age a shade
+brighter, a nudge to take it up or let it go. `wvr hold [PANE] [NOTE]` does
+the same from a shell, and `wvr resume` lists held threads with lost ones
+(`--all` brings back only the lost).
+
+Claude Code deletes a conversation 30 days after its last use
+(`cleanupPeriodDays` in its settings): a thread held longer than that comes
+back without it.
 
 ### Adopting a conversation
 

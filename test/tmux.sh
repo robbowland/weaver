@@ -702,6 +702,37 @@ ok "...and its agent's title saved as it is stays its agent's" "$(jq -r '.title 
 ok "...and the board whole after it, not filtered by the name typed" \
 	"$(curl -s -m 2 --unix-socket "$(board)" localhost | jq -r '"\(.query)|\(.matchCount == .totalCount)"')" "|true"
 
+# --- hold: h asks what's next, then closes the thread's agent and nvim and
+# keeps it under HELD, never brought back on its own; enter there resumes it.
+key 68 # h
+waitfor 'v0 | grep -qF "hold 02 › "' 20
+ok "hold: h opens it on the row's thread" "$(v0 | grep -cF 'hold 02 › ')|$(v0 | grep -c 'CANCEL')" "1|1"
+typed "rerun the parser tests" "hold 02 › rerun the parser tests"
+key 0d # enter
+waitfor '[ "$(windows)" = "0 1 " ]' 60
+held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id // .thread.session_id)"' "$f"; done; }
+ok "...enter: its window goes, the thread kept as held with your note and its conversation" \
+	"$(windows)|$(held)" "0 1 |rerun the parser tests|$CID"
+waitfor 'v0 | grep -q "rerun the parser tests"' 20
+key 67 # g: the list from its top, its headings in view
+waitfor 'v0 | grep -q "HELD"' 20
+ok "...under HELD on the board, your note its fact" \
+	"$(v0 | grep -c 'HELD · 1')|$(v0 | grep -q '\[=\].*rerun the parser tests' && echo shown)" "1|shown" ||
+	v0 | sed 's/^/  board: /' | cut -c1-140 | head -12
+ok "...the board whole again, not filtered by the note typed" \
+	"$(curl -s -m 2 --unix-socket "$(board)" localhost | jq -r '"\(.query)|\(.matchCount == .totalCount)"')" "|true"
+outside wvr resume --all >/dev/null 2>&1
+sleep 1
+ok "...resume --all (what the session lost) leaves it waiting" "$(windows)|$(held | wc -l | tr -d ' ')" "0 1 |1"
+key 47 # G: its row, the last
+key 0d # enter
+waitfor '[ "$(windows)" = "0 1 2 " ]' 60
+AG2=$(pane_at 2 1)
+waitfor '[ -f "$AT/args.$AG2" ]'
+ok "...enter on it brings it back, its conversation resumed" \
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.$AG2" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "0 1 2 |--resume $CID |0"
+waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
+
 # --- restart: a thread's agent started again in its own pane (an updated
 # harness), resuming its conversation; one mid-turn is left unless forced
 rm -f "$AT/args.$AG2"

@@ -136,6 +136,7 @@ var commands = map[string]command{
 	"resume":  {run: helped((*wvr.Env).Resume)},
 	"adopt":   {run: helped((*wvr.Env).Adopt)},
 	"rename":  {run: helped((*wvr.Env).Rename)},
+	"hold":    {run: helped((*wvr.Env).Hold)},
 	"restart": {run: helped((*wvr.Env).Restart)},
 	"quit":    {run: helped((*wvr.Env).Quit)},
 	"next":    {session: true, run: done(func(e *wvr.Env, _ []string) { e.Next() })},

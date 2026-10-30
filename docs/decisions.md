@@ -140,6 +140,28 @@ can supersede an earlier one, and says so.
   diffview-plus calls and the git adapter leaves empty), so the view follows
   the agent's tip as it moves.
 
+## Holding threads
+
+- 2026-10-30: A thread can be put on hold (`h`, `wvr hold`): its agent and
+  Neovim close, its conversation and worktree stay, and it waits under HELD
+  with a note of what is next, until you resume it. Rob keeps idle threads
+  open because they hold context he may want, and too many in flight is
+  what he struggles with; closing one feels like losing it, as tab-hoarding
+  research found (Chang et al., CHI 2021). A held thread is a lost thread's
+  record with `held` and `note`, so resuming, forgetting and listing are the
+  lost threads' own. The note is asked for because a plan for an unfinished
+  task is what lets it go from mind (Masicampo & Baumeister 2011; Leroy &
+  Glomb 2018 on attention residue), and is optional, since asking costs.
+  Left out to stay lean: coming back on a date or an event (PR merged), a
+  limit on how many are held, and an agent-written note; an age a shade
+  brighter after a week stands in for a weekly look.
+- 2026-10-30: Edits on the board (rename, hold) are in place, in its search
+  line, not a popup: the keys let go while one is open, and the prompt
+  names the thread. Leaving one clears the query, re-enables the search and
+  waits for it before hiding the input line: done in one go from a
+  transform (fzf 0.74.5), hiding the input left the list filtered by what
+  was typed.
+
 ## Neovim
 
 - 2026-10-14: Polite following. An `edit` or `root` event is followed only

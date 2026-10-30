@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
@@ -226,19 +227,27 @@ func cardRoom(items, cols, lines int) string {
 
 // The board's groups: by state, then read-only threads (reviews,
 // investigations: not ones you watch closely) in a group of their own, then
-// the threads lost with their session.
-var heads = [6]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "REVIEWS", "LOST"}
+// the threads lost with their session, then those you put on hold.
+var heads = [7]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "REVIEWS", "LOST", "HELD"}
 
 const (
 	groupReviews = 4
 	groupLost    = 5
+	groupHeld    = 6
+)
+
+// GHeld is a held thread's cell; heldStale, how long a hold lasts before
+// its age stands out, as a weekly look at what waits would catch it.
+const (
+	GHeld     = "[=]"
+	heldStale = 7 * 24 * 3600
 )
 
 type boardRow struct {
 	group                                    int
 	key, pane, tab, glyph, name, fact, where string
 	age, label, root, num                    string
-	lost                                     bool
+	lost, stale                              bool
 }
 
 // Rows is the dashboard's lines for fzf: one TAB-separated item per line,
@@ -286,7 +295,7 @@ func (e *Env) rows(plain bool) string {
 	}
 	agents, now := e.AgentRows()
 	var rs []boardRow
-	counts := [6]int{}
+	counts := [len(heads)]int{}
 	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts
 	wn, wf, ww, numw := 0, 0, 0, 2
 	nums := false
@@ -415,25 +424,40 @@ func (e *Env) rows(plain bool) string {
 		rs = append(rs, r)
 	}
 	live := len(rs)
-	// Threads lost with their session (a crash, or quit), last: enter
-	// resumes one in a new window (wvr resume).
+	running := map[string]bool{}
+	for _, a := range agents {
+		if a.Pane != "" && a.Sid != "" {
+			running[a.Sid] = true
+		}
+	}
+	// Threads lost with their session (a crash, or quit), then those you
+	// held, last: enter resumes one in a new window (wvr resume).
 	for _, l := range e.LostRows() {
+		// Held a moment ago: its agent is still closing.
+		if l.Sid != "" && running[l.Sid] {
+			continue
+		}
 		since := now
 		if digits(l.Lost) {
 			since, _ = strconv.ParseInt(l.Lost, 10, 64)
 		}
 		// Named as it was when live.
 		name := l.Called()
-		fact := "its session went · ⏎ resumes"
+		g, fact, glyph, was := groupLost, "its session went · ⏎ resumes", paint(GEnd, grey, dim, off), "lost"
+		if l.Held != "" {
+			since, _ = strconv.ParseInt(l.Held, 10, 64)
+			g, fact, glyph, was = groupHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, grey, dim, off), "held"
+		}
 		w := git.WhereOf(l.Dir)
 		where := w.Repo
 		if w.Branch != "" {
 			where += "/" + w.Branch
 		}
-		r := boardRow{group: groupLost, key: fmt.Sprintf("%d%011d%08d", groupLost, 10000000000-since, len(rs)), pane: l.Sid,
-			glyph: paint(GEnd, grey, dim, off), lost: true, name: name, fact: fact, where: where,
-			age: age(now - since), root: l.Dir, label: name + " · " + where + " · lost"}
-		counts[groupLost]++
+		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, 10000000000-since, len(rs)), pane: l.Sid,
+			glyph: glyph, lost: true, name: name, fact: fact, where: where,
+			age: age(now - since), root: l.Dir, label: name + " · " + where + " · " + was,
+			stale: g == groupHeld && now-since > heldStale}
+		counts[g]++
 		wn = max(wn, rlen(name))
 		wf = max(wf, rlen(fact))
 		rs = append(rs, r)
@@ -652,7 +676,12 @@ func (e *Env) rows(plain bool) string {
 		if cw > 0 {
 			out += dim + oneline.Fit(r.where, cw-2) + off + "  "
 		}
-		out += dim + fmt.Sprintf("%*s", ageW, r.age) + off
+		// A hold past a week: its age stands out, a nudge to look at it.
+		ac := dim
+		if r.stale {
+			ac = grey
+		}
+		out += ac + fmt.Sprintf("%*s", ageW, r.age) + off
 		id := "a" + r.pane
 		if r.lost {
 			id = "l" + r.pane
@@ -756,7 +785,7 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last.
 func boardHints() []choice {
-	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|ctrl+q QUIT"
+	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|h HOLD|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|ctrl+q QUIT"
 	search := "⏎ JUMP|esc BACK|ctrl+e NVIM|tab VIEWS"
 	// A toggle says where it goes next: s from the screen (or the card
 	// hidden) to the card, ? from the help back to it.
@@ -780,6 +809,8 @@ func boardHints() []choice {
 	switch kind, _ := editing(); {
 	case kind == editRename:
 		items = []string{"⏎ SAVE", "esc CANCEL", "ctrl+u CLEAR"}
+	case kind == editHold:
+		items = []string{"⏎ HOLD", "esc CANCEL"}
 	case searching():
 		items = strings.Split(search, "|")
 	case os.Getenv("LS_EMPTY") == "1" || total == "0":

@@ -116,6 +116,27 @@ hookj "$(ev UserPromptSubmit ',"prompt":"say hello"')"
 ok "hook: working, turn 1, its nvim" "$(jq -r '"\(.state) \(.turn) \(.nvim_pane)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1 $NV"
 ok "status: one working" "$(REX_SESSION=$SID wvr status)" "[/] 1"
 
+# --- the board's edits: rename (as its enter does it), and hold
+REX_SESSION=$SID wvr _modedone "rename 01 › " "Greeting" >/dev/null 2>&1
+waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 50
+ok "rename in place: the thread its prompt names takes the name, and its window" \
+	"$(windows)|$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "home/1 01 Greeting · repo/main/2|Greeting"
+held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id)"' "$f"; done; }
+REX_SESSION=$SID wvr hold "$AG" "write the reply" >"$AT/hold.out" 2>&1
+waitfor '[ "$(windows)" = "home/1" ]' 100
+ok "hold: its window goes, the thread kept as held with your note" "$(windows)|$(held)" "home/1|write the reply|sid-1" ||
+	sed 's/^/  hold: /' "$AT/hold.out"
+REX_SESSION=$SID wvr resume --all >/dev/null 2>&1
+sleep 1
+ok "...resume --all (what the session lost) leaves it waiting" "$(windows)|$(held | wc -l | tr -d ' ')" "home/1|1"
+REX_SESSION=$SID wvr resume sid-1 >"$AT/resume.out" 2>&1
+waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 100
+AGB=$(block_at 2 1)
+waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
+ok "...resumed, it comes back named and on its conversation" \
+	"$(windows)|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "home/1 01 Greeting · repo/main/2|--resume sid-1 |0" ||
+	sed 's/^/  resume: /' "$AT/resume.out"
+
 # --- quit: the session ends, its thread kept
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1
 waitfor '[ -z "$(sid)" ]' 50

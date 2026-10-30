@@ -57,10 +57,14 @@ const Usage = `usage: wvr [command]
                                close an agent (the focused one) with its nvim, and its
                                thread's window; offers to remove a thread's worktree when it
                                is clean and merged or pushed
-  resume [--all] [which]       threads lost when their session went (a crash, or quit):
-                               alone, list them; with a name, number or session id, bring
-                               that one back in a new window resuming its conversation;
-                               --all, every one. --forget [--yes] which: drop one
+  hold [pane-id] [note]        put a thread on hold (the focused one): note what's next;
+                               its agent and nvim close, its worktree stays, and it waits
+                               under HELD until you resume it
+  resume [--all] [which]       threads lost when their session went (a crash, or quit), or
+                               held: alone, list them; with a name, number or session id,
+                               bring that one back in a new window resuming its
+                               conversation; --all, every lost one. --forget [--yes] which:
+                               drop one
   adopt [pane-id | session-id] make a conversation weaver did not start a thread, kept
                                and brought back as threads are: the agent in this pane
                                (or pane-id) where it runs, or conversation session-id

@@ -153,7 +153,7 @@ func (e *Env) Boot(sock string) {
 	if os.Getenv("WEAVER_RESTORE") != "0" {
 		also := strings.TrimPrefix(e.SKey, "tmux-")
 		for _, l := range e.LostRows() {
-			if l.Skey == e.SKey || l.Skey == also {
+			if l.Held == "" && (l.Skey == e.SKey || l.Skey == also) {
 				e.ResumeSession()
 				break
 			}

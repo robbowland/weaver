@@ -355,9 +355,11 @@ func AgentAlive(pid, start string, starts map[int]string) bool {
 	return strings.Join(strings.Fields(now), " ") == strings.Join(strings.Fields(start), " ")
 }
 
-// LostRow is a thread lost with its session.
+// LostRow is a thread lost with its session, or held: Held (epoch s) and
+// Note when you put it on hold.
 type LostRow struct {
 	File, Sid, Name, Num, Dir, Lost, Skey, Task, Title string
+	Held, Note                                         string
 	lost                                               float64
 }
 
@@ -385,7 +387,11 @@ func (e *Env) LostRows() []LostRow {
 		r := LostRow{File: f, Sid: oneline.Line(st.SessionID), Name: oneline.Line(lo.Thread.Name), Num: num,
 			Dir: oneline.Line(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: oneline.Line(lo.Key()),
 			// Named as you renamed it, else as asked.
-			Task: oneline.Line(cmp.Or(lo.Thread.Title, lo.Task())), Title: oneline.Line(cmp.Or(lo.Thread.Title, st.Title))}
+			Task: oneline.Line(cmp.Or(lo.Thread.Title, lo.Task())), Title: oneline.Line(cmp.Or(lo.Thread.Title, st.Title)),
+			Note: oneline.Line(lo.Note)}
+		if lo.Held > 0 {
+			r.Held = strconv.Itoa(int(lo.Held))
+		}
 		r.lost, _ = strconv.ParseFloat(r.Lost, 64)
 		rs = append(rs, r)
 	}
@@ -542,14 +548,36 @@ func (e *Env) LoseThread(f string) {
 // record's), else, one never known, its thread's own; resumed, that one
 // starts afresh in its directory.
 func (e *Env) keepLost(skey string, st agent.Record, th store.Thread) bool {
+	return e.writeLost(skey, st, th, 0, "")
+}
+
+// writeLost writes the lost record of a thread (held when you put it on
+// hold, with your note).
+func (e *Env) writeLost(skey string, st agent.Record, th store.Thread, held int64, note string) bool {
 	st.SessionID = cmp.Or(st.SessionID, th.SessionID)
 	st.Agent = cmp.Or(st.Agent, string(th.Agent))
 	id := st.SessionID
 	if id == "" {
 		id = "thread-" + strconv.FormatInt(th.Created, 10) + "-" + strconv.Itoa(th.Num)
 	}
-	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th}
+	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th, Held: jsonx.Int(held), Note: note}
 	return store.Write(e.LostDir+"/"+skey+"_"+id+".json", rec) == nil
+}
+
+// Hold keeps the thread of the agent whose state file is f as held: a lost
+// record you made, with note (what is next), which nothing brings back on
+// its own. Its files stay, for closing it to forget. False when its agent
+// is no thread, or the record could not be written.
+func (e *Env) Hold(f, note string) bool {
+	defer store.Lock(f)()
+	b := strings.TrimSuffix(f, ".json")
+	th, err := store.ReadThread(b + ".thread")
+	if err != nil {
+		return false
+	}
+	// One whose agent never reported has no state: its record says enough.
+	st, _ := store.ReadState(f)
+	return e.writeLost(KeyOfFile(f), st, th, time.Now().Unix(), note)
 }
 
 // Forget removes the files of the agent whose state file is f (its activity
