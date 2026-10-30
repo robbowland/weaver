@@ -659,6 +659,7 @@ Environment variables change weaver's defaults.
 | `WEAVER_MUX` | `tmux` | `rex`: run on Rex, as `wvr --rex` does ([On Rex](#on-rex-experimental)) |
 | `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
+| `WEAVER_WIP` | `5` | How many threads you mean to have open at once: past it, the board's count shows it (`7/5`) and the new-thread form says how to hold or close one; `0`: no limit |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as Neovim keeps 60 columns |
 | `WEAVER_BELL` | `1` | `needs-you`: ring only when an agent needs you; `0`: never |

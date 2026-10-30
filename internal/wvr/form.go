@@ -221,8 +221,12 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	// Its line stays when it says nothing, so a message coming or going
-	// never moves the rows.
+	// never moves the rows; past the limit on open threads, it says so.
 	if b.Len() == 0 {
+		if n := len(e.SessionFiles("thread")); overWIP(n) {
+			return "        " + CDim + strconv.Itoa(n) + " threads open, past your " + strconv.Itoa(wipLimit()) +
+				": h on the board holds one, x closes one" + COff + "\n"
+		}
 		return " \n"
 	}
 	return b.String()

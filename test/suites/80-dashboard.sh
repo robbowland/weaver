@@ -67,6 +67,20 @@ for p in 0 1 2; do
 	golden "card-$p-60.txt" "$(FZF_PREVIEW_COLUMNS=60 wvr _preview $p "$(FZF_COLUMNS=120 wvr _rows | awk -F '\t' -v id=a$p '$1 == id { print $6 }')" | strip)"
 done
 golden help.txt "$(FZF_SOCK=$AT/x.sock wvr _view help >/dev/null && FZF_SOCK=$AT/x.sock wvr _preview 0 | strip)"
+
+# Past the open threads you mean to have (WEAVER_WIP), the board's count
+# says so, and the form for a new thread on its spare line: a nudge, never
+# a block.
+count() { LS_MODE=plain COLUMNS=120 wvr _rows | head -n 1 | grep -o 'THREADS \] [0-9/]*'; }
+ok "WIP: past WEAVER_WIP the board's count is against it, else as ever" \
+	"$(WEAVER_WIP=2 count)|$(count)|$(WEAVER_WIP=0 count)" "THREADS ] 3/2|THREADS ] 3|THREADS ] 3"
+for p in 0 2; do
+	jq -nc --arg w "$T/dash" '{name: "t", task: "t", worktree: $w, agent: "claude"}' >"$SD/${SK}_$p.thread"
+done
+ok "...and the form, its spare line telling how to close or hold one" \
+	"$(WEAVER_WIP=1 wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')|$(wvr _form header "$AT/wip.form" "")" \
+	" 2 threads open, past your 1: h on the board holds one, x closes one| "
+rm -f "$SD/${SK}_0.thread" "$SD/${SK}_2.thread"
 golden empty-card.txt "$(wvr _preview '' | strip)"
 
 # A thread whose agent has not reported yet: starting, then not reporting.

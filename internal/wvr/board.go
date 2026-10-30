@@ -243,6 +243,19 @@ const (
 	heldStale = 7 * 24 * 3600
 )
 
+// wipLimit is how many threads you mean to have open at once ($WEAVER_WIP,
+// 5 when unset; 0, no limit). Past it, the board's count says so, and the
+// form for a new thread: a nudge to hold or close one, never a block.
+func wipLimit() int {
+	if n, ok := cli.EnvInt("WEAVER_WIP"); ok && n >= 0 {
+		return n
+	}
+	return 5
+}
+
+// overWIP is whether n threads open is past the limit.
+func overWIP(n int) bool { return wipLimit() > 0 && n > wipLimit() }
+
 type boardRow struct {
 	group                                    int
 	key, pane, tab, glyph, name, fact, where string
@@ -548,16 +561,25 @@ func (e *Env) rows(plain bool) string {
 
 	// The title: the thread count, and the status bar's counts at the right.
 	titleL := "[ WEAVER :: THREADS ]"
+	// Past the limit you set yourself: the count against it, a shade
+	// brighter.
+	over := ""
+	if overWIP(live) {
+		over = "/" + strconv.Itoa(wipLimit())
+	}
 	if live > 0 {
-		titleL += " " + strconv.Itoa(live)
+		titleL += " " + strconv.Itoa(live) + over
 	}
 	tk := bold
 	if !plain && bold != "" {
 		tk = CBold + CInk
 	}
 	tl := dim + "[" + off + " " + tk + "WEAVER" + off + " " + dim + "::" + off + " " + grey + "THREADS" + off + " " + dim + "]" + off
-	if live > 0 {
-		tl += " " + grey + strconv.Itoa(live) + off
+	switch {
+	case live > 0 && over != "" && grey != "":
+		tl += " " + CInk + strconv.Itoa(live) + off + dim + over + off
+	case live > 0:
+		tl += " " + grey + strconv.Itoa(live) + over + off
 	}
 	titleR, tc := "", ""
 	for g := 0; g < 3; g++ {

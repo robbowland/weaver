@@ -155,6 +155,14 @@ can supersede an earlier one, and says so.
   Left out to stay lean: coming back on a date or an event (PR merged), a
   limit on how many are held, and an agent-written note; an age a shade
   brighter after a week stands in for a weekly look.
+- 2026-10-30: A limit on open threads (`WEAVER_WIP`, 5) only says when
+  you are past it, where it matters: the board's count (`7/5`, a shade
+  brighter) and the new-thread form's spare line, which says how to hold or
+  close one. Limiting work in flight is what Personal Kanban rests on
+  (Benson; 1 to 3 for one person, a rule of thumb, set higher here for
+  agents that work on their own), but a hard cap that refuses the next
+  thread would block urgent work; and the status line, drawn by each
+  multiplexer, is left as it is.
 - 2026-10-30: Edits on the board (rename, hold) are in place, in its search
   line, not a popup: the keys let go while one is open, and the prompt
   names the thread. Leaving one clears the query, re-enables the search and
