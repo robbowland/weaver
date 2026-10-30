@@ -121,6 +121,18 @@ function M.first_line(out)
   return line ~= '' and line or nil
 end
 
+-- A path as a diff's `---`/`+++` line has it: C-quoted when it holds odd
+-- characters, and followed by a tab when it holds a space.
+function M.diff_path(p)
+  p = p:gsub('\t$', '')
+  local q = p:match('^"(.*)"$')
+  if not q then
+    return p
+  end
+  q = q:gsub('\\(%d%d%d)', function(o) return string.char(tonumber(o, 8)) end)
+  return (q:gsub('\\(.)', { t = '\t', n = '\n', ['"'] = '"', ['\\'] = '\\' }))
+end
+
 -- Paths from `git … -z`, which (unlike plain output) never C-quotes them.
 function M.nul_list(out)
   local list = {}

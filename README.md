@@ -193,6 +193,8 @@ review exactly what each turn changed:
   branch.
 - `<leader>aa` picks one agent, the main thread or a subagent, and reviews
   only its own changes, in whichever worktree it made them, as it works.
+- `<leader>ai` shows the whole branch in your own buffers (signs, and every
+  change in quickfix), and `<leader>aI` steps through it commit by commit.
 - `<leader>an` notes a line for the agent, and `<leader>as` sends your notes
   as its next prompt.
 

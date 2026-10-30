@@ -7,7 +7,7 @@ local M = {}
 local api = vim.api
 local util = require('weaver.util')
 
-local modules = { 'status', 'reload', 'review' }
+local modules = { 'status', 'reload', 'review', 'inplace' }
 
 local STRING_FIELDS = {
   'sid', 'root', 'file', 'tool', 'agent_id', 'prompt', 'waiting', 'title', 'ref', 'commit', 'point', 'agent',
@@ -43,6 +43,7 @@ function M.dispatch(ev)
   if kind == 'edit' or kind == 'checktime' or kind == 'snapshot' then
     require('weaver.reload').checktime()
     require('weaver.review').poke()
+    require('weaver.inplace').poke()
   end
   require('weaver.log').refresh()
   pcall(api.nvim_exec_autocmds, 'User', { pattern = 'WeaverEvent', data = ev, modeline = false })
@@ -92,6 +93,13 @@ local function commands()
   cmd('AgentTurns', function() require('weaver.turns').pick() end, {
     desc = "weaver: pick one of the agent's turns and review its diff",
   })
+  cmd('AgentInPlace', function(o) require('weaver.inplace').toggle(o.args) end, {
+    nargs = '?',
+    complete = function(lead)
+      return vim.tbl_filter(function(s) return s:find(lead, 1, true) == 1 end, { 'branch', 'commits', 'off' })
+    end,
+    desc = 'weaver: the branch reviewed in your own buffers (commits: step commit by commit; again or off: end it)',
+  })
   cmd('AgentDiffs', function() require('weaver.agents').pick() end, {
     desc = "weaver: pick an agent (the main thread or a subagent) and a worktree, and review its own changes there",
   })
@@ -128,6 +136,8 @@ M.KEYS = {
   { 'R', 'AgentReviewed', 'Mark reviewed' },
   { 'T', 'AgentTurns', 'Pick a turn' },
   { 'a', 'AgentDiffs', "Pick an agent's changes" },
+  { 'i', 'AgentInPlace', 'Review the branch in place' },
+  { 'I', 'AgentInPlace commits', 'Review the branch in place, commit by commit' },
   { 'l', 'AgentLog', 'Activity log' },
   { 'w', 'AgentWhy', 'Why is this line here' },
   { 'c', 'AgentChanges turn', 'Last turn hunks in quickfix' },

@@ -180,6 +180,16 @@ function M.build_index(root)
   return idx
 end
 
+-- Bring ROOT's private index up to date without waiting: CB(path), or
+-- CB(nil) when there is none, runs scheduled.
+function M.with_index(root, cb)
+  local real, idx = M.index_paths(root)
+  if not real then
+    return vim.schedule(function() cb(nil) end)
+  end
+  rebuild_index(root, real, idx, function() cb(idx) end)
+end
+
 -- Make VIEW list its files against ROOT's private index, rebuilt before each
 -- listing.
 local function use_private_index(view, root)
@@ -458,24 +468,19 @@ end
 
 -- Hunks ---------------------------------------------------------------------------
 
-local function unquote(p)
-  local q = p:match('^"(.*)"$')
-  if not q then
-    return p
-  end
-  q = q:gsub('\\(%d%d%d)', function(o) return string.char(tonumber(o, 8)) end)
-  return (q:gsub('\\(.)', { t = '\t', n = '\n', ['"'] = '"', ['\\'] = '\\' }))
-end
-
 -- `git diff -U0` output as quickfix items, one per hunk.
 function M.parse_hunks(root, out)
-  local items, path = {}, nil
+  local items, path, header = {}, nil, false
   local lines = vim.split(out or '', '\n', { plain = true })
   local i = 1
   while i <= #lines do
-    local plus = lines[i]:match('^%+%+%+ (.*)$')
-    if plus then
-      path = plus ~= '/dev/null' and unquote(plus):gsub('^b/', '', 1) or nil
+    -- A file's `+++` line is in its header, before its first hunk: in a
+    -- hunk, an added "++ x" reads the same.
+    local plus = header and lines[i]:match('^%+%+%+ (.*)$')
+    if lines[i]:match('^diff ') then
+      header, path = true, nil
+    elseif plus then
+      path = plus ~= '/dev/null' and util.diff_path(plus):gsub('^b/', '', 1) or nil
     else
       local c, d = lines[i]:match('^@@ %-[%d,]+ %+(%d+),?(%d*) @@')
       if c and path then

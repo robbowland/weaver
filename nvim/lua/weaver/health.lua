@@ -36,6 +36,11 @@ function M.check()
   else
     health.info(':AgentTurns uses vim.ui.select (no snacks picker)')
   end
+  if pcall(require, 'gitsigns') then
+    health.ok('gitsigns for :AgentInPlace')
+  else
+    health.info(':AgentInPlace lists the changes in quickfix only (no gitsigns for the signs)')
+  end
 
   local bin = util.weaver_bin()
   if bin then

@@ -488,6 +488,24 @@ An agent's Bash changes show when Claude Code says what a command changed,
 which it does in auto mode, or with `"bashEditDiffEnabled": true` in its
 settings; without that, only its edits do.
 
+To review in your own buffers instead, `<leader>ai` turns on the branch in
+place: every buffer of the worktree compares against the branch's root, so
+gitsigns' signs and your hunk keys (LazyVim's `]h`/`[h`, `<leader>ghp`) show
+everything the branch changed, committed or not, and the quickfix list holds
+every change, file by file, for `]q`/`[q`. `<leader>aI` steps the same
+changes commit by commit, oldest first (a merge's are the other branch's,
+so it has none), then what is not committed: each commit's changes where
+they are in the file now, marked `(changed since)` where a later change
+rewrote them. The signs stay the branch's either way, and the list follows
+your edits, the agent's and its commits, a rebase included. The same key
+again ends it. Nothing opens or moves on its own, a quickfix list of yours
+stays current, and it says once what it holds.
+
+| Key | Command | Does |
+| --- | --- | --- |
+| `<leader>ai` | `:AgentInPlace` | The branch in your own buffers, file by file (again: off) |
+| `<leader>aI` | `:AgentInPlace commits` | The same, commit by commit (again: off) |
+
 As you review, note what the agent should change. `<leader>an` on a line or a
 selection, in a review or in any file of its Neovim, asks for the note and
 marks the line. `<leader>as` sends every note as one message, each with its
@@ -505,8 +523,8 @@ A branch is compared against `$WEAVER_BASE`, else `git config
 branch.<branch>.weaverbase`, else the default branch of the `upstream` or
 `origin` remote, else `main` or `master`.
 
-`:checkhealth weaver` says whether diffview-plus, the snacks picker and the
-agent binding are in place.
+`:checkhealth weaver` says whether diffview-plus, the snacks picker,
+gitsigns and the agent binding are in place.
 
 ### In your own Neovim
 

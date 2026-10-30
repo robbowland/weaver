@@ -111,6 +111,20 @@ can supersede an earlier one, and says so.
   hand to the background run through its environment. A snapshot of only
   the call's paths took 41 to 63 ms on 10 000 to 50 000 files, against 55
   to 146 ms for the whole worktree.
+- 2026-10-30: Review in place (`:AgentInPlace`) is gitsigns with its base
+  set per buffer to the branch's root, in the worktree under review only (a
+  global base would apply one worktree's root to every other's files), and
+  the quickfix list for stepping, with your own keys for both: nothing new
+  to learn, nothing opened or moved on its own. Commit by commit, a buffer
+  can only show the file as it is now, so each commit's hunks are placed on
+  today's lines and marked where a later change rewrote them; the exact
+  commit is the review view's. One `git log -p` (first parents: a merge
+  moves lines but lists nothing) is mapped forward commit by commit onto
+  HEAD's lines and kept until HEAD moves; each refresh is then one diff,
+  run without waiting, and only ever replaces the review's own quickfix
+  list (by its id), so another list you made stays current. A buffer is
+  under review when gitsigns has it in that worktree (nested worktrees and
+  submodules are others), and its base is what gitsigns says it is.
 - 2026-10-30: A chain takes only the files a call says it changed. The
   fallback following uses (what `git status` shows changed since the pane's
   previous Bash call) would credit an agent with another's edits, or yours,
