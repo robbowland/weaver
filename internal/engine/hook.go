@@ -76,9 +76,15 @@ type hk struct {
 	// last tools that finished (an async PreToolUse may land after them).
 	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
 	// FollowBash: the background run follows a Bash call's edits (a sync
-	// hook's, which must not wait on git).
-	FollowBash string
-	rc         int
+	// hook's, which must not wait on git). AgentSnap: it takes an edit
+	// tool's file into the agent's chain.
+	FollowBash, AgentSnap string
+	// What the call changed, as it says (the foreground's alone: too big
+	// to hand on), and the subagent an Agent call started.
+	changes                        []hooks.Change
+	changesKnown                   bool
+	launchID, launchType, launchAs string
+	rc                             int
 }
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
@@ -223,6 +229,11 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
 	h.Paths = in.CommandPaths()
+	h.changes, h.changesKnown = in.Changes()
+	h.launchID, h.launchType, h.launchAs = in.Launched()
+	h.launchID = oneline.Ctl(h.launchID)
+	h.launchType = oneline.Ctl(oneline.Squash(h.launchType, 40))
+	h.launchAs = oneline.Ctl(oneline.Squash(h.launchAs, 200))
 	return h.Event != ""
 }
 
@@ -478,6 +489,9 @@ func (h *hk) hookLog(e *session.Env) {
 		if h.EvFile != "" {
 			h.logLine(e, logEdit{h.logHead("edit"), h.EvFile, h.Root, h.Tool, h.Aid})
 		}
+		if h.launchID != "" {
+			h.logLine(e, logAgent{h.logHead("agent"), h.launchID, h.launchType, h.launchAs})
+		}
 	case "PostToolUseFailure":
 		if h.Interrupt != "" {
 			h.logLine(e, logInterrupt{h.logHead("interrupt"), h.Tool})
@@ -525,15 +539,22 @@ func afterWrite(e *session.Env, h *hk) {
 		bestEffort(os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644))
 	}
 	h.hookLog(e)
+	// Following a Bash or MCP edit, and the agent chains, need git: here
+	// when this process runs in the background anyway (Claude Code's async
+	// hook), else in the background run, never while the agent waits on its
+	// hook.
+	async := h.Mode == "async"
 	if h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
-		// Following a Bash or MCP edit needs git: here when this process
-		// runs in the background anyway (Claude Code's async hook), else in
-		// the background run, never while the agent waits on its hook.
-		if h.Mode == "async" {
+		if async {
 			followBash(e, h)
 		} else {
 			h.FollowBash = "1"
 		}
+	}
+	// An agent's chains take only what a call says it changed: what git
+	// sees changed since may be another agent's, or yours.
+	if h.Event == "PostToolUse" && h.EvFile != "" && !async {
+		h.AgentSnap = "1"
 	}
 	// The background work, only when there is some.
 	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch+h.FollowBash != "" ||
@@ -541,6 +562,10 @@ func afterWrite(e *session.Env, h *hk) {
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		spawnBg(e, h)
+	}
+	// After the background run is on its way: nvim follows first.
+	if h.Event == "PostToolUse" && async && h.changesKnown {
+		agentChanges(e, h, h.changes)
 	}
 }
 

@@ -35,9 +35,10 @@ type Input struct {
 	PromptID string `json:"prompt_id"`
 	Title    string `json:"session_title"`
 	// A tool call's.
-	ToolName  string          `json:"tool_name"`
-	ToolInput json.RawMessage `json:"tool_input"`
-	ToolUseID string          `json:"tool_use_id"`
+	ToolName     string          `json:"tool_name"`
+	ToolInput    json.RawMessage `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"` // PostToolUse
+	ToolUseID    string          `json:"tool_use_id"`
 	// CallKey is which call, when an adapter says (its tool_key): in place
 	// of the tool's name and input.
 	CallKey   string `json:"-"`
@@ -95,6 +96,9 @@ func AsyncGate(in Input, state agent.State) bool {
 		t := in.ToolName
 		switch t {
 		case "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "EnterWorktree", "ExitWorktree":
+			return true
+		case "Agent", "Task":
+			// The subagent it started, and what it was asked to do.
 			return true
 		}
 		if strings.HasPrefix(t, "mcp__") {

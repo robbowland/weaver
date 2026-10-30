@@ -79,7 +79,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `root` | `root` | the agent moved to another repo or worktree without a file |
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
-| `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed |
+| `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed; point `agent`: an agent chain's tip moved |
 | `focus` | `root`, `file` (may be `""`) | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): where the agent is, for the review keys |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
@@ -140,12 +140,69 @@ any other point is `start` or `end`.
 Untracked files larger than `WEAVER_SNAPSHOT_MAX_KB` (5 MB) are left out;
 `WEAVER_SNAPSHOTS=0` turns snapshots off.
 
-As a chain starts in a worktree (once per session there), that worktree's
-session chains whose last snapshot is more than 31 days old are deleted, and
-so are the private indexes no snapshot has written in that time (the
-compiled half only). A worktree's refs go with it when it is removed; this
-keeps a main checkout from holding every session's chain, and a copy of its
-index for each, for good. The reviewed chain stays.
+As a chain starts in a worktree (once per session, or agent, there), that
+worktree's session and agent chains whose last snapshot is more than 31 days
+old are deleted, and so are the private indexes no snapshot has written in
+that time (the compiled half only). A worktree's refs go with it when it is
+removed; this keeps a main checkout from holding every session's chain, and
+a copy of its index for each, for good. The reviewed chain stays.
+
+### Agent chains
+
+Each agent's own changes: the main thread's and every subagent's, in each
+worktree it changed, whoever else works there.
+
+| Ref (per worktree) | Commits |
+| --- | --- |
+| `refs/worktree/weaver/agents/<session_id>/<agent>` | `start`, then the tip on it; `<agent>` is `main` or the subagent's `agent_id` |
+
+`start` is the worktree just before the agent's first change there: the
+worktree as it is (`add --all` into a private index, big untracked files
+left out), less what the call that changed it did, where the call says. The
+tip is `start` with the agent's own files as they are after each of its
+calls (`add --all` of those paths alone; `rm --cached` for those gone),
+replaced at each call that changes them, always on `start`. So `tip^..tip`
+is the agent's diff there; two agents editing one file each have it as they
+last left it. A call that says what a file held, for a file not yet in
+`start..tip`, puts that into `start` (a new `start`, the tip on it): the
+start is read after the calls of the batch before its hook ran, and another
+may have changed the file since. Only what git would take is taken: files it
+ignores stay out (what it tracks is never ignored), and big ones it does not
+track (`WEAVER_SNAPSHOT_MAX_KB`).
+
+The private index (`index-<session_id>-<agent>`) is a call's alone: built
+from the tip (`read-tree`), or for a new chain from a copy of the real
+index, and removed after, so none is kept per agent and worktree.
+
+What a call changed, from Claude Code's PostToolUse (undocumented, read
+leniently). A chain takes only what the call says: what git sees changed
+since may be another agent's, or yours.
+
+| Tool | Files | Before the call |
+| --- | --- | --- |
+| Edit, Write, MultiEdit, NotebookEdit | `tool_input.file_path` | `tool_response.originalFile`; else Write's `type: create` (none); else `structuredPatch` undone from the file |
+| Bash, with `tool_response.bashEditDiff` | its `changedFiles` (at most 200; an empty list: none) | its `files[].hunks` undone; one hunk `-0,0`: none |
+| Bash with `bashEditDiff` `unavailable`, or `shared` and no files; Bash without it; an MCP edit tool | none (following still looks: the files `git status` shows changed since the previous such call) | |
+
+Claude Code gives `bashEditDiff` in auto and bypass-permissions modes, or
+with the `bashEditDiffEnabled` setting.
+
+The chains are taken in the async hook process, after the background run
+has started (nvim follows first); a hook that is not async hands an edit
+tool's file to the background run, before content unknown. One write per
+chain at a time (the private index's lock); the tip moves compare-and-swap.
+A chain whose tip could not be committed after its start is removed, so the
+next call starts it again. Commits are by `weaver <weaver@localhost>`:
+
+    weaver: agent <agent> start | weaver: agent <agent>
+
+    Weaver-Session: <session_id>
+    Weaver-Agent: <agent>
+    Weaver-Point: start|tip
+
+A chain that starts is logged once (`snapshot`, point `agent`), and every
+move of a tip is a `snapshot` event to nvim (point `agent`, `ref` the
+chain). `WEAVER_SNAPSHOTS=0` turns these off too.
 
 ## Activity log
 
@@ -164,9 +221,10 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 | `interrupt` | `tool` |
 | `cwd` | `cwd`, `root` |
 | `subagent` | `agent_id`, `agent_type`, `phase` (start, stop), `desc`? |
+| `agent` | `agent_id`, `agent_type`, `desc` (the Agent call's description, at most 200 chars): what a subagent was asked to do |
 | `stop` | `last` (at most 400 chars) |
 | `error` | `error` |
-| `snapshot` | `root`, `commit`, `point` |
+| `snapshot` | `root`, `commit`, `point`; point `agent` (an agent chain started): `agent_id`, `main` for the main thread |
 | `end` | |
 
 ## Events from other agents

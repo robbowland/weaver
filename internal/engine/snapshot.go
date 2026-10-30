@@ -36,26 +36,11 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		return "", false, false
 	}
 	idx := gd + "/index-" + key
-	// One snapshot of a chain at a time; a lock whose owner died is removed.
-	lockd := idx + ".lock.d"
-	for i := 0; ; i++ {
-		if os.Mkdir(lockd, 0o755) == nil {
-			break
-		}
-		if owner, err := files.FirstLine(lockd + "/pid"); err == nil && owner != "" {
-			if p, ok := atoi(owner); ok && !process.Alive(p) {
-				os.RemoveAll(lockd)
-				continue
-			}
-		}
-		if i >= 600 {
-			return "", false, false
-		}
-		time.Sleep(100 * time.Millisecond)
+	unlock, ok := lockIndex(idx)
+	if !ok {
+		return "", false, false
 	}
-	// Without its owner, the lock is waited out.
-	bestEffort(os.WriteFile(lockd+"/pid", []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644))
-	defer os.RemoveAll(lockd)
+	defer unlock()
 
 	label := point
 	tip, _ := git.Output(top, nil, "", "rev-parse", "-q", "--verify", ref+"^{commit}")
@@ -72,45 +57,9 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 		}
 		tree = t
 	} else {
-		if !files.Exists(idx) {
-			if index, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
-				if b, err := os.ReadFile(index); err == nil {
-					// A head start; without it git reads every file.
-					bestEffort(os.WriteFile(idx, b, 0o644))
-				}
-			}
-		}
-		// Untracked files over WEAVER_SNAPSHOT_MAX_KB (5 MB) stay out: a
-		// download or a build artefact must not bloat the object store.
-		maxKB := int64(5120)
-		if v, ok := cli.EnvInt("WEAVER_SNAPSHOT_MAX_KB"); ok {
-			maxKB = int64(v)
-		}
 		env := []string{"GIT_INDEX_FILE=" + idx}
-		var big []string
-		if out, err := git.Output(top, nil, "", "ls-files", "-z", "-o", "--exclude-standard"); err == nil {
-			for _, p := range strings.Split(out, "\x00") {
-				if p == "" {
-					continue
-				}
-				st, err := os.Lstat(filepath.Join(top, p))
-				if err == nil && st.Mode().IsRegular() && st.Size() > maxKB*1024 {
-					big = append(big, p)
-				}
-			}
-		}
-		args := []string{"add", "--all", "--", "."}
-		if len(big) > 0 {
-			for _, p := range big {
-				args = append(args, ":(exclude,literal)"+p)
-			}
-			// One that was small when an earlier snapshot took it: out.
-			_, err := git.Output(top, env, strings.Join(big, "\n")+"\n", "rm", "--cached", "-f", "-q", "--ignore-unmatch", "--pathspec-from-file=-")
-			bestEffort(err)
-		}
-		// What git could not read (a file it may not open) stays as it was.
-		_, err := git.Output(top, env, "", args...)
-		bestEffort(err)
+		seedIndex(top, idx)
+		addWorktree(top, env)
 		t, err := git.Output(top, env, "", "write-tree")
 		if err != nil {
 			return "", false, false
@@ -166,19 +115,112 @@ func snapshot(dir, ref, point string, n int, key string, m snapMsg) (string, boo
 	if m.transcript != "" {
 		msg += "Transcript: " + m.transcript + "\n"
 	}
+	commit, ok := commitSnapshot(top, ref, tree, parent, tip, subject, msg)
+	if !ok {
+		return tip, false, true
+	}
+	return commit, true, true
+}
+
+// lockIndex takes the lock of private index idx: one snapshot of a chain
+// at a time, a lock whose owner died removed. False when it stayed taken.
+func lockIndex(idx string) (unlock func(), ok bool) {
+	lockd := idx + ".lock.d"
+	for i := 0; ; i++ {
+		if os.Mkdir(lockd, 0o755) == nil {
+			break
+		}
+		if owner, err := files.FirstLine(lockd + "/pid"); err == nil && owner != "" {
+			if p, ok := atoi(owner); ok && !process.Alive(p) {
+				os.RemoveAll(lockd)
+				continue
+			}
+		}
+		if i >= 600 {
+			return nil, false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Without its owner, the lock is waited out.
+	bestEffort(os.WriteFile(lockd+"/pid", []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644))
+	return func() { os.RemoveAll(lockd) }, true
+}
+
+// seedIndex gives private index idx, the first time, a copy of the
+// worktree's real index: a head start, without which git reads every file.
+func seedIndex(top, idx string) {
+	if files.Exists(idx) {
+		return
+	}
+	if index, err := git.Output(top, nil, "", "rev-parse", "--path-format=absolute", "--git-path", "index"); err == nil {
+		if b, err := os.ReadFile(index); err == nil {
+			bestEffort(os.WriteFile(idx, b, 0o644))
+		}
+	}
+}
+
+// snapMaxBytes: untracked files over WEAVER_SNAPSHOT_MAX_KB (5 MB) stay out
+// of snapshots, so a download or a build artefact cannot bloat the object
+// store.
+func snapMaxBytes() int64 {
+	if v, ok := cli.EnvInt("WEAVER_SNAPSHOT_MAX_KB"); ok {
+		return int64(v) * 1024
+	}
+	return 5120 * 1024
+}
+
+// addWorktree brings the private index in env up to the whole worktree at
+// top, big untracked files left out.
+func addWorktree(top string, env []string) {
+	var big []string
+	if out, err := git.Output(top, nil, "", "ls-files", "-z", "-o", "--exclude-standard"); err == nil {
+		for _, p := range strings.Split(out, "\x00") {
+			if p == "" {
+				continue
+			}
+			st, err := os.Lstat(filepath.Join(top, p))
+			if err == nil && st.Mode().IsRegular() && st.Size() > snapMaxBytes() {
+				big = append(big, p)
+			}
+		}
+	}
+	args := []string{"add", "--all", "--", "."}
+	if len(big) > 0 {
+		for _, p := range big {
+			args = append(args, ":(exclude,literal)"+p)
+		}
+		// One that was small when an earlier snapshot took it: out.
+		_, err := git.Output(top, env, strings.Join(big, "\n")+"\n", "rm", "--cached", "-f", "-q", "--ignore-unmatch", "--pathspec-from-file=-")
+		bestEffort(err)
+	}
+	// What git could not read (a file it may not open) stays as it was.
+	_, err := git.Output(top, env, "", args...)
+	bestEffort(err)
+}
+
+// commitSnapshot commits tree (on parent, if any) by weaver with message
+// msg and moves ref from old to it, compare-and-swap: false when another
+// writer moved ref first, or git failed.
+func commitSnapshot(top, ref, tree, parent, old, subject, msg string) (string, bool) {
+	commit, ok := commitTree(top, tree, parent, msg)
+	if !ok {
+		return "", false
+	}
+	if _, err := git.Output(top, nil, "", "update-ref", "-m", subject, ref, commit, old); err != nil {
+		return "", false
+	}
+	return commit, true
+}
+
+// commitTree commits tree (on parent, if any) by weaver, with message msg.
+func commitTree(top, tree, parent, msg string) (string, bool) {
 	ident := []string{"GIT_AUTHOR_NAME=weaver", "GIT_AUTHOR_EMAIL=weaver@localhost", "GIT_COMMITTER_NAME=weaver", "GIT_COMMITTER_EMAIL=weaver@localhost"}
 	ct := []string{"commit-tree", tree}
 	if parent != "" {
 		ct = append(ct, "-p", parent)
 	}
 	commit, err := git.Output(top, ident, msg, ct...)
-	if err != nil || commit == "" {
-		return tip, false, true
-	}
-	if _, err := git.Output(top, nil, "", "update-ref", "-m", subject, ref, commit, tip); err != nil {
-		return tip, false, true
-	}
-	return commit, true, true
+	return commit, err == nil && commit != ""
 }
 
 func firstRunes(s string, n int) string { return oneline.Cut(s, n) }
@@ -187,13 +229,13 @@ func firstRunes(s string, n int) string { return oneline.Cut(s, n) }
 // as weaver keeps its activity logs and turns.
 const snapKeep = 31 * 24 * time.Hour
 
-// pruneSnapshots drops this worktree's session chains whose last snapshot is
-// older than before, and the private indexes (gd/index-*) no snapshot has
-// used since: without it a main checkout would keep every session's chain,
-// and a copy of its index for each, for good. Run as a chain starts, which
-// is once per session in each worktree.
+// pruneSnapshots drops this worktree's session and agent chains whose last
+// snapshot is older than before, and the private indexes (gd/index-*) no
+// snapshot has used since: without it a main checkout would keep every
+// session's chains, and a copy of its index for each, for good. Run as a
+// chain starts, which is once per session (or agent) in each worktree.
 func pruneSnapshots(top, gd string, before time.Time) {
-	out, err := git.Output(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/")
+	out, err := git.Output(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/", agentRefs)
 	if err == nil {
 		for _, l := range strings.Split(out, "\n") {
 			f := strings.Fields(l)
@@ -237,7 +279,7 @@ func snapRoots(e *session.Env, h *hk, point string, turn int, roots, prompt, pro
 		if point == "base" {
 			point = "start"
 		}
-		h.logLine(e, logSnapshot{h.logHead("snapshot"), r, c, point})
+		h.logLine(e, logSnapshot{logHead: h.logHead("snapshot"), Root: r, Commit: c, Point: point})
 		if h.NV != "" {
 			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref}, "", "")
 		}

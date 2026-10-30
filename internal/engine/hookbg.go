@@ -15,6 +15,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/session"
@@ -81,6 +82,9 @@ func hookBg(e *session.Env) {
 		e.GC()
 	}
 	hookSnapshots(e, h)
+	if h.AgentSnap != "" {
+		agentChanges(e, h, []hooks.Change{{Path: h.EvFile}})
+	}
 }
 
 // actOn has e act on the session the hook acted on, not the one its
@@ -159,80 +163,40 @@ func nvimStateEvent(e *session.Env, h *hk) {
 }
 
 // followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
-// heredoc, a formatter, an MCP write) counts as an edit: in the repos the
-// command names, the one it ran in and the agent's root, the files git sees
-// as changed since the previous such call; the newest is followed. False
-// when nothing changed.
+// heredoc, a formatter, an MCP write) counts as an edit. Which files: what
+// the call says (Claude Code's bashEditDiff), else, in the repos the command
+// names, the one it ran in and the agent's root, the files git sees as
+// changed since the previous such call. The newest is followed. False when
+// nothing changed.
 func followBashEdits(e *session.Env, h *hk) bool {
 	stamp := e.PaneFile(h.Pane, "bash")
 	nw := stamp + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(nw, nil, 0o644) != nil {
 		return false
 	}
-	sst, err := os.Stat(stamp)
-	if err != nil {
-		bestEffort(os.Rename(nw, stamp)) // without it, the next command looks further back
-		return false
-	}
-	var roots []string
-	seen := map[string]bool{}
-	cands := append([]string{h.Cwd, h.Root}, h.Paths...)
-	for _, p := range cands {
-		if !strings.HasPrefix(p, "/") {
-			continue
+	var ps []string
+	if h.changesKnown {
+		bestEffort(os.Rename(nw, stamp))
+		ps = followable(h.changes)
+	} else {
+		sst, err := os.Stat(stamp)
+		if err != nil {
+			bestEffort(os.Rename(nw, stamp)) // without it, the next command looks further back
+			return false
 		}
-		d := p
-		for d != "" {
-			if st, err := os.Stat(d); err == nil && st.IsDir() {
-				break
-			}
-			d = d[:max(strings.LastIndexByte(d, '/'), 0)]
-		}
-		if d == "" {
-			continue
-		}
-		r, ok := git.WorkTree(d)
-		if !ok || seen[r] {
-			continue
-		}
-		seen[r] = true
-		roots = append(roots, r)
-		if len(roots) >= 4 {
-			break
-		}
+		ps = changedSince(h, sst.ModTime())
+		bestEffort(os.Rename(nw, stamp))
 	}
 	type cand struct {
 		p string
 		t time.Time
 	}
 	var cs []cand
-	for _, r := range roots {
-		c := exec.Command("git", "-C", r, "status", "--porcelain", "-z", "-uall")
-		c.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
-		out, _ := c.Output()
-		es := strings.Split(string(out), "\x00")
-		for i := 0; i < len(es); i++ {
-			en := es[i]
-			if len(en) < 4 {
-				continue
-			}
-			xy := en[:2]
-			// A rename is followed by its original path.
-			if strings.ContainsAny(xy, "RC") {
-				i++
-			}
-			if strings.Contains(xy, "D") {
-				continue
-			}
-			p := r + "/" + en[3:]
-			st, err := os.Lstat(p)
-			if err != nil || !st.Mode().IsRegular() || !st.ModTime().After(sst.ModTime()) {
-				continue
-			}
+	for _, p := range ps {
+		if st, err := os.Lstat(p); err == nil {
 			cs = append(cs, cand{p, st.ModTime()})
 		}
 	}
-	bestEffort(os.Rename(nw, stamp))
 	if len(cs) == 0 {
 		return false
 	}
@@ -283,6 +247,99 @@ func followBashEdits(e *session.Env, h *hk) bool {
 		e.Mux().Title(h.NV, "nvim: "+filepath.Base(r))
 	}
 	return true
+}
+
+// followable are the files of changes cs that following can show: on disk,
+// in a worktree, and not ignored there (what git status would list).
+func followable(cs []hooks.Change) []string {
+	byRoot := map[string][]string{}
+	var roots []string
+	for _, c := range cs {
+		st, err := os.Lstat(c.Path)
+		if err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		r, ok := git.FileWorkTree(c.Path)
+		rel := relTo(r, c.Path)
+		if !ok || rel == "" {
+			continue
+		}
+		if _, seen := byRoot[r]; !seen {
+			roots = append(roots, r)
+		}
+		byRoot[r] = append(byRoot[r], rel)
+	}
+	var ps []string
+	for _, r := range roots {
+		drop := ignored(r, byRoot[r])
+		for _, rel := range byRoot[r] {
+			if !drop[rel] {
+				ps = append(ps, r+"/"+rel)
+			}
+		}
+	}
+	return ps
+}
+
+// changedSince are the files git sees as changed, modified after t, in the
+// repos a command names, the one it ran in and the agent's root (four at
+// most): regular files, not deletions.
+func changedSince(h *hk, t time.Time) []string {
+	var roots []string
+	seen := map[string]bool{}
+	cands := append([]string{h.Cwd, h.Root}, h.Paths...)
+	for _, p := range cands {
+		if !strings.HasPrefix(p, "/") {
+			continue
+		}
+		d := p
+		for d != "" {
+			if st, err := os.Stat(d); err == nil && st.IsDir() {
+				break
+			}
+			d = d[:max(strings.LastIndexByte(d, '/'), 0)]
+		}
+		if d == "" {
+			continue
+		}
+		r, ok := git.WorkTree(d)
+		if !ok || seen[r] {
+			continue
+		}
+		seen[r] = true
+		roots = append(roots, r)
+		if len(roots) >= 4 {
+			break
+		}
+	}
+	var ps []string
+	for _, r := range roots {
+		c := exec.Command("git", "-C", r, "status", "--porcelain", "-z", "-uall")
+		c.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+		out, _ := c.Output()
+		es := strings.Split(string(out), "\x00")
+		for i := 0; i < len(es); i++ {
+			en := es[i]
+			if len(en) < 4 {
+				continue
+			}
+			xy := en[:2]
+			// A rename is followed by its original path.
+			if strings.ContainsAny(xy, "RC") {
+				i++
+			}
+			if strings.Contains(xy, "D") {
+				continue
+			}
+			p := r + "/" + en[3:]
+			st, err := os.Lstat(p)
+			if err != nil || !st.Mode().IsRegular() || !st.ModTime().After(t) {
+				continue
+			}
+			ps = append(ps, p)
+		}
+	}
+	return ps
 }
 
 // Focus tells the nvim of the agent in pane p, which rec says (its kind

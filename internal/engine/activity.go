@@ -80,6 +80,14 @@ type (
 		Root   string `json:"root"`
 		Commit string `json:"commit"`
 		Point  string `json:"point"`
+		// An agent chain's (point agent): main, or the subagent's id.
+		AgentID string `json:"agent_id,omitempty"`
+	}
+	logAgent struct {
+		logHead
+		AgentID   string `json:"agent_id"`
+		AgentType string `json:"agent_type"`
+		Desc      string `json:"desc"`
 	}
 )
 

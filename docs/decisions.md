@@ -92,6 +92,39 @@ can supersede an earlier one, and says so.
   review at a subagent's worktree. Rob wants the review of the agent he
   picks in Claude Code's agent list, but Claude Code tells hooks nothing of
   that selection, so the latest edit is the nearest signal.
+- 2026-10-30: Each agent gets its own chain in every worktree it changes
+  (see [Agent chains](design.md#agent-chains)), reviewed with
+  `:AgentDiffs`. In a sample of busy sessions, subagents made 89% of the
+  edits, in 4 to 23 worktrees the main thread never touched, and background
+  subagents keep editing after the main thread's turn has ended, so a
+  turn's diff neither separates agents nor covers their work. The unit is
+  the agent in a worktree; within a worktree an agent's tip takes only its
+  own files, so another agent's files and your edits stay out (one file two
+  agents edit is shared: hunk-level attribution was left out).
+- 2026-10-30: Agent chains are commits, not patches in the activity log:
+  diffview reviews commits, and a patch can be far over the log's 4 KB
+  line. The start comes from what the call says it changed, observed in
+  Claude Code 2.1.312's PostToolUse (Edit and Write's `originalFile`,
+  absent from about half of Edit calls in that sample, then
+  `structuredPatch` undone; Bash's `bashEditDiff`, on in auto mode), so it
+  is taken in the async hook process: the before content is too big to
+  hand to the background run through its environment. A snapshot of only
+  the call's paths took 41 to 63 ms on 10 000 to 50 000 files, against 55
+  to 146 ms for the whole worktree.
+- 2026-10-30: A chain takes only the files a call says it changed. The
+  fallback following uses (what `git status` shows changed since the pane's
+  previous Bash call) would credit an agent with another's edits, or yours,
+  in the same worktree; a Bash change missing from a review was preferred to
+  one in the wrong agent's. No private index is kept between calls: one
+  per agent and worktree, each a copy of the real index, would have held
+  hundreds of megabytes in a busy checkout for a month.
+- 2026-10-30: An agent's review compares its chain's two commits, never a
+  worktree's files, so no language server starts for another worktree (a
+  file opened from it attaches one, and detaching later leaves the server
+  running). diffview reads a comparison's revisions once, as commits; the
+  view's adapter re-reads them at each refresh (`refresh_revs`, which
+  diffview-plus calls and the git adapter leaves empty), so the view follows
+  the agent's tip as it moves.
 
 ## Neovim
 
