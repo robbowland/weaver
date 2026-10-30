@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -72,11 +71,8 @@ func (e *Env) EditMode(args []string) error {
 		name, _ := e.shownName(p)
 		fmt.Println(open + "+change-ghost(empty: its agent's title)+transform(" + q + " _hf)+change-query:" + oneline.Line(name))
 	case editHold:
-		ghost := "what's next, for when you come back"
-		if st, err := store.ReadState(e.StateFile(p)); err == nil && st.State == agent.StateWorking {
-			ghost += " (it is working: holding stops its turn)"
-		}
-		fmt.Println(open + "+clear-query+change-ghost(" + ghost + ")+transform(" + q + " _hf)")
+		// Its footer says, while you type, if holding stops a turn.
+		fmt.Println(open + "+clear-query+change-ghost(what's next, for when you come back)+transform(" + q + " _hf)")
 	default:
 		return errors.New("usage: wvr _mode rename|hold PANE")
 	}
@@ -109,7 +105,11 @@ func (e *Env) EditDone(args []string) error {
 		}
 	case editHold:
 		// Its agent takes a moment to end: behind, as close does, and
-		// its row moves to HELD when it has.
+		// its row moves to HELD when it has; till then, the footer says
+		// it is on its way.
+		if b := sockBase(); b != "" {
+			bestEffort(files.Put(b+".holding", m[2]))
+		}
 		c := exec.Command(e.Self, "hold", string(p), text)
 		if f, err := os.OpenFile(e.StateDir+"/close.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err == nil {
 			c.Stdout, c.Stderr = f, f

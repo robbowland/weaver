@@ -762,7 +762,12 @@ tab bar; a view's the same), `?` keys,
 `ctrl-r` reload, `q` and `esc` close. `/` shows the input and unbinds the
 letters; `esc` clears the query, hides it and binds them again. The footer is
 recomputed (`wvr _footer`) on every load and mode change, from the width
-and the mode, `?` always last.
+and the mode, `?` always last. Browsing, it holds the few keys most used
+(`⏎ OPEN`, `n`, `x`, `h`, `/`, `v`, `tab`, `ctrl+q`), the rest in `?`'s help;
+`⏎ OPEN` is a thread's window, or a lost or held one resumed. While a hold
+is on its way (`<board>.holding`, the thread's number, until its agent has
+closed) it starts with `… HOLDING NN`; holding a thread mid-turn adds `!
+MID-TURN: HOLDING STOPS IT`.
 
 A heading or gap never keeps the cursor: on `focus`, a transform sends it on
 to `next` (to `prev` when the move was upward, or when there is no `next`).

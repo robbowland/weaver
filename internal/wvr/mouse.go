@@ -56,7 +56,7 @@ func hintAt(hs []choice, gap, col int) (choice, bool) {
 // the rest fzf's own.
 func hintAct(key string) string {
 	switch key {
-	case "1-9", "↑↓":
+	case "1-9", "↑↓", "!", "…":
 		return ""
 	case "ctrl+q":
 		return "execute-silent(tmux send-keys -K C-q)"
@@ -81,7 +81,7 @@ func footClick(hs []choice, gap int) string {
 func (e *Env) Click(args []string) {
 	switch firstArg(args) {
 	case "board":
-		fmt.Print(footClick(boardHints(), 2))
+		fmt.Print(footClick(e.boardHints(), 2))
 	case "title":
 		fmt.Print(welcomeClick(len(e.viewNames()) > 0))
 	case "pick":

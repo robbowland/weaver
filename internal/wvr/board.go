@@ -17,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
+	"github.com/robbowland/weaver/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -805,18 +806,15 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 }
 
 // boardHints are the dashboard's footer: the keys that work now, as many as
-// fit the list's width, ? always last.
-func boardHints() []choice {
-	browse := "⏎ JUMP|1-9|n NEW|x CLOSE|h HOLD|/ SEARCH|s SCREEN|v NVIM|tab VIEWS|ctrl+q QUIT"
-	search := "⏎ JUMP|esc BACK|ctrl+e NVIM|tab VIEWS"
-	// A toggle says where it goes next: s from the screen (or the card
-	// hidden) to the card, ? from the help back to it.
-	showing := ""
-	if b := sockBase(); b != "" {
-		showing, _ = files.FirstLine(b + ".view")
-	}
-	if pl := os.Getenv("FZF_PREVIEW_LINES"); showing == "screen" || sockBase() != "" && files.Exists(sockBase()+".tight") && (pl == "" || pl == "0") {
-		browse = strings.Replace(browse, "s SCREEN", "s CARD", 1)
+// fit the list's width, ? always last; the rest are in its help. ⏎ opens a
+// row's thread: its window, or a lost or held one in a new window.
+func (e *Env) boardHints() []choice {
+	browse := "⏎ OPEN|n NEW|x CLOSE|h HOLD|/ SEARCH|v NVIM|tab VIEWS|ctrl+q QUIT"
+	search := "⏎ OPEN|esc BACK|ctrl+e NVIM|tab VIEWS"
+	// A toggle says where it goes next: ? from the help back to the card.
+	showing, base := "", sockBase()
+	if base != "" {
+		showing, _ = files.FirstLine(base + ".view")
 	}
 	helpWhat := "HELP"
 	if showing == "help" {
@@ -828,11 +826,17 @@ func boardHints() []choice {
 	var items []string
 	help := false
 	total := os.Getenv("FZF_TOTAL_COUNT")
-	switch kind, _ := editing(); {
+	switch kind, which := editing(); {
 	case kind == editRename:
 		items = []string{"⏎ SAVE", "esc CANCEL", "ctrl+u CLEAR"}
 	case kind == editHold:
 		items = []string{"⏎ HOLD", "esc CANCEL"}
+		// Said while you type, where the ghost would go.
+		if p, ok := e.paneOfThread(which); ok {
+			if st, err := store.ReadState(e.StateFile(p)); err == nil && st.State == agent.StateWorking {
+				items = append(items, "! MID-TURN: HOLDING STOPS IT")
+			}
+		}
 	case searching():
 		items = strings.Split(search, "|")
 	case os.Getenv("LS_EMPTY") == "1" || total == "0":
@@ -844,6 +848,14 @@ func boardHints() []choice {
 	default:
 		items = strings.Split(browse, "|")
 		help, w = true, 6
+		// A thread you held a moment ago, while its agent closes.
+		if which, err := files.FirstLine(base + ".holding"); base != "" && err == nil {
+			if _, ok := e.paneOfThread(which); ok {
+				items = append([]string{"… HOLDING " + which}, items...)
+			} else {
+				bestEffort(os.Remove(base + ".holding"))
+			}
+		}
 	}
 	var hs []choice
 	for _, it := range items {
@@ -861,7 +873,7 @@ func boardHints() []choice {
 }
 
 // Footer is the dashboard's footer: its hints, each a button.
-func Footer() string { return hintLine(boardHints(), 2) + "\n" }
+func (e *Env) Footer() string { return hintLine(e.boardHints(), 2) + "\n" }
 
 // welcome is the empty board's header: what to do, centred in the room
 // the list has on a terminal cols x lines (a third of the way down, as a
@@ -946,9 +958,9 @@ func fzfAct(action, text string) (string, bool) {
 }
 
 // HF is the dashboard's header and footer as fzf actions.
-func HF() string {
+func (e *Env) HF() string {
 	h := strings.TrimRight(Title(), "\n")
-	f := strings.TrimRight(Footer(), "\n")
+	f := strings.TrimRight(e.Footer(), "\n")
 	var acts []string
 	if a, ok := fzfAct("change-header", h); ok {
 		acts = append(acts, a)
@@ -972,7 +984,7 @@ func (e *Env) Chrome() string {
 		}
 	}
 	out := ""
-	if hf := HF(); hf != "" {
+	if hf := e.HF(); hf != "" {
 		out = hf + "+"
 	}
 	pw, _ := files.FirstLine(base + ".room")

@@ -27,7 +27,7 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 │                                                                      │
 │   IDLE · 1                                                           │
 │   05 [x]  Audit yabai float rules Removed two dead rules; th…  47m  │
-│   ⏎ JUMP  1-9  n NEW  x CLOSE  / SEARCH  s SCREEN  ? HELP            │
+│   ⏎ OPEN  n NEW  x CLOSE  h HOLD  / SEARCH  v NVIM  ? HELP           │
 │ ─────────────────────────────────────────────────────────────────────│
 │ Add a CLI flag · try/add-a-cli-flag · turn 3                         │
 │ needs you · 11m                                                      │

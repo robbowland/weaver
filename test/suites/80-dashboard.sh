@@ -74,13 +74,30 @@ golden help.txt "$(FZF_SOCK=$AT/x.sock wvr _view help >/dev/null && FZF_SOCK=$AT
 count() { LS_MODE=plain COLUMNS=120 wvr _rows | head -n 1 | grep -o 'THREADS \] [0-9/]*'; }
 ok "WIP: past WEAVER_WIP the board's count is against it, else as ever" \
 	"$(WEAVER_WIP=2 count)|$(count)|$(WEAVER_WIP=0 count)" "THREADS ] 3/2|THREADS ] 3|THREADS ] 3"
-for p in 0 2; do
-	jq -nc --arg w "$T/dash" '{name: "t", task: "t", worktree: $w, agent: "claude"}' >"$SD/${SK}_$p.thread"
-done
+jq -nc --arg w "$T/dash" '{name: "t", task: "t", worktree: $w, agent: "claude", num: 8}' >"$SD/${SK}_0.thread"
+jq -nc --arg w "$T/dash" '{name: "t", task: "t", worktree: $w, agent: "claude", num: 7}' >"$SD/${SK}_2.thread"
 ok "...and the form, its spare line telling how to close or hold one" \
 	"$(WEAVER_WIP=1 wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')|$(wvr _form header "$AT/wip.form" "")" \
 	" 2 threads open, past your 1: h on the board holds one, x closes one| "
+# A held thread: the form says it waits, to look at before starting another.
+mkdir -p "$SD/lost"
+jq -nc --arg k "$SK" --arg w "$T/dash" '{lost: 1, held: 1, note: "try again", skey: $k, state: {session_id: "sid-held"},
+	thread: {name: "h", task: "h", worktree: $w, agent: "claude"}}' >"$SD/lost/${SK}_sid-held.json"
+ok "...and what is held, past the limit and within it" \
+	"$(WEAVER_WIP=1 wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')|$(wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')" \
+	" 2 threads open, past your 1: h on the board holds one, x closes one · 1 held under HELD on the board| 1 held under HELD on the board, waiting: ⏎ on one there resumes it"
+rm -f "$SD/lost/${SK}_sid-held.json"
+# The footer: ⏎ opens whatever the row is (a thread, a lost or held one);
+# holding one mid-turn says it stops it, as you type the note; and one just
+# held is on its way until its agent has closed.
+foot() { FZF_COLUMNS=160 wvr _footer | strip; }
+ok "footer: ⏎ opens, h holds" "$(foot | grep -o '⏎ OPEN')|$(foot | grep -o 'h HOLD')" "⏎ OPEN|h HOLD"
+ok "...holding a thread mid-turn says it stops it; one waiting on you, not" \
+	"$(FZF_PROMPT='hold 07 › ' foot | grep -c 'MID-TURN')|$(FZF_PROMPT='hold 08 › ' foot | grep -c 'MID-TURN')" "1|0"
+printf '07\n' >"$AT/hb.holding"
+ok "...one just held, while its agent closes" "$(FZF_SOCK=$AT/hb.sock foot | grep -o 'HOLDING 07')" "HOLDING 07"
 rm -f "$SD/${SK}_0.thread" "$SD/${SK}_2.thread"
+ok "...and not once it has" "$(FZF_SOCK=$AT/hb.sock foot | grep -c 'HOLDING')|$([ -f "$AT/hb.holding" ] || echo gone)" "0|gone"
 golden empty-card.txt "$(wvr _preview '' | strip)"
 
 # A thread whose agent has not reported yet: starting, then not reporting.

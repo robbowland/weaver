@@ -178,7 +178,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		if items == 0 {
 			os.Setenv("LS_EMPTY", "1")
 		}
-		foot := strings.TrimRight(Footer(), "\n")
+		foot := strings.TrimRight(e.Footer(), "\n")
 		os.Unsetenv("LS_EMPTY")
 		header := strings.TrimRight(Title(), "\n")
 		os.Unsetenv("FZF_SOCK")

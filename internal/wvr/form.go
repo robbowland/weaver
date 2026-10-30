@@ -221,11 +221,28 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 		}
 	}
 	// Its line stays when it says nothing, so a message coming or going
-	// never moves the rows; past the limit on open threads, it says so.
+	// never moves the rows. Past the limit on open threads, it says so; and
+	// what you held waits there, to look at before starting another.
 	if b.Len() == 0 {
-		if n := len(e.SessionFiles("thread")); overWIP(n) {
+		held := 0
+		for _, r := range e.LostRows() {
+			if r.Held != "" {
+				held++
+			}
+		}
+		heldSays := ""
+		if held > 0 {
+			heldSays = strconv.Itoa(held) + " held under HELD on the board"
+		}
+		switch n := len(e.SessionFiles("thread")); {
+		case overWIP(n):
+			if heldSays != "" {
+				heldSays = " · " + heldSays
+			}
 			return "        " + CDim + strconv.Itoa(n) + " threads open, past your " + strconv.Itoa(wipLimit()) +
-				": h on the board holds one, x closes one" + COff + "\n"
+				": h on the board holds one, x closes one" + heldSays + COff + "\n"
+		case heldSays != "":
+			return "        " + CDim + heldSays + ", waiting: ⏎ on one there resumes it" + COff + "\n"
 		}
 		return " \n"
 	}
