@@ -106,12 +106,12 @@ func (e *Env) ls(peek, at string) (string, error) {
 	// An agent you started by hand, adopted; else the picker of
 	// conversations (on an empty board too, as n's field is made).
 	adoptAct := "transform:if [ \"$FZF_TOTAL_COUNT\" = 0 ]; then echo 'execute-silent(" + q + " _popup adopt)'; else printf '%s2})\\n' 'execute-silent(" + q + " _popup adopt {'; fi"
-	renameAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " _popup rename {2})' ;; esac"
+	// In place, on its own row (modes.go), in the popover too.
+	renameAct := "transform:case {1} in a*) " + q + " _mode rename {2} ;; esac"
 	restartAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " restart {2})' ;; esac"
 	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+q+" _menu board {1})"
 	if peek != "" {
 		closeAct = "transform:case {1} in a*|l*) echo 'print(close)+accept' ;; esac"
-		renameAct = "transform:case {1} in a*) echo 'print(rename)+accept' ;; esac"
 		restartAct = "transform:case {1} in a*) echo 'print(restart)+accept' ;; esac"
 		adoptAct, nextAct, prevAct, menuAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept", "ignore"
 	}
@@ -200,7 +200,9 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "resize:reload-sync(LS_REMEASURE=1 " + q + " _rows)", "--bind", "load:transform(" + q + " _chrome)",
 			"--bind", "focus:" + focusRefresh("transform(COLOR=1 "+q+" _refresh)") + `+transform:case {1} in a*) ;; *) case $FZF_ACTION in up|page-up|half-page-up|offset-up|scroll-up|up-match|prev-*) t={4}; [ -n "$t" ] || t={5} ;; *) t={5}; [ -n "$t" ] || t={4} ;; esac; [ -n "$t" ] && echo "pos($t)" ;; esac`,
 			"--bind", "j:down,k:up,g,home:first,G,end:last,q:" + quitAct,
-			"--bind", "enter,double-click:transform:case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; esac",
+			// An edit open (modes.go) is done; else the row's thread.
+			"--bind", "enter,double-click:transform:case \"$FZF_PROMPT\" in rename\\ *) " + q + " _modedone \"$FZF_PROMPT\" \"$FZF_QUERY\" ;; " +
+				"*) case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; esac ;; esac",
 		}
 		for _, r := range [][3]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}} {
 			var bs []string
@@ -227,7 +229,8 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "right-click:"+menuAct,
 			"--bind", "ctrl-r:"+cardUnscrolled+"+reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
-			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo 'hide-input+rebind(`+lsKeys+`)+transform(`+q+` _hf)'; fi}`)
+			// Out of a search or an edit, the board as it was.
+			"--bind", `esc:clear-query+transform{if [ "$FZF_INPUT_STATE" = hidden ]; then echo '`+quitAct+`'; else echo '`+browseActs(q)+`'; fi}`)
 		args = append(args, cardScrollBinds...)
 		if peek != "" {
 			// Alt y again closes it, as a toggle; Alt N and Alt 1 work in it

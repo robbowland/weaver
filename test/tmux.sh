@@ -653,6 +653,53 @@ waitfor 'v0 | grep -q "Tidy the parser"' 20
 ok "...or the board is off screen" "$(v0 | grep -c 'Tidy the parser')|$(v0 | grep -c 'Held name')" "1|0"
 helpto off
 
+# --- rename in place: r on a row turns the board's input line into a
+# prompt for its thread; its keys type (n and x among them); esc cancels.
+hex() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n'; }
+# typed TEXT: keys, again till the board's input line shows TEXT (fzf drops
+# input that comes during a reload).
+typed() {
+	for _ in 1 2 3; do
+		key "$(hex "$1")"
+		waitfor "v0 | grep -qF '$2'" 20 && return 0
+		key 15 # ctrl-u
+	done
+}
+key 2f # /
+typed Tidy "/ Tidy"
+key 1b # esc: the search closes, the cursor stays on thread 2
+waitfor '! v0 | grep -qF "/ Tidy"'
+key 72 # r
+waitfor 'v0 | grep -qF "rename 02 › Tidy the parser"' 20
+ok "rename in place: r opens it on the row's thread, its name to edit" \
+	"$(v0 | grep -cF 'rename 02 › Tidy the parser')|$(v0 | grep -c 'SAVE')" "1|1"
+key 15 # ctrl-u
+typed "Next fix" "rename 02 › Next fix"
+key 0d # enter
+waitfor '[ "$(label2)" = "02 Next fix · repo/main" ]'
+ok "...typed and saved: the board's keys type, and the thread takes the name" \
+	"$(label2)|$(jq -r .title "$SD/tmux-${S}_$AG2.thread")|$(v0 | grep -cF 'rename 02')" "02 Next fix · repo/main|Next fix|0"
+key 72 # r
+waitfor 'v0 | grep -qF "rename 02 › Next fix"' 20
+key 15
+key "$(hex lost)"
+key 1b # esc
+waitfor '! v0 | grep -qF "rename 02"'
+sleep 0.5
+ok "...esc leaves it as it was" "$(label2)|$(jq -r .title "$SD/tmux-${S}_$AG2.thread")" "02 Next fix · repo/main|Next fix"
+key 72 # r
+waitfor 'v0 | grep -qF "rename 02 › Next fix"' 20
+key 15
+key 0d # enter, empty
+waitfor '[ "$(label2)" = "02 Tidy the parser · repo/main" ]'
+ok "...empty gives its agent's title back" "$(label2)|$(jq -r '.title // ""' "$SD/tmux-${S}_$AG2.thread")" "02 Tidy the parser · repo/main|"
+key 72 # r
+waitfor 'v0 | grep -qF "rename 02 › Tidy the parser"' 20
+key 0d # enter, unchanged
+waitfor '! v0 | grep -qF "rename 02"'
+sleep 0.5
+ok "...and its agent's title saved as it is stays its agent's" "$(jq -r '.title // ""' "$SD/tmux-${S}_$AG2.thread")" ""
+
 # --- restart: a thread's agent started again in its own pane (an updated
 # harness), resuming its conversation; one mid-turn is left unless forced
 rm -f "$AT/args.$AG2"

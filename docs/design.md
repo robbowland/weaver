@@ -421,9 +421,15 @@ adopt; else the agent this pane belongs to, its own or its nvim's), under
 the numbering lock its other writers take, then relabels the windows and
 reloads the boards. Without NAME it asks on the terminal (fzf, the query the
 current name); an empty NAME clears it. The board's `r` on a thread's row
-opens that prompt in a popup (`_popup rename PANE`, 8 lines), on an agent
-that is no thread says to adopt it first; in alt+y's popover it is left for
-once the popover has closed (`peekChoice`).
+(alt+y's popover's too) edits in place: `wvr _mode rename PANE` prints the
+fzf actions that show its input line, let go of its keys (`lsKeys`) and
+stop it filtering, with the prompt `rename NN › ` (NN the thread's number,
+else `%PANE`) and the current name as the query; on an agent that is no
+thread it says to adopt it first. `enter` with such a prompt runs `wvr
+_modedone "$FZF_PROMPT" "$FZF_QUERY"`, which renames the thread the prompt
+names (a name unchanged is left as it is, so an agent's title is never
+taken for yours) and prints the actions back to browsing; `esc` goes back
+without it. The mouse menu's rename is the `r` key.
 
 ### Restarting
 

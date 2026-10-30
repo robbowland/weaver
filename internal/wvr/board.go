@@ -777,7 +777,9 @@ func boardHints() []choice {
 	var items []string
 	help := false
 	total := os.Getenv("FZF_TOTAL_COUNT")
-	switch {
+	switch kind, _ := editing(); {
+	case kind == editRename:
+		items = []string{"⏎ SAVE", "esc CANCEL", "ctrl+u CLEAR"}
 	case searching():
 		items = strings.Split(search, "|")
 	case os.Getenv("LS_EMPTY") == "1" || total == "0":

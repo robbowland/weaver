@@ -32,22 +32,12 @@ func (e *Env) Rename(args []string) error {
 	if p == "" {
 		return errors.New("usage: wvr rename [pane-id] [name]")
 	}
-	th, err := store.ReadThread(e.ThreadFile(p))
-	if err != nil {
-		return errors.New("its agent is no thread: adopt it first (wvr adopt)")
+	cur, ok := e.shownName(p)
+	if !ok {
+		return errNotThread
 	}
 	name := strings.Join(args, " ")
 	if len(args) == 0 {
-		// What the board calls it now: your name, its agent's title, else
-		// its task (or the item it started from).
-		cur := th.Title
-		if cur == "" {
-			st, _ := store.ReadState(e.StateFile(p))
-			cur = st.Title
-		}
-		if cur == "" {
-			cur = oneline.Line(strings.SplitN(th.About(), "\n", 2)[0])
-		}
 		n, ok := askName(formLabel("WEAVER", "RENAME"), cur, "its agent's title", "its agent's title",
 			CGrey+"⏎"+COff+" "+CDim+"RENAME"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"CANCEL"+COff)
 		if !ok {
@@ -56,6 +46,27 @@ func (e *Env) Rename(args []string) error {
 		name = n
 	}
 	return e.retitle(p, oneline.Line(strings.TrimSpace(name)))
+}
+
+var errNotThread = errors.New("its agent is no thread: adopt it first (wvr adopt)")
+
+// shownName is what the board calls the thread of the agent in pane p now:
+// your name, its agent's title, else its task (or the item it started
+// from); false when the agent is no thread.
+func (e *Env) shownName(p mux.PaneID) (string, bool) {
+	th, err := store.ReadThread(e.ThreadFile(p))
+	if err != nil {
+		return "", false
+	}
+	cur := th.Title
+	if cur == "" {
+		st, _ := store.ReadState(e.StateFile(p))
+		cur = st.Title
+	}
+	if cur == "" {
+		cur = oneline.Line(strings.SplitN(th.About(), "\n", 2)[0])
+	}
+	return cur, true
 }
 
 // retitle sets the title of the thread whose agent is pane p ("" for none:

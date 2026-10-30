@@ -165,10 +165,13 @@ A thread is called by the name it started with: the form's `name` row (or
 (`#45 Add a flag`, or `review :: #45 Add a flag` read-only) unless you change
 it. With none, it is called by the title
 its agent gives it (Claude Code names its conversations as they go), else by
-its task. `r` on the board, or `wvr rename [PANE] [NAME]`, gives it a name of
-your own later, on the board, its card, its window and the status line; with
-no name, it asks. An empty name gives the agent's title back. The name stays with the thread when it is lost and
-resumed.
+its task. `r` on the board gives it a name of your own, there and then: the
+board's search line becomes `rename 02 › its name`, `enter` saves and `esc`
+leaves it as it was. The name shows on the board, its card, its window and
+the status line. An empty name gives the agent's title back, and saving the
+agent's title as it is leaves it the agent's, to change as it goes. `wvr
+rename [PANE] [NAME]` does the same from a shell (with no name, it asks).
+The name stays with the thread when it is lost and resumed.
 
 ### Closing a thread
 
