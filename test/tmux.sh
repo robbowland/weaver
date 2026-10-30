@@ -699,6 +699,8 @@ key 0d # enter, unchanged
 waitfor '! v0 | grep -qF "rename 02"'
 sleep 0.5
 ok "...and its agent's title saved as it is stays its agent's" "$(jq -r '.title // ""' "$SD/tmux-${S}_$AG2.thread")" ""
+ok "...and the board whole after it, not filtered by the name typed" \
+	"$(curl -s -m 2 --unix-socket "$(board)" localhost | jq -r '"\(.query)|\(.matchCount == .totalCount)"')" "|true"
 
 # --- restart: a thread's agent started again in its own pane (an updated
 # harness), resuming its conversation; one mid-turn is left unless forced

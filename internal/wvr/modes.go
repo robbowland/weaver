@@ -37,9 +37,12 @@ func editing() (kind, which string) {
 	return m[1], m[2]
 }
 
-// browseActs are fzf's actions from an edit back to browsing the board.
+// browseActs are fzf's actions from an edit (or a search) back to browsing
+// the board. The search for the cleared query is fzf's, after: without
+// waiting for it, hiding the input leaves the list filtered by what was
+// typed.
 func browseActs(q string) string {
-	return "clear-query+hide-input+enable-search+change-prompt(/ )+change-ghost(search threads)+rebind(" + lsKeys + ")+transform(" + q + " _hf)"
+	return "clear-query+enable-search+wait+hide-input+change-prompt(/ )+change-ghost(search threads)+rebind(" + lsKeys + ")+transform(" + q + " _hf)"
 }
 
 // EditMode is `wvr _mode KIND PANE`: fzf's actions that open the edit KIND
