@@ -242,6 +242,7 @@ const (
 const (
 	GHeld     = "[=]"
 	heldStale = 7 * 24 * 3600
+	heldFold  = 3
 )
 
 // wipLimit is how many threads you mean to have open at once ($WEAVER_WIP,
@@ -645,9 +646,21 @@ func (e *Env) rows(plain bool) string {
 	}
 	var ls []item
 	var keyl [10]string
+	// HELD past heldFold rows shows its newest and folds the rest into a
+	// row of their own, whose enter unfolds them (and folds them again); on
+	// the board, not in its text.
+	fold, unfolded, held := 0, base != "" && files.Exists(base+".heldopen"), 0
+	if !plain && counts[groupHeld] > heldFold {
+		fold = heldFold
+	}
 	lastG, a := -1, 0
 	for _, i := range order {
 		r := rs[i]
+		if r.group == groupHeld && fold > 0 && !unfolded {
+			if held++; held > fold {
+				continue
+			}
+		}
 		g := r.group
 		if g != lastG {
 			if lastG != -1 && gaps {
@@ -710,6 +723,14 @@ func (e *Env) rows(plain bool) string {
 			id = "l" + r.pane
 		}
 		ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, isAgent: true})
+	}
+	if fold > 0 {
+		more := strconv.Itoa(counts[groupHeld]-fold) + " more held"
+		t := grey + more + off + dim + " · ⏎ shows them" + off
+		if unfolded {
+			more, t = "every held thread", dim+"⏎ folds them again"+off
+		}
+		ls = append(ls, item{id: "m", text: strings.Repeat(" ", numw) + " " + dim + "…" + off + sep + t, label: more, isAgent: true})
 	}
 	// A gap under the last group too, between the list and its keys, as a
 	// view has.

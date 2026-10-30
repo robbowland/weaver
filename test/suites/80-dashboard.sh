@@ -87,6 +87,24 @@ ok "...and what is held, past the limit and within it" \
 	"$(WEAVER_WIP=1 wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')|$(wvr _form header "$AT/wip.form" "" | strip | tr -s ' ')" \
 	" 2 threads open, past your 1: h on the board holds one, x closes one · 1 held under HELD on the board| 1 held under HELD on the board, waiting: ⏎ on one there resumes it"
 rm -f "$SD/lost/${SK}_sid-held.json"
+
+# Many held: HELD shows its three newest and folds the rest into a row of
+# their own; enter there (wvr _fold) shows them all, and folds them again.
+for i in 1 2 3 4 5; do
+	jq -nc --arg k "$SK" --arg w "$T/dash" --argjson h $((NOW - i * 60)) --arg n "next $i" \
+		'{lost: $h, held: $h, note: $n, skey: $k, state: {session_id: ("sid-h" + ($h | tostring))},
+		thread: {name: "h", task: "h", worktree: $w, agent: "claude"}}' >"$SD/lost/${SK}_h$i.json"
+done
+held_rows() { FZF_SOCK=$AT/fold.sock FZF_COLUMNS=120 wvr _rows | strip | awk -F '\t' '$1 ~ /^[lm]/ { print substr($1, 1, 1) ":" $NF }' | sed 's/  */ /g'; }
+ok "HELD folds past three, the rest on a row of their own" \
+	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(held_rows | grep -c '2 more held · ⏎ shows them')" "l: l: l: m: |1"
+FZF_SOCK=$AT/fold.sock wvr _fold
+ok "...enter there shows them all, and folds them again" \
+	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(held_rows | grep -c 'folds them again')" "l: l: l: l: l: m: |1"
+FZF_SOCK=$AT/fold.sock wvr _fold
+ok "...folded again; the board as text lists every one" \
+	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(LS_MODE=plain COLUMNS=120 wvr _rows | grep -c '\[=\]')" "l: l: l: m: |5"
+rm -f "$SD/lost/${SK}"_h?.json
 # The footer: ⏎ opens whatever the row is (a thread, a lost or held one);
 # holding one mid-turn says it stops it, as you type the note; and one just
 # held is on its way until its agent has closed.

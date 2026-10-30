@@ -590,7 +590,10 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   before its agent and nvim are closed as `wvr close --hold` closes them:
   unasked, its worktree never offered for removal. The board lists it under
   HELD, last, newest first, its note as its fact, its cell `[=]`, and its age
-  a shade brighter after a week; it is hidden while an agent with its
+  a shade brighter after a week. Past three, HELD shows the three newest and
+  one row (id `m`) for the rest, `… N more held`, whose `enter` (`wvr _fold`,
+  the board's `<base>.heldopen`) shows them all and then folds them again;
+  the board as text (`wvr ls | cat`) lists every one. A held thread is hidden while an agent with its
   session id still runs (being closed). Neither the session starting (its
   lost threads brought back) nor `wvr resume --all` takes a held thread;
   `wvr resume WHICH` and the board's `enter` do, as a lost one's, and `x`

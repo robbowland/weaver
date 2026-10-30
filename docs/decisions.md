@@ -154,7 +154,9 @@ can supersede an earlier one, and says so.
   Glomb 2018 on attention residue), and is optional, since asking costs.
   Left out to stay lean: coming back on a date or an event (PR merged), a
   limit on how many are held, and an agent-written note; an age a shade
-  brighter after a week stands in for a weekly look.
+  brighter after a week stands in for a weekly look. Past three held, HELD
+  folds the rest into one row, so holding many never crowds the threads
+  you are working on.
 - 2026-10-30: A limit on open threads (`WEAVER_WIP`, 5) only says when
   you are past it, where it matters: the board's count (`7/5`, a shade
   brighter) and the new-thread form's spare line, which says how to hold or

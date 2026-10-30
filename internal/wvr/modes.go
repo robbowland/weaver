@@ -151,6 +151,20 @@ func (e *Env) Hold(args []string) error {
 	return e.Close([]string{"--hold", string(p)})
 }
 
+// Fold is `wvr _fold`: the board's HELD threads past its first few shown,
+// or folded again (enter on the row that stands for them).
+func Fold() {
+	b := sockBase()
+	if b == "" {
+		return
+	}
+	if files.Exists(b + ".heldopen") {
+		bestEffort(os.Remove(b + ".heldopen"))
+		return
+	}
+	bestEffort(files.Put(b+".heldopen", "1"))
+}
+
 // paneOfThread is the agent's pane of the thread an edit's prompt names:
 // its number in this session, or %pane.
 func (e *Env) paneOfThread(which string) (mux.PaneID, bool) {

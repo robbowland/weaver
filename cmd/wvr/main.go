@@ -220,6 +220,7 @@ var commands = map[string]command{
 	// The board's edits in place.
 	"_mode":     {session: true, run: (*wvr.Env).EditMode},
 	"_modedone": {session: true, run: (*wvr.Env).EditDone},
+	"_fold":     {run: done(func(*wvr.Env, []string) { wvr.Fold() })},
 
 	// tmux's hooks.
 	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},

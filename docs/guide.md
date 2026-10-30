@@ -358,7 +358,9 @@ worktree and branch stay as they are, and its row moves to HELD with your
 note. Nothing brings it back on its own, not even `wvr` starting the
 session again: `enter` on it resumes it in a new window, on its
 conversation, and `x` forgets it. A hold past a week shows its age a shade
-brighter, a nudge to take it up or let it go. `wvr hold [PANE] [NOTE]` does
+brighter, a nudge to take it up or let it go. Past three held threads, the
+board shows the newest three and one row for the rest (`… 2 more held`):
+`enter` on it shows them all, and on it again folds them away. `wvr hold [PANE] [NOTE]` does
 the same from a shell, and `wvr resume` lists held threads with lost ones
 (`--all` brings back only the lost).
 
