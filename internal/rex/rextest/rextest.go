@@ -1,6 +1,5 @@
-// Package rextest is Rex for tests outside package rex: none at all, or a
-// server of a test's own, never the user's (as rex_test.go's hermetic and
-// server are inside it).
+// Package rextest is Rex for tests: none at all, or a server of a test's
+// own, never the user's. It does not import rex, whose own tests use it.
 package rextest
 
 import (
@@ -12,8 +11,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/robbowland/weaver/internal/rex"
 )
 
 // NoRex clears what weaver, Rex and tmux read from the environment (all
@@ -44,14 +41,14 @@ func NoRex(t testing.TB) string {
 // stopWait is how long a server has to stop once told.
 var stopWait = 10 * time.Second
 
-// Server starts a Rex server of the test's own (the test is skipped
-// without rex), as NoRex points rex. It stops as the test ends, or when
-// stop is called (no Rex answers from then on): SIGTERM, then waited for,
-// so that Rex removes its runtime file; one left is an error, and so is a
-// server still running 10 s on, which is then killed.
-func Server(t testing.TB) (stop func()) {
+// Server starts a Rex server of the test's own with bin, the rex command
+// (rex.Bin; the test is skipped without it), as NoRex points rex. It stops
+// as the test ends, or when stop is called (no Rex answers from then on):
+// SIGTERM, then waited for, so that Rex removes its runtime file; one left
+// is an error, and so is a server still running 10 s on, which is then
+// killed.
+func Server(t testing.TB, bin string) (stop func()) {
 	t.Helper()
-	bin := rex.Bin()
 	if _, err := exec.LookPath(bin); err != nil {
 		t.Skip("rex is not installed")
 	}

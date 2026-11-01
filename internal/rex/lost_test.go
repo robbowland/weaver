@@ -77,7 +77,7 @@ esac
 // a destroyed one's is, and once the server has stopped its life is gone
 // with it, while what Rex alone could say is not known.
 func TestLostServer(t *testing.T) {
-	stop := rextest.Server(t)
+	stop := rextest.Server(t, rex.Bin())
 	s, err := rex.Start(t.TempDir(), "demo", "/", []string{"/bin/sleep", "600"})
 	if err != nil {
 		t.Fatal(err)

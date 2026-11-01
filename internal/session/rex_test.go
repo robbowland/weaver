@@ -26,7 +26,7 @@ import (
 // once a run however many agents ask; once it has gone they are kept as
 // lost; while Rex does not answer, nothing is lost or retired.
 func TestRexLostAndGC(t *testing.T) {
-	stop := rextest.Server(t)
+	stop := rextest.Server(t, rex.Bin())
 	dir := t.TempDir()
 	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", TSock: []string{"-S", dir + "/no-tmux.sock"}}
 	for _, d := range []string{e.StateDir, e.LostDir} {

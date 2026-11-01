@@ -30,12 +30,11 @@ func TestServerStopBounded(t *testing.T) {
 	if err := os.WriteFile(dir+"/rex", []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	was := stopWait
 	stopWait = 200 * time.Millisecond
 	t.Cleanup(func() { stopWait = was })
 	r := &recorder{TB: t}
-	stop := Server(r)
+	stop := Server(r, dir+"/rex")
 	done := make(chan struct{})
 	go func() {
 		stop()

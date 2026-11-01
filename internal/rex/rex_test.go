@@ -13,90 +13,28 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 )
 
-// hermetic clears what weaver, Rex and tmux read from the environment,
-// all but where rex is (REX_BIN_DIR): a test is the same in a weaver pane,
-// a Rex terminal or tmux as anywhere else.
-func hermetic(t *testing.T) {
-	t.Helper()
-	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
-		if k == "TMUX" || k == "TMUX_PANE" || strings.HasPrefix(k, "WEAVER_") ||
-			strings.HasPrefix(k, "REX_") && k != "REX_BIN_DIR" {
-			t.Setenv(k, "")
-			_ = os.Unsetenv(k)
-		}
-	}
-	// rex falls back from a server it cannot reach to the one in its
-	// runtime directory: the test's own, with none in it unless the test
-	// starts one, never the user's.
-	run := t.TempDir()
-	t.Setenv("REX_RUNTIME_DIR", run)
-	t.Setenv("REX_SERVER", "unix://"+run+"/none.sock")
-}
-
-// server starts a Rex server of the test's own (skipped without rex) and
-// points rex at it.
+// server starts a Rex server of the test's own (rextest.Server: skipped
+// without rex) and points rex at it, and checks that serverPID finds it
+// from the runtime file Rex keeps for it, as hooks do, without a call.
 func server(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath(Bin()); err != nil {
-		t.Skip("rex is not installed")
-	}
-	hermetic(t)
-	// A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
-	d, err := os.MkdirTemp("/tmp", "wvr-rex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(d) })
-	conf := filepath.Join(d, "init.lua")
-	if err := os.WriteFile(conf, []byte("-- nothing\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	sock := filepath.Join(d, "s.sock")
-	// Its runtime files in d, not the user's Rex directory.
-	run := filepath.Join(d, "run")
-	t.Setenv("REX_RUNTIME_DIR", run)
-	t.Setenv("REX_SERVER", "unix://"+sock)
-	srv := exec.Command(Bin(), "server", "run", "--listen", "unix://"+sock, "--state-dir", filepath.Join(d, "state"), "--config", conf)
-	if err := srv.Start(); err != nil {
-		t.Fatal(err)
-	}
-	// Stopped, not killed, so that Rex removes its runtime file as it goes.
-	t.Cleanup(func() {
-		done := make(chan error, 1)
-		go func() { done <- srv.Wait() }()
-		_ = srv.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-done:
-		case <-time.After(10 * time.Second):
-			_ = srv.Process.Kill()
-			<-done
-			t.Error("the Rex server did not stop")
-		}
-		if left, _ := filepath.Glob(filepath.Join(run, "servers", "*", "runtime.json")); len(left) > 0 {
-			t.Errorf("the Rex server left %q", left)
-		}
-	})
-	for i := 0; call("server.status", map[string]any{}, nil) != nil; i++ {
-		if i == 50 {
-			t.Fatal("the Rex server did not start")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	// Its runtime file is in d, where serverPID reads it.
-	sum := sha256.Sum256([]byte("unix://" + sock))
-	if _, err := os.Stat(filepath.Join(run, "servers", hex.EncodeToString(sum[:]), "runtime.json")); err != nil {
+	rextest.Server(t, Bin())
+	sum := sha256.Sum256([]byte(os.Getenv("REX_SERVER")))
+	if _, err := os.Stat(filepath.Join(os.Getenv("REX_RUNTIME_DIR"), "servers", hex.EncodeToString(sum[:]), "runtime.json")); err != nil {
 		t.Fatalf("the Rex server's runtime file: %v", err)
 	}
-	if pid := serverPID(); pid != srv.Process.Pid {
-		t.Fatalf("serverPID %d, the server's %d", pid, srv.Process.Pid)
+	var st struct {
+		Pid int `json:"pid"`
+	}
+	if err := call("server.status", map[string]any{}, &st); err != nil || st.Pid == 0 || serverPID() != st.Pid {
+		t.Fatalf("serverPID %d, the server's %d (%v)", serverPID(), st.Pid, err)
 	}
 }
 
@@ -664,7 +602,7 @@ func TestApp(t *testing.T) {
 // a stale file of another server once on the same endpoint, which sorts
 // first, and no server to ask.
 func TestServerPID(t *testing.T) {
-	hermetic(t)
+	rextest.NoRex(t)
 	run := t.TempDir()
 	t.Setenv("REX_RUNTIME_DIR", run)
 	ep := "unix:///nowhere/rex.sock"
@@ -687,7 +625,7 @@ func TestServerPID(t *testing.T) {
 
 // A pane's number comes from its block, the same each time it is asked.
 func TestFromEnv(t *testing.T) {
-	hermetic(t)
+	rextest.NoRex(t)
 	dir := t.TempDir()
 	r := ids{dir}
 	if err := r.made("session:abc", "weaver", 1); err != nil {
