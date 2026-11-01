@@ -73,7 +73,10 @@ weaver's keys are Alt keys, in Rex as anywhere: run Change Option Key
 Behavior from Rex's command palette and have Option send Alt. Rex's default,
 Automatic, sends Alt only on a U.S. keyboard layout; on any other (ABC,
 British, ...) Option types special characters, `alt+y` types `¥`, and only
-`cmd+y` reaches weaver's tmux, as the Meta it reads Rex's Cmd as.
+`cmd+y` reaches weaver's tmux, as the Meta it reads Rex's Cmd as. weaver on
+Rex binds its keys in Rex, which takes them before Option types anything, so
+they work whatever Option sends; the setting is for weaver's tmux in a Rex
+terminal, and for programs' own Alt keys.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has

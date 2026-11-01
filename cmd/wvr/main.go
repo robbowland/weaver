@@ -243,7 +243,9 @@ var commands = map[string]command{
 	// tmux's hooks.
 	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},
 	"_fit":  {session: true, run: done(func(e *wvr.Env, args []string) { e.Fit(arg(args, 0)) })},
-	"_boot": {session: true, run: done(func(e *wvr.Env, args []string) { e.Boot(arg(args, 0)) })},
+	// Rex: a thread's widths back once the app has evened out its panes.
+	"_width": {session: true, run: done(func(e *wvr.Env, args []string) { e.ThreadWidth(arg(args, 0)) })},
+	"_boot":  {session: true, run: done(func(e *wvr.Env, args []string) { e.Boot(arg(args, 0)) })},
 
 	// The new-thread form, and the threads it opens.
 	"_from": {session: true, run: (*wvr.Env).From},

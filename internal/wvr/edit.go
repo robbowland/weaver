@@ -33,6 +33,13 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 	return p, err
 }
 
+// ThreadWidth is `wvr _width AGENT`: threadWidth, of a pane as given.
+func (e *Env) ThreadWidth(agent string) {
+	if p, ok := tmux.ParsePane(agent); ok {
+		e.threadWidth(p)
+	}
+}
+
 // threadWidth: back to a thread's split once its nvim reopens beside the
 // agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
 // agent are the window's only panes.
@@ -47,6 +54,21 @@ func (e *Env) threadWidth(agent mux.PaneID) {
 		return
 	}
 	e.Mux().SetWidth(agent, agentCols(total))
+}
+
+// settleWidths puts thread agent's window back to its widths (threadWidth)
+// once the Rex app has evened out its panes: it does that, within a second
+// or so and with nothing to say when, to the window it shows whenever its
+// panes change (a pane split in, or put in another's place). Detached, so
+// what asked goes on at once; twice, for an app slow to it. Nothing on
+// tmux, which keeps a pane's width.
+func (e *Env) settleWidths(agent mux.PaneID) {
+	if !e.OnRex() {
+		return
+	}
+	c := exec.Command("/bin/sh", "-c", `sleep 1; "$0" _width "$1"; sleep 1.5; exec "$0" _width "$1"`, e.Self, string(agent))
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	bestEffort(c.Start())
 }
 
 // editLock is one `wvr edit` per agent at a time, so a second Alt v finds
@@ -187,6 +209,7 @@ func (e *Env) Edit(args []string) error {
 			// A thread's window gets its split back.
 			if files.Exists(e.PaneFile(agentPane, "thread")) {
 				e.threadWidth(agentPane)
+				e.settleWidths(agentPane)
 			}
 			// The new nvim records itself (pane and pid) as it starts; give it
 			// a moment, still holding the lock, so a second press finds it.

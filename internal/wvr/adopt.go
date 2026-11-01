@@ -187,6 +187,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 			total = 200
 		}
 		e.splitNvim(p, dir, total)
+		e.settleWidths(p)
 	}
 	return tab
 }

@@ -114,7 +114,7 @@ func restartSummary(done, busy, failed []string) string {
 func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	th, err := store.ReadThread(e.ThreadFile(p))
 	if err != nil {
-		return "%" + string(p), errors.New("not a thread (adopt it first)")
+		return "pane " + string(p), errors.New("not a thread (adopt it first)")
 	}
 	label := fmt.Sprintf("%02d", th.Num)
 	// Mid-turn as the board says it; an agent that has exited never is.
@@ -147,5 +147,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		os.RemoveAll(d)
 		return label, errors.New(e.MuxName() + " could not restart it")
 	}
+	// On Rex the agent starts again in a pane put in its place.
+	e.settleWidths(p)
 	return label, nil
 }
