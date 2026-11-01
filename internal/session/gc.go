@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/process"
-	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -121,112 +119,27 @@ func (e *Env) GC() {
 }
 
 // gcAgents is GC's agents, their nvims' bindings and their threads: of
-// every session, each asked once a run.
+// every session, each multiplexer asked once a run (lives).
 func (e *Env) gcAgents() {
 	now := time.Now().Unix()
-	var sessions []tmuxSession
-	answered, asked := false, false
-	ask := func() {
-		if !asked {
-			sessions, answered = e.tmuxSessions()
-			asked = true
-		}
-	}
-	// A Rex session's (rex-<name>), as Rex says, once a run: whether it
-	// runs, and its panes when asked (each a snapshot of the session).
-	type rexAnswer struct {
-		s                 rex.Session
-		running, answered bool
-		panes             []mux.Pane
-		listed            bool
-		listErr           error
-	}
-	rexes := map[string]*rexAnswer{}
-	onRex := func(skey string) (*rexAnswer, bool) {
-		if !strings.HasPrefix(skey, "rex-") {
-			return nil, false
-		}
-		a := rexes[skey]
-		if a == nil {
-			a = &rexAnswer{}
-			a.s, a.running, a.answered = rex.Alive(e.RexDir(), skey)
-			rexes[skey] = a
-		}
-		return a, true
-	}
-	// Is pane p one of a's? (Not known: it is.)
-	rexShows := func(a *rexAnswer, p mux.PaneID) bool {
-		if !a.listed {
-			a.panes, a.listErr = a.s.Panes()
-			a.listed = true
-		}
-		_, ok := PaneIn(a.panes, p)
-		return a.listErr != nil || ok
-	}
-	// Rex not answering of skey's session: held off, but for a file of ts
-	// from before the machine started, which no session outlives.
-	boot := process.BootTime()
-	rexHeld := func(a *rexAnswer, ts int64) bool {
-		beforeBoot := boot > 0 && ts < boot
-		return !a.answered && !beforeBoot
-	}
-	// Does skey's session run, for a file of ts?
-	running := func(skey string, ts int64) bool {
-		if a, ok := onRex(skey); ok {
-			return a.running || rexHeld(a, ts)
-		}
-		ask()
-		// Nobody answered: keep everything.
-		return !answered || slices.ContainsFunc(sessions, func(s tmuxSession) bool { return s.key == skey })
-	}
-	// Is skey's session one made after ts: another life of it, the one a
-	// file of ts knew having gone? (A name on two servers: the earlier.)
-	madeAfter := func(skey string, ts int64) bool {
-		if a, ok := onRex(skey); ok {
-			made, known := a.s.Made()
-			return a.running && known && ts > 0 && made > ts
-		}
-		ask()
-		made := int64(0)
-		for _, s := range sessions {
-			if s.key == skey && (made == 0 || s.created < made) {
-				made = s.created
-			}
-		}
-		return made > 0 && ts > 0 && made > ts
-	}
-	var shown map[paneLife]bool
+	l := e.newLives()
 	for _, f := range paneFiles(e.StateDir, "json") {
-		l, _ := files.FirstLine(f)
-		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), agent.State(sub1(reGcState, l))
-		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
-		if pid != "" {
+		line, _ := files.FirstLine(f)
+		pid, start, st := sub1(reGcPid, line), sub1(reGcStart, line), agent.State(sub1(reGcState, line))
+		ts, _ := strconv.ParseInt(sub1(reGcTs, line), 10, 64)
+		skey := KeyOfFile(f)
+		switch {
+		case pid != "":
 			if !process.StillRuns(pid, start, nil) {
-				// Its pane kept (it exited, its thread to be started again
-				// or closed): the board's to show, not to retire.
-				if shown == nil {
-					shown = e.panesShown()
-				}
-				st, err := store.ReadState(f)
-				if err == nil && shown[paneLife{KeyOfFile(f), paneOfNum(st.Pane), st.Where}] {
+				if rec, err := store.ReadState(f); err == nil && l.kept(skey, rec) {
 					continue
 				}
-				if a, ok := onRex(KeyOfFile(f)); err == nil && ok && (rexHeld(a, st.TS) || a.running && a.s.ID == st.Session && rexShows(a, paneOfNum(st.Pane))) {
-					continue
-				}
-				e.Retire(f, pid)
+				l.retire(f, pid)
 				continue
 			}
-		} else {
-			skey := KeyOfFile(f)
-			if madeAfter(skey, ts) {
-				e.Retire(f, "")
-				continue
-			}
-			if !running(skey, ts) && now-ts > 3600 {
-				e.Retire(f, "")
-				continue
-			}
+		case l.madeAfter(skey, ts), !l.running(skey, ts) && now-ts > 3600:
+			l.retire(f, "")
+			continue
 		}
 		if st == agent.StateEnded && now-ts > 3600 {
 			e.Forget(f, pid)
@@ -258,7 +171,7 @@ func (e *Env) gcAgents() {
 		}
 		skey := KeyOfFile(f)
 		fi, err := os.Stat(f)
-		if err == nil && (!running(skey, fi.ModTime().Unix()) || madeAfter(skey, fi.ModTime().Unix())) {
+		if err == nil && (!l.running(skey, fi.ModTime().Unix()) || l.madeAfter(skey, fi.ModTime().Unix())) {
 			e.LoseThread(f)
 		}
 	}

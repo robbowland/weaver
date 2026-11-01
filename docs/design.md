@@ -553,12 +553,15 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   without `server` either, one created after `ts`). A Rex session's has gone
   when the machine has started since, or its server's process has ended
   (neither asks Rex), or Rex says another server runs or the session is no
-  longer on it (`rex.Lost`); when a call that takes fails, neither: its
+  longer on it (`rex.Answer.Lost`); when a call that takes fails, neither: its
   files stay as they are for a later look (one taken for lost while it runs
   would be resumed twice, one taken for not lost forgotten). `GC` likewise
   retires and loses nothing of a Rex session it cannot ask about, but what
-  is from before the machine started, and looks at each session's panes
-  once a run. Anything else is forgotten as before; a pane closed while its
+  is from before the machine started. One pass (a `GC` run, the board's
+  rows) judges every file by one answer from each multiplexer
+  (`session.lives`): tmux's sessions listed once, Rex's server and sessions
+  asked once, each session's panes looked at once. Anything else is
+  forgotten as before; a pane closed while its
   session runs on is not lost. The hook does
   the same check before a new agent's state replaces a dead one's in a reused
   pane id (a new server numbers panes from 0 again), and only ever keeps
@@ -1038,7 +1041,8 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `$REX_SERVER`, `servers/<SHA-256 of the endpoint, hex>/runtime.json` in
   `$REX_RUNTIME_DIR`, else `~/Library/Application Support/rex` (its endpoint
   and pid checked), so hooks make no call; without one it asks the server
-  (`server.status`). `rex.Lost` says whether a life has gone and whether it
+  (`server.status`). `rex.Answer` asks the server's pid, then its sessions,
+  each once and only when needed; its `Lost` says whether a life has gone and whether it
   could tell: gone when its server's process has ended (no call), when
   another server runs, or when the session is no longer on it; not known
   when a call that takes fails, when weaver takes nothing for lost (see

@@ -61,40 +61,65 @@ func FromEnv(dir string) Here {
 	return h
 }
 
+// Answer is what the Rex server $REX_SERVER names says of its sessions,
+// each thing asked once, when first needed: its pid, then the sessions it
+// runs. Every file one pass looks at (a gc run, the board's rows) is
+// judged by one Answer. Its zero value has asked nothing yet.
+type Answer struct {
+	pidAsked, listAsked bool
+	pid                 int
+	live                map[string]bool // nil: not answered
+}
+
+func (a *Answer) serverPID() int {
+	if !a.pidAsked {
+		a.pid, a.pidAsked = serverPID(), true
+	}
+	return a.pid
+}
+
+func (a *Answer) sessions() map[string]bool {
+	if !a.listAsked {
+		a.live, _ = sessions()
+		a.listAsked = true
+	}
+	return a.live
+}
+
 // Lost: has the session life w gone, and does Rex say? Gone when its
 // server's process has ended (no call), when the server running is
 // another, or when the session is no longer on it. Not known when Rex does
 // not answer what that takes, whichever call fails: never gone for that.
 // A life with no session: not lost.
-func Lost(w agent.Where) (lost, known bool) {
+func (a *Answer) Lost(w agent.Where) (lost, known bool) {
 	switch {
 	case w.Session == "":
 		return false, true
 	case w.Server > 1 && !process.Alive(w.Server):
 		return true, true
 	}
-	pid := serverPID()
+	pid := a.serverPID()
 	switch {
 	case pid == 0:
 		return false, false
 	case w.Server != 0 && pid != w.Server:
 		return true, true
 	}
-	live, err := sessions()
-	if err != nil {
+	live := a.sessions()
+	if live == nil {
 		return false, false
 	}
 	return !live[w.Session], true
 }
 
-// Alive is the session whose files are keyed skey (Key of its name): one
+// Keyed is the session whose files are keyed skey (Key of its name): one
 // weaver made of a name with that key, else the one whose id the key holds
 // (a session weaver did not make is named by its id); whether it runs, and
 // whether Rex answered at all. By key, not by a name taken back out of
 // it: Key turns a name's / into _.
-func Alive(dir, skey string) (s Session, running, answered bool) {
-	live, err := sessions()
-	if err != nil {
+func (a *Answer) Keyed(dir, skey string) (s Session, running, answered bool) {
+	live := a.sessions()
+	if live == nil {
 		return Session{}, false, false
 	}
 	id, name, ok := ids{dir}.keyed(skey)

@@ -16,7 +16,6 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
-	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -233,6 +232,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			Exited: p.Exited})
 	}
 	starts := process.Starts(pids)
+	l := e.newLives()
 	for _, g := range gones {
 		if !trusted {
 			continue
@@ -240,14 +240,14 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if process.StillRuns(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
 			continue
 		}
-		e.Retire(g.f, g.pid)
+		l.retire(g.f, g.pid)
 	}
 	out := rows[:0]
 	for _, r := range rows {
 		if !r.Exited && r.Pid != "" && !process.StillRuns(r.Pid, r.Pstart, starts) {
 			// Killed without a SessionEnd: it is not coming back (a thread
 			// lost with its session is kept, to resume).
-			e.Retire(r.Sfile, r.Pid)
+			l.retire(r.Sfile, r.Pid)
 			continue
 		}
 		out = append(out, r)
@@ -360,85 +360,14 @@ func (e *Env) LostRows() []LostRow {
 // Retire: the agent of state file f (pid) is gone: its thread lost with its
 // session is kept, anything else forgotten. When whether its session went
 // cannot be told (Rex not answering), nothing yet: a later look decides.
-func (e *Env) Retire(f, pid string) {
-	lost, known := e.lostCheck(f)
-	switch {
-	case !known:
-		return
-	case lost && e.Lose(f, pid):
-		return
-	}
-	e.Forget(f, pid)
-}
+// A pass over many files keeps one lives for them all.
+func (e *Env) Retire(f, pid string) { e.newLives().retire(f, pid) }
 
 // LostCheck: is the dead agent of state file f a thread lost with its
-// session? A thread not ended on purpose whose session has gone since its
-// last event (whether or not its conversation is known: a thread lasts
-// until you close it). Not when that cannot be told.
+// session? Not when that cannot be told (lives.lostCheck).
 func (e *Env) LostCheck(f string) bool {
-	lost, known := e.lostCheck(f)
+	lost, known := e.newLives().lostCheck(f)
 	return lost && known
-}
-
-// lostCheck is LostCheck, and whether it could tell.
-func (e *Env) lostCheck(f string) (lost, known bool) {
-	b := strings.TrimSuffix(f, ".json")
-	if !files.Exists(b+".thread") || !files.Exists(f) {
-		return false, true
-	}
-	s, err := store.ReadState(f)
-	if err != nil {
-		return false, true
-	}
-	switch s.EndReason {
-	case "prompt_input_exit", "logout", "clear":
-		return false, true
-	}
-	return e.serverLost(KeyOfFile(f), s.TS, s.Where)
-}
-
-// serverLost: did session key skey's session go since ts (epoch s), its
-// agent having run in life w of it (when its state says)? A tmux session:
-// when the machine has started since ts (no server outlives that, and one
-// started since may have the old one's pid), or no server has that life of
-// it any more: no session of its name, or one on another server, or one
-// made again on the same server (another id; older states, without one: a
-// session made after ts). A Rex session: when the machine has started
-// since, else as rex.Lost says, known false while Rex does not answer,
-// when it is neither (a thread taken for lost while it runs would be
-// resumed twice, and one taken for not lost forgotten). Any other key
-// (zellij's, from before weaver ran on tmux) never is.
-func (e *Env) serverLost(skey string, ts int64, w agent.Where) (lost, known bool) {
-	rexKey := strings.HasPrefix(skey, "rex-")
-	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
-		return false, true
-	}
-	if b := process.BootTime(); b > 0 && ts < b {
-		return true, true
-	}
-	if rexKey {
-		return rex.Lost(w)
-	}
-	ss, _ := e.tmuxSessions()
-	for _, s := range ss {
-		if s.key != skey {
-			continue
-		}
-		switch {
-		case w.Server == 0:
-			if s.created <= ts {
-				return false, true
-			}
-		case s.where.Server != w.Server:
-		case w.Session != "":
-			if s.where.Session == w.Session {
-				return false, true
-			}
-		case s.created <= ts:
-			return false, true
-		}
-	}
-	return true, true
 }
 
 var rePid = []byte(`"pid":`)

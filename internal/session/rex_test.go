@@ -122,7 +122,7 @@ func TestRexLostAndGC(t *testing.T) {
 	thread("9001", dead, now)
 	thread("9002", "-", now)
 	thread("9003", "", now)
-	if lost, known := e.serverLost(skey, now, life); lost || !known {
+	if lost, known := e.newLives().lost(skey, now, life); lost || !known {
 		t.Errorf("running: serverLost %v, known %v", lost, known)
 	}
 	os.Remove(log)
@@ -137,6 +137,9 @@ func TestRexLostAndGC(t *testing.T) {
 	if n := strings.Count(string(b), "--autostart=false do "); n != 1 {
 		t.Errorf("running: the session looked at %d times, want once\n%s", n, b)
 	}
+	if n := strings.Count(string(b), " session.list "); n != 1 {
+		t.Errorf("running: Rex asked for its sessions %d times in one run, want once\n%s", n, b)
+	}
 
 	// Gone: each thread is kept as lost.
 	if err := s.Quit(); err != nil {
@@ -145,10 +148,14 @@ func TestRexLostAndGC(t *testing.T) {
 	for _, p := range []mux.PaneID{"9001", "9003"} {
 		thread(p, "", now-7200)
 	}
-	if lost, known := e.serverLost(skey, now, life); !lost || !known {
+	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
 		t.Errorf("gone: serverLost %v, known %v", lost, known)
 	}
+	os.Remove(log)
 	e.gcAgents()
+	if b, _ := os.ReadFile(log); strings.Count(string(b), " session.list ") != 1 {
+		t.Errorf("gone: Rex asked for its sessions %d times in one run, want once\n%s", strings.Count(string(b), " session.list "), b)
+	}
 	for _, p := range append(shown, "9001", "9002", "9003") {
 		check("gone", p, false, true)
 	}
@@ -161,11 +168,11 @@ func TestRexLostAndGC(t *testing.T) {
 	if err := os.RemoveAll(e.LostDir); err != nil {
 		t.Fatal(err)
 	}
-	if lost, known := e.serverLost(skey, now, life); !lost || !known {
+	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
 		t.Errorf("its server stopped: serverLost %v, known %v", lost, known)
 	}
 	where = agent.Where{Server: os.Getpid(), Session: s.ID}
-	if lost, known := e.serverLost(skey, now, where); lost || known {
+	if lost, known := e.newLives().lost(skey, now, where); lost || known {
 		t.Errorf("no answer: serverLost %v, known %v", lost, known)
 	}
 	for _, p := range shown {

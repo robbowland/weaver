@@ -64,12 +64,50 @@ esac
 		t.Setenv("FAKE_PID", c.pid)
 		t.Setenv("FAKE_SESSIONS", c.sessions)
 		os.Remove(log)
-		lost, known := rex.Lost(c.w)
+		lost, known := new(rex.Answer).Lost(c.w)
 		b, _ := os.ReadFile(log)
 		calls := strings.Join(strings.Fields(string(b)), " ")
 		if lost != c.lost || known != c.known || calls != c.calls {
 			t.Errorf("%s: lost %v, known %v, asked %q; want %v, %v, %q", c.what, lost, known, calls, c.lost, c.known, c.calls)
 		}
+	}
+}
+
+// One Answer asks each thing once, however many lives it judges: the
+// server's pid, then its sessions, only when a life needs them.
+func TestAnswerAsksOnce(t *testing.T) {
+	dir := rextest.NoRex(t)
+	log := dir + "/calls"
+	fake := "#!/bin/sh\necho \"$4\" >> '" + log + "'\n" + `case "$4" in
+server.status) echo "{\"pid\":$FAKE_PID}" ;;
+session.list) echo '{"sessions":[{"session_id":"session:a"}]}' ;;
+*) exit 1 ;;
+esac
+`
+	if err := os.MkdirAll(dir+"/bin", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/bin/rex", []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+"/bin:"+os.Getenv("PATH"))
+	t.Setenv("FAKE_PID", strconv.Itoa(os.Getpid()))
+	var a rex.Answer
+	if lost, known := a.Lost(agent.Where{Server: os.Getppid(), Session: "session:a"}); !lost || !known {
+		t.Errorf("another server's life: lost %v, known %v", lost, known)
+	}
+	if b, _ := os.ReadFile(log); strings.Join(strings.Fields(string(b)), " ") != "server.status" {
+		t.Errorf("another server's life asked %q, want only server.status", b)
+	}
+	for _, s := range []string{"session:a", "session:b", "session:a"} {
+		a.Lost(agent.Where{Server: os.Getpid(), Session: s})
+	}
+	if _, running, answered := a.Keyed(t.TempDir(), "rex-a"); !running || !answered {
+		t.Errorf("Keyed rex-a: running %v, answered %v", running, answered)
+	}
+	b, _ := os.ReadFile(log)
+	if calls := strings.Join(strings.Fields(string(b)), " "); calls != "server.status session.list" {
+		t.Errorf("asked %q, want each once: server.status session.list", calls)
 	}
 }
 
@@ -86,20 +124,20 @@ func TestLostServer(t *testing.T) {
 	if life.Server == 0 || life.Session != s.ID {
 		t.Fatalf("life: %+v", life)
 	}
-	if lost, known := rex.Lost(life); lost || !known {
+	if lost, known := new(rex.Answer).Lost(life); lost || !known {
 		t.Errorf("running: lost %v, known %v", lost, known)
 	}
 	if err := s.Quit(); err != nil {
 		t.Fatal(err)
 	}
-	if lost, known := rex.Lost(life); !lost || !known {
+	if lost, known := new(rex.Answer).Lost(life); !lost || !known {
 		t.Errorf("destroyed: lost %v, known %v", lost, known)
 	}
 	stop()
-	if lost, known := rex.Lost(life); !lost || !known {
+	if lost, known := new(rex.Answer).Lost(life); !lost || !known {
 		t.Errorf("its server stopped: lost %v, known %v", lost, known)
 	}
-	if lost, known := rex.Lost(agent.Where{Server: os.Getpid(), Session: s.ID}); lost || known {
+	if lost, known := new(rex.Answer).Lost(agent.Where{Server: os.Getpid(), Session: s.ID}); lost || known {
 		t.Errorf("no Rex answering: lost %v, known %v", lost, known)
 	}
 }
