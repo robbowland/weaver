@@ -146,10 +146,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			st, changed = agent.StateInterrupted, true
 		}
 		r := Row{Pane: paneOfNum(s.Pane), Window: p.Window, State: agent.State(oneline.Line(string(st)))}
-		r.Root = oneline.Line(s.Root)
-		if r.Root == "" {
-			r.Root = oneline.Line(s.Cwd)
-		}
+		// Where it is: as its agent said, else its thread's worktree (an
+		// agent restarted, or brought back, before it has said).
+		r.Root = oneline.Line(cmp.Or(s.Root, s.Cwd, t.Worktree))
 		switch {
 		case changed:
 			r.Since = int64(cu)
