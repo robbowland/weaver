@@ -59,16 +59,6 @@ local function define_entry_points()
     end)
     return 0
   end
-  -- The calls of the previous release, for a hook that predates WeaverEvent.
-  function _G.AgentFollow(root, path)
-    local ev = M.parse_event(vim.json.encode({ ev = (path and path ~= '') and 'edit' or 'root', root = root, file = path }))
-    vim.schedule(function() M.dispatch(ev) end)
-    return 0
-  end
-  function _G.AgentChecktime()
-    vim.schedule(function() M.dispatch({ ev = 'checktime', seq = 0 }) end)
-    return 0
-  end
 end
 
 local function complete_scope(lead)

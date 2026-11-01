@@ -11,7 +11,7 @@ NVP=$(Z new-pane --name latency -- bash --noprofile --norc)
 NVP=${NVP#terminal_}
 rm -f "$(sock $P)"
 nvim --clean --headless --listen "$(sock $P)" \
-	-c 'lua function AgentFollow() return 0 end; function AgentChecktime() return 0 end; function WeaverEvent() return 0 end' \
+	-c 'lua function WeaverEvent() return 0 end' \
 	</dev/null >/dev/null 2>&1 &
 nvpid=$!
 printf '%s\n%s\n' "$NVP" "$nvpid" >"$SD/${SK}_$P.nvim"

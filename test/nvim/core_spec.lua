@@ -168,15 +168,6 @@ T.run(function()
   T.ok('log: kept current as events arrive', C.wait_for(1000, "return vim.fn.getline('$'):match('^turn 2 · .* · now turn two$') ~= nil", true), true)
   C.cmd('close')
 
-  -- The previous release's calls still work, as edit and checktime events.
-  C.lua('_G.got = nil')
-  T.ok('AgentFollow returns at once', C.lua('return AgentFollow(...)', R.main, app), 0)
-  C.poke()
-  T.ok('...as an edit event', C.lua('return _G.got.ev .. "|" .. _G.got.file'), 'edit|' .. app)
-  C.lua('return AgentChecktime()')
-  C.poke()
-  T.ok('AgentChecktime: a checktime event', C.lua('return _G.got.ev'), 'checktime')
-
   -- An nvim opened on a finished agent: the last turn's size from the
   -- worktrees it touched.
   local sid2 = 'sid-startup'

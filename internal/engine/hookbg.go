@@ -39,9 +39,9 @@ func hookBg(e *session.Env) {
 	// nvim first: following is what you see.
 	if h.NV != "" {
 		if h.EvFile != "" {
-			nvimEditEvent(e, h, "edit", h.Root, h.EvFile, h.Tool)
+			nvimEditEvent(e, h, h.Root, h.EvFile, h.Tool)
 		} else if h.Root != h.Old.Root {
-			nvimEvent(e, h, nvimRoot{h.nvimHead("root"), h.Root}, h.Root, "")
+			nvimEvent(e, h, nvimRoot{h.nvimHead("root"), h.Root})
 		}
 		// The bar shows the state, turn, prompt and title: any change to them.
 		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing ||
@@ -117,11 +117,10 @@ func wtMarker(dir, m string) {
 	bestEffort(exec.Command("wt", args...).Run()) // a branch's mark, nothing more
 }
 
-// nvimEvent sends event ev (docs/design.md) to the agent's nvim: WeaverEvent,
-// or AgentFollow / AgentChecktime on a weaver.lua that predates it, over its
-// socket (msgpack-RPC; no nvim client started). An nvim that did not
-// answer in time is left alone for 15s.
-func nvimEvent(e *session.Env, h *hk, m nvimMessage, r, f string) {
+// nvimEvent sends event m (docs/design.md) to the agent's nvim, as
+// WeaverEvent, over its socket (msgpack-RPC; no nvim client started). An
+// nvim that did not answer in time is left alone for 15s.
+func nvimEvent(e *session.Env, h *hk, m nvimMessage) {
 	sock := e.NvimSock(h.Pane)
 	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
 		return
@@ -136,16 +135,8 @@ func nvimEvent(e *session.Env, h *hk, m nvimMessage, r, f string) {
 	if err != nil {
 		return
 	}
-	j, ev := strings.TrimSuffix(string(b), "\n"), m.name()
-	q := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
-	compat := "0"
-	switch ev {
-	case "edit", "root", "focus":
-		compat = "v:lua.AgentFollow('" + q(r) + "','" + q(f) + "')"
-	case "checktime":
-		compat = "v:lua.AgentChecktime()"
-	}
-	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + q(j) + "') : " + compat
+	j := strings.ReplaceAll(strings.TrimSuffix(string(b), "\n"), "'", "''")
+	expr := "luaeval('_G.WeaverEvent ~= nil') ? v:lua.WeaverEvent('" + j + "') : 0"
 	if nvim.Eval(sock, expr, 2*time.Second) == nvim.Stalled {
 		bestEffort(os.WriteFile(stalled, []byte(strconv.FormatInt(h.Now, 10)+"\n"), 0o644))
 	} else if files.Exists(stalled) {
@@ -153,13 +144,13 @@ func nvimEvent(e *session.Env, h *hk, m nvimMessage, r, f string) {
 	}
 }
 
-// nvimEditEvent: an edit (or a focus) at file f in root r.
-func nvimEditEvent(e *session.Env, h *hk, ev, r, f, tool string) {
-	nvimEvent(e, h, nvimEdit{h.nvimHead(ev), r, f, tool, h.Aid}, r, f)
+// nvimEditEvent: an edit at file f in root r.
+func nvimEditEvent(e *session.Env, h *hk, r, f, tool string) {
+	nvimEvent(e, h, nvimEdit{h.nvimHead("edit"), r, f, tool, h.Aid})
 }
 
 func nvimStateEvent(e *session.Env, h *hk) {
-	nvimEvent(e, h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing}, "", "")
+	nvimEvent(e, h, nvimState{h.nvimHead("state"), h.Prompt, h.Waiting, h.Title, h.Doing})
 }
 
 // followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
@@ -242,7 +233,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 	if h.NV == "" {
 		return true
 	}
-	nvimEditEvent(e, h, "edit", r, newest, h.Tool)
+	nvimEditEvent(e, h, r, newest, h.Tool)
 	if r != h.Old.Root {
 		e.Mux().Title(h.NV, "nvim: "+filepath.Base(r))
 	}
@@ -343,12 +334,13 @@ func changedSince(h *hk, t time.Time) []string {
 }
 
 // Focus tells the nvim of the agent in pane p, which rec says (its kind
-// alone before it reports), to show file in root.
-func Focus(e *session.Env, p mux.PaneID, rec agent.Record, root, file string) {
+// alone before it reports), that the agent is in root: where its reviews
+// are of.
+func Focus(e *session.Env, p mux.PaneID, rec agent.Record, root string) {
 	now := time.Now()
 	h := &hk{Pane: p, AgentKind: rec.Agent, Sid: rec.SessionID, State: rec.State, Turn: rec.Turn, Now: now.Unix(), NowMs: now.UnixMilli()}
 	if h.AgentKind == "" {
 		h.AgentKind = string(agent.Claude)
 	}
-	nvimEditEvent(e, h, "focus", root, file, "")
+	nvimEvent(e, h, nvimRoot{h.nvimHead("focus"), root})
 }

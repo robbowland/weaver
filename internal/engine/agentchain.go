@@ -64,7 +64,7 @@ func agentChanges(e *session.Env, h *hk, cs []hooks.Change) {
 			h.logLine(e, logSnapshot{logHead: h.logHead("snapshot"), Root: r, Commit: s.tip, Point: "agent", AgentID: a})
 		}
 		if h.NV != "" {
-			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, s.tip, "agent", agentRef(h.Sid, a)}, "", "")
+			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, s.tip, "agent", agentRef(h.Sid, a)})
 		}
 	}
 }

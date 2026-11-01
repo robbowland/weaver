@@ -158,7 +158,7 @@ func (e *Env) Edit(args []string) error {
 		// not answer: never a second one.
 		if p, ok := session.PaneIn(panes, nv); nv != "" && ok && !p.Exited {
 			unlock()
-			engine.Focus(e.Env, agentPane, rec, root, file)
+			engine.Focus(e.Env, agentPane, rec, root)
 			e.focus(nv)
 		} else {
 			argv := []string{e.Self, "nvim", string(agentPane)}

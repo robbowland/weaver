@@ -468,7 +468,7 @@ func followBash(e *session.Env, h *hk) {
 			h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
 		}
 		if h.NV != "" {
-			nvimEvent(e, h, h.nvimHead("checktime"), "", "")
+			nvimEvent(e, h, h.nvimHead("checktime"))
 		}
 	}
 }

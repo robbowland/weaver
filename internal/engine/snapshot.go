@@ -281,7 +281,7 @@ func snapRoots(e *session.Env, h *hk, point string, turn int, roots, prompt, pro
 		}
 		h.logLine(e, logSnapshot{logHead: h.logHead("snapshot"), Root: r, Commit: c, Point: point})
 		if h.NV != "" {
-			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref}, "", "")
+			nvimEvent(e, h, nvimSnapshot{h.nvimHead("snapshot"), r, c, point, ref})
 		}
 	}
 }
