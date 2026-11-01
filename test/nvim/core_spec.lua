@@ -28,6 +28,23 @@ T.run(function()
   T.ok('garbage and older events change nothing', C.winbar():match('^%[!%] needs you') ~= nil, true)
   C.event({ ev = 'state', state = 'working', doing = 'npm test', sid = sid, turn = 3 })
   T.ok('working: what it runs', C.winbar():match('^%[/%] working · turn 3 · running npm test') ~= nil, true)
+
+  -- Where the agent is (its reviews' worktree) moves only on edit, root and
+  -- focus: a snapshot's root is any worktree its turn touched, and a state
+  -- event carries none of its own.
+  local function at() return C.lua("return require('weaver.status').worktree()") end
+  for _, c in ipairs({
+    { ev = 'edit', root = R.a, file = R.a .. '/src/app.txt', want = R.a },
+    { ev = 'snapshot', root = R.b, point = 'end', commit = 'abc', want = R.a },
+    { ev = 'state', state = 'working', root = R.b, want = R.a },
+    { ev = 'root', root = R.b, want = R.b },
+    { ev = 'focus', root = R.a, want = R.a },
+  }) do
+    local want = c.want
+    c.want, c.sid, c.turn = nil, sid, 3
+    C.event(c)
+    T.ok('where the agent is, after ' .. c.ev, at(), want)
+  end
   C.event({ ev = 'state', state = 'working', doing = '', sid = sid, turn = 3 })
   T.ok('...and once it is done, what it was asked', C.winbar():match('^%[/%] working · turn 3 · fix the readme') ~= nil, true)
   C.event({ ev = 'state', state = 'done', sid = sid, turn = 3 })
