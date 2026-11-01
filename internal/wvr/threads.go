@@ -131,11 +131,13 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // (`wvr _agent tok kind`), then its nvim on the agent's left (`wvr nvim
 // --fresh AGENT`), told the agent's pane and bound to it before this
 // returns; the agent at its width, with the focus (not gone to when
-// nofocus), nvim with nvimEnv too. Its window id.
+// nofocus), nvim with nvimEnv too. Its window id. The window is made
+// whole behind you, then shown: the Rex app evens out a split made in the
+// window it shows (its balancing on creation), not one it is shown made.
 func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
 		Spawn: e.agentSpawn(tok, kind, dir),
-		Label: name, At: mux.NextFree, Background: nofocus,
+		Label: name, At: mux.NextFree, Background: true,
 	})
 	if err != nil {
 		return "", false
@@ -146,6 +148,9 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	if !e.splitNvim(agentPane, dir, total, nvimEnv...) {
 		e.Mux().CloseWindow(tab)
 		return "", false
+	}
+	if !nofocus {
+		e.Mux().Focus(agentPane)
 	}
 	return tab, true
 }

@@ -103,7 +103,7 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 		R capture -s "$SID" -b "$(view | jq -r '.windows[0].layers[0].blocks[0].block_id')" --trim | sed 's/^/  | /'
 	}
 ok "start: weaver's keys written beside Rex's init.lua, and Rex told to read them" \
-	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|9"
+	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|10"
 
 # --- wvr --rex in a Rex session weaver did not make (any Rex terminal's):
 # weaver's session, shown, never a board of that one
