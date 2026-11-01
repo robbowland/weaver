@@ -40,9 +40,13 @@ Multiplexers section with this.
 4. **Key-bound Lua runs in the server with an app's environment**: PATH
    `/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, no `REX_BIN_DIR`, no
    Homebrew. A `wvr` it starts finds no `rex` and does nothing, silently.
-   weaver.lua carries the writer's PATH and rex dir; `rex.Bin` falls back to
+   weaver.lua carries the writer's rex dir (as REX_BIN_DIR; not its PATH,
+   which would change with every shell that starts wvr and reload Rex's
+   config each time); `rex.Bin` falls back to
    `~/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex`;
-   key commands' stderr goes to `rex.log` (see `rex server logs`).
+   key commands' stderr goes to `rex.log` (see `rex server logs`). Their
+   `cwd` defaults to Rex's own directory: pass the pane's (its reported
+   pwd, else its program's from the terminal's `process` method).
 5. **Rex's bindings take Alt keys whatever Option sends**: with
    `Workspace.terminalOptionKeyBehavior` `automatic`, `composesText` or
    `actsAsAlt` alike, a pressed ⌥j fired weaver's `alt+j`. The setting

@@ -1,34 +1,45 @@
 -- weaver's keys in Rex, as config/tmux.conf binds them in tmux. wvr writes
--- this file (~/.config/rex/weaver.lua) each time it starts on Rex; load it
--- from ~/.config/rex/init.lua with
+-- this file (weaver.lua, beside the init.lua Rex reads) each time it starts
+-- on Rex, and has Rex read it again when it is new to Rex; init.lua loads
+-- it with
 --
 --   require("weaver")
 --
--- then `rex config reload`. What runs is wvr's, at its own path:
+-- What runs is wvr's, at its own path:
 local wvr = "@WVR@"
 -- weaver's record of the Rex sessions it made, one file each:
 local sessions = "@SESSIONS@"
--- The PATH, and where rex is, of the wvr that wrote this (from a
--- terminal). Rex's server runs these keys' commands with an app's
--- environment, which has neither: without them, wvr finds no rex (nor
--- git), and every key would do nothing.
-local path = "@PATH@"
+-- Where rex is, as the wvr that wrote this (from a terminal) found it.
+-- Rex's server runs these keys' commands with an app's environment, with
+-- no rex on its PATH and no REX_BIN_DIR: without it, wvr would find no rex
+-- (but the Rex app's own), and every key would do nothing.
 local rexbin = "@REXBIN@"
 
 local terminal = "com.superlogical.terminal"
 
--- The directory the pane a key was pressed in last reported, for a new
--- thread's form to start from: a file:// URL's path, its %XX escapes
--- undone (a space is %20), else a plain path as it is.
+-- home is $HOME, where Rex's Lua says it ("" where it does not).
+local function home()
+  return (os and os.getenv and os.getenv("HOME")) or ""
+end
+
+-- The directory of the pane a key was pressed in, for a new thread's form
+-- to start from: the one it last reported (a file:// URL's path, its %XX
+-- escapes undone, a space being %20; else a plain path as it is), else its
+-- program's (nvim reports none), else home: never Rex's own.
 local function pwd(ctx)
-  local r = ctx.block_id and rex.block.call(terminal, "pwd", { block_id = ctx.block_id })
-  local url = r and r.pwd or ""
-  local path = url:match("^file://[^/]*(/.*)$")
-  if path then
-    return (path:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+  if ctx.block_id then
+    local r = rex.block.call(terminal, "pwd", { block_id = ctx.block_id })
+    local url = r and r.pwd or ""
+    local path = url:match("^file://[^/]*(/.*)$")
+    if path then
+      return (path:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+    end
+    if url ~= "" and not url:find("://", 1, true) then return url end
+    local p = rex.block.call(terminal, "process", { block_id = ctx.block_id })
+    local proc = p and (p.foreground or p.child)
+    if proc and proc.cwd and proc.cwd ~= "" then return proc.cwd end
   end
-  if url:find("://", 1, true) then return "" end
-  return url
+  return home()
 end
 
 -- run runs wvr with args for the session the key was pressed in, as tmux's
@@ -38,10 +49,10 @@ local function run(ctx, args, cwd)
   local argv = { wvr }
   for _, a in ipairs(args) do argv[#argv + 1] = a end
   local _, err = rex.exec.start(argv, {
-    cwd = (cwd ~= nil and cwd ~= "") and cwd or nil,
+    cwd = (cwd ~= nil and cwd ~= "") and cwd or (home() ~= "" and home() or nil),
     env = {
       REX_SESSION = ctx.session_id, REX_BLOCK = false, WEAVER_MUX = "rex",
-      PATH = path ~= "" and path or nil, REX_BIN_DIR = rexbin ~= "" and rexbin or false,
+      REX_BIN_DIR = rexbin ~= "" and rexbin or false,
     },
     stdout = false,
     stderr = function(s) rex.log("warn", "weaver: " .. s) end,

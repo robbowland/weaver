@@ -160,7 +160,7 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	// Inside Lua strings: a path's \ and " escaped.
 	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace
 	keys := strings.NewReplacer("@WVR@", lua(e.Self), "@SESSIONS@", lua(e.RexDir()+"/sessions"),
-		"@PATH@", lua(os.Getenv("PATH")), "@REXBIN@", lua(rex.BinDir())).Replace(string(src))
+		"@REXBIN@", lua(rex.BinDir())).Replace(string(src))
 	if old, err := os.ReadFile(f); err != nil || string(old) != keys {
 		if err := store.WriteAtomic(f, []byte(keys)); err != nil {
 			return f, false, false, err

@@ -24,8 +24,11 @@ import (
 //	               number, a view 900 and on)
 //	view/<num>     the view window num shows
 //	sessions/<id>  a session weaver made: its name, when, and its server
+//	said/<sid>     the block of the message last shown in session sid (Say)
+//	remote-off     when weaver last said the app takes no actions
 //	lock, start    held while a number is given or moved, and while wvr
 //	               asks whether weaver's session runs and makes it (Ensure)
+//	say            held while a message replaces the last (Say)
 //
 // A number is never given twice, and follows its block when weaver starts
 // another in its place (Respawn); the block it leaves gets none again

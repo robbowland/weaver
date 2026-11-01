@@ -965,12 +965,20 @@ esac
 	}
 	t.Setenv("REX_BIN_DIR", bin)
 	s := Session{ID: "session:x", Name: "w", Dir: dir}
-	if err := s.showInApp("window:a"); err == nil {
+	// Starting shows the session in the app, and says for itself when it
+	// cannot (startRex): no message, nor the wait before the next.
+	if err := s.ShowInApp(); err == nil {
 		t.Fatal("the app took the action")
 	}
-	_ = s.showInApp("window:b")
+	s.show("window:a")
+	s.show("window:b")
 	b, _ := os.ReadFile(log)
 	if n := strings.Count(string(b), "new_layer"); n != 1 || !strings.Contains(string(b), "Remote Control") {
 		t.Errorf("said %d times, want once, of Remote Control:\n%s", n, b)
+	}
+	// Said before the fallback makes the window shown the server's active
+	// one, while that is still the window the app shows.
+	if i, j := strings.Index(string(b), "new_layer"), strings.Index(string(b), "focus_window"); i < 0 || j < 0 || i > j {
+		t.Errorf("the message came after the fallback:\n%s", b)
 	}
 }

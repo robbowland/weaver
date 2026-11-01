@@ -151,10 +151,10 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	}
 	if !nofocus {
 		e.Mux().Focus(agentPane)
+		// Rex sizes a window no app has shown yet at 80 columns: its
+		// widths once it is.
+		e.settleWidths(agentPane)
 	}
-	// Rex sizes a window no app has shown yet at 80 columns: its widths
-	// once it is.
-	e.settleWidths(agentPane)
 	return tab, true
 }
 

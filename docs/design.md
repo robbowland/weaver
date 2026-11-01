@@ -935,9 +935,10 @@ else weaver's.
   home when it has gone); from anywhere else home, made again if it was
   closed.
 - **Views:** see [Views](#views).
-- **Threads:** `new-window -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
+- **Threads:** `new-window -d -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
   `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
-  shell), the nvim pane titled `nvim: <dir>`, the agent active. `alt+v`'s nvim is a
+  shell), the nvim pane titled `nvim: <dir>`, then the agent focused (its
+  window selected): whole before it is shown, as Rex needs. `alt+v`'s nvim is a
   `split-window -h -b -l 80%` on the agent's left.
 - **Text:** tmux reads a window's or pane's name, a start directory and a
   message as a format (`#H`, `#{...}`, `#[...]`). What weaver did not write
@@ -1076,10 +1077,11 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   it sets it back to its tab. So `Show`, `Focus`, and `OpenWindow` and
   `BreakOut` in the foreground ask the app (`rex do session.select` with
   the window: Remote Control on), else make it the server's active window.
-  weaver.lua's keys run wvr with the environment of the wvr that wrote it
-  (its PATH, and where rex is): Rex's server runs them with an app's, where
-  `rex.Bin` would find no rex but the app's server's own; what wvr says on
-  stderr goes to Rex's log. `SplitLeft` gives pid 0, not known yet (Rex runs
+  weaver.lua's keys run wvr with `REX_BIN_DIR` where the wvr that wrote it
+  found rex: Rex's server runs them with an app's environment, where
+  `rex.Bin` would find no rex but the app's server's own; they run in the
+  pane's directory (its program's when it reports none), and what wvr says
+  on stderr goes to Rex's log. `SplitLeft` gives pid 0, not known yet (Rex runs
   a command through the login shell, whose pid it would be): `wvr nvim`
   records its own pid as it starts. Rex has no message line: `Say` and
   `SayToSession` show their text as one line in a small floating layer at
@@ -1087,10 +1089,11 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   closes on its own after its time (what the session shows is its active
   window, so both are the same). It is sized by the text's columns (wide
   characters two), and text wider than the window is cut keeping its start,
-  ending in `…`. A new message replaces the one before: its block is
-  labelled `weaver: message`, and each `Say` closes those it finds before
-  opening its own, under a lock of its own (`$STATE_DIR/rex/say`), so two
-  at once never both show. `Looking` claims no pane and says it cannot tell (nothing
+  ending in `…`. Its block is labelled with the text: Rex heads a floating
+  layer with its label, over its one row. A new message replaces the one
+  before: each `Say` closes the block kept in `$STATE_DIR/rex/said/<session>`
+  and keeps its own there, under a lock of its own (`$STATE_DIR/rex/say`),
+  so two at once never both show. `Looking` claims no pane and says it cannot tell (nothing
   in Rex's API says which session an app shows, and the app stays attached
   to every session it has shown), so on Rex an agent is marked seen only by
   weaver's own moves to it (`_goto`, alt+1 and the like). Rex has no
@@ -1099,8 +1102,12 @@ nothing of failing. What only tmux runs (its menus, its hooks:
 - **Start:** `wvr` with `$WEAVER_MUX=rex` makes the Rex session (home its
   first window, `want` 0) unless one weaver made of that name runs, asks
   the app to show it (`session.select`, with Remote Control on), and
-  writes `config/rex.lua`, run by its own path, to
-  `~/.config/rex/weaver.lua` for init.lua to `require`.
+  writes `config/rex.lua`, run by its own path, to `weaver.lua` beside the
+  init.lua Rex reads (`$REX_CONFIG`, else `~/.config/rex/init.lua`) for it to
+  `require`; when weaver.lua changed, or the server's keymap
+  (`client.keymap`) has none of its bindings, it has Rex read its
+  configuration again (`rex config reload`), the server having read init.lua
+  before weaver.lua was there.
 
 ## Setting itself up
 

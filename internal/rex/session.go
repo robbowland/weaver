@@ -299,7 +299,9 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 		Window string   `json:"window_id"`
 		Blocks []string `json:"block_ids"`
 	}
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(w.Label, 128), "focus": !w.Background,
+	// Never the server's active window first: one the app does not show,
+	// where a message would go unseen (show).
+	if err := s.callS("session.new_window", map[string]any{"window_label": cut(w.Label, 128), "focus": false,
 		"layout": layout(w.Spawn, "")}, &out); err != nil {
 		return "", "", 0, err
 	}
@@ -320,7 +322,7 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 		s.placeIn(v, seen, out.Window, mux.WindowID(wn), w.At)
 	}
 	if !w.Background {
-		_ = s.showInApp(out.Window)
+		s.show(out.Window)
 	}
 	// Its one pane fills it: the window is as wide as the pane.
 	return mux.WindowID(wn), mux.PaneID(pn), s.cols(mux.PaneID(pn)), nil
@@ -381,7 +383,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		Window string   `json:"window_id"`
 		Blocks []string `json:"block_ids"`
 	}
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label, 128), "focus": !background,
+	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label, 128), "focus": false,
 		"layout": layout(mux.Spawn{Argv: []string{"/bin/sleep", "60"}}, "")}, &out); err != nil {
 		return "", 0, err
 	}
@@ -402,7 +404,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		s.placeIn(v, seen, out.Window, mux.WindowID(wn), at)
 	}
 	if !background {
-		_ = s.showInApp(out.Window)
+		s.show(out.Window)
 		_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
 	}
 	return mux.WindowID(wn), s.cols(p), nil
@@ -533,30 +535,41 @@ func (s Session) Zoom(p mux.PaneID) {
 	}
 }
 
-// Show shows window w in the Rex app (showInApp); where the app will not,
-// it is the session's active window at least.
+// Show shows window w (show).
 func (s Session) Show(w mux.WindowID) {
-	id, err := s.window(w)
-	if err != nil {
-		return
-	}
-	if s.showInApp(id) != nil {
-		_ = s.callS("session.focus_window", map[string]any{"window_id": id}, nil)
+	if id, err := s.window(w); err == nil {
+		s.show(id)
 	}
 }
 
-// Focus focuses pane p and shows its window in the Rex app (showInApp).
+// Focus focuses pane p, its window shown first (show) when it is not the
+// one shown already.
 func (s Session) Focus(p mux.PaneID) {
 	b, err := s.block(p)
 	if err != nil {
 		return
 	}
 	if v, err := s.view(); err == nil {
-		if w := v.windowOf(b); w != "" {
-			_ = s.showInApp(w)
+		if w := v.windowOf(b); w != "" && w != v.Active {
+			s.show(w)
 		}
 	}
 	_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
+}
+
+// show shows window id (Rex's): in the app (showInApp), else, the app
+// refusing, as the server's active window at least. Refused for want of
+// Remote Control, it says so (sayRemoteOff) first, while the server's
+// active window is still the one the app shows.
+func (s Session) show(id string) {
+	err := s.showInApp(id)
+	if err == nil {
+		return
+	}
+	if strings.Contains(err.Error(), "Remote Control") {
+		s.sayRemoteOff()
+	}
+	_ = s.callS("session.focus_window", map[string]any{"window_id": id}, nil)
 }
 
 // showInApp asks the Rex app to show window id (Rex's) of the session. The
@@ -573,9 +586,6 @@ func (s Session) showInApp(id string) error {
 		args = append(args, "window_id="+id)
 	}
 	_, err := run(args...)
-	if err != nil && strings.Contains(err.Error(), "Remote Control") {
-		s.sayRemoteOff()
-	}
 	return err
 }
 
