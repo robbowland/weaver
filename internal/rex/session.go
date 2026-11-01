@@ -598,17 +598,16 @@ func (s Session) Type(p mux.PaneID, text string) error {
 // seconds.
 const sayScript = `printf '\033[2J\033[H\033[?25l\033[?7l %s' "$1"; exec /bin/sleep "$2"`
 
-// sayLabel labels the block of weaver's message, for the next to find.
-const sayLabel = "weaver: message"
-
 // Say shows text for about ms milliseconds at the foot of the active
 // window, as tmux's message line does: a floating layer that takes no
 // focus (nor keys), whose program prints it and exits, which closes it.
-// It replaces the message shown before, in any window, so two are never
-// shown at once: Says hold a lock of their own (say) from looking for it
-// till theirs is made. It is one line, as wide as the text's columns
-// (wide characters two), cut at the window's width with its start kept.
-// Its control characters show as spaces.
+// The layer is labelled with the text: Rex heads a floating layer with its
+// label, over its one row. It replaces the message shown before, in any
+// window, so two are never shown at once: its block is kept (said/<session>
+// in the registry), and Says hold a lock of their own (say) from closing it
+// till theirs is made and kept. It is one line, as wide as the text's
+// columns (wide characters two), cut at the window's width with its start
+// kept. Its control characters show as spaces.
 func (s Session) Say(ms int, text string) {
 	text = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -622,25 +621,25 @@ func (s Session) Say(ms int, text string) {
 	cols, lines := 160, 48
 	if sn, err := s.snapshot(false); err == nil {
 		cols, lines = sn.activeSize()
-		for _, w := range sn.View.Windows {
-			for _, l := range w.Layers {
-				for _, b := range l.Blocks {
-					if l.Kind == "floating" && b.Label == sayLabel {
-						_ = s.callS("block.close", map[string]any{"block_id": b.ID}, nil)
-					}
-				}
-			}
-		}
+	}
+	said := fileName(s.ID)
+	if old := s.ids().noted("said", said); old != "" {
+		_ = s.callS("block.close", map[string]any{"block_id": old}, nil)
 	}
 	text = head(text, max(cols-2, 1))
 	w := min(width(text)+2, cols)
 	fw, fh := float64(w)/float64(cols), 1/float64(lines)
-	_ = s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
-		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": sayLabel, "options": map[string]any{
+	var out struct {
+		Blocks []string `json:"block_ids"`
+	}
+	if s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
+		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": cut(text, 128), "options": map[string]any{
 			"shell": "none", "size": map[string]any{"columns": w, "rows": 1},
 			"exit":    map[string]any{"on_completion": true, "quick_exit_threshold_ms": 0},
 			"command": []string{"/bin/sh", "-c", sayScript, "sh", text, strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64)},
-		}}}}, nil)
+		}}}}, &out) == nil && len(out.Blocks) > 0 {
+		_ = s.ids().note("said", said, out.Blocks[0])
+	}
 }
 
 // SayToSession is Say: what the session shows is its active window.

@@ -505,17 +505,19 @@ func TestWidth(t *testing.T) {
 }
 
 // message is what weaver's message shows: the last of its lines, as many
-// as its terminal has rows; "" when there is none.
+// as its terminal has rows; "" when there is none. Its label, which heads
+// it in the app, is what it shows too.
 func message(t *testing.T, s Session) string {
 	t.Helper()
 	v, err := s.view()
 	if err != nil {
 		t.Fatal(err)
 	}
+	said := s.ids().noted("said", fileName(s.ID))
 	for _, w := range v.Windows {
 		for _, l := range w.Layers {
 			for _, b := range l.Blocks {
-				if l.Kind != "floating" || b.Label != sayLabel {
+				if l.Kind != "floating" || b.ID != said {
 					continue
 				}
 				var sz struct {
@@ -529,7 +531,11 @@ func message(t *testing.T, s Session) string {
 					return ""
 				}
 				lines := strings.Split(strings.TrimRight(f.Content, "\n"), "\n")
-				return strings.Join(lines[max(len(lines)-sz.Rows, 0):], "\n")
+				shown := strings.Join(lines[max(len(lines)-sz.Rows, 0):], "\n")
+				if strings.TrimSpace(shown) != b.Label {
+					t.Errorf("the message shows %q, its label (the app's heading) is %q", shown, b.Label)
+				}
+				return shown
 			}
 		}
 	}
