@@ -75,7 +75,8 @@ func (e *Env) popup(what string, z popupSize, border bool, dir string, args []st
 }
 
 // Popup is `wvr _popup new|close|forget ...`: the board's n, x on a thread,
-// x on a lost one, as the dialogs Alt N and the menus open.
+// x on a lost one, as the dialogs Alt N and the menus open, and Rex's
+// Ctrl q.
 func (e *Env) Popup(args []string) error {
 	switch firstArg(args) {
 	case "new":
@@ -85,6 +86,10 @@ func (e *Env) Popup(args []string) error {
 		return e.cardPopup(args...)
 	case "forget":
 		return e.cardPopup(append([]string{"resume", "--forget"}, args[1:]...)...)
+	case "quit":
+		// Ctrl q on Rex (tmux's is its own): what quitting stops and keeps,
+		// asked in the card.
+		return e.cardPopup("quit")
 	case "adopt":
 		// An agent you started by hand becomes a thread where it is, said on
 		// the status line; anything else opens the picker of conversations.
@@ -107,5 +112,5 @@ func (e *Env) Popup(args []string) error {
 		}
 		return e.popup("the prompt", nameSize, false, "", []string{"rename", string(p)})
 	}
-	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE] | rename PANE")
+	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE] | rename PANE | quit")
 }

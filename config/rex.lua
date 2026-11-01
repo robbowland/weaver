@@ -38,7 +38,7 @@ local function run(ctx, args, cwd)
   local argv = { wvr }
   for _, a in ipairs(args) do argv[#argv + 1] = a end
   local _, err = rex.exec.start(argv, {
-    cwd = cwd,
+    cwd = (cwd ~= nil and cwd ~= "") and cwd or nil,
     env = {
       REX_SESSION = ctx.session_id, REX_BLOCK = false, WEAVER_MUX = "rex",
       PATH = path ~= "" and path or nil, REX_BIN_DIR = rexbin ~= "" and rexbin or false,
@@ -92,6 +92,9 @@ end)
 key("alt+v", function(ctx) run(ctx, { "edit" }) end)
 key("alt+shift+v", function(ctx) run(ctx, { "edit", "--full" }) end)
 key("alt+1", function(ctx) run(ctx, { "next" }) end)
+-- Quit the session, every agent and nvim in it, after asking (tmux's
+-- Ctrl q asks only while a turn is under way).
+key("ctrl+q", function(ctx) run(ctx, { "_popup", "quit" }) end)
 -- The next and previous window that shows no view, as tmux's: through wvr,
 -- since the app shows only a window it is asked to (the server's active
 -- window is not what it shows).

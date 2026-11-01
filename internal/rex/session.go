@@ -726,7 +726,7 @@ func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string
 	pw, ph := size(cols, lines)
 	fw, fh := min(float64(pw)/float64(cols), 1), min(float64(ph)/float64(lines), 1)
 	in := map[string]any{"bounds": []float64{(1 - fw) / 2, (1 - fh) / 2, fw, fh}, "focus": true,
-		"layout": layout(mux.Spawn{Argv: argv, Dir: dir}, "")}
+		"layout": layout(mux.Spawn{Argv: argv, Dir: dir}, "weaver")}
 	if active != "" {
 		in["window_id"] = active
 	}
