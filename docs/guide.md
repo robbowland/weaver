@@ -64,7 +64,9 @@ of tmux (as `WEAVER_MUX=rex wvr` does; `wvr --tmux` is tmux, whatever
 `WEAVER_MUX` says): it starts a Rex session named `weaver` (home in its first
 window, a window per thread), or shows it when it is already running. Rex
 shows a session only when asked by an app with Remote Control on (Rex's
-settings, Rex Server); otherwise switch to it in Rex yourself.
+settings, Rex Server); otherwise switch to it in Rex yourself. Every Rex
+terminal is in some Rex session, so the board opens in place only in one
+weaver made; in any other, `wvr ls` is the board of its agents.
 
 weaver's keys are Alt keys, in Rex as anywhere: run Change Option Key
 Behavior from Rex's command palette and have Option send Alt. Rex's default,

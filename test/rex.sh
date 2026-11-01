@@ -93,6 +93,15 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 ok "start: weaver's keys for Rex, written for init.lua to load" \
 	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$XDG_CONFIG_HOME/rex/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")" "1|1"
 
+# --- wvr --rex in a Rex session weaver did not make (any Rex terminal's):
+# weaver's session, shown, never a board of that one
+OTHER=$(R api call session.create '{"label":"other"}' | jq -r .session_id)
+REX_SESSION=$OTHER perl -e 'alarm 10; exec @ARGV' wvr --rex >"$AT/other.out" 2>&1
+ok "start in another Rex session: weaver's shown, no second one, no board there" \
+	"$(sid | wc -l | tr -d ' ')|$(ls /tmp/weaver-$(id -u)/rex-*.fzf.*.sock 2>/dev/null | wc -l | tr -d ' ')|$(grep -c "the $S session runs in Rex" "$AT/other.out")" \
+	"1|1|1" || sed 's/^/  other: /' "$AT/other.out"
+R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
+
 # --- a thread (wvr new, here), as Alt N's form makes it
 (cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'say hello' >"$AT/new.out" 2>&1)
 waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/2" ]' 100

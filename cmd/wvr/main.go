@@ -276,9 +276,11 @@ func muxFlag(cmd string, args []string) (string, []string) {
 }
 
 // start starts (or attaches to) a weaver session, named as given; inside
-// one, the board.
+// one, the board. Every Rex terminal is in a Rex session, so on Rex the
+// board is in place only in a session weaver made: from any other, wvr
+// starts or shows weaver's (wvr ls is the board of the session you are in).
 func start(e *wvr.Env, args []string) error {
-	if e.Session != "" {
+	if e.Session != "" && (!e.OnRex() || e.WeaverSession()) {
 		return e.Ls()
 	}
 	return e.Start(arg(args, 0))
