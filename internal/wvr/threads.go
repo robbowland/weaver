@@ -1406,7 +1406,7 @@ func (e *Env) CloseTail(a []string) error {
 	// whichever window tmux would show next.
 	ps, _ := e.Mux().Panes()
 	if ap, ok := session.PaneIn(ps, agent); ok {
-		if _, cur, home := e.where(); cur.id == ap.Tab && home != ap.Tab {
+		if _, cur, home := e.where(); cur.ID == ap.Tab && home != ap.Tab {
 			e.selectHome(home)
 		}
 	}

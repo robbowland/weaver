@@ -41,11 +41,13 @@ func (e *Env) Goto(pane, tab string) {
 	e.PushStatus()
 }
 
-type tab struct {
-	id         mux.WindowID
-	name, view string
-	active     bool
-}
+// homeName is the name weaver gives home's window.
+const homeName = "home"
+
+// isHome: is w home's window? The one named home that shows no view: at
+// index 0 where weaver places it, or wherever it was made again when 0 was
+// taken (selectHome).
+func isHome(w mux.Window) bool { return w.Name == homeName && w.View == "" }
 
 // The session's panes and windows are fetched once for all an operation
 // looks up in them (on Rex each fetch is a snapshot of the session), then
@@ -79,34 +81,25 @@ func (e *Env) windowWidth(w mux.WindowID) (int, bool) {
 	return x.Width, ok && x.Width > 0
 }
 
-func (e *Env) tabs() []tab {
-	ws, _ := e.Mux().Windows()
-	var ts []tab
-	for _, w := range ws {
-		ts = append(ts, tab{w.ID, w.Name, w.View, w.Active})
-	}
-	return ts
-}
-
 // GoHome is `wvr go home` (Alt y): from a thread, the board in a popover
 // over it (peek), where tab goes on to the views; from home on through the
 // views (THREADS, GITHUB, LINEAR), and from the last back to where you came
 // from; from anywhere else (or with no terminal to show a popover on) home,
 // made again first if it was closed.
 func (e *Env) GoHome() {
-	ts, cur, home := e.where()
-	back := func() { e.goBack(ts, cur, home) }
+	ws, cur, home := e.where()
+	back := func() { e.goBack(ws, cur, home) }
 	views := e.viewNames()
 	at := -1
-	if cur.view != "" {
+	if cur.View != "" {
 		for i, v := range views {
-			if v == cur.view {
+			if v == cur.View {
 				at = i
 			}
 		}
 	}
 	switch {
-	case home != "" && cur.id == home, at >= 0:
+	case home != "" && cur.ID == home, at >= 0:
 		if at+1 < len(views) {
 			if _, err := e.OpenView(views[at+1]); err == nil {
 				return
@@ -114,7 +107,7 @@ func (e *Env) GoHome() {
 		}
 		back()
 		return
-	case cur.id != "" && cur.view == "" && e.peek(cur):
+	case cur.ID != "" && cur.View == "" && e.peek(cur):
 		return
 	}
 	e.toHome(cur, home)
@@ -125,14 +118,14 @@ func (e *Env) GoHome() {
 // views. It waits for the popover to close, then runs what was chosen there
 // that the popover would have been in the way of: a jump, or a dialog (tmux
 // shows one popup at a time). False when no terminal looks at the session.
-func (e *Env) peek(cur tab) bool {
+func (e *Env) peek(cur mux.Window) bool {
 	if e.SockDirReady() != nil {
 		return false
 	}
 	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())
 	os.Remove(f)
 	defer os.Remove(f)
-	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.id))})
+	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.ID))})
 	if !ok || c.Run() != nil {
 		return false
 	}
@@ -195,15 +188,15 @@ func (e *Env) agentIn(w mux.WindowID) mux.PaneID {
 
 // toHome goes home from window cur (kept, when a thread's, for going back
 // to), made again first if it was closed.
-func (e *Env) toHome(cur tab, home mux.WindowID) {
-	if cur.id != "" && cur.view == "" && cur.id != home {
-		bestEffort(os.WriteFile(e.lastFile(), []byte(string(cur.id)+"\n"), 0o644))
+func (e *Env) toHome(cur mux.Window, home mux.WindowID) {
+	if cur.ID != "" && cur.View == "" && cur.ID != home {
+		bestEffort(os.WriteFile(e.lastFile(), []byte(string(cur.ID)+"\n"), 0o644))
 	}
 	e.selectHome(home)
 	// The board's cursor on the thread you came from: what you were looking
 	// at stays in view as you step back.
-	if cur.id != "" && cur.view == "" && cur.id != home {
-		e.boardOn(cur.id)
+	if cur.ID != "" && cur.View == "" && cur.ID != home {
+		e.boardOn(cur.ID)
 	}
 }
 
@@ -214,7 +207,7 @@ func (e *Env) GoView(step int) {
 	_, cur, _ := e.where()
 	at := 0
 	for i, n := range order {
-		if n == cur.view {
+		if n == cur.View {
 			at = i
 		}
 	}
@@ -230,9 +223,9 @@ func (e *Env) showHome() {
 // selectHome shows home (window home), made again first if it was closed.
 func (e *Env) selectHome(home mux.WindowID) {
 	if home == "" {
-		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: "home", At: 0}
+		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: homeName, At: 0}
 		if _, _, _, err := e.Mux().OpenWindow(w); err != nil {
-			w.At = -1
+			w.At = mux.NextFree
 			_, _, _, _ = e.Mux().OpenWindow(w) // 0 is taken: wherever it goes; nothing more to try
 		}
 		return
@@ -264,19 +257,19 @@ func (e *Env) Pos(pane string) string {
 }
 
 // where is the session's windows, the one you are on, and home.
-func (e *Env) where() ([]tab, tab, mux.WindowID) {
-	ts := e.tabs()
-	var cur tab
+func (e *Env) where() ([]mux.Window, mux.Window, mux.WindowID) {
+	ws, _ := e.Mux().Windows()
+	var cur mux.Window
 	var home mux.WindowID
-	for _, t := range ts {
-		if t.active && cur.id == "" {
-			cur = t
+	for _, w := range ws {
+		if w.Active && cur.ID == "" {
+			cur = w
 		}
-		if t.name == "home" && t.view == "" && home == "" {
-			home = t.id
+		if isHome(w) && home == "" {
+			home = w.ID
 		}
 	}
-	return ts, cur, home
+	return ws, cur, home
 }
 
 // lastFile keeps the thread's window Alt y left, for going back to it.
@@ -285,21 +278,21 @@ func (e *Env) lastFile() string { return e.StateDir + "/" + e.SKey + ".last" }
 // GoBack is `wvr go back` (q and esc on home and in a view): back to the
 // thread's window you came from; when that is gone (or was nowhere), home.
 func (e *Env) GoBack() {
-	ts, cur, home := e.where()
-	e.goBack(ts, cur, home)
+	ws, cur, home := e.where()
+	e.goBack(ws, cur, home)
 }
 
-func (e *Env) goBack(ts []tab, cur tab, home mux.WindowID) {
+func (e *Env) goBack(ws []mux.Window, cur mux.Window, home mux.WindowID) {
 	if l, _ := files.FirstLine(e.lastFile()); l != "" {
 		last, _ := tmux.ParseWindow(l)
-		for _, t := range ts {
-			if t.id == last && t.view == "" && t.id != home {
+		for _, w := range ws {
+			if w.ID == last && w.View == "" && w.ID != home {
 				e.Mux().Show(last)
 				return
 			}
 		}
 	}
-	if home != "" && cur.id != home {
+	if home != "" && cur.ID != home {
 		e.Mux().Show(home)
 	}
 }

@@ -158,7 +158,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 	nv := e.NvimPane(p)
 	ws, _ := e.Mux().Windows()
 	win, _ := windowIn(ws, tab)
-	own := ap.TabIndex != 0 && win.View == ""
+	own := win.View == "" && !isHome(win)
 	if own {
 		for _, q := range windowPanes(ps, tab) {
 			if q != p && q != nv {

@@ -75,7 +75,7 @@ func (e *Env) Start(name string) error {
 	if os.Chdir("/") != nil {
 		return errors.New("cannot cd /")
 	}
-	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", "home", "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
+	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", homeName, "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
 		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
 }
 
