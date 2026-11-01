@@ -319,6 +319,9 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	if w.At >= 0 {
 		s.placeIn(v, seen, out.Window, mux.WindowID(wn), w.At)
 	}
+	if !w.Background {
+		_ = s.showInApp(out.Window)
+	}
 	// Its one pane fills it: the window is as wide as the pane.
 	return mux.WindowID(wn), mux.PaneID(pn), s.cols(mux.PaneID(pn)), nil
 }
@@ -399,7 +402,8 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		s.placeIn(v, seen, out.Window, mux.WindowID(wn), at)
 	}
 	if !background {
-		s.Focus(p)
+		_ = s.showInApp(out.Window)
+		_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
 	}
 	return mux.WindowID(wn), s.cols(p), nil
 }
@@ -529,16 +533,47 @@ func (s Session) Zoom(p mux.PaneID) {
 	}
 }
 
+// Show shows window w in the Rex app (showInApp); where the app will not,
+// it is the session's active window at least.
 func (s Session) Show(w mux.WindowID) {
-	if id, err := s.window(w); err == nil {
+	id, err := s.window(w)
+	if err != nil {
+		return
+	}
+	if s.showInApp(id) != nil {
 		_ = s.callS("session.focus_window", map[string]any{"window_id": id}, nil)
 	}
 }
 
+// Focus focuses pane p and shows its window in the Rex app (showInApp).
 func (s Session) Focus(p mux.PaneID) {
-	if b, err := s.block(p); err == nil {
-		_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
+	b, err := s.block(p)
+	if err != nil {
+		return
 	}
+	if v, err := s.view(); err == nil {
+		if w := v.windowOf(b); w != "" {
+			_ = s.showInApp(w)
+		}
+	}
+	_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
+}
+
+// showInApp asks the Rex app to show window id (Rex's) of the session. The
+// app keeps its own tab for a session, which the server's active window
+// does not move: session.focus_window changes what the server calls
+// active, not what you see, and the app sets it back to its tab when it
+// next shows the session. So whatever is to be seen goes through the app,
+// which takes actions only with Remote Control on (an error otherwise).
+// Not for what happens behind you (a hook, threads restored at start): it
+// takes the app to this session.
+func (s Session) showInApp(id string) error {
+	args := []string{"do", "session.select", "session_id=" + s.ID}
+	if id != "" {
+		args = append(args, "window_id="+id)
+	}
+	_, err := run(args...)
+	return err
 }
 
 // Type pastes text (a paste event: the program sees one bracketed paste,

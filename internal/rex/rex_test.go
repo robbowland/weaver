@@ -826,6 +826,22 @@ func TestBin(t *testing.T) {
 	if got := Bin(); got != filepath.Join(other, "rex") {
 		t.Errorf("REX_BIN_DIR without a rex: %q, want PATH's", got)
 	}
+	// An app's environment (Rex's server runs weaver's keys with it): no
+	// REX_BIN_DIR, no rex on PATH; the Rex app's server's own.
+	home := t.TempDir()
+	app := filepath.Join(home, appServerRex)
+	if err := os.MkdirAll(filepath.Dir(app), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(app, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("REX_BIN_DIR", "")
+	t.Setenv("PATH", t.TempDir())
+	if got, dir := Bin(), BinDir(); got != app || dir != filepath.Dir(app) {
+		t.Errorf("in an app's environment: %q in %q, want the app's server's", got, dir)
+	}
 }
 
 // A session Rex brings back after its server restarts is a husk: its ids

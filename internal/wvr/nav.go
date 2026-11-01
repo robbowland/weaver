@@ -211,6 +211,29 @@ func (e *Env) GoView(step int) {
 	e.statusClick(order[((at+step)%len(order)+len(order))%len(order)])
 }
 
+// GoWindow is `wvr go window next|prev` (Alt j, Alt k in Rex, as tmux.conf
+// binds them in tmux): the next or previous window that shows no view
+// (home, a thread), around the end.
+func (e *Env) GoWindow(step int) {
+	ws, cur, _ := e.where()
+	var in []mux.Window
+	at := 0
+	for _, w := range ws {
+		if w.ID == cur.ID {
+			at = len(in)
+		} else if w.View != "" {
+			continue
+		}
+		in = append(in, w)
+	}
+	if len(in) < 2 {
+		return
+	}
+	if w := in[((at+step)%len(in)+len(in))%len(in)]; w.ID != cur.ID {
+		e.Mux().Show(w.ID)
+	}
+}
+
 // showHome shows home, made again first if it was closed.
 func (e *Env) showHome() {
 	_, _, home := e.where()

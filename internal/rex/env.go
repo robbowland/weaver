@@ -227,7 +227,4 @@ func Start(dir, name, here string, home []string) (Session, error) {
 
 // ShowInApp asks the Rex app to show the session: it can only when Remote
 // Control is on in its settings.
-func (s Session) ShowInApp() error {
-	_, err := run("do", "session.select", "session_id="+s.ID)
-	return err
-}
+func (s Session) ShowInApp() error { return s.showInApp("") }

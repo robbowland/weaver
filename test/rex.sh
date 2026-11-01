@@ -41,8 +41,18 @@ export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
 # The server's terminals take its environment: PATH has this build's wvr
 # first, else home starts again as the wvr installed (installs.go).
-rex server run --listen "$REX_SERVER" --state-dir "$AT/rexstate" --config "$AT/init.lua" >"$AT/server.log" 2>&1 &
-server=$!
+# Rex's server runs weaver's keys' commands with its own environment: the
+# app's, with no rex on PATH and no REX_BIN_DIR. As here: PATH without any
+# directory that has a rex (its terminals have theirs: Rex sets REX_BIN_DIR
+# in them).
+REXCMD=$(command -v rex)
+NOREX=$(printf '%s' "$PATH" | tr ':' '\n' | while read -r d; do [ -x "$d/rex" ] || printf '%s:' "$d"; done)
+serve() {
+	env -u REX_BIN_DIR PATH="${NOREX%:}" \
+		"$REXCMD" server run --listen "$REX_SERVER" --state-dir "$AT/rexstate" --config "$AT/init.lua" >>"$AT/server.log" 2>&1 &
+	server=$!
+}
+serve
 cleanup() {
 	kill "$server" 2>/dev/null
 	wait "$server" 2>/dev/null
@@ -114,6 +124,17 @@ AG=$(num "$AGB") NV=$(num "$NVB")
 waitfor '[ -f "$SD/rex-${S}_$AG.nvim" ]' 100
 ok "new: the agent took the task, and its nvim is bound to it" \
 	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.nvim" 2>/dev/null)" "say hello|$NV"
+# --- weaver's keys, pressed as the Rex app sends a bound key (its bindings
+# first): Alt k home, Alt j back to the thread, though wvr runs with the
+# server's environment
+active() { view | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .label'; }
+alt() { R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_$1\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":$(printf '%d' "'$1")}}" | jq -r .handled; }
+k=$(alt k)
+waitfor '[ "$(active)" = home ]' 50
+k="$k|$(active)|$(alt j)"
+waitfor '[ "$(active)" != home ]' 50
+ok "keys: Alt k, home; Alt j, the thread again" "$k|$(active)" "true|home|true|01 say hello · repo/main" ||
+	{ grep -i weaver "$AT/server.log" | tail -5 | sed 's/^/  server: /'; }
 ok "new: its thread record, under the session's Rex key and the agent's number" \
 	"$(jq -r .num "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "1"
 
@@ -155,8 +176,7 @@ hookj "$(ev SessionStart ',"source":"resume"')"
 OLD=$SID
 kill "$server"
 wait "$server" 2>/dev/null
-rex server run --listen "$REX_SERVER" --state-dir "$AT/rexstate" --config "$AT/init.lua" >>"$AT/server.log" 2>&1 &
-server=$!
+serve
 waitfor 'R api call server.status "{}" >/dev/null 2>&1' 100
 if [ "$(sid)" != "$OLD" ]; then
 	echo "SKIP restart: this Rex did not bring the session back"

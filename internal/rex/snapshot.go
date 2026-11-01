@@ -122,6 +122,21 @@ func (s Session) snapshot(full bool) (snapshot, error) {
 	return sn, err
 }
 
+// windowOf is the window block b is in (its tiled layout or a floating
+// layer); "" when none.
+func (v view) windowOf(b string) string {
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			for _, x := range l.Blocks {
+				if x.ID == b {
+					return w.ID
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // rects are the blocks of a layout, by id: where each is, as fractions of
 // the window.
 func rects(n *node, into map[string][]float64) {

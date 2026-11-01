@@ -76,13 +76,17 @@ British, ...) Option types special characters, `alt+y` types `¥`, and only
 `cmd+y` reaches weaver's tmux, as the Meta it reads Rex's Cmd as.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
-`~/.config/rex/weaver.lua` as it starts, and says to load it by adding
-`require("weaver")` to `~/.config/rex/init.lua` and running
-`rex config reload`. It binds `alt+y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`,
-`alt+j`/`alt+k` and `alt+h`/`alt+l` as weaver's tmux does. Rex's
-configuration is one for every session, so the keys are weaver's only in the
-Rex sessions weaver made; in any other they are the terminal's, so a weaver on
-tmux in a Rex terminal still gets its own.
+`weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
+Rex read it when it is new to Rex, and says to load it by adding
+`require("weaver")` to `init.lua` when that does not. It binds `alt+y`,
+`alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k` and `alt+h`/`alt+l` as
+weaver's tmux does. Rex's configuration is one for every session, so the keys
+are weaver's only in the Rex sessions weaver made; in any other they are the
+terminal's, so a weaver on tmux in a Rex terminal still gets its own.
+
+The Rex app shows the window it is asked to, so weaver's moves (its keys,
+enter on the board, a new thread) ask it, which it does only with Remote
+Control on. When a key does nothing, `rex server logs` has what wvr said.
 
 Rex has no status line or message line: Rex shows each agent's state itself,
 from what Claude Code reports to it, the board shows the rest, and weaver's

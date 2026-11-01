@@ -1071,7 +1071,15 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   it, made only when an app is attached to the session: otherwise `Popup`
   says false, makes nothing, and gives a command whose `Start` fails with
   why. `BreakOut` opens a window with a stand-in, moves the pane beside it
-  and closes the stand-in. `SplitLeft` gives pid 0, not known yet (Rex runs
+  and closes the stand-in. The app keeps its own tab for each session: the
+  server's active window (`session.focus_window`) is not what it shows, and
+  it sets it back to its tab. So `Show`, `Focus`, and `OpenWindow` and
+  `BreakOut` in the foreground ask the app (`rex do session.select` with
+  the window: Remote Control on), else make it the server's active window.
+  weaver.lua's keys run wvr with the environment of the wvr that wrote it
+  (its PATH, and where rex is): Rex's server runs them with an app's, where
+  `rex.Bin` would find no rex but the app's server's own; what wvr says on
+  stderr goes to Rex's log. `SplitLeft` gives pid 0, not known yet (Rex runs
   a command through the login shell, whose pid it would be): `wvr nvim`
   records its own pid as it starts. Rex has no message line: `Say` and
   `SayToSession` show their text as one line in a small floating layer at

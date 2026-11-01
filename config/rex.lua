@@ -8,6 +8,12 @@
 local wvr = "@WVR@"
 -- weaver's record of the Rex sessions it made, one file each:
 local sessions = "@SESSIONS@"
+-- The PATH, and where rex is, of the wvr that wrote this (from a
+-- terminal). Rex's server runs these keys' commands with an app's
+-- environment, which has neither: without them, wvr finds no rex (nor
+-- git), and every key would do nothing.
+local path = "@PATH@"
+local rexbin = "@REXBIN@"
 
 local terminal = "com.superlogical.terminal"
 
@@ -27,14 +33,21 @@ end
 
 -- run runs wvr with args for the session the key was pressed in, as tmux's
 -- run-shell does: in no pane of its own, so weaver acts on the focused one.
+-- What it says when it fails goes to Rex's log (rex server logs).
 local function run(ctx, args, cwd)
   local argv = { wvr }
   for _, a in ipairs(args) do argv[#argv + 1] = a end
-  rex.exec.start(argv, {
+  local _, err = rex.exec.start(argv, {
     cwd = cwd,
-    env = { REX_SESSION = ctx.session_id, REX_BLOCK = false, WEAVER_MUX = "rex" },
-    stdout = false, stderr = false, detach = true,
+    env = {
+      REX_SESSION = ctx.session_id, REX_BLOCK = false, WEAVER_MUX = "rex",
+      PATH = path ~= "" and path or nil, REX_BIN_DIR = rexbin ~= "" and rexbin or false,
+    },
+    stdout = false,
+    stderr = function(s) rex.log("warn", "weaver: " .. s) end,
+    detach = true,
   })
+  if err then rex.log("warn", "weaver: could not run wvr: " .. tostring(err)) end
 end
 
 -- inView: is the key pressed in one of weaver's views (GITHUB, LINEAR),
@@ -79,7 +92,10 @@ end)
 key("alt+v", function(ctx) run(ctx, { "edit" }) end)
 key("alt+shift+v", function(ctx) run(ctx, { "edit", "--full" }) end)
 key("alt+1", function(ctx) run(ctx, { "next" }) end)
-key("alt+j", function() rex.session.focus_next_window{} end)
-key("alt+k", function() rex.session.focus_previous_window{} end)
+-- The next and previous window that shows no view, as tmux's: through wvr,
+-- since the app shows only a window it is asked to (the server's active
+-- window is not what it shows).
+key("alt+j", function(ctx) run(ctx, { "go", "window", "next" }) end)
+key("alt+k", function(ctx) run(ctx, { "go", "window", "prev" }) end)
 key("alt+h", function() rex.session.focus_direction{ direction = "left" } end)
 key("alt+l", function() rex.session.focus_direction{ direction = "right" } end)

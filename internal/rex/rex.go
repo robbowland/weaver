@@ -15,18 +15,40 @@ import (
 
 // Bin is the rex command: the one Rex's terminals say is theirs
 // ($REX_BIN_DIR: the running server's own, whatever a login shell puts
-// first on PATH), else on PATH.
+// first on PATH), else on PATH, else the one beside the server the Rex app
+// runs (an app's environment, where Rex's server runs weaver's keys, has
+// neither).
 func Bin() string {
 	if d := os.Getenv("REX_BIN_DIR"); d != "" {
-		p := filepath.Join(d, "rex")
-		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+		if p := filepath.Join(d, "rex"); isExec(p) {
 			return p
 		}
 	}
 	if p, err := exec.LookPath("rex"); err == nil {
 		return p
 	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if p := filepath.Join(home, appServerRex); isExec(p) {
+			return p
+		}
+	}
 	return "rex"
+}
+
+// appServerRex is where the Rex app keeps its server's rex, under $HOME.
+const appServerRex = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"
+
+// BinDir is the directory of the rex Bin finds; "" when it finds none.
+func BinDir() string {
+	if p := Bin(); filepath.IsAbs(p) {
+		return filepath.Dir(p)
+	}
+	return ""
+}
+
+func isExec(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir() && st.Mode()&0o111 != 0
 }
 
 // KeysLoaded: does the Rex server's configuration bind weaver's keys (one
