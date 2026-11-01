@@ -83,7 +83,7 @@ func (e *Env) Click(args []string) {
 	case "board":
 		fmt.Print(footClick(e.boardHints(), 2))
 	case "title":
-		fmt.Print(welcomeClick(len(e.viewNames()) > 0))
+		fmt.Print(welcomeClick(len(e.viewNames()) > 0, session.Quote(e.Self)))
 	case "pick":
 		fmt.Print(footClick(pickHints, 3))
 	case "form":

@@ -620,7 +620,7 @@ func (e *Env) rows(plain bool) string {
 			out := ""
 			if n == 0 {
 				c, l := lsSize()
-				out, _ = welcome(c, l, len(e.viewNames()) > 0)
+				out, _ = welcome(c, l, len(e.viewNames()) > 0, session.Quote(e.Self))
 			}
 			bestEffort(files.Put(base+".title", out))
 			if n == 0 {
@@ -899,13 +899,14 @@ func (e *Env) Footer() string { return hintLine(e.boardHints(), 2) + "\n" }
 // welcome is the empty board's header: what to do, centred in the room
 // the list has on a terminal cols x lines (a third of the way down, as a
 // card sits), and for each of its lines (from 1) what a click on it does,
-// "" for none: each key line is its key's button.
-func welcome(cols, lines int, views bool) (string, []string) {
+// "" for none: each key line is its key's button. An Alt key's button runs
+// what the key does (wvr, as q quotes it), on tmux or Rex alike.
+func welcome(cols, lines int, views bool, q string) (string, []string) {
 	type row struct{ key, what, act string }
-	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"alt+N", "start one from anywhere", "execute-silent(tmux send-keys -K M-N)"},
+	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"alt+N", "start one from anywhere", "execute-silent(" + q + " _popup new)"},
 		{"a", "resume a conversation as a thread", "trigger(a)"}}
 	if views {
-		rows = append(rows, row{"alt+y", "your pull requests and issues", "execute-silent(tmux send-keys -K M-y)"})
+		rows = append(rows, row{"alt+y", "your pull requests and issues", "execute-silent(" + q + " go home)"})
 	}
 	about := "a thread is a task, its worktree, and an agent beside its nvim"
 	note := "or start claude or codex in any pane: weaver follows it"
@@ -940,13 +941,13 @@ func welcome(cols, lines int, views bool) (string, []string) {
 
 // welcomeClick is the action for a click on line (from 1) of the empty
 // board's welcome, when it shows.
-func welcomeClick(views bool) string {
+func welcomeClick(views bool, q string) string {
 	if t, _ := files.ReadTrim(sockBase() + ".title"); t == "" {
 		return ""
 	}
 	line, _ := cli.EnvInt("FZF_CLICK_HEADER_LINE")
 	c, l := lsSize()
-	if _, acts := welcome(c, l, views); line >= 1 && line <= len(acts) && acts[line-1] != "" {
+	if _, acts := welcome(c, l, views, q); line >= 1 && line <= len(acts) && acts[line-1] != "" {
 		return acts[line-1] + "\n"
 	}
 	return ""

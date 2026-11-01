@@ -68,7 +68,7 @@ func TestBoardMenu(t *testing.T) {
 // Each of the welcome's key lines is the button for its key; no other
 // line does anything.
 func TestWelcomeClicks(t *testing.T) {
-	text, acts := welcome(200, 56, true)
+	text, acts := welcome(200, 56, true, "wvr")
 	lines := strings.Split(text, "\n")
 	if len(lines) != len(acts) {
 		t.Fatalf("%d lines, %d actions", len(lines), len(acts))
@@ -80,8 +80,8 @@ func TestWelcomeClicks(t *testing.T) {
 			got[strings.TrimSpace(key)] = acts[i]
 		}
 	}
-	want := map[string]string{"n": "trigger(n)", "alt+N": "execute-silent(tmux send-keys -K M-N)", "a": "trigger(a)",
-		"alt+y": "execute-silent(tmux send-keys -K M-y)"}
+	want := map[string]string{"n": "trigger(n)", "alt+N": "execute-silent(wvr _popup new)", "a": "trigger(a)",
+		"alt+y": "execute-silent(wvr go home)"}
 	if len(got) != len(want) {
 		t.Fatalf("buttons %q, want %q", got, want)
 	}
