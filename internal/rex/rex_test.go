@@ -945,3 +945,32 @@ func TestKeysLoaded(t *testing.T) {
 		t.Error("keys not loaded after ReloadConfig")
 	}
 }
+
+// With Remote Control off the app takes no actions: weaver says so, as a
+// message (the server's to show), and at most once in a while, rather than
+// moving nothing you could see without a word.
+func TestRemoteOffSaid(t *testing.T) {
+	rextest.NoRex(t)
+	dir := t.TempDir()
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	fake := "#!/bin/sh\necho \"$*\" >> '" + log + "'\n" + `case "$2 $3" in
+"do session.select") echo "Error: Rex.app is not accepting actions. Turn on Remote Control in Rex's settings." >&2; exit 1 ;;
+"api call") echo '{}' ;;
+*) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "rex"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", bin)
+	s := Session{ID: "session:x", Name: "w", Dir: dir}
+	if err := s.showInApp("window:a"); err == nil {
+		t.Fatal("the app took the action")
+	}
+	_ = s.showInApp("window:b")
+	b, _ := os.ReadFile(log)
+	if n := strings.Count(string(b), "new_layer"); n != 1 || !strings.Contains(string(b), "Remote Control") {
+		t.Errorf("said %d times, want once, of Remote Control:\n%s", n, b)
+	}
+}

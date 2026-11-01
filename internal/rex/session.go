@@ -573,7 +573,28 @@ func (s Session) showInApp(id string) error {
 		args = append(args, "window_id="+id)
 	}
 	_, err := run(args...)
+	if err != nil && strings.Contains(err.Error(), "Remote Control") {
+		s.sayRemoteOff()
+	}
 	return err
+}
+
+// remoteOffEvery is how often weaver says the app takes no actions.
+const remoteOffEvery = 10 * time.Minute
+
+// sayRemoteOff says that the Rex app shows nothing weaver asks without
+// Remote Control, at most every remoteOffEvery (rex/remote-off): else
+// weaver's moves would do nothing you could see, and say nothing. A message
+// is the server's to show, which needs no Remote Control.
+func (s Session) sayRemoteOff() {
+	f := s.ids().path("", "remote-off")
+	if st, err := os.Stat(f); err == nil && time.Since(st.ModTime()) < remoteOffEvery {
+		return
+	}
+	if s.ids().write("", "remote-off", time.Now().Format(time.RFC3339)) != nil {
+		return
+	}
+	s.Say(8000, "weaver: for weaver to show you its windows, turn on Remote Control in Rex's settings (Rex Server)")
 }
 
 // Type pastes text (a paste event: the program sees one bracketed paste,
