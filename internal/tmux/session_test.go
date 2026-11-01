@@ -106,3 +106,29 @@ func TestKeepStaysWhenTheProgramExits(t *testing.T) {
 		t.Errorf("a pane without Keep stayed: windows %q", names)
 	}
 }
+
+// The session's windows as tmux lists them: a name with spaces and #
+// whole, the view a window shows, its width, the one active.
+func TestWindows(t *testing.T) {
+	srv, tm := server(t)
+	s := Session{Name: "a", Sock: srv}
+	w, _, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/sleep", "600"}},
+		Label: "02 fix #3 · repo/main", View: "github", At: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := s.Windows()
+	if err != nil || len(ws) != 2 {
+		t.Fatalf("windows: %+v %v", ws, err)
+	}
+	if ws[0].Index != 0 || ws[0].View != "" || ws[0].Active {
+		t.Errorf("the first: %+v", ws[0])
+	}
+	got := ws[1]
+	if got.ID != w || got.Index != 7 || got.Name != "02 fix #3 · repo/main" || got.View != "github" || got.Width != width || width <= 0 || !got.Active {
+		t.Errorf("the one opened: %+v, want %s at 7, its name whole, github, %d wide, active", got, w, width)
+	}
+	if n := tm("display-message", "-p", "-t", WindowTarget(w), "#{window_name}"); n != got.Name {
+		t.Errorf("tmux names it %q", n)
+	}
+}
