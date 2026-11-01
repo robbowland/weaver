@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"encoding/json"
 	"os"
+	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -28,6 +31,50 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 		}
 		if string(st.Pid) != c.want {
 			t.Errorf("pid %s: recorded %q, want %q", c.pid, st.Pid, c.want)
+		}
+	}
+}
+
+// What a sync hook (Codex's, which wait) hands its background run reaches
+// it: every exported field, the stored state's lists left behind, and so
+// the files a Bash call says it changed, which the background run follows.
+// What stays unexported is the foreground's alone: one more is a choice to
+// make here.
+func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
+	resp, _ := json.Marshal(map[string]any{"bashEditDiff": map[string]any{"changedFiles": []string{"/w/a.go", "/w/b.go"}}})
+	h := &hk{Pane: "5", Session: "s", Mode: "sync"}
+	h.Old.Files, h.Old.TurnRoots = []string{"/w/old.go"}, []string{"/w"}
+	if !h.parse(hooks.Input{Event: "PostToolUse", SessionID: "conv", Cwd: "/w", ToolName: "Bash", ToolResponse: resp}, nil) {
+		t.Fatal("not parsed")
+	}
+	h.FollowBash = "1"
+	b, err := bgRun(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := &hk{}
+	if err := json.Unmarshal(b, got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.ChangedKnown || !slices.Equal(got.Changed, []string{"/w/a.go", "/w/b.go"}) || got.FollowBash != "1" {
+		t.Errorf("the files the call changed: %v %q, follow %q", got.ChangedKnown, got.Changed, got.FollowBash)
+	}
+	if got.Old.Files != nil || got.Old.TurnRoots != nil {
+		t.Errorf("the stored state's lists went too: %q %q", got.Old.Files, got.Old.TurnRoots)
+	}
+	want := map[string]bool{"sf": true, "changes": true, "launchID": true, "launchType": true, "launchAs": true, "rc": true}
+	rt := reflect.TypeOf(hk{})
+	gv, hv := reflect.ValueOf(got).Elem(), reflect.ValueOf(h).Elem()
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		switch {
+		case !f.IsExported():
+			if !want[f.Name] {
+				t.Errorf("%s is unexported, so the background run never has it", f.Name)
+			}
+		case f.Tag.Get("json") == "-", f.Name == "Old":
+		case !reflect.DeepEqual(gv.Field(i).Interface(), hv.Field(i).Interface()):
+			t.Errorf("%s: %v reached the background run as %v", f.Name, hv.Field(i).Interface(), gv.Field(i).Interface())
 		}
 	}
 }

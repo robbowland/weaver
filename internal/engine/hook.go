@@ -80,10 +80,14 @@ type hk struct {
 	// hook's, which must not wait on git). AgentSnap: it takes an edit
 	// tool's file into the agent's chain.
 	FollowBash, AgentSnap string
-	// What the call changed, as it says (the foreground's alone: too big
-	// to hand on), and the subagent an Agent call started.
+	// The files the call says it changed, and whether it says: handed on
+	// to the background run, which follows them (FollowBash).
+	Changed      []string
+	ChangedKnown bool
+	// What the call changed, what each file held before with it (the
+	// foreground's alone: too big to hand on), and the subagent an Agent
+	// call started.
 	changes                        []hooks.Change
-	changesKnown                   bool
 	launchID, launchType, launchAs string
 	rc                             int
 }
@@ -230,7 +234,10 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
 	h.Paths = in.CommandPaths()
-	h.changes, h.changesKnown = in.Changes()
+	h.changes, h.ChangedKnown = in.Changes()
+	for _, c := range h.changes {
+		h.Changed = append(h.Changed, c.Path)
+	}
 	h.launchID, h.launchType, h.launchAs = in.Launched()
 	h.launchID = oneline.Ctl(h.launchID)
 	h.launchType = oneline.Ctl(oneline.Squash(h.launchType, 40))
@@ -565,7 +572,7 @@ func afterWrite(e *session.Env, h *hk) {
 		spawnBg(e, h)
 	}
 	// After the background run is on its way: nvim follows first.
-	if h.Event == "PostToolUse" && async && h.changesKnown {
+	if h.Event == "PostToolUse" && async && h.ChangedKnown {
 		agentChanges(e, h, h.changes)
 	}
 }
@@ -573,11 +580,7 @@ func afterWrite(e *session.Env, h *hk) {
 // spawnBg starts `wvr hook --bg`, detached, with this run in its
 // environment.
 func spawnBg(e *session.Env, h *hk) {
-	// The stored state's lists stay behind: the background run has the new
-	// ones, and its environment has room for so much.
-	bg := *h
-	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents, bg.Old.TurnRoots = nil, nil, nil, nil
-	b, err := json.Marshal(&bg)
+	b, err := bgRun(h)
 	if err != nil {
 		return
 	}
@@ -591,6 +594,15 @@ func spawnBg(e *session.Env, h *hk) {
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Not started, nvim, tmux and the snapshots catch up at the next event.
 	bestEffort(c.Start())
+}
+
+// bgRun is h as the background run takes it ($WEAVER_BG, hookBg). The
+// stored state's lists stay behind: the background run has the new ones,
+// and its environment has room for so much.
+func bgRun(h *hk) ([]byte, error) {
+	bg := *h
+	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents, bg.Old.TurnRoots = nil, nil, nil, nil
+	return json.Marshal(&bg)
 }
 
 // HookMain is `wvr hook [--async|--bg]`.

@@ -166,9 +166,9 @@ func followBashEdits(e *session.Env, h *hk) bool {
 		return false
 	}
 	var ps []string
-	if h.changesKnown {
+	if h.ChangedKnown {
 		bestEffort(os.Rename(nw, stamp))
-		ps = followable(h.changes)
+		ps = followable(h.Changed)
 	} else {
 		sst, err := os.Stat(stamp)
 		if err != nil {
@@ -240,18 +240,18 @@ func followBashEdits(e *session.Env, h *hk) bool {
 	return true
 }
 
-// followable are the files of changes cs that following can show: on disk,
-// in a worktree, and not ignored there (what git status would list).
-func followable(cs []hooks.Change) []string {
+// followable are the files of paths that following can show: on disk, in
+// a worktree, and not ignored there (what git status would list).
+func followable(paths []string) []string {
 	byRoot := map[string][]string{}
 	var roots []string
-	for _, c := range cs {
-		st, err := os.Lstat(c.Path)
+	for _, p := range paths {
+		st, err := os.Lstat(p)
 		if err != nil || !st.Mode().IsRegular() {
 			continue
 		}
-		r, ok := git.FileWorkTree(c.Path)
-		rel := relTo(r, c.Path)
+		r, ok := git.FileWorkTree(p)
+		rel := relTo(r, p)
 		if !ok || rel == "" {
 			continue
 		}
