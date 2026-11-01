@@ -125,18 +125,44 @@ func sessions() (map[string]bool, error) {
 	return live, nil
 }
 
-// Named is weaver's Rex session name, when it runs.
-func Named(dir, name string) (Session, bool) {
+// Named is the Rex session weaver made last of name, and whether it runs:
+// false when weaver made none. An error when Rex does not answer: not
+// known to run, nor known not to.
+func Named(dir, name string) (Session, bool, error) {
 	id, ok := ids{dir}.named(name)
 	if !ok {
-		return Session{}, false
+		return Session{}, false, nil
 	}
-	s := Session{ID: id, Name: name, Dir: dir}
-	return s, s.Running()
+	live, err := sessions()
+	if err != nil {
+		return Session{}, false, err
+	}
+	return Session{ID: id, Name: name, Dir: dir}, live[id], nil
+}
+
+// Ensure is weaver's Rex session name, running: the one weaver made, else
+// one made now (prepare, then Start). One weaver at a time asks and makes,
+// so two started at once make one session; none is made while Rex does
+// not answer whether one runs.
+func Ensure(dir, name, here string, home []string, prepare func() error) (Session, error) {
+	unlock, err := ids{dir}.lockOn("start")
+	if err != nil {
+		return Session{}, err
+	}
+	defer unlock()
+	s, running, err := Named(dir, name)
+	if err != nil || running {
+		return s, err
+	}
+	if err := prepare(); err != nil {
+		return Session{}, err
+	}
+	return Start(dir, name, here, home)
 }
 
 // Start makes weaver's Rex session name, home (argv, in dir here) its
-// first window; it is weaver's from then on (FromEnv, Named).
+// first window; it is weaver's from then on (FromEnv, Named). Ensure is
+// how wvr starts it: Start makes one whether or not one runs.
 func Start(dir, name, here string, home []string) (Session, error) {
 	var out struct {
 		ID      string `json:"session_id"`

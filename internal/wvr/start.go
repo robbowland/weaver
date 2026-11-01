@@ -80,7 +80,8 @@ func (e *Env) Start(name string) error {
 }
 
 // startRex is Start on Rex ($WEAVER_MUX=rex): weaver's Rex session name,
-// made with home in its first window when it is not running, then shown in
+// made with home in its first window when it is not running (rex.Ensure:
+// one wvr at a time, none made while Rex does not answer), then shown in
 // the Rex app, which it can be only with Remote Control on in Rex's
 // settings (else wvr says where it is). Weaver's keys for Rex are written
 // each time (~/.config/rex/weaver.lua) for init.lua to load.
@@ -92,8 +93,8 @@ func (e *Env) startRex(name string) error {
 	} else if !loaded {
 		fmt.Fprintf(os.Stderr, "weaver: for its keys, add require(\"weaver\") to %s, then run rex config reload\n", tildify(filepath.Join(filepath.Dir(keys), "init.lua")))
 	}
-	s, ok := rex.Named(e.RexDir(), name)
-	if !ok {
+	here, _ := os.Getwd()
+	s, err := rex.Ensure(e.RexDir(), name, here, []string{e.Self, "home"}, func() error {
 		skey := rex.Key(name)
 		if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
 			return err
@@ -102,10 +103,10 @@ func (e *Env) startRex(name string) error {
 			return err
 		}
 		os.Remove(e.StateDir + "/" + skey + ".last")
-		here, _ := os.Getwd()
-		if s, err = rex.Start(e.RexDir(), name, here, []string{e.Self, "home"}); err != nil {
-			return fmt.Errorf("weaver could not start on Rex (is Rex running?): %w", err)
-		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("weaver could not start on Rex (is Rex running?): %w", err)
 	}
 	if s.ShowInApp() != nil {
 		fmt.Printf("weaver: the %s session runs in Rex: switch to it there (with Remote Control on in Rex's settings, wvr shows it)\n", name)

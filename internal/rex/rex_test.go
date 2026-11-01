@@ -119,8 +119,8 @@ func TestSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := Named(dir, "demo"); !ok || got.ID != s.ID {
-		t.Fatalf("Named: %+v %v", got, ok)
+	if got, ok, err := Named(dir, "demo"); !ok || err != nil || got.ID != s.ID {
+		t.Fatalf("Named: %+v %v %v", got, ok, err)
 	}
 	if ws, err := s.Windows(); err != nil || len(ws) != 1 || ws[0].Name != "home" || ws[0].Index != 0 {
 		t.Fatalf("home: %+v %v", ws, err)
@@ -712,5 +712,88 @@ func TestFromEnv(t *testing.T) {
 	t.Setenv("REX_SESSION", "session:other")
 	if Chosen(dir) {
 		t.Error("another session is chosen")
+	}
+}
+
+// Two weavers starting the same session at once make one, and both have
+// it; once it runs, Ensure makes no other.
+func TestEnsureOnce(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	var prepared int
+	var mu sync.Mutex
+	prepare := func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		prepared++
+		return nil
+	}
+	got := make([]Session, 2)
+	var wg sync.WaitGroup
+	for i := range got {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, err := Ensure(dir, "demo", "/", sleep, prepare)
+			if err != nil {
+				t.Error(err)
+			}
+			got[i] = s
+		}()
+	}
+	wg.Wait()
+	t.Cleanup(func() { _ = got[0].Quit() })
+	if got[0].ID == "" || got[0].ID != got[1].ID || prepared != 1 {
+		t.Errorf("two at once: sessions %q and %q, prepared %d times; want one, once", got[0].ID, got[1].ID, prepared)
+	}
+	if s, err := Ensure(dir, "demo", "/", sleep, prepare); err != nil || s.ID != got[0].ID || prepared != 1 {
+		t.Errorf("again: %q %v, prepared %d times; want %q, once", s.ID, err, prepared, got[0].ID)
+	}
+	var l struct {
+		Sessions []struct {
+			Label string `json:"label"`
+		} `json:"sessions"`
+	}
+	if err := call("session.list", map[string]any{}, &l); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, x := range l.Sessions {
+		if x.Label == "demo" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("Rex runs %d sessions named demo, want 1", n)
+	}
+}
+
+// While Rex does not answer, a session weaver made is neither running nor
+// not (an error), and Ensure makes none in its place.
+func TestEnsureNoAnswer(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	at, run := os.Getenv("REX_SERVER"), os.Getenv("REX_RUNTIME_DIR")
+	// No server there, and none in its runtime directory to fall back to.
+	none := t.TempDir()
+	t.Setenv("REX_SERVER", "unix://"+none+"/none.sock")
+	t.Setenv("REX_RUNTIME_DIR", none)
+	if _, running, err := Named(dir, "demo"); err == nil {
+		t.Errorf("Named with no answer: running %v, no error", running)
+	}
+	made := false
+	if _, err := Ensure(dir, "demo", "/", []string{"/bin/sleep", "600"}, func() error { made = true; return nil }); err == nil || made {
+		t.Errorf("Ensure with no answer: %v, prepared %v; want an error, nothing made", err, made)
+	}
+	t.Setenv("REX_SERVER", at)
+	t.Setenv("REX_RUNTIME_DIR", run)
+	if _, running, err := Named(dir, "demo"); err != nil || !running {
+		t.Errorf("Named once Rex answers: %v %v", running, err)
 	}
 }

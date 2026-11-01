@@ -1548,8 +1548,11 @@ func (e *Env) toWeaverSession() error {
 	if e.Session == "" {
 		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
 		if e.OnRex() {
-			s, ok := rex.Named(e.RexDir(), name)
-			if !ok {
+			s, running, err := rex.Named(e.RexDir(), name)
+			if err != nil {
+				return fmt.Errorf("weaver cannot tell whether its Rex session %s runs (Rex does not answer): %w", name, err)
+			}
+			if !running {
 				return errors.New("no Rex session " + name + " of weaver's is running (start it with `wvr`)")
 			}
 			e.Session, e.SKey, e.RexID = name, rex.Key(name), s.ID
