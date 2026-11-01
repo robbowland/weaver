@@ -45,13 +45,20 @@ type Window struct {
 
 // Spawn is a program for a new pane: argv in Dir (empty: the
 // multiplexer's choice), with Env (KEY=VALUE) added to its environment.
-// Keep: the pane stays when the program exits, for what it said last to be
-// read (an agent's; tmux keeps it from the agent's side, KeepExited).
+// Keep, when set, keeps the pane when the program exits, for what it said
+// last to be read; nil, the pane goes with it.
 type Spawn struct {
 	Argv []string
 	Dir  string
 	Env  []string
-	Keep bool
+	Keep *Exit
+}
+
+// Exit is what a pane kept when its program exits says, where its
+// multiplexer can say it (tmux; Rex shows its own): What happened, how the
+// program exited, and Hint, what to do next.
+type Exit struct {
+	What, Hint string
 }
 
 // NewWindow is a window to open: Spawn in its one pane, named Label, at
@@ -123,9 +130,6 @@ type Mux interface {
 	BreakOut(p PaneID, label string, at int, focus bool) (WindowID, error)
 	// Respawn starts s again in pane p, ending what runs there.
 	Respawn(p PaneID, s Spawn) error
-	// KeepExited keeps pane p when its program exits, showing what (and
-	// how it exited) and hint.
-	KeepExited(p PaneID, what, hint string)
 	// Close ends pane p, and CloseWindow window w.
 	Close(p PaneID)
 	CloseWindow(w WindowID)

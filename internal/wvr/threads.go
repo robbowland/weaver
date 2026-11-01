@@ -134,7 +134,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // nofocus), nvim with nvimEnv too. Its window id.
 func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
-		Spawn: mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir, Keep: true},
+		Spawn: e.agentSpawn(tok, kind, dir),
 		Label: name, At: -1, Background: nofocus,
 	})
 	if err != nil {
@@ -632,13 +632,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	return nil
 }
 
-// keepExited keeps agent pane p when its agent exits, as its thread lasts
-// until you close it: what the agent said last (a broken install, a bad
-// flag, a goodbye) stays to be read, and the board shows it exited, R to
-// start it again, x to close the thread, rather than its pane going and
-// leaving nvim alone in the window.
-func (e *Env) keepExited(p mux.PaneID, kind agent.Kind) {
-	e.Mux().KeepExited(p, "weaver: "+string(kind)+" exited", "on the board, R starts it again, x closes the thread")
+// agentSpawn is a thread's agent pane (`wvr _agent tok kind`, in dir),
+// kept when its agent exits, as its thread lasts until you close it: what
+// the agent said last (a broken install, a bad flag, a goodbye) stays to be
+// read, and the board shows it exited, R to start it again, x to close the
+// thread, rather than its pane going and leaving nvim alone in the window.
+func (e *Env) agentSpawn(tok string, kind agent.Kind, dir string) mux.Spawn {
+	return mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir,
+		Keep: &mux.Exit{What: "weaver: " + string(kind) + " exited", Hint: "on the board, R starts it again, x closes the thread"}}
 }
 
 // AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
@@ -663,9 +664,6 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	paneNum, _ := atoi(string(pane))
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
-		if pane != "" {
-			e.keepExited(pane, kind)
-		}
 		w := agent.Command(kind, cmd, mode)
 		if len(w) == 0 {
 			return errors.New("no command for " + string(kind))

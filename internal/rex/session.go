@@ -90,7 +90,7 @@ func layout(sp mux.Spawn, label string) map[string]any {
 	if sp.Dir != "" {
 		opts["cwd"] = sp.Dir
 	}
-	if sp.Keep {
+	if sp.Keep != nil {
 		opts["exit"] = map[string]any{"on_completion": false}
 	}
 	b := map[string]any{"flavor": terminal + ".shell", "options": opts}
@@ -416,9 +416,6 @@ func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 	}
 	return nil
 }
-
-// KeepExited does nothing: a pane weaver keeps is made to stay (Keep).
-func (s Session) KeepExited(mux.PaneID, string, string) {}
 
 func (s Session) Close(p mux.PaneID) {
 	if b, err := s.block(p); err == nil {

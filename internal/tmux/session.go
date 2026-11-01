@@ -144,8 +144,20 @@ func (s Session) spawn(sp mux.Spawn) []string {
 	for _, v := range sp.Env {
 		args = append(args, "-e", v)
 	}
+	if sp.Keep != nil {
+		// Kept from inside the pane, before the program runs: from outside,
+		// after the pane is made, it could come too late for a program that
+		// ends at once.
+		args = append(args, "/bin/sh", "-c", keepThenRun, Text(sp.Keep.What)+
+			"#{?pane_dead_signal, on signal #{pane_dead_signal},#{?#{!=:#{pane_dead_status},0}, with status #{pane_dead_status},}}"+
+			" · "+Text(sp.Keep.Hint))
+	}
 	return append(args, sp.Argv...)
 }
+
+// keepThenRun, run by sh with its format as $0 and the program as its
+// arguments, keeps the pane it runs in when the program exits, then runs it.
+const keepThenRun = `tmux set-option -p -t "$TMUX_PANE" remain-on-exit on \; set-option -p -t "$TMUX_PANE" remain-on-exit-format "$0"; exec "$@"`
 
 func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, error) {
 	args := []string{"new-window"}
@@ -206,14 +218,6 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.W
 func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 	_, err := s.Run(append([]string{"respawn-pane", "-k", "-t", Target(p)}, s.spawn(sp)...)...)
 	return err
-}
-
-func (s Session) KeepExited(p mux.PaneID, what, hint string) {
-	t := Target(p)
-	s.Run("set-option", "-p", "-t", t, "remain-on-exit", "on", ";",
-		"set-option", "-p", "-t", t, "remain-on-exit-format", Text(what)+
-			"#{?pane_dead_signal, on signal #{pane_dead_signal},#{?#{!=:#{pane_dead_status},0}, with status #{pane_dead_status},}}"+
-			" · "+Text(hint))
 }
 
 func (s Session) Close(p mux.PaneID)         { s.Run("kill-pane", "-t", Target(p)) }

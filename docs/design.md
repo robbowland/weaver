@@ -330,12 +330,13 @@ after its session went leaves `resume` (the session id) there instead of
 `task`, and its agent's pane resumes: `claude --resume <session_id>`
 (the agent afresh when unknown), `codex resume <id>`. A thread closed
 before its nvim is recorded as bound is closed whole all the same: `close`
-finds that nvim as the pane started for its agent. Before it execs the
-agent, the pane sets its own `remain-on-exit on` (and a
-`remain-on-exit-format` naming the agent, its status, and R and x), so an
-agent that exits, cleanly or not (a broken install, a bad flag in
-`WEAVER_CLAUDE`), leaves what it said on its pane and its thread on the
-board, exited: `R` (`wvr restart`) starts its agent again in that pane on
+finds that nvim as the pane started for its agent. The pane is made to
+stay when its program exits (`Spawn.Keep`, naming the agent, and R and x):
+on tmux, it sets its own `remain-on-exit on` (and a `remain-on-exit-format`
+with those and its status) before `wvr _agent` runs, so an agent that
+exits, cleanly or not (a broken install, a bad flag in `WEAVER_CLAUDE`), or
+a `wvr _agent` that fails before it, leaves what it said on its pane and
+its thread on the board, exited: `R` (`wvr restart`) starts its agent again in that pane on
 its conversation (afresh when none is known), `x` closes the thread. A
 thread lasts until you close it, so its window never stays with nvim
 alone in it.
@@ -1049,8 +1050,10 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `env(1)`, Rex setting none: `WEAVER_MUX=rex`, and `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay
-  when its program exits (Rex is told as it is made; tmux by
-  `KeepExited`). A popup is a floating layer, its command `rex wait` on
+  when its program exits: Rex is told as it is made; on tmux the pane's
+  command is a `sh` that sets the pane's `remain-on-exit` from inside it,
+  then execs the program (set from outside, once the pane is made, it
+  would come too late for a program that ends at once). A popup is a floating layer, its command `rex wait` on
   it, made only when an app is attached to the session: otherwise `Popup`
   says false, makes nothing, and gives a command whose `Start` fails with
   why. `BreakOut` opens a window with a stand-in, moves the pane beside it

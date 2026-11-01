@@ -126,7 +126,7 @@ func TestSession(t *testing.T) {
 		t.Fatalf("home: %+v %v", ws, err)
 	}
 
-	w, p, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: true},
+	w, p, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: &mux.Exit{}},
 		Label: "01 demo", At: 1, Background: true})
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestSession(t *testing.T) {
 
 	// Started again, the agent is the same pane.
 	old, _ := s.block(p)
-	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: true}); err != nil {
+	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: &mux.Exit{}}); err != nil {
 		t.Fatal(err)
 	}
 	if now, _ := s.block(p); now == old || now == "" {
@@ -260,7 +260,7 @@ func TestRespawnNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.Respawn(p, mux.Spawn{Argv: []string{self, "-test.run=^TestRespawnedProgram$"},
-		Env: []string{"WVR_TEST_RESPAWNED=" + td}, Keep: true}); err != nil {
+		Env: []string{"WVR_TEST_RESPAWNED=" + td}, Keep: &mux.Exit{}}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; ; i++ {
@@ -299,7 +299,7 @@ func TestRespawnFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(u, 0o755) })
-	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: true}); err == nil {
+	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: &mux.Exit{}}); err == nil {
 		t.Fatal("Respawn kept no number, yet did not fail")
 	}
 	if err := os.Chmod(u, 0o755); err != nil {
