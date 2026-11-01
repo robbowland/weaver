@@ -1020,8 +1020,13 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `rex/lock`, never twice; `Respawn` points the pane's number at the block
   that takes its place, holding `rex/lock` from before that block is made
   until its number names it, so the program it starts, asking its number
-  however soon, gets the pane's; one that fails once the block is made
-  closes it and leaves the old pane as it was, its number and all. Beside
+  however soon, gets the pane's. The old block, until it has closed, is
+  retired (`u/<id>` holds `-`): no number, neither the pane's nor one of
+  its own, so its agent's last hooks, which would reset the new agent's
+  state under the pane's number, reach no pane (on tmux, `respawn-pane -k`
+  ends the old agent before it starts the new). One that fails once the
+  block is made closes it and leaves the old pane as it was, its number
+  and all. Beside
   them: `cmd/<num>` the argv weaver started a
   block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
   window was given (home 0, a thread its number, a view 900 and on: Rex

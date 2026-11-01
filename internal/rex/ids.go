@@ -24,28 +24,37 @@ import (
 //	view/<num>     the view window num shows
 //
 // A number is never given twice, and follows its block when weaver starts
-// another in its place (Respawn).
+// another in its place (Respawn); the block it leaves gets none again
+// (its u/<id> holds retired).
 type ids struct{ dir string }
+
+// retired is u/<id> of a block another took the number of (Respawn): it
+// is ending, and what it says as it does (an agent's last hooks) is no
+// pane's, neither the number's new block's nor one of its own.
+const retired = "-"
+
+var errRetired = errors.New("rex: a block replaced")
 
 func (r ids) path(kind, name string) string { return filepath.Join(r.dir, kind, name) }
 
 func fileName(id string) string { return strings.ReplaceAll(id, ":", "_") }
 
-// num is id's number, given it now if it has none.
+// num is id's number, given it now if it has none; none for a block
+// replaced (errRetired).
 func (r ids) num(id string) (string, error) {
 	if id == "" {
 		return "", errors.New("rex: no id")
 	}
-	if n, err := files.FirstLine(r.path("u", fileName(id))); err == nil && n != "" {
-		return n, nil
+	if n, ok, err := r.has(id); ok {
+		return n, err
 	}
 	unlock, err := r.lock()
 	if err != nil {
 		return "", err
 	}
 	defer unlock()
-	if n, err := files.FirstLine(r.path("u", fileName(id))); err == nil && n != "" {
-		return n, nil
+	if n, ok, err := r.has(id); ok {
+		return n, err
 	}
 	next := 1
 	if l, err := files.FirstLine(r.path("", "next")); err == nil {
@@ -66,10 +75,23 @@ func (r ids) num(id string) (string, error) {
 	return n, r.write("", "next", strconv.Itoa(next+1))
 }
 
+// has is what u/<id> says: id's number, or errRetired; false when it
+// says nothing.
+func (r ids) has(id string) (string, bool, error) {
+	n, err := files.FirstLine(r.path("u", fileName(id)))
+	switch {
+	case err != nil || n == "":
+		return "", false, nil
+	case n == retired:
+		return "", true, errRetired
+	}
+	return n, true, nil
+}
+
 // known is id's number when it has one; it gives none.
 func (r ids) known(id string) (string, bool) {
-	n, err := files.FirstLine(r.path("u", fileName(id)))
-	return n, err == nil && n != ""
+	n, ok, err := r.has(id)
+	return n, ok && err == nil
 }
 
 // id is what number n names.
@@ -85,8 +107,9 @@ func (r ids) id(n string) (string, bool) {
 // block started in the place of n's. The lock is held from before start
 // till n names the block, so its program, asking its number however soon
 // (num, which waits for the lock to give one), gets n, never one of its
-// own. When n cannot be kept for the block, drop closes it, and n names
-// the old block still: a failed replace leaves one block, the old.
+// own; the old block is retired. When n cannot be kept for the block, drop
+// closes it, and n names the old block still: a failed replace leaves one
+// block, the old.
 func (r ids) replace(n string, start func() (string, error), drop func(id string)) error {
 	unlock, err := r.lock()
 	if err != nil {
@@ -108,7 +131,7 @@ func (r ids) replace(n string, start func() (string, error), drop func(id string
 		return err
 	}
 	if had && old != id {
-		os.Remove(r.path("u", fileName(old)))
+		_ = r.write("u", fileName(old), retired)
 	}
 	return nil
 }
