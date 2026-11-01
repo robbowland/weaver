@@ -103,6 +103,12 @@ Multiplexers section with this.
   (`defaults export … | plutil -extract 'Workspace\.lastFocusedSession' raw
   -o - - | base64 -D`) — else keys land in whatever session the user has
   open (possibly the agent's own).
+- A fake agent lives only in the QA shell's `WEAVER_CLAUDE`: a thread
+  resumed from the board (a held or lost one) takes the board's agent
+  command ("now's", by design), which in a Rex block is the real `claude`.
+  Resume and restart fake threads from the QA shell (`wvr resume`, `wvr
+  restart`), not the board; if a real agent starts, end it by the pid the
+  block's `process` method gives, never by name.
 - Clean up QA sessions (`session.destroy`) and put the app back where it was
   (`rex do session.select session_id=…`).
 
