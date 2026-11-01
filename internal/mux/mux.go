@@ -117,8 +117,9 @@ type Mux interface {
 	// pid of its process, 0 when that is not known yet (Rex starts it
 	// through the user's shell).
 	SplitLeft(of PaneID, s NewSplit) (PaneID, int, error)
-	// BreakOut moves pane p to a window of its own, named label, at index at
-	// when at >= 0 (an error when that is taken); focus goes with it.
+	// BreakOut moves pane p to a window of its own in the session, named
+	// label, at index at when at >= 0 (an error when that is taken), else
+	// at its next free index; focus goes with it.
 	BreakOut(p PaneID, label string, at int, focus bool) (WindowID, error)
 	// Respawn starts s again in pane p, ending what runs there.
 	Respawn(p PaneID, s Spawn) error

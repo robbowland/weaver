@@ -191,12 +191,9 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 }
 
 func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.WindowID, error) {
-	args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", Target(p), "-n", Text(label)}
+	args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", Target(p), "-n", Text(label), "-t", s.at(at)}
 	if !focus {
 		args = append(args, "-d")
-	}
-	if at >= 0 {
-		args = append(args, "-t", s.at(at))
 	}
 	out, err := s.Run(args...)
 	if err != nil {
