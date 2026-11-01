@@ -86,6 +86,36 @@ func (e *Env) focusedPane() mux.PaneID {
 	return p
 }
 
+// agentWhere is the agent in pane p as weaver knows it (its state, else
+// its kind from its thread), the worktree it is in (its state's root, else
+// its directory, else its thread's worktree) and the file under it it was
+// last at, if any; false when weaver knows of no worktree it is in that is
+// there. Its nvim's reviews follow that worktree, so it is never a guess.
+func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, known bool) {
+	if s, err := store.ReadState(e.StateFile(p)); err == nil {
+		rec, root, file = s, s.Root, s.File
+		if root == "" {
+			root = s.Cwd
+		}
+	} else if t, err := store.ReadThread(e.ThreadFile(p)); err == nil {
+		rec.Agent, root = string(t.Agent), t.Worktree
+	}
+	if st, err := os.Stat(root); err != nil || !st.IsDir() {
+		return rec, "", "", false
+	}
+	// git gives the root as a real path; the agent may have used a
+	// symlinked one (/tmp vs /private/tmp), so compare real paths.
+	if file != "" && files.Exists(file) {
+		if d, err := filepath.EvalSymlinks(filepath.Dir(file)); err == nil {
+			file = d + "/" + filepath.Base(file)
+		}
+	}
+	if !strings.HasPrefix(file, root+"/") || !files.Exists(file) {
+		file = ""
+	}
+	return rec, root, file, true
+}
+
 // Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
 // focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
 func (e *Env) Edit(args []string) error {
@@ -127,28 +157,10 @@ func (e *Env) Edit(args []string) error {
 		}
 	} else {
 		e.MarkSeen(agentPane)
-		var rec agent.Record
-		root, file := "", ""
-		if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
-			rec, root, file = s, s.Root, s.File
-			if root == "" {
-				root = s.Cwd
-			}
-		} else if t, err := store.ReadThread(e.ThreadFile(agentPane)); err == nil {
-			rec.Agent, root = string(t.Agent), t.Worktree
-		}
-		if st, err := os.Stat(root); root == "" || err != nil || !st.IsDir() {
+		rec, root, file, known := e.agentWhere(agentPane)
+		if !known {
+			// nvim opens here, and an nvim open keeps the worktree it knew.
 			root, _ = os.Getwd()
-		}
-		// git gives the root as a real path; the agent may have used a
-		// symlinked one (/tmp vs /private/tmp), so compare real paths.
-		if file != "" && files.Exists(file) {
-			if d, err := filepath.EvalSymlinks(filepath.Dir(file)); err == nil {
-				file = d + "/" + filepath.Base(file)
-			}
-		}
-		if !strings.HasPrefix(file, root+"/") || !files.Exists(file) {
-			file = ""
 		}
 		unlock := e.editLock(agentPane)
 		// Fresh, now that no other press is opening an nvim for this agent.
@@ -158,7 +170,9 @@ func (e *Env) Edit(args []string) error {
 		// not answer: never a second one.
 		if p, ok := session.PaneIn(panes, nv); nv != "" && ok && !p.Exited {
 			unlock()
-			engine.Focus(e.Env, agentPane, rec, root)
+			if known {
+				engine.Focus(e.Env, agentPane, rec, root)
+			}
 			e.focus(nv)
 		} else {
 			argv := []string{e.Self, "nvim", string(agentPane)}

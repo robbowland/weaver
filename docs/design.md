@@ -80,7 +80,7 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed; point `agent`: an agent chain's tip moved |
-| `focus` | `root` | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): where the agent is, for the review keys |
+| `focus` | `root` | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): where the agent is, for the review keys, when weaver knows it |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
 
