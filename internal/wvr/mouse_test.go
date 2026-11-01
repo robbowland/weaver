@@ -30,9 +30,9 @@ func TestHintAct(t *testing.T) {
 	for key, want := range map[string]string{
 		"⏎": "trigger(enter)", "esc": "trigger(esc)", "?": "trigger(?)", "n": "trigger(n)",
 		"ctrl+r": "trigger(ctrl-r)", "ctrl+e": "trigger(ctrl-e)", "alt+r": "trigger(alt-r)", "alt+B": "trigger(alt-B)",
-		"shift+tab": "trigger(btab)", "ctrl+q": "execute-silent(tmux send-keys -K C-q)", "1-9": "", "↑↓": "",
+		"shift+tab": "trigger(btab)", "ctrl+q": "execute-silent(wvr _popup quit)", "1-9": "", "↑↓": "",
 	} {
-		if got := hintAct(key); got != want {
+		if got := hintAct(key, "wvr"); got != want {
 			t.Errorf("hintAct(%q) = %q, want %q", key, got, want)
 		}
 	}

@@ -985,7 +985,7 @@ func (e *Env) Items(args []string) error {
 		e.switchKind(src)
 		return nil
 	case "click":
-		fmt.Print(footClick(e.itemHints(src), 2))
+		fmt.Print(footClick(e.itemHints(src), 2, session.Quote(e.Self)))
 		return nil
 	case "menu":
 		e.rowMenu(e.itemMenu(src, ref))

@@ -52,24 +52,25 @@ func hintAt(hs []choice, gap, col int) (choice, bool) {
 }
 
 // hintAct is what fzf does for a click on a hint: what its key does ("" for
-// a hint that is no one key, as 1-9 and ↑↓ are). ctrl+q is tmux's (quit),
-// the rest fzf's own.
-func hintAct(key string) string {
+// a hint that is no one key, as 1-9 and ↑↓ are). ctrl+q is the
+// multiplexer's (quit, after asking: wvr, as q quotes it, on tmux or Rex
+// alike), the rest fzf's own.
+func hintAct(key, q string) string {
 	switch key {
 	case "1-9", "↑↓", "!", "…":
 		return ""
 	case "ctrl+q":
-		return "execute-silent(tmux send-keys -K C-q)"
+		return "execute-silent(" + q + " _popup quit)"
 	}
 	return "trigger(" + fzfKey(key) + ")"
 }
 
 // footClick is the action for a click on footer hs (gap apart), at fzf's
-// FZF_CLICK_FOOTER_COLUMN.
-func footClick(hs []choice, gap int) string {
+// FZF_CLICK_FOOTER_COLUMN; q quotes wvr.
+func footClick(hs []choice, gap int, q string) string {
 	col, _ := cli.EnvInt("FZF_CLICK_FOOTER_COLUMN")
 	if h, ok := hintAt(hs, gap, col); ok {
-		return hintAct(h.key) + "\n"
+		return hintAct(h.key, q) + "\n"
 	}
 	return ""
 }
@@ -79,15 +80,16 @@ func footClick(hs []choice, gap int) string {
 // welcome (title), its key line's; on the status line (status RANGE, the
 // range clicked), it goes there.
 func (e *Env) Click(args []string) {
+	q := session.Quote(e.Self)
 	switch firstArg(args) {
 	case "board":
-		fmt.Print(footClick(e.boardHints(), 2))
+		fmt.Print(footClick(e.boardHints(), 2, q))
 	case "title":
-		fmt.Print(welcomeClick(len(e.viewNames()) > 0, session.Quote(e.Self)))
+		fmt.Print(welcomeClick(len(e.viewNames()) > 0, q))
 	case "pick":
-		fmt.Print(footClick(pickHints, 3))
+		fmt.Print(footClick(pickHints, 3, q))
 	case "form":
-		fmt.Print(footClick(formHints(arg(args, 1)), 3))
+		fmt.Print(footClick(formHints(arg(args, 1)), 3, q))
 	case "status":
 		e.statusClick(arg(args, 1))
 	}
