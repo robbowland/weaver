@@ -13,13 +13,18 @@ import (
 	"strings"
 )
 
-// Bin is the rex command: on PATH, else where Rex's terminals say it is.
+// Bin is the rex command: the one Rex's terminals say is theirs
+// ($REX_BIN_DIR: the running server's own, whatever a login shell puts
+// first on PATH), else on PATH.
 func Bin() string {
+	if d := os.Getenv("REX_BIN_DIR"); d != "" {
+		p := filepath.Join(d, "rex")
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			return p
+		}
+	}
 	if p, err := exec.LookPath("rex"); err == nil {
 		return p
-	}
-	if d := os.Getenv("REX_BIN_DIR"); d != "" {
-		return filepath.Join(d, "rex")
 	}
 	return "rex"
 }

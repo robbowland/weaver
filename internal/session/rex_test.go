@@ -111,7 +111,7 @@ func TestRexLostAndGC(t *testing.T) {
 	if err := os.WriteFile(dir+"/bin/rex", []byte(wrap), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+"/bin:"+os.Getenv("PATH"))
+	t.Setenv("REX_BIN_DIR", dir+"/bin")
 
 	// Running: agents that died in its panes are left; one whose pane has
 	// gone is forgotten, not lost; a thread that has not reported, or

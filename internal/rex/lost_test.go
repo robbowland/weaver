@@ -42,7 +42,7 @@ esac
 	if err := os.WriteFile(dir+"/bin/rex", []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+"/bin:"+os.Getenv("PATH"))
+	t.Setenv("REX_BIN_DIR", dir+"/bin")
 	server, other := os.Getpid(), os.Getppid()
 	life := agent.Where{Server: server, Session: "session:a"}
 	listed := `{"sessions":[{"session_id":"session:a"}]}`
@@ -90,7 +90,7 @@ esac
 	if err := os.WriteFile(dir+"/bin/rex", []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+"/bin:"+os.Getenv("PATH"))
+	t.Setenv("REX_BIN_DIR", dir+"/bin")
 	t.Setenv("FAKE_PID", strconv.Itoa(os.Getpid()))
 	var a rex.Answer
 	if lost, known := a.Lost(agent.Where{Server: os.Getppid(), Session: "session:a"}); !lost || !known {

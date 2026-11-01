@@ -192,7 +192,7 @@ func TestRespawnNumber(t *testing.T) {
 	}
 	t.Setenv("WVR_TEST_REX", Bin())
 	t.Setenv("WVR_TEST_MARK", filepath.Join(td, "asking"))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("REX_BIN_DIR", bin)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -795,7 +795,6 @@ func logRex(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_BIN_DIR", dir)
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return log
 }
 
@@ -806,4 +805,24 @@ func windowOf(ws []mux.Window, w mux.WindowID) (mux.Window, bool) {
 		}
 	}
 	return mux.Window{}, false
+}
+
+// The rex weaver runs is the one Rex's terminals say is theirs
+// ($REX_BIN_DIR), ahead of any on PATH; when that has none, PATH's.
+func TestBin(t *testing.T) {
+	own, other := t.TempDir(), t.TempDir()
+	for _, d := range []string{own, other} {
+		if err := os.WriteFile(filepath.Join(d, "rex"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", other)
+	t.Setenv("REX_BIN_DIR", own)
+	if got := Bin(); got != filepath.Join(own, "rex") {
+		t.Errorf("with REX_BIN_DIR: %q, want its rex", got)
+	}
+	t.Setenv("REX_BIN_DIR", t.TempDir())
+	if got := Bin(); got != filepath.Join(other, "rex") {
+		t.Errorf("REX_BIN_DIR without a rex: %q, want PATH's", got)
+	}
 }
