@@ -423,7 +423,7 @@ func (e *Env) rows(plain bool) string {
 			g, key = groupReviews, strconv.Itoa(groupReviews)+key
 		}
 		pn, _ := strconv.Atoi(string(a.Pane))
-		r := boardRow{group: g, key: fmt.Sprintf("%s%08d", key, pn), pane: string(a.Pane), tab: string(a.Tab), glyph: glyph,
+		r := boardRow{group: g, key: fmt.Sprintf("%s%08d", key, pn), pane: string(a.Pane), tab: string(a.Window), glyph: glyph,
 			name: name, fact: fact, where: where, age: age(now - since), root: a.Root}
 		r.label = name + " · " + where + " · turn " + strconv.Itoa(a.Turn)
 		if a.Tnum > 0 {

@@ -47,9 +47,9 @@ func PaneIn(ps []mux.Pane, p mux.PaneID) (mux.Pane, bool) {
 type Row struct {
 	State                                                             agent.State
 	Pane                                                              mux.PaneID
-	Tab                                                               mux.WindowID
+	Window                                                            mux.WindowID
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
-	Tabname, Agent, Bgtasks, Ttask, Tname                             string
+	WindowName, Agent, Bgtasks, Ttask, Tname                          string
 	Since                                                             int64 // epoch s
 	Seen                                                              bool
 	Bg, Nsub, Turn                                                    int  // background tasks, subagents
@@ -145,7 +145,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case st0 == agent.StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = agent.StateInterrupted, true
 		}
-		r := Row{Pane: paneOfNum(s.Pane), Tab: p.Tab, State: agent.State(oneline.Line(string(st)))}
+		r := Row{Pane: paneOfNum(s.Pane), Window: p.Window, State: agent.State(oneline.Line(string(st)))}
 		r.Root = oneline.Line(s.Root)
 		if r.Root == "" {
 			r.Root = oneline.Line(s.Cwd)
@@ -190,7 +190,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			r.File = ""
 		}
 		r.Sid = oneline.Line(s.SessionID)
-		r.Tabname = oneline.Line(p.TabName)
+		r.WindowName = oneline.Line(p.WindowName)
 		r.Agent = oneline.Line(s.Agent)
 		r.Bgtasks = oneline.Line(s.BackgroundTasks)
 		r.Doing = oneline.Line(s.Doing)
@@ -225,9 +225,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if since == 0 {
 			since = now
 		}
-		rows = append(rows, Row{Pane: pane, Tab: p.Tab, State: agent.StateStarting,
+		rows = append(rows, Row{Pane: pane, Window: p.Window, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
-			Tabname: oneline.Line(p.TabName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
+			WindowName: oneline.Line(p.WindowName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
 			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}

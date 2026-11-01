@@ -19,17 +19,17 @@ type WindowID string
 
 // Pane is one pane of a session.
 type Pane struct {
-	ID       PaneID
-	Tab      WindowID
-	TabName  string
-	TabIndex int
-	Exited   bool
-	Cmd      string
-	W, H     int
-	X, Y     int
-	Title    string
-	Cwd      string
-	Focused  bool
+	ID          PaneID
+	Window      WindowID
+	WindowName  string
+	WindowIndex int
+	Exited      bool
+	Cmd         string
+	W, H        int
+	X, Y        int
+	Title       string
+	Cwd         string
+	Focused     bool
 }
 
 // Window is one window of a session: its place, its name, the view it

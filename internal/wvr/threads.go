@@ -1161,7 +1161,7 @@ func threadNvim(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 		return "", ""
 	}
 	for _, p := range panes {
-		if p.Tab == agent.Tab && p.ID != agent.ID &&
+		if p.Window == agent.Window && p.ID != agent.ID &&
 			(strings.HasSuffix(p.Cmd, " nvim --fresh "+string(agent.ID)) || strings.HasSuffix(p.Cmd, " nvim --thread "+tok)) {
 			return p.ID, tok
 		}
@@ -1210,7 +1210,7 @@ func (e *Env) Close(args []string) error {
 				found, n := mux.PaneID(""), 0
 				for _, p := range panes {
 					id := p.ID
-					if p.Tab == me.Tab && (files.Exists(e.StateFile(id)) || files.Exists(e.ThreadFile(id))) {
+					if p.Window == me.Window && (files.Exists(e.StateFile(id)) || files.Exists(e.ThreadFile(id))) {
 						found, n = id, n+1
 					}
 				}
@@ -1239,13 +1239,13 @@ func (e *Env) Close(args []string) error {
 		st, pid, start = s.State, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart)
 		title, kind = oneline.Line(s.Title), oneline.Line(s.Agent)
 	}
-	tab := byID[agentPane].Tab
+	tab := byID[agentPane].Window
 	// The window's other panes, which close must leave alone (and which
 	// keep it open).
 	others := false
 	for _, p := range panes {
 		id := p.ID
-		if p.Tab == tab && id != agentPane && id != nv && !strings.HasSuffix(p.Cmd, " sidebar") {
+		if p.Window == tab && id != agentPane && id != nv && !strings.HasSuffix(p.Cmd, " sidebar") {
 			others = true
 		}
 	}
@@ -1374,7 +1374,7 @@ func (e *Env) Close(args []string) error {
 	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
 	// Closing the last panes of the window closes it, and any popup in it:
 	// when this runs in one, finish from outside it.
-	if me, ok := byID[e.MyPane]; !others && ok && me.Tab == tab {
+	if me, ok := byID[e.MyPane]; !others && ok && me.Window == tab {
 		os.MkdirAll(e.StateDir, 0o755)
 		// Out of this pane's session, and deaf to the hangup its closing
 		// sends.
@@ -1406,7 +1406,7 @@ func (e *Env) CloseTail(a []string) error {
 	// whichever window tmux would show next.
 	ps, _ := e.Mux().Panes()
 	if ap, ok := session.PaneIn(ps, agent); ok {
-		if _, cur, home := e.where(); cur.ID == ap.Tab && home != ap.Tab {
+		if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window {
 			e.selectHome(home)
 		}
 	}

@@ -39,10 +39,10 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 func (e *Env) threadWidth(agent mux.PaneID) {
 	ps, _ := e.Mux().Panes()
 	ap, ok := session.PaneIn(ps, agent)
-	if !ok || len(windowPanes(ps, ap.Tab)) != 2 {
+	if !ok || len(windowPanes(ps, ap.Window)) != 2 {
 		return
 	}
-	total, ok := e.windowWidth(ap.Tab)
+	total, ok := e.windowWidth(ap.Window)
 	if !ok {
 		return
 	}

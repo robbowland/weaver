@@ -87,10 +87,10 @@ func TestSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, ok := paneIn(ps, p); !ok || a.Tab != w || a.TabIndex != 1 || a.Cmd != "/bin/cat" || a.Exited {
+	if a, ok := paneIn(ps, p); !ok || a.Window != w || a.WindowIndex != 1 || a.Cmd != "/bin/cat" || a.Exited {
 		t.Errorf("agent pane: %+v %v", a, ok)
 	}
-	if n, ok := paneIn(ps, nv); !ok || n.Tab != w || n.Title != "nvim: demo" {
+	if n, ok := paneIn(ps, nv); !ok || n.Window != w || n.Title != "nvim: demo" {
 		t.Errorf("nvim pane: %+v %v", n, ok)
 	}
 
@@ -138,7 +138,7 @@ func TestSession(t *testing.T) {
 		t.Errorf("respawned pane names %q (was %q)", now, old)
 	}
 	ps, _ = s.Panes()
-	if a, ok := paneIn(ps, p); !ok || a.Tab != w || a.Cmd != "/bin/sleep 600" {
+	if a, ok := paneIn(ps, p); !ok || a.Window != w || a.Cmd != "/bin/sleep 600" {
 		t.Errorf("respawned: %+v %v", a, ok)
 	}
 
@@ -252,7 +252,7 @@ func TestRespawnFails(t *testing.T) {
 	}
 	var in []mux.PaneID
 	for _, x := range ps {
-		if x.Tab == w {
+		if x.Window == w {
 			in = append(in, x.ID)
 		}
 	}
@@ -773,10 +773,10 @@ func TestBreakOut(t *testing.T) {
 		t.Errorf("its window: %+v %v, said %d wide", o, ok, width)
 	}
 	ps, _ := s.Panes()
-	if x, ok := paneIn(ps, q); !ok || x.Tab != out {
+	if x, ok := paneIn(ps, q); !ok || x.Window != out {
 		t.Errorf("the pane broken out: %+v %v, want in %q", x, ok, out)
 	}
-	if x, ok := paneIn(ps, p); !ok || x.Tab != w {
+	if x, ok := paneIn(ps, p); !ok || x.Window != w {
 		t.Errorf("the pane left: %+v %v, want in %q", x, ok, w)
 	}
 }

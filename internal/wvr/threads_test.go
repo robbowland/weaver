@@ -16,12 +16,12 @@ import (
 // the agent's token).
 func TestThreadNvimByToken(t *testing.T) {
 	panes := []mux.Pane{
-		{ID: "4", Tab: "2", Cmd: "/bin/weaver nvim --thread 123"},
-		{ID: "5", Tab: "3", Cmd: "/bin/weaver nvim --thread 456"},
-		{ID: "6", Tab: "3", Cmd: "/bin/weaver _agent 456 claude"},
-		{ID: "7", Tab: "3", Cmd: "fish"},
-		{ID: "10", Tab: "4", Cmd: "/bin/weaver nvim --fresh 11"},
-		{ID: "11", Tab: "4", Cmd: "/bin/weaver _agent 789 claude"},
+		{ID: "4", Window: "2", Cmd: "/bin/weaver nvim --thread 123"},
+		{ID: "5", Window: "3", Cmd: "/bin/weaver nvim --thread 456"},
+		{ID: "6", Window: "3", Cmd: "/bin/weaver _agent 456 claude"},
+		{ID: "7", Window: "3", Cmd: "fish"},
+		{ID: "10", Window: "4", Cmd: "/bin/weaver nvim --fresh 11"},
+		{ID: "11", Window: "4", Cmd: "/bin/weaver _agent 789 claude"},
 	}
 	if nv, tok := threadNvim(panes, panes[2]); nv != "5" || tok != "456" {
 		t.Errorf("got %q %q, want 5 456", nv, tok)
@@ -31,10 +31,10 @@ func TestThreadNvimByToken(t *testing.T) {
 	}
 	// Another window's nvim is not its own, nor is any pane of an agent
 	// weaver did not start.
-	if nv, _ := threadNvim(panes, mux.Pane{ID: "8", Tab: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, mux.Pane{ID: "8", Window: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
 		t.Errorf("another window's nvim: got %q", nv)
 	}
-	if nv, _ := threadNvim(panes, mux.Pane{ID: "9", Tab: "3", Cmd: "claude"}); nv != "" {
+	if nv, _ := threadNvim(panes, mux.Pane{ID: "9", Window: "3", Cmd: "claude"}); nv != "" {
 		t.Errorf("not a thread's agent: got %q", nv)
 	}
 }

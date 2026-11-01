@@ -154,7 +154,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 	if !ok {
 		return ""
 	}
-	tab := ap.Tab
+	tab := ap.Window
 	nv := e.NvimPane(p)
 	ws, _ := e.Mux().Windows()
 	win, _ := windowIn(ws, tab)

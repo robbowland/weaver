@@ -57,7 +57,7 @@ func isHome(w mux.Window) bool { return w.Name == homeName && w.View == "" }
 func windowPanes(ps []mux.Pane, w mux.WindowID) []mux.PaneID {
 	var in []mux.PaneID
 	for _, q := range ps {
-		if q.Tab == w {
+		if q.Window == w {
 			in = append(in, q.ID)
 		}
 	}
@@ -179,7 +179,7 @@ func (e *Env) Peek(args []string) error {
 func (e *Env) agentIn(w mux.WindowID) mux.PaneID {
 	panes, _ := e.Panes()
 	for _, p := range panes {
-		if p.Tab == w && e.agentOf(p.ID) == p.ID {
+		if p.Window == w && e.agentOf(p.ID) == p.ID {
 			return p.ID
 		}
 	}
@@ -393,7 +393,7 @@ func (e *Env) Next() {
 		} else {
 			l += " · done"
 		}
-		cs = append(cs, c{class, r.Since, r.Pane, r.Tab, l})
+		cs = append(cs, c{class, r.Since, r.Pane, r.Window, l})
 	}
 	if len(cs) == 0 {
 		if cli.IsTTY(1) {

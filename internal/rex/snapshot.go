@@ -246,7 +246,7 @@ func (s Session) panesOf(sn snapshot) []mux.Pane {
 				continue
 			}
 			i := sn.Blocks[b.ID]
-			p := mux.Pane{ID: mux.PaneID(n), Tab: mux.WindowID(wn), TabName: w.Label, TabIndex: s.place(wn),
+			p := mux.Pane{ID: mux.PaneID(n), Window: mux.WindowID(wn), WindowName: w.Label, WindowIndex: s.place(wn),
 				Cmd: s.ids().noted("cmd", n), Title: b.Label, Cwd: cwdOf(i),
 				Focused: w.ID == sn.View.Active && w.Focused == b.ID}
 			if i.Size != nil {

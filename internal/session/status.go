@@ -225,8 +225,8 @@ func (e *Env) threadTabLabels(rows []Row) {
 	panes, _ := e.Panes()
 	names := map[string]bool{}
 	for _, p := range panes {
-		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.TabName)
-		names[string(p.Tab)+"\t"+n] = true
+		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.WindowName)
+		names[string(p.Window)+"\t"+n] = true
 	}
 	for _, r := range rows {
 		if r.Pane == "" || r.Tnum == 0 {
@@ -240,10 +240,10 @@ func (e *Env) threadTabLabels(rows []Row) {
 			l = r.Prompt
 		}
 		label := ThreadLabel(r.Tnum, l, r.Root)
-		if names[string(r.Tab)+"\t"+label] {
+		if names[string(r.Window)+"\t"+label] {
 			continue
 		}
-		e.Mux().Label(r.Tab, label)
+		e.Mux().Label(r.Window, label)
 	}
 }
 
