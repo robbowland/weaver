@@ -496,8 +496,9 @@ function M.poke()
   end, 500)
 end
 
-function M.active()
-  return state ~= nil
+-- The worktree the review in place is of, while it is on.
+function M.root()
+  return state and state.root or nil
 end
 
 function M.setup()

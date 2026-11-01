@@ -198,9 +198,16 @@ function M.changes(scope)
   end
 end
 
+-- The repository :AgentReviewed marks: the one you are reviewing, in a view
+-- (from any tab) or in place, not one the agent has moved to since; else
+-- the one a review would be of.
+local function reviewed_root()
+  return dv.open_root() or require('weaver.inplace').root() or M.root()
+end
+
 -- :AgentReviewed
 function M.mark_reviewed()
-  local root = M.root()
+  local root = reviewed_root()
   local bin = util.weaver_bin()
   if not root or not bin then
     util.msg(root and 'cannot find weaver' or 'not in a git repository', util.WARN)

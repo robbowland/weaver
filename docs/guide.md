@@ -485,6 +485,8 @@ back, refreshed; pressing it inside the view closes it; and another scope's
 key replaces it. The view refreshes itself as the agent edits. A review is of
 the worktree the agent, or one of its subagents, last edited, whatever
 Neovim's directory; inside the view, a key works on the view's worktree.
+`:AgentReviewed` marks the worktree you are reviewing, from any tab: the open
+view's, else the one reviewed in place, else the agent's.
 
 | Key | Command | Shows |
 | --- | --- | --- |

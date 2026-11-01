@@ -193,5 +193,26 @@ T.run(function()
   C.cmd('AgentReview uncommitted')
   T.ok("another worktree: the review is of the agent's", shows({ 'M app.txt' }), { 'M app.txt' })
 
+  -- :AgentReviewed from another tab marks the worktree the open view is of,
+  -- not the one the agent has moved to since, and the view stays on it.
+  local function reviewed(root)
+    return vim.trim(vim.system({ 'git', '-C', root, 'rev-parse', '-q', '--verify', 'refs/worktree/weaver/reviewed' }, { text = true }):wait().stdout or '')
+  end
+  C.cmd('tabfirst')
+  C.event({ ev = 'edit', root = R.a, file = R.a .. '/src/other.txt', sid = sid })
+  C.cmd('AgentReview reviewed')
+  T.ok('a review of worktree a, since its mark', shows({ 'M other.txt' }), { 'M other.txt' })
+  local mark_a = reviewed(R.a)
+  C.cmd('tabfirst')
+  C.event({ ev = 'edit', root = R.b, file = R.b .. '/src/app.txt', sid = sid })
+  C.cmd('AgentReviewed')
+  T.wait(5000, function() return reviewed(R.a) ~= mark_a end)
+  T.ok(
+    "AgentReviewed from another tab: the view's worktree, not the agent's",
+    { reviewed(R.a) ~= mark_a, reviewed(R.b), shows({}) },
+    { true, '', {} }
+  )
+  T.ok('...the view stays on it', C.lua("return require('weaver.diffview').open_root()"), R.a)
+
   C.close()
 end)

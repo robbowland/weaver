@@ -383,12 +383,22 @@ function M.refresh()
   end
 end
 
+local function root_of(view)
+  return util.real(view.adapter.ctx.toplevel)
+end
+
 -- The view's repository when you are in it, else nil.
 function M.view_root()
   local cur = M.current()
   if cur and cur.tabpage == api.nvim_get_current_tabpage() then
-    return util.real(cur.adapter.ctx.toplevel)
+    return root_of(cur)
   end
+end
+
+-- The open view's repository, from any tab; nil with none open.
+function M.open_root()
+  local cur = M.current()
+  return cur and root_of(cur) or nil
 end
 
 -- gf: the file in the tab you came from -----------------------------------------
