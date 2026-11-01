@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -86,14 +87,22 @@ func (e *Env) Start(name string) error {
 // none made while Rex does not answer; the husk ended), then shown in
 // the Rex app, which it can be only with Remote Control on in Rex's
 // settings (else wvr says where it is). Weaver's keys for Rex are written
-// each time (~/.config/rex/weaver.lua) for init.lua to load.
+// each time (weaver.lua beside Rex's init.lua) for init.lua to load, and
+// Rex told to read its configuration again when they are new to it.
 func (e *Env) startRex(name string) error {
 	e.SelfSetup()
-	keys, loaded, err := e.writeRexKeys()
-	if err != nil {
+	keys, loads, changed, err := e.writeRexKeys()
+	switch {
+	case err != nil:
 		fmt.Fprintln(os.Stderr, "weaver: could not write weaver's keys for Rex: "+err.Error())
-	} else if !loaded {
+	case !loads:
 		fmt.Fprintf(os.Stderr, "weaver: for its keys, add require(\"weaver\") to %s, then run rex config reload\n", tildify(filepath.Join(filepath.Dir(keys), "init.lua")))
+	case changed || !rex.KeysLoaded():
+		// Rex reads its configuration only when told: one read before
+		// weaver.lua was there (or was this) has none of its keys.
+		if err := rex.ReloadConfig(); err != nil {
+			fmt.Fprintln(os.Stderr, "weaver: Rex did not read weaver's keys: run rex config reload ("+err.Error()+")")
+		}
 	}
 	here, _ := os.Getwd()
 	s, husk, err := rex.Ensure(e.RexDir(), name, here, []string{e.Self, "home"}, func() error {
@@ -124,33 +133,55 @@ func (e *Env) startRex(name string) error {
 }
 
 // writeRexKeys writes weaver's keys for Rex (config/rex.lua, run by this
-// wvr) to weaver.lua beside Rex's init.lua: its path, and whether init.lua
-// loads it.
-func (e *Env) writeRexKeys() (string, bool, error) {
+// wvr) to weaver.lua beside the init.lua Rex reads ($REX_CONFIG, else
+// rex/init.lua in the configuration directory): its path, whether init.lua
+// loads it, and whether it was not already as written.
+func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	dir, err := setup.Runtime()
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	src, err := os.ReadFile(dir + "/config/rex.lua")
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
-	conf := os.Getenv("XDG_CONFIG_HOME")
-	if conf == "" {
-		conf = os.Getenv("HOME") + "/.config"
+	init := os.Getenv("REX_CONFIG")
+	if init == "" {
+		conf := os.Getenv("XDG_CONFIG_HOME")
+		if conf == "" {
+			conf = os.Getenv("HOME") + "/.config"
+		}
+		init = filepath.Join(conf, "rex", "init.lua")
 	}
-	f := filepath.Join(conf, "rex", "weaver.lua")
+	f = filepath.Join(filepath.Dir(init), "weaver.lua")
 	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
-		return f, false, err
+		return f, false, false, err
 	}
 	// Inside Lua strings: a path's \ and " escaped.
 	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace
 	keys := strings.NewReplacer("@WVR@", lua(e.Self), "@SESSIONS@", lua(e.RexDir()+"/sessions")).Replace(string(src))
-	if err := store.WriteAtomic(f, []byte(keys)); err != nil {
-		return f, false, err
+	if old, err := os.ReadFile(f); err != nil || string(old) != keys {
+		if err := store.WriteAtomic(f, []byte(keys)); err != nil {
+			return f, false, false, err
+		}
+		changed = true
 	}
-	init, _ := os.ReadFile(filepath.Join(filepath.Dir(f), "init.lua"))
-	return f, strings.Contains(string(init), `require("weaver")`) || strings.Contains(string(init), `require "weaver"`), nil
+	b, _ := os.ReadFile(init)
+	return f, loadsWeaver(string(b)), changed, nil
+}
+
+// reRequireWeaver is a Lua require of weaver: require("weaver"), require
+// "weaver", pcall(require, "weaver"), with either quote.
+var reRequireWeaver = regexp.MustCompile(`\brequire[\s(,]*["']weaver["']`)
+
+// loadsWeaver: does init.lua (its text) load weaver.lua? Not in a comment.
+func loadsWeaver(init string) bool {
+	for _, l := range strings.Split(init, "\n") {
+		if code, _, _ := strings.Cut(l, "--"); reRequireWeaver.MatchString(code) {
+			return true
+		}
+	}
+	return false
 }
 
 // Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,

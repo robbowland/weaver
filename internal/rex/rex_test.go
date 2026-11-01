@@ -894,3 +894,32 @@ func TestRestoredAcrossABoot(t *testing.T) {
 		t.Error("made since, its server not known: restored")
 	}
 }
+
+// A server that read init.lua before weaver.lua was there binds none of
+// weaver's keys until it reads its configuration again.
+func TestKeysLoaded(t *testing.T) {
+	at, err := os.MkdirTemp("/tmp", "wvr-rex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(at) })
+	if err := os.WriteFile(filepath.Join(at, "init.lua"), []byte("pcall(require, \"weaver\")\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rextest.ServerAt(t, Bin(), at)
+	if KeysLoaded() {
+		t.Fatal("keys loaded before weaver.lua was written")
+	}
+	if err := os.WriteFile(filepath.Join(at, "weaver.lua"), []byte("rex.bind(\"alt+y\", function() return true end)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if KeysLoaded() {
+		t.Error("keys loaded without Rex reading its configuration again")
+	}
+	if err := ReloadConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if !KeysLoaded() {
+		t.Error("keys not loaded after ReloadConfig")
+	}
+}

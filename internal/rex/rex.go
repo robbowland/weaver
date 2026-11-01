@@ -29,6 +29,35 @@ func Bin() string {
 	return "rex"
 }
 
+// KeysLoaded: does the Rex server's configuration bind weaver's keys (one
+// of weaver.lua's bindings in its keymap)? A server that read init.lua
+// before weaver.lua was there has none: init.lua's require of it failed,
+// and Rex reads its configuration again only when told (ReloadConfig).
+// False when Rex does not say.
+func KeysLoaded() bool {
+	var k struct {
+		Bindings []struct {
+			Source string `json:"source"`
+		} `json:"bindings"`
+	}
+	if call("client.keymap", map[string]any{}, &k) != nil {
+		return false
+	}
+	for _, b := range k.Bindings {
+		if strings.HasPrefix(b.Source, "weaver.lua:") {
+			return true
+		}
+	}
+	return false
+}
+
+// ReloadConfig has the Rex server read its configuration again, and every
+// client fetch its keys again.
+func ReloadConfig() error {
+	_, err := run("config", "reload")
+	return err
+}
+
 // rexCmd is rex with args, on the server $REX_SERVER names (else Rex's
 // own), never starting one.
 func rexCmd(args ...string) *exec.Cmd {

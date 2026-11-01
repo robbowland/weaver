@@ -62,3 +62,21 @@ func TestAgentWhere(t *testing.T) {
 		}
 	}
 }
+
+// Rex's init.lua loads weaver's keys however it requires them, but not
+// from a comment.
+func TestLoadsWeaver(t *testing.T) {
+	for init, want := range map[string]bool{
+		`require("weaver")`:                  true,
+		`require "weaver"`:                   true,
+		`pcall(require, "weaver")`:           true,
+		`local ok = pcall(require,'weaver')`: true,
+		`-- pcall(require, "weaver")`:        false,
+		`require("weaver_extra")`:            false,
+		`rex.bind("cmd+d", "pane.split")`:    false,
+	} {
+		if got := loadsWeaver("x = 1\n" + init + "\n"); got != want {
+			t.Errorf("loadsWeaver(%q) = %v, want %v", init, got, want)
+		}
+	}
+}

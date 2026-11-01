@@ -69,9 +69,12 @@ func ServerAt(t testing.TB, bin, dir string) (stop func()) {
 		t.Setenv("REX_SERVER", "unix://"+filepath.Join(d, "s.sock"))
 	}
 	state := filepath.Join(d, "state")
+	// Its configuration: the test's own init.lua in dir, else none.
 	conf := filepath.Join(d, "init.lua")
-	if err := os.WriteFile(conf, []byte("-- nothing\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(conf); err != nil {
+		if err := os.WriteFile(conf, []byte("-- nothing\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	run := os.Getenv("REX_RUNTIME_DIR")
 	// Its blocks have the server's environment, REX_SERVER and all.

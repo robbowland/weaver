@@ -18,13 +18,15 @@ unset TMUX TMUX_PANE WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
 # Rex keeps a server's runtime files under REX_RUNTIME_DIR: here, never in
 # your Rex's directory, and rex never falls back to your server.
 for v in $(compgen -e | grep '^REX_' | grep -v '^REX_BIN_DIR$'); do unset "$v"; done
-export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock WEAVER_MUX=rex WEAVER_SESSION=$S
+export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock REX_CONFIG=$AT/init.lua WEAVER_MUX=rex WEAVER_SESSION=$S
 export XDG_STATE_HOME=$AT/state XDG_CONFIG_HOME=$AT/config XDG_DATA_HOME=$AT/data CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_VIEWS= WEAVER_SELF_SETUP=0 EDITOR=nvim VISUAL=nvim TERM=xterm-256color
 [ -f "$HERE/nvim/init.lua" ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
 SD=$XDG_STATE_HOME/weaver
 mkdir -p "$AT/bin" "$SD" "$AT/claude/sessions" "$XDG_CONFIG_HOME"
-printf -- '-- nothing\n' >"$AT/init.lua"
+# Rex's configuration loads weaver's keys, as the guide says, from before
+# wvr has first written them (the server reads it as it starts).
+printf 'pcall(require, "weaver")\n' >"$AT/init.lua"
 # A fake agent: notes its arguments and pid by its block, then waits as a shell.
 cat >"$AT/bin/claude" <<EOF
 #!/bin/bash
@@ -90,15 +92,15 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 		echo "  home shows:"
 		R capture -s "$SID" -b "$(view | jq -r '.windows[0].layers[0].blocks[0].block_id')" --trim | sed 's/^/  | /'
 	}
-ok "start: weaver's keys for Rex, written for init.lua to load" \
-	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$XDG_CONFIG_HOME/rex/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")" "1|1"
+ok "start: weaver's keys written beside Rex's init.lua, and Rex told to read them" \
+	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|9"
 
 # --- wvr --rex in a Rex session weaver did not make (any Rex terminal's):
 # weaver's session, shown, never a board of that one
 OTHER=$(R api call session.create '{"label":"other"}' | jq -r .session_id)
 REX_SESSION=$OTHER perl -e 'alarm 10; exec @ARGV' wvr --rex >"$AT/other.out" 2>&1
 ok "start in another Rex session: weaver's shown, no second one, no board there" \
-	"$(sid | wc -l | tr -d ' ')|$(ls /tmp/weaver-$(id -u)/rex-*.fzf.*.sock 2>/dev/null | wc -l | tr -d ' ')|$(grep -c "the $S session runs in Rex" "$AT/other.out")" \
+	"$(sid | wc -l | tr -d ' ')|$(ls /tmp/weaver-$(id -u)/rex-$S.fzf.*.sock /tmp/weaver-$(id -u)/rex-${OTHER#session:}.fzf.*.sock 2>/dev/null | wc -l | tr -d ' ')|$(grep -c "the $S session runs in Rex" "$AT/other.out")" \
 	"1|1|1" || sed 's/^/  other: /' "$AT/other.out"
 R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
 
