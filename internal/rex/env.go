@@ -166,23 +166,35 @@ func Named(dir, name string) (Session, bool, error) {
 }
 
 // Ensure is weaver's Rex session name, running: the one weaver made, else
-// one made now (prepare, then Start). One weaver at a time asks and makes,
-// so two started at once make one session; none is made while Rex does
-// not answer whether one runs.
-func Ensure(dir, name, here string, home []string, prepare func() error) (Session, error) {
+// one made now (prepare, then Start). One Rex restored after its server
+// restarted (Restored) is made again, and the old one given back, a husk
+// for the caller to end once the new one shows (the caller may be running
+// in it). One weaver at a time asks and makes, so two started at once
+// make one session; none is made while Rex does not answer whether one
+// runs.
+func Ensure(dir, name, here string, home []string, prepare func() error) (s Session, husk *Session, err error) {
 	unlock, err := ids{dir}.lockOn("start")
 	if err != nil {
-		return Session{}, err
+		return Session{}, nil, err
 	}
 	defer unlock()
 	s, running, err := Named(dir, name)
-	if err != nil || running {
-		return s, err
+	switch {
+	case err != nil:
+		return Session{}, nil, err
+	case running && !s.Restored():
+		return s, nil, nil
+	case running:
+		old := s
+		husk = &old
 	}
 	if err := prepare(); err != nil {
-		return Session{}, err
+		return Session{}, nil, err
 	}
-	return Start(dir, name, here, home)
+	if s, err = Start(dir, name, here, home); err != nil {
+		return s, nil, err
+	}
+	return s, husk, nil
 }
 
 // Start makes weaver's Rex session name, home (argv, in dir here) its
@@ -204,7 +216,7 @@ func Start(dir, name, here string, home []string) (Session, error) {
 		return Session{}, errors.New("rex: no session made")
 	}
 	s := Session{ID: out.ID, Name: name, Dir: dir}
-	if err := s.ids().made(out.ID, name, time.Now().Unix()); err != nil {
+	if err := s.ids().made(out.ID, name, time.Now(), serverPID()); err != nil {
 		return s, err
 	}
 	if n, err := s.ids().num(out.Windows[0].Window); err == nil {

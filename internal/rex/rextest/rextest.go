@@ -49,17 +49,33 @@ var stopWait = 10 * time.Second
 // killed.
 func Server(t testing.TB, bin string) (stop func()) {
 	t.Helper()
+	return ServerAt(t, bin, "")
+}
+
+// ServerAt is Server in dir (empty: a directory of its own), its socket,
+// runtime files and state there: one started again in the same dir is at
+// the same endpoint, and finds the sessions the last one there saved as
+// it stopped (Rex keeps them by endpoint). dir's path must be short, as a
+// socket's is.
+func ServerAt(t testing.TB, bin, dir string) (stop func()) {
+	t.Helper()
 	if _, err := exec.LookPath(bin); err != nil {
 		t.Skip("rex is not installed")
 	}
 	d := NoRex(t)
+	if dir != "" {
+		d = dir
+		t.Setenv("REX_RUNTIME_DIR", filepath.Join(d, "run"))
+		t.Setenv("REX_SERVER", "unix://"+filepath.Join(d, "s.sock"))
+	}
+	state := filepath.Join(d, "state")
 	conf := filepath.Join(d, "init.lua")
 	if err := os.WriteFile(conf, []byte("-- nothing\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run := os.Getenv("REX_RUNTIME_DIR")
 	// Its blocks have the server's environment, REX_SERVER and all.
-	srv := exec.Command(bin, "server", "run", "--listen", os.Getenv("REX_SERVER"), "--state-dir", filepath.Join(d, "state"), "--config", conf)
+	srv := exec.Command(bin, "server", "run", "--listen", os.Getenv("REX_SERVER"), "--state-dir", state, "--config", conf)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}

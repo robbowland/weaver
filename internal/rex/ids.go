@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/robbowland/weaver/internal/files"
 )
@@ -152,15 +153,19 @@ func (r ids) noted(kind, n string) string {
 }
 
 // session is weaver's name for Rex session id, and when weaver made it,
-// when weaver made it (sessions/<id>: the name, then the time).
-func (r ids) session(id string) (string, int64, bool) {
+// in epoch seconds to the millisecond (made; whole seconds in older
+// records).
+func (r ids) session(id string) (string, float64, bool) {
 	b, err := os.ReadFile(r.path("sessions", fileName(id)))
 	if err != nil {
 		return "", 0, false
 	}
-	name, made, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
-	t, _ := strconv.ParseInt(made, 10, 64)
-	return name, t, name != ""
+	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
+	var t float64
+	if len(ls) > 1 {
+		t, _ = strconv.ParseFloat(ls[1], 64)
+	}
+	return ls[0], t, ls[0] != ""
 }
 
 // named is the Rex session weaver made last for name.
@@ -180,7 +185,7 @@ func (r ids) keyed(skey string) (string, string, bool) {
 func (r ids) latest(match func(name string) bool) (string, string, bool) {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	var best, bestName string
-	var at int64 = -1
+	at := -1.0
 	for _, d := range ents {
 		id := strings.Replace(d.Name(), "_", ":", 1)
 		if n, made, ok := r.session(id); ok && match(n) && made > at {
@@ -190,8 +195,25 @@ func (r ids) latest(match func(name string) bool) (string, string, bool) {
 	return best, bestName, best != ""
 }
 
-func (r ids) made(id, name string, at int64) error {
-	return r.write("sessions", fileName(id), name+"\n"+strconv.FormatInt(at, 10))
+// made records session id as weaver's, named name, made at, on the server
+// whose pid is server (sessions/<id>: the name, the time in epoch seconds
+// to the millisecond, so the later of two made in one second is told,
+// and the pid).
+func (r ids) made(id, name string, at time.Time, server int) error {
+	t := strconv.FormatFloat(float64(at.UnixMilli())/1000, 'f', 3, 64)
+	return r.write("sessions", fileName(id), name+"\n"+t+"\n"+strconv.Itoa(server))
+}
+
+// server is the pid of the server weaver made session id on; 0 when not
+// known (a record from before weaver kept it).
+func (r ids) server(id string) int {
+	b, _ := os.ReadFile(r.path("sessions", fileName(id)))
+	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(ls) < 3 {
+		return 0
+	}
+	n, _ := strconv.Atoi(ls[2])
+	return n
 }
 
 func (r ids) write(kind, name, v string) error {

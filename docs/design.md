@@ -1033,7 +1033,13 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   window was given (home 0, a thread its number, a view 900 and on: Rex
   orders windows, it does not index them, so `Place` moves a window before
   the first placed further on), `view/<num>` its view, and
-  `sessions/<id>` the name weaver gave a session it made, and when.
+  `sessions/<id>` the name weaver gave a session it made, when (epoch
+  seconds to the millisecond) and the pid of the server it made it on.
+  Rex saves its sessions as its server stops and brings them back when
+  one starts again at that endpoint, ids and all, with a fresh shell in
+  each terminal; one whose server is not the one weaver made it on is such
+  a husk (`Restored`): `rex.Ensure` makes it again and gives it back for
+  `wvr` to end once the new one shows, and `wvr` in one starts again.
 - **Keys:** files are keyed `tmux-<name>` or `rex-<name>`; a Rex session
   weaver did not make is named by its id.
 - **Where:** on Rex, `agent.Where` is the Rex server's pid and the

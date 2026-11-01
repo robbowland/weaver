@@ -89,6 +89,11 @@ messages show for a moment at the foot of the window. Inside a
 tmux pane, weaver uses that tmux, so weaver on tmux in a Rex terminal works
 as before.
 
+When Rex restarts (an update, say), it brings its sessions back without
+what ran in them, a shell where each program was. `wvr --rex` then starts
+the `weaver` session again, its threads back on their conversations, and
+ends the one Rex brought back.
+
 Weaver does not follow Codex on Rex yet (its hooks would never reach the
 thread), so it says so rather than start, resume, adopt or restart a Codex
 thread there.

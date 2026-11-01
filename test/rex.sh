@@ -145,6 +145,32 @@ waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
 ok "...resumed, it comes back named and on its conversation" \
 	"$(windows)|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "home/1 01 Greeting · repo/main/2|--resume sid-1 |0" ||
 	sed 's/^/  resume: /' "$AT/resume.out"
+hookj "$(ev SessionStart ',"source":"resume"')"
+
+# --- Rex restarts: it brings the session back, its ids and all, but a
+# shell in each terminal, what ran there gone. wvr starts the session
+# again, the thread back on its conversation, and ends what Rex brought back.
+OLD=$SID
+kill "$server"
+wait "$server" 2>/dev/null
+rex server run --listen "$REX_SERVER" --state-dir "$AT/rexstate" --config "$AT/init.lua" >>"$AT/server.log" 2>&1 &
+server=$!
+waitfor 'R api call server.status "{}" >/dev/null 2>&1' 100
+if [ "$(sid)" != "$OLD" ]; then
+	echo "SKIP restart: this Rex did not bring the session back"
+else
+	rm -f "$AT"/args.*
+	wvr >"$AT/restart.out" 2>&1
+	waitfor '[ -n "$(sid)" ] && [ "$(sid)" != "$OLD" ]' 100
+	SID=$(sid)
+	waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 200
+	AGB=$(block_at 2 1)
+	waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
+	ok "restart: a session of its own again, the thread back on its conversation, Rex's husk gone" \
+		"$(sid | wc -l | tr -d ' ')|$([ "$SID" != "$OLD" ] && echo new)|$(windows)|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)" \
+		"1|new|home/1 01 Greeting · repo/main/2|--resume sid-1 " ||
+		sed 's/^/  restart: /' "$AT/restart.out"
+fi
 
 # --- quit: the session ends, its thread kept
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1

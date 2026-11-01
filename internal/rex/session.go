@@ -153,7 +153,17 @@ func (s Session) Life() agent.Where {
 // Made is when weaver made the session (Rex does not say).
 func (s Session) Made() (int64, bool) {
 	_, made, ok := s.ids().session(s.ID)
-	return made, ok && made > 0
+	return int64(made), ok && made > 0
+}
+
+// Restored: did Rex bring the session back after its server restarted?
+// Rex restores a session as it was, its ids and all, with a fresh shell in
+// each terminal: every program weaver ran in it (home, agents, nvims)
+// ended with the server weaver made it on. False when that is not known: a
+// record from before weaver kept its server, or no server answering.
+func (s Session) Restored() bool {
+	was, now := s.ids().server(s.ID), serverPID()
+	return was > 0 && now > 0 && now != was
 }
 
 func (s Session) Running() bool {

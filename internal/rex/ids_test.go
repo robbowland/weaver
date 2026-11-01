@@ -3,6 +3,7 @@ package rex
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 // A session is found by its files' key, though the key turned its name's /
@@ -13,7 +14,7 @@ func TestKeyed(t *testing.T) {
 		id, name string
 		made     int64
 	}{{"session:old", "work/api", 1}, {"session:new", "work/api", 2}, {"session:other", "work_api2", 3}} {
-		if err := r.made(s.id, s.name, s.made); err != nil {
+		if err := r.made(s.id, s.name, time.Unix(s.made, 0), 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -52,5 +53,27 @@ func TestReplaceRetires(t *testing.T) {
 	}
 	if next, _ := r.num("block:other"); next == n {
 		t.Errorf("a new block took %q again", next)
+	}
+}
+
+// Of two sessions of a name made within one second, the later is found;
+// a record from before weaver kept milliseconds still reads.
+func TestLatestWithinASecond(t *testing.T) {
+	r := ids{t.TempDir()}
+	at := time.Unix(1700000000, 0)
+	if err := r.made("session:first", "w", at.Add(100*time.Millisecond), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.made("session:second", "w", at.Add(900*time.Millisecond), 0); err != nil {
+		t.Fatal(err)
+	}
+	if id, ok := r.named("w"); !ok || id != "session:second" {
+		t.Errorf("named: %q %v, want session:second", id, ok)
+	}
+	if err := r.write("sessions", fileName("session:old"), "o\n1700000000"); err != nil {
+		t.Fatal(err)
+	}
+	if name, made, ok := r.session("session:old"); !ok || name != "o" || made != 1700000000 {
+		t.Errorf("an older record: %q %v %v", name, made, ok)
 	}
 }

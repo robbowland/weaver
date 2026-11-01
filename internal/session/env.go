@@ -122,6 +122,12 @@ func (e *Env) MuxName() string {
 	return "tmux"
 }
 
+// RexRestored: is this a Rex session Rex brought back after its server
+// restarted, everything weaver ran in it gone (rex.Session.Restored)?
+func (e *Env) RexRestored() bool {
+	return e.RexID != "" && rex.Session{ID: e.RexID, Name: e.Session, Dir: e.RexDir()}.Restored()
+}
+
 // RexDir is where weaver keeps what it knows of Rex (rex's registry).
 func (e *Env) RexDir() string { return e.StateDir + "/rex" }
 

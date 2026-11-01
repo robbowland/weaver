@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -283,11 +284,17 @@ func muxFlag(cmd string, args []string) (string, []string, string) {
 // one, the board. Every Rex terminal is in a Rex session, so on Rex the
 // board is in place only in a session weaver made: from any other, wvr
 // starts or shows weaver's (wvr ls is the board of the session you are in).
+// One Rex brought back after a restart, its programs gone, is started
+// again.
 func start(e *wvr.Env, args []string) error {
+	name := arg(args, 0)
+	if e.Session != "" && e.OnRex() && e.WeaverSession() && e.RexRestored() {
+		return e.Start(cmp.Or(name, e.Session))
+	}
 	if e.Session != "" && (!e.OnRex() || e.WeaverSession()) {
 		return e.Ls()
 	}
-	return e.Start(arg(args, 0))
+	return e.Start(name)
 }
 
 // version is set at build time by a package (-ldflags "-X main.version=1.2.3").

@@ -80,8 +80,9 @@ func (e *Env) Start(name string) error {
 }
 
 // startRex is Start on Rex ($WEAVER_MUX=rex): weaver's Rex session name,
-// made with home in its first window when it is not running (rex.Ensure:
-// one wvr at a time, none made while Rex does not answer), then shown in
+// made with home in its first window when it is not running, or runs only
+// as Rex brought it back after a restart (rex.Ensure: one wvr at a time,
+// none made while Rex does not answer; the husk ended), then shown in
 // the Rex app, which it can be only with Remote Control on in Rex's
 // settings (else wvr says where it is). Weaver's keys for Rex are written
 // each time (~/.config/rex/weaver.lua) for init.lua to load.
@@ -94,7 +95,7 @@ func (e *Env) startRex(name string) error {
 		fmt.Fprintf(os.Stderr, "weaver: for its keys, add require(\"weaver\") to %s, then run rex config reload\n", tildify(filepath.Join(filepath.Dir(keys), "init.lua")))
 	}
 	here, _ := os.Getwd()
-	s, err := rex.Ensure(e.RexDir(), name, here, []string{e.Self, "home"}, func() error {
+	s, husk, err := rex.Ensure(e.RexDir(), name, here, []string{e.Self, "home"}, func() error {
 		skey := rex.Key(name)
 		if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
 			return err
@@ -110,6 +111,11 @@ func (e *Env) startRex(name string) error {
 	}
 	if s.ShowInApp() != nil {
 		fmt.Printf("weaver: the %s session runs in Rex: switch to it there (with Remote Control on in Rex's settings, wvr shows it)\n", name)
+	}
+	if husk != nil {
+		fmt.Printf("weaver: Rex restarted and brought the %s session back without what ran in it: started again, its threads with it\n", name)
+		// Last: this wvr may be running in it.
+		_ = husk.Quit()
 	}
 	return nil
 }

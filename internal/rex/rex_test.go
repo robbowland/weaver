@@ -628,7 +628,7 @@ func TestFromEnv(t *testing.T) {
 	rextest.NoRex(t)
 	dir := t.TempDir()
 	r := ids{dir}
-	if err := r.made("session:abc", "weaver", 1); err != nil {
+	if err := r.made("session:abc", "weaver", time.Unix(1, 0), 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_SERVER", "unix:///nowhere")
@@ -673,7 +673,7 @@ func TestEnsureOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := Ensure(dir, "demo", "/", sleep, prepare)
+			s, _, err := Ensure(dir, "demo", "/", sleep, prepare)
 			if err != nil {
 				t.Error(err)
 			}
@@ -685,7 +685,7 @@ func TestEnsureOnce(t *testing.T) {
 	if got[0].ID == "" || got[0].ID != got[1].ID || prepared != 1 {
 		t.Errorf("two at once: sessions %q and %q, prepared %d times; want one, once", got[0].ID, got[1].ID, prepared)
 	}
-	if s, err := Ensure(dir, "demo", "/", sleep, prepare); err != nil || s.ID != got[0].ID || prepared != 1 {
+	if s, husk, err := Ensure(dir, "demo", "/", sleep, prepare); err != nil || s.ID != got[0].ID || prepared != 1 || husk != nil {
 		t.Errorf("again: %q %v, prepared %d times; want %q, once", s.ID, err, prepared, got[0].ID)
 	}
 	var l struct {
@@ -726,7 +726,7 @@ func TestEnsureNoAnswer(t *testing.T) {
 		t.Errorf("Named with no answer: running %v, no error", running)
 	}
 	made := false
-	if _, err := Ensure(dir, "demo", "/", []string{"/bin/sleep", "600"}, func() error { made = true; return nil }); err == nil || made {
+	if _, _, err := Ensure(dir, "demo", "/", []string{"/bin/sleep", "600"}, func() error { made = true; return nil }); err == nil || made {
 		t.Errorf("Ensure with no answer: %v, prepared %v; want an error, nothing made", err, made)
 	}
 	t.Setenv("REX_SERVER", at)
@@ -825,4 +825,50 @@ func TestBin(t *testing.T) {
 	if got := Bin(); got != filepath.Join(other, "rex") {
 		t.Errorf("REX_BIN_DIR without a rex: %q, want PATH's", got)
 	}
+}
+
+// A session Rex brings back after its server restarts is a husk: its ids
+// as they were, a shell in each terminal. Ensure makes it again and gives
+// the husk back, for the caller to end; one on the server it was made on
+// is neither restored nor made again.
+func TestEnsureRestored(t *testing.T) {
+	// A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
+	at, err := os.MkdirTemp("/tmp", "wvr-rex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(at) })
+	stop := rextest.ServerAt(t, Bin(), at)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	nothing := func() error { return nil }
+	s, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Restored() {
+		t.Error("a session on the server it was made on: restored")
+	}
+	if got, husk, err := Ensure(dir, "demo", "/", sleep, nothing); err != nil || husk != nil || got.ID != s.ID {
+		t.Errorf("Ensure while it runs: %q %v %v, want %q and no husk", got.ID, husk, err, s.ID)
+	}
+	stop()
+	rextest.ServerAt(t, Bin(), at)
+	if _, running, err := Named(dir, "demo"); err != nil || !running {
+		t.Skipf("this Rex did not bring the session back (%v, %v)", running, err)
+	}
+	if !s.Restored() {
+		t.Fatal("a session Rex brought back after a restart: not restored")
+	}
+	got, husk, err := Ensure(dir, "demo", "/", sleep, nothing)
+	if err != nil || husk == nil || husk.ID != s.ID || got.ID == s.ID || got.Restored() {
+		t.Fatalf("Ensure of a restored session: %q, husk %v, %v; want a new one, the old as the husk", got.ID, husk, err)
+	}
+	if err := husk.Quit(); err != nil {
+		t.Fatal(err)
+	}
+	if again, _, err := Named(dir, "demo"); err != nil || again.ID != got.ID {
+		t.Errorf("after: %q %v, want %q", again.ID, err, got.ID)
+	}
+	t.Cleanup(func() { _ = got.Quit() })
 }
