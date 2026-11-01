@@ -133,7 +133,8 @@ func (e *Env) pushStatus(labels bool) {
 	// Shown, they redraw every client (tmux's status line): set them when
 	// they change.
 	if labels || now != old {
-		e.Mux().Publish(need, done, work)
+		// An agent that needs you is mid-turn too: quitting stops it.
+		e.Mux().Publish(mux.Counts{Need: need, Done: done, Work: work, Busy: need+work > 0})
 	}
 	q := Quote(e.Self)
 	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")

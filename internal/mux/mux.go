@@ -86,6 +86,14 @@ type NewSplit struct {
 	Background bool
 }
 
+// Counts are the session's agents as its status shows them: that need
+// you, done and unseen, working; and Busy, whether one is mid-turn, which
+// quitting would stop.
+type Counts struct {
+	Need, Done, Work int
+	Busy             bool
+}
+
 // StripItem is one name on the strip of weaver's windows (THREADS, and
 // each view): its view (empty: home), as shown, and whether it is set up.
 type StripItem struct {
@@ -164,9 +172,8 @@ type Mux interface {
 	// MarkUnseen marks the window pane p is in as holding an agent done
 	// and unseen, or clears it.
 	MarkUnseen(p PaneID, on bool)
-	// Publish shows the session's counts: agents that need you, done and
-	// unseen, working.
-	Publish(need, done, work int)
+	// Publish shows the session's counts.
+	Publish(c Counts)
 	// Strip shows the strip of weaver's windows.
 	Strip(items []StripItem)
 	// Popup is the command that shows argv over where you are, sized by

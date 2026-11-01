@@ -284,11 +284,15 @@ func (s Session) MarkUnseen(p mux.PaneID, on bool) {
 }
 
 // Publish sets the session's @weaver-counts, which its status line shows
-// (an option set redraws every client), and @weaver-busy, which Ctrl q
-// reads to ask first while a turn is under way.
-func (s Session) Publish(need, done, work int) {
-	s.Run("set-option", "-t", s.at(-1), "@weaver-counts", Counts(need, done, work))
-	s.Run("set-option", "-t", s.at(-1), "@weaver-busy", strconv.Itoa(need+work))
+// (an option set redraws every client), and @weaver-busy (1 or 0), which
+// Ctrl q reads to ask first.
+func (s Session) Publish(c mux.Counts) {
+	busy := "0"
+	if c.Busy {
+		busy = "1"
+	}
+	s.Run("set-option", "-t", s.at(-1), "@weaver-counts", Counts(c.Need, c.Done, c.Work))
+	s.Run("set-option", "-t", s.at(-1), "@weaver-busy", busy)
 }
 
 // Counts is the status line's counts in tmux's colours: needs you, done,

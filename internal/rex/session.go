@@ -650,7 +650,7 @@ var wide = [][2]rune{
 }
 
 func (s Session) MarkUnseen(mux.PaneID, bool) {}
-func (s Session) Publish(int, int, int)       {}
+func (s Session) Publish(mux.Counts)          {}
 func (s Session) Strip([]mux.StripItem)       {}
 
 // Popup opens argv in a floating layer over the active window, sized by
