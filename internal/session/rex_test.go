@@ -14,6 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/store"
@@ -172,7 +173,7 @@ func TestRexLostAndGC(t *testing.T) {
 	}
 	thread("9002", "-", now)
 	thread("9003", "", now-7200)
-	before := BootTime() - 7200
+	before := process.BootTime() - 7200
 	thread("9101", dead, before)
 	thread("9102", "", before)
 	thread("9103", "-", before)

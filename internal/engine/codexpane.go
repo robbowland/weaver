@@ -9,6 +9,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
@@ -150,7 +151,7 @@ func rexCodexIn(at string) bool {
 		if unix.ByteSliceToString(k.Proc.P_comm[:]) != "codex" {
 			continue
 		}
-		argv, env, ok := session.ProcArgs(int(k.Proc.P_pid))
+		argv, env, ok := process.Args(int(k.Proc.P_pid))
 		if ok && env["REX_BLOCK"] != "" && env["TMUX"] == "" && realPath(codexDir(argv, env["PWD"])) == at {
 			return true
 		}

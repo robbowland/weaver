@@ -4,11 +4,11 @@ import (
 	"errors"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // Here is where weaver runs, as Rex tells it ($REX_SESSION, $REX_BLOCK):
@@ -70,7 +70,7 @@ func Lost(w agent.Where) (lost, known bool) {
 	switch {
 	case w.Session == "":
 		return false, true
-	case w.Server > 1 && syscall.Kill(w.Server, 0) != nil:
+	case w.Server > 1 && !process.Alive(w.Server):
 		return true, true
 	}
 	pid := serverPID()

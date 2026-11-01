@@ -1424,10 +1424,10 @@ func (e *Env) CloseTail(a []string) error {
 	if digits(tok) {
 		os.RemoveAll(e.opening(tok))
 	}
-	for i := 0; i < 50 && pid != "" && session.AgentAlive(pid, start, nil); i++ {
+	for i := 0; i < 50 && pid != "" && process.StillRuns(pid, start, nil); i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
-	if pid != "" && session.AgentAlive(pid, start, nil) {
+	if pid != "" && process.StillRuns(pid, start, nil) {
 		fmt.Fprintf(os.Stderr, "weaver: the agent (pid %s) is still running; its worktree stays\n", pid)
 		remove = "0"
 	}

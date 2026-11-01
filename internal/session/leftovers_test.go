@@ -1,22 +1,9 @@
 package session
 
 import (
-	"encoding/binary"
 	"reflect"
 	"testing"
 )
-
-func TestParseProcArgs(t *testing.T) {
-	b := binary.LittleEndian.AppendUint32(nil, 2)
-	b = append(b, "/usr/bin/uv\x00\x00\x00\x00uv\x00run\x00TMUX_PANE=%1\x00PWD=/w\x00\x00junk"...)
-	argv, env, ok := parseProcArgs(b)
-	if !ok || !reflect.DeepEqual(argv, []string{"uv", "run"}) || !reflect.DeepEqual(env, map[string]string{"TMUX_PANE": "%1", "PWD": "/w"}) {
-		t.Fatalf("got %q %q %v", argv, env, ok)
-	}
-	if _, _, ok := parseProcArgs(binary.LittleEndian.AppendUint32(nil, 3)); ok {
-		t.Fatal("a truncated block parsed")
-	}
-}
 
 // What an agent left running is a leftover only when it runs from the
 // worktree it was started in: a venv's python (a link elsewhere, taken as

@@ -18,7 +18,6 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
-	"golang.org/x/sys/unix"
 )
 
 // Panes lists the session's panes, retried twice: an empty answer is no
@@ -233,19 +232,19 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}
-	starts := ProcStarts(pids)
+	starts := process.Starts(pids)
 	for _, g := range gones {
 		if !trusted {
 			continue
 		}
-		if AgentAlive(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
+		if process.StillRuns(g.pid, g.start, starts) && g.pid != "" && g.st != agent.StateEnded {
 			continue
 		}
 		e.Retire(g.f, g.pid)
 	}
 	out := rows[:0]
 	for _, r := range rows {
-		if !r.Exited && r.Pid != "" && !AgentAlive(r.Pid, r.Pstart, starts) {
+		if !r.Exited && r.Pid != "" && !process.StillRuns(r.Pid, r.Pstart, starts) {
 			// Killed without a SessionEnd: it is not coming back (a thread
 			// lost with its session is kept, to resume).
 			e.Retire(r.Sfile, r.Pid)
@@ -273,7 +272,7 @@ type claudeSession struct {
 func (e *Env) ClaudeRunning() map[string]string {
 	m := map[string]string{}
 	for pid, c := range e.claudeLive() {
-		if c.SessionID != "" && AgentAlive(pid, c.ProcStart, nil) {
+		if c.SessionID != "" && process.StillRuns(pid, c.ProcStart, nil) {
 			m[c.SessionID] = pid
 		}
 	}
@@ -303,56 +302,6 @@ func (e *Env) claudeLive() map[string]claudeSession {
 		m[string(c.Pid)] = c
 	}
 	return m
-}
-
-// ProcStarts are processes' start times as ps prints them (TZ=UTC, LC_ALL=C:
-// "Thu Oct 15 15:38:35 2026"), by pid, from the kernel without ps.
-func ProcStarts(pids []int) map[int]string {
-	m := map[int]string{}
-	for _, p := range pids {
-		k, err := unix.SysctlKinfoProc("kern.proc.pid", p)
-		if err != nil || k.Proc.P_pid != int32(p) {
-			continue
-		}
-		t := time.Unix(int64(k.Proc.P_starttime.Sec), 0).UTC()
-		m[p] = t.Format("Mon Jan _2 15:04:05 2006")
-	}
-	return m
-}
-
-// BootTime is when the machine started (epoch s), from the kernel; 0 when
-// it does not say.
-func BootTime() int64 {
-	tv, err := unix.SysctlTimeval("kern.boottime")
-	if err != nil {
-		return 0
-	}
-	return tv.Sec
-}
-
-// AgentAlive: is process pid (started at start, as ps prints it, if known)
-// still running? kill -0 alone would trust a reused pid. No pid at all
-// cannot be checked: it is.
-func AgentAlive(pid, start string, starts map[int]string) bool {
-	n, err := strconv.Atoi(pid)
-	if err != nil || !digits(pid) {
-		return true
-	}
-	if !process.Alive(n) {
-		return false
-	}
-	if start == "" {
-		return true
-	}
-	now, ok := starts[n]
-	if !ok {
-		if s := ProcStarts([]int{n}); s[n] != "" {
-			now = s[n]
-		} else {
-			return true
-		}
-	}
-	return strings.Join(strings.Fields(now), " ") == strings.Join(strings.Fields(start), " ")
 }
 
 // LostRow is a thread lost with its session, or held: Held (epoch s) and
@@ -464,7 +413,7 @@ func (e *Env) serverLost(skey string, ts int64, w agent.Where) (lost, known bool
 	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
 		return false, true
 	}
-	if b := BootTime(); b > 0 && ts < b {
+	if b := process.BootTime(); b > 0 && ts < b {
 		return true, true
 	}
 	if rexKey {

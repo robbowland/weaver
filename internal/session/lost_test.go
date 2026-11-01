@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // An agent that last reported before the machine started lost its session,
@@ -35,7 +36,7 @@ func TestServerLostAcrossABoot(t *testing.T) {
 	if lost, _ := e.serverLost("tmux-s", time.Now().Unix(), w); lost {
 		t.Error("its server runs on: lost")
 	}
-	if lost, _ := e.serverLost("tmux-s", BootTime()-60, w); !lost {
+	if lost, _ := e.serverLost("tmux-s", process.BootTime()-60, w); !lost {
 		t.Error("it reported before the machine started, on a server with the same pid: not lost")
 	}
 }

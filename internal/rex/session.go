@@ -11,12 +11,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // Session is the Rex session ID as weaver acts on it (mux.Mux). Weaver
@@ -120,8 +120,7 @@ func serverPID() int {
 			Pid      int    `json:"pid"`
 		}
 		f := filepath.Join(runtimeDir(), "servers", hex.EncodeToString(sum[:]), "runtime.json")
-		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &r) == nil && r.Endpoint == ep && r.Pid > 0 &&
-			syscall.Kill(r.Pid, 0) == nil {
+		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &r) == nil && r.Endpoint == ep && process.Alive(r.Pid) {
 			return r.Pid
 		}
 	}

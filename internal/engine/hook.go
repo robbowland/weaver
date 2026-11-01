@@ -19,6 +19,7 @@ import (
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -113,7 +114,7 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, agentNam
 	// inherits its pane: while the pane's own agent runs, its events are not
 	// ours.
 	if me != "" && pk.Pid != "" && me != pk.Pid {
-		if session.AgentAlive(pk.Pid, pk.Start, nil) {
+		if process.StillRuns(pk.Pid, pk.Start, nil) {
 			if pk.State != agent.StateEnded {
 				return 0
 			}
@@ -281,7 +282,7 @@ func (h *hk) run(e *session.Env, me string) {
 		// kernel's, once.
 		if h.ProcStart == "" && h.Pid != h.oPid() {
 			if n, ok := atoi(h.Pid); ok {
-				h.ProcStart = strings.TrimRight(session.ProcStarts([]int{n})[n], " ")
+				h.ProcStart = strings.TrimRight(process.Starts([]int{n})[n], " ")
 			}
 		}
 	}

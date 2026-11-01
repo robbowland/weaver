@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -166,7 +165,7 @@ func (e *Env) gcAgents() {
 	}
 	// Rex not answering of skey's session: held off, but for a file of ts
 	// from before the machine started, which no session outlives.
-	boot := BootTime()
+	boot := process.BootTime()
 	rexHeld := func(a *rexAnswer, ts int64) bool {
 		beforeBoot := boot > 0 && ts < boot
 		return !a.answered && !beforeBoot
@@ -202,7 +201,7 @@ func (e *Env) gcAgents() {
 		pid, start, st := sub1(reGcPid, l), sub1(reGcStart, l), agent.State(sub1(reGcState, l))
 		ts, _ := strconv.ParseInt(sub1(reGcTs, l), 10, 64)
 		if pid != "" {
-			if !AgentAlive(pid, start, nil) {
+			if !process.StillRuns(pid, start, nil) {
 				// Its pane kept (it exited, its thread to be started again
 				// or closed): the board's to show, not to retire.
 				if shown == nil {
@@ -333,25 +332,13 @@ func (e *Env) sweepOrphans() {
 		if f[1] != "1" && ok && parent.argv0 != "systemd" {
 			continue
 		}
-		if pid, err := strconv.Atoi(f[0]); err == nil && pid > 1 && syscall.Kill(pid, syscall.SIGTERM) == nil {
+		if pid, err := strconv.Atoi(f[0]); err == nil {
 			pids = append(pids, pid)
 		}
 	}
 	// An --embed server whose UI went may not hear TERM: what is left after
 	// two seconds is killed (its swap file stays, to recover from).
-	for i := 0; i < 20 && len(pids) > 0; i++ {
-		time.Sleep(100 * time.Millisecond)
-		var left []int
-		for _, pid := range pids {
-			if syscall.Kill(pid, 0) == nil {
-				left = append(left, pid)
-			}
-		}
-		pids = left
-	}
-	for _, pid := range pids {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-	}
+	process.End(pids)
 }
 
 // sweepSockets removes sockets nothing listens on any more (a board, a

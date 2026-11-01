@@ -19,17 +19,6 @@ func deadPid(t *testing.T) int {
 	return c.Process.Pid
 }
 
-// A recorded agent's pid of 1 or less is no process weaver knows (pid.Alive):
-// never alive; no pid at all cannot be checked, and is.
-func TestAgentAlive(t *testing.T) {
-	me := os.Getpid()
-	for pid, want := range map[string]bool{"0": false, "1": false, strconv.Itoa(me): true, "": true} {
-		if got := AgentAlive(pid, "", nil); got != want {
-			t.Errorf("AgentAlive(%q) = %v, want %v", pid, got, want)
-		}
-	}
-}
-
 // An nvim recorded with a pid of 0 (one the multiplexer did not say) has
 // not been seen to run: never its agent's nvim. One recorded without a pid
 // is its pane until it records itself.

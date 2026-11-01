@@ -1,8 +1,6 @@
 package session
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,10 +8,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // Leftovers are what an agent started in a weaver pane and left running
@@ -120,30 +117,12 @@ func (e *Env) SweepLeftovers() int {
 			fmt.Fprintf(log, "%s ended %d (%d processes; pane %s, %s): %s\n", time.Now().Format(time.RFC3339),
 				l.Pid, len(l.Procs), l.Pane, l.Dir, l.Cmd)
 		}
-		for _, pid := range l.Procs {
-			if syscall.Kill(pid, syscall.SIGTERM) == nil {
-				pids = append(pids, pid)
-			}
-		}
+		pids = append(pids, l.Procs...)
 	}
 	if log != nil {
 		_ = log.Close()
 	}
-	n := len(pids)
-	for i := 0; i < 20 && len(pids) > 0; i++ {
-		time.Sleep(100 * time.Millisecond)
-		var left []int
-		for _, pid := range pids {
-			if syscall.Kill(pid, 0) == nil {
-				left = append(left, pid)
-			}
-		}
-		pids = left
-	}
-	for _, pid := range pids {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-	}
-	return n
+	return process.End(pids)
 }
 
 // condemned are the leftovers in tree (breadth first, as Leftovers walks
@@ -268,53 +247,11 @@ func runsFrom(tree []proc, dir string) bool {
 
 // readProc is process pid's arguments and environment (kern.procargs2).
 func readProc(pid int) (proc, bool) {
-	argv, env, ok := ProcArgs(pid)
+	argv, env, ok := process.Args(pid)
 	if !ok {
 		return proc{}, false
 	}
 	return proc{pid: pid, argv: argv, env: env}, true
-}
-
-// ProcArgs are process pid's arguments and environment, as the kernel
-// keeps them (kern.procargs2); false when it will not say (another user's
-// process, or one macOS keeps them of).
-func ProcArgs(pid int) ([]string, map[string]string, bool) {
-	b, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return nil, nil, false
-	}
-	return parseProcArgs(b)
-}
-
-// parseProcArgs reads kern.procargs2's layout: argc (int32), the program's
-// path, NUL padding, then argc arguments and the environment, each ended by
-// a NUL.
-func parseProcArgs(b []byte) ([]string, map[string]string, bool) {
-	if len(b) < 4 {
-		return nil, nil, false
-	}
-	argc := int(binary.LittleEndian.Uint32(b[:4]))
-	b = b[4:]
-	i := bytes.IndexByte(b, 0)
-	if i < 0 {
-		return nil, nil, false
-	}
-	b = bytes.TrimLeft(b[i:], "\x00")
-	var argv []string
-	env := map[string]string{}
-	for _, s := range strings.Split(string(b), "\x00") {
-		if len(argv) < argc {
-			argv = append(argv, s)
-			continue
-		}
-		if s == "" {
-			break
-		}
-		if k, v, ok := strings.Cut(s, "="); ok {
-			env[k] = v
-		}
-	}
-	return argv, env, len(argv) == argc
 }
 
 // Processes is "1 process", "3 processes".

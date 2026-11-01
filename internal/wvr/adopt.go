@@ -16,6 +16,7 @@ import (
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"github.com/robbowland/weaver/internal/tmux"
@@ -98,7 +99,7 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 		return "", fmt.Errorf("weaver follows no agent in pane %%%s", p)
 	}
 	sid := oneline.Line(st.SessionID)
-	if st.State == agent.StateEnded || st.Pid != "" && !session.AgentAlive(string(st.Pid), st.ProcStart, nil) {
+	if st.State == agent.StateEnded || st.Pid != "" && !process.StillRuns(string(st.Pid), st.ProcStart, nil) {
 		return "", fmt.Errorf("its agent has ended: `wvr adopt %s` resumes its conversation as a thread", cmp.Or(sid, "SESSION-ID"))
 	}
 	kind, ok := agent.ParseKind(st.Agent)
