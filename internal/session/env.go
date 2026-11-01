@@ -114,6 +114,14 @@ func (e *Env) OnRex() bool {
 	return e.RexID != "" || !e.InTmux && os.Getenv("WEAVER_MUX") == "rex"
 }
 
+// MuxName is the multiplexer weaver acts on, as its messages name it.
+func (e *Env) MuxName() string {
+	if e.OnRex() {
+		return "Rex"
+	}
+	return "tmux"
+}
+
 // RexDir is where weaver keeps what it knows of Rex (rex's registry).
 func (e *Env) RexDir() string { return e.StateDir + "/rex" }
 

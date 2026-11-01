@@ -227,7 +227,7 @@ func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 		Label: v.label, View: name, At: idx, Background: !show,
 	})
 	if err != nil {
-		return "", fmt.Errorf("tmux could not open the %s view", v.label)
+		return "", fmt.Errorf("%s could not open the %s view", e.MuxName(), v.label)
 	}
 	// A session started before its views (or an older weaver) has no strip.
 	e.SetStrip()

@@ -134,7 +134,7 @@ func (e *Env) Edit(args []string) error {
 	defer release()
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New("tmux would not list the panes")
+		return errors.New(e.MuxName() + " would not list the panes")
 	}
 	if target == "" {
 		if target = e.focusedPane(); target == "" {

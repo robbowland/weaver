@@ -619,9 +619,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("tmux could not open the window for %s (its new worktree stays: %s)", name, dir)
+			return fmt.Errorf("%s could not open the window for %s (its new worktree stays: %s)", e.MuxName(), name, dir)
 		}
-		return fmt.Errorf("tmux could not open the window for %s", name)
+		return fmt.Errorf("%s could not open the window for %s", e.MuxName(), name)
 	}
 	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
@@ -867,7 +867,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	}
 	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
-		return "", fmt.Errorf("%s: tmux could not open its window", nm)
+		return "", fmt.Errorf("%s: %s could not open its window", nm, e.MuxName())
 	}
 	e.threadPlace(tab, n)
 	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
@@ -1191,7 +1191,7 @@ func (e *Env) Close(args []string) error {
 	}
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New("tmux would not list the panes")
+		return errors.New(e.MuxName() + " would not list the panes")
 	}
 	byID := map[mux.PaneID]mux.Pane{}
 	for _, p := range panes {
@@ -1630,7 +1630,7 @@ func (e *Env) Quit(args []string) error {
 		}
 	}
 	if err := e.Mux().Quit(); err != nil {
-		return errors.New("tmux could not quit " + name)
+		return errors.New(e.MuxName() + " could not quit " + name)
 	}
 	return nil
 }
