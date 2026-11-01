@@ -46,13 +46,17 @@ func main() {
 		_, err := setup.Runtime()
 		exit(err)
 	}
-	cmd, args = muxFlag(cmd, args)
+	cmd, args, named := muxFlag(cmd, args)
 	c, ok := commands[cmd]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wvr.Usage)
 		os.Exit(2)
 	}
 	e := wvr.Load()
+	if named == "rex" && e.InTmux {
+		// Inside a tmux pane weaver acts on that tmux (guide.md, On Rex).
+		fmt.Fprintln(os.Stderr, "weaver: inside tmux, weaver runs on that tmux; wvr --rex starts it on Rex from outside tmux")
+	}
 	if c.session && e.Session == "" {
 		exit(errNoSession)
 	}
@@ -255,16 +259,16 @@ var commands = map[string]command{
 
 // muxFlag is `wvr --rex|--tmux [session]` and `wvr start --rex|--tmux
 // [session]`: start, on that multiplexer, as $WEAVER_MUX would say it (set
-// here for this process, before the environment is read). Any other
-// command is as it was.
-func muxFlag(cmd string, args []string) (string, []string) {
+// here for this process, before the environment is read), and the
+// multiplexer it named. Any other command is as it was.
+func muxFlag(cmd string, args []string) (string, []string, string) {
 	flag := cmd
 	if cmd == "start" && len(args) > 0 {
 		flag = args[0]
 	}
 	mux, ok := map[string]string{"--rex": "rex", "--tmux": "tmux"}[flag]
 	if !ok {
-		return cmd, args
+		return cmd, args, ""
 	}
 	if cmd == "start" {
 		args = args[1:]
@@ -272,7 +276,7 @@ func muxFlag(cmd string, args []string) (string, []string) {
 	if err := os.Setenv("WEAVER_MUX", mux); err != nil {
 		exit(err)
 	}
-	return "start", args
+	return "start", args, mux
 }
 
 // start starts (or attaches to) a weaver session, named as given; inside

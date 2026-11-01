@@ -25,8 +25,8 @@ func TestMuxFlag(t *testing.T) {
 		{"", nil, "", nil, ""},
 	} {
 		t.Setenv("WEAVER_MUX", "")
-		cmd, args := muxFlag(c.cmd, c.args)
-		if cmd != c.wantCmd || !slices.Equal(args, c.wantArgs) || os.Getenv("WEAVER_MUX") != c.mux {
+		cmd, args, named := muxFlag(c.cmd, c.args)
+		if cmd != c.wantCmd || !slices.Equal(args, c.wantArgs) || os.Getenv("WEAVER_MUX") != c.mux || named != c.mux {
 			t.Errorf("muxFlag(%q, %q) = %q %q, WEAVER_MUX %q; want %q %q, %q",
 				c.cmd, c.args, cmd, args, os.Getenv("WEAVER_MUX"), c.wantCmd, c.wantArgs, c.mux)
 		}
