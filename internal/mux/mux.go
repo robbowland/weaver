@@ -61,9 +61,14 @@ type Exit struct {
 	What, Hint string
 }
 
+// NextFree is the index to open a window at, or break a pane out to, when
+// any free one will do: the session's next.
+const NextFree = -1
+
 // NewWindow is a window to open: Spawn in its one pane, named Label, at
-// index At when At >= 0 (an error when that index is taken), showing View
-// when set. Background leaves the session where it is.
+// index At (NextFree: the session's next free one; else an error when
+// that index is taken), showing View when set. Background leaves the
+// session where it is.
 type NewWindow struct {
 	Spawn
 	Label      string
@@ -125,9 +130,10 @@ type Mux interface {
 	// through the user's shell).
 	SplitLeft(of PaneID, s NewSplit) (PaneID, int, error)
 	// BreakOut moves pane p to a window of its own in the session, named
-	// label, at index at when at >= 0 (an error when that is taken), else
-	// at its next free index; focus goes with it.
-	BreakOut(p PaneID, label string, at int, focus bool) (WindowID, error)
+	// label, at index at (NextFree: its next free one; else an error when
+	// that is taken): the window and its width. Background leaves the
+	// session where it is; else the focus goes with the pane.
+	BreakOut(p PaneID, label string, at int, background bool) (WindowID, int, error)
 	// Respawn starts s again in pane p, ending what runs there.
 	Respawn(p PaneID, s Spawn) error
 	// Close ends pane p, and CloseWindow window w.

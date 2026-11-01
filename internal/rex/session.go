@@ -246,12 +246,6 @@ func (s Session) Screen(p mux.PaneID) []byte {
 	return []byte(f.Content)
 }
 
-// taken: is place at another live window's than skip?
-func (s Session) taken(at int, skip string) bool {
-	v, err := s.view()
-	return err == nil && s.takenIn(v, at, skip)
-}
-
 // takenIn is taken, among the windows of view v.
 func (s Session) takenIn(v view, at int, skip string) bool {
 	for _, w := range v.Windows {
@@ -262,9 +256,24 @@ func (s Session) takenIn(v view, at int, skip string) bool {
 	return false
 }
 
+// placing is the view to place a new window at at by (placeIn), once at
+// is known to be free in it: none for NextFree. An error when at is
+// another window's.
+func (s Session) placing(at int) (view, bool, error) {
+	if at < 0 {
+		return view{}, false, nil
+	}
+	v, err := s.view()
+	if err == nil && s.takenIn(v, at, "") {
+		return v, true, errors.New("rex: place " + strconv.Itoa(at) + " is another window's")
+	}
+	return v, err == nil, nil
+}
+
 func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, error) {
-	if w.At >= 0 && s.taken(w.At, "") {
-		return "", "", 0, errors.New("rex: place " + strconv.Itoa(w.At) + " is another window's")
+	v, seen, err := s.placing(w.At)
+	if err != nil {
+		return "", "", 0, err
 	}
 	var out struct {
 		Window string   `json:"window_id"`
@@ -288,7 +297,7 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	_ = s.ids().note("cmd", pn, strings.Join(w.Argv, " "))
 	_ = s.ids().note("view", wn, w.View)
 	if w.At >= 0 {
-		s.Place(mux.WindowID(wn), w.At)
+		s.placeIn(v, seen, out.Window, mux.WindowID(wn), w.At)
 	}
 	// Its one pane fills it: the window is as wide as the pane.
 	return mux.WindowID(wn), mux.PaneID(pn), s.cols(mux.PaneID(pn)), nil
@@ -334,43 +343,45 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 }
 
 // BreakOut opens a window with a stand-in, moves p beside it and closes
-// the stand-in: Rex makes windows only of new blocks.
-func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.WindowID, error) {
+// the stand-in: Rex makes windows only of new blocks. p fills its new
+// window: its width is p's.
+func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (mux.WindowID, int, error) {
 	b, err := s.block(p)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	if at >= 0 && s.taken(at, "") {
-		return "", errors.New("rex: place " + strconv.Itoa(at) + " is another window's")
+	v, seen, err := s.placing(at)
+	if err != nil {
+		return "", 0, err
 	}
 	var out struct {
 		Window string   `json:"window_id"`
 		Blocks []string `json:"block_ids"`
 	}
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label, 128), "focus": focus,
+	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label, 128), "focus": !background,
 		"layout": layout(mux.Spawn{Argv: []string{"/bin/sleep", "60"}}, "")}, &out); err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if out.Window == "" || len(out.Blocks) == 0 {
-		return "", errors.New("rex: no window made")
+		return "", 0, errors.New("rex: no window made")
 	}
 	stand := out.Blocks[0]
 	if err := s.callS("session.move_block", map[string]any{"block_id": b, "anchor_block_id": stand}, nil); err != nil {
 		_ = s.callS("session.close_window", map[string]any{"window_id": out.Window}, nil)
-		return "", err
+		return "", 0, err
 	}
 	_ = s.callS("block.close", map[string]any{"block_id": stand}, nil)
 	wn, err := s.ids().num(out.Window)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if at >= 0 {
-		s.Place(mux.WindowID(wn), at)
+		s.placeIn(v, seen, out.Window, mux.WindowID(wn), at)
 	}
-	if focus {
+	if !background {
 		s.Focus(p)
 	}
-	return mux.WindowID(wn), nil
+	return mux.WindowID(wn), s.cols(p), nil
 }
 
 // Respawn starts sp in a block beside p's, which it then closes, and has
@@ -436,11 +447,18 @@ func (s Session) Place(w mux.WindowID, at int) {
 		return
 	}
 	v, err := s.view()
-	if err == nil && s.takenIn(v, at, id) {
+	s.placeIn(v, err == nil, id, w, at)
+}
+
+// placeIn is Place of window w (Rex's id) by view v of the session, when
+// it was seen: a place another window has is left to it; unseen, the place
+// is kept and the window not moved.
+func (s Session) placeIn(v view, seen bool, id string, w mux.WindowID, at int) {
+	if seen && s.takenIn(v, at, id) {
 		return
 	}
 	_ = s.ids().note("want", string(w), strconv.Itoa(at))
-	if err != nil {
+	if !seen {
 		return
 	}
 	in := map[string]any{"window_id": id}
@@ -545,10 +563,8 @@ func (s Session) Say(ms int, text string) {
 	}
 	cols, lines := 160, 48
 	if sn, err := s.snapshot(false); err == nil {
+		cols, lines = sn.activeSize()
 		for _, w := range sn.View.Windows {
-			if c, l := sn.size(w); w.ID == sn.View.Active && c > 0 && l > 0 {
-				cols, lines = c, l
-			}
 			for _, l := range w.Layers {
 				for _, b := range l.Blocks {
 					if l.Kind == "floating" && b.Label == sayLabel {
@@ -645,18 +661,10 @@ func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string
 	if !s.attached() {
 		return failed(errors.New("rex: no app is attached to the session")), false
 	}
-	sn, err := s.snapshot(false)
-	cols, lines, active := 0, 0, ""
-	if err == nil {
+	cols, lines, active := 160, 48, ""
+	if sn, err := s.snapshot(false); err == nil {
+		cols, lines = sn.activeSize()
 		active = sn.View.Active
-		for _, w := range sn.View.Windows {
-			if w.ID == active {
-				cols, lines = sn.size(w)
-			}
-		}
-	}
-	if cols <= 0 || lines <= 0 {
-		cols, lines = 160, 48
 	}
 	pw, ph := size(cols, lines)
 	fw, fh := min(float64(pw)/float64(cols), 1), min(float64(ph)/float64(lines), 1)

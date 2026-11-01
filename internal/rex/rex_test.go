@@ -99,7 +99,7 @@ func TestSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w3, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "03 later", At: -1, Background: true})
+	w3, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "03 later", At: mux.NextFree, Background: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -734,4 +734,76 @@ func TestEnsureNoAnswer(t *testing.T) {
 	if _, running, err := Named(dir, "demo"); err != nil || !running {
 		t.Errorf("Named once Rex answers: %v %v", running, err)
 	}
+}
+
+// BreakOut moves a pane to a window of its own, at the place asked and
+// with the width it says, leaving its old window the rest; a place another
+// window has is refused, and the pane stays where it was.
+func TestBreakOut(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	s, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	w, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "01 shared", At: 1, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.BreakOut(q, "taken", 1, true); err == nil {
+		t.Error("broken out to a place another window has")
+	}
+	log := logRex(t)
+	out, width, err := s.BreakOut(q, "02 out", 2, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(log); strings.Count(string(b), "session.view") != 1 {
+		t.Errorf("the session's view asked for %d times, want once:\n%s", strings.Count(string(b), "session.view"), b)
+	}
+	ws, _ := s.Windows()
+	o, ok := windowOf(ws, out)
+	if !ok || o.Index != 2 || o.Name != "02 out" || width <= 0 || o.Width != width {
+		t.Errorf("its window: %+v %v, said %d wide", o, ok, width)
+	}
+	ps, _ := s.Panes()
+	if x, ok := paneIn(ps, q); !ok || x.Tab != out {
+		t.Errorf("the pane broken out: %+v %v, want in %q", x, ok, out)
+	}
+	if x, ok := paneIn(ps, p); !ok || x.Tab != w {
+		t.Errorf("the pane left: %+v %v, want in %q", x, ok, w)
+	}
+}
+
+// logRex has rex, as weaver runs it, log each call it is given: the log.
+func logRex(t *testing.T) string {
+	t.Helper()
+	bin, err := exec.LookPath(Bin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	log := filepath.Join(dir, "calls")
+	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + bin + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "rex"), []byte(wrap), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", dir)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+func windowOf(ws []mux.Window, w mux.WindowID) (mux.Window, bool) {
+	for _, x := range ws {
+		if x.ID == w {
+			return x, true
+		}
+	}
+	return mux.Window{}, false
 }

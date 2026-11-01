@@ -14,7 +14,8 @@ import (
 const terminal = "com.superlogical.terminal"
 
 // snapshotLua is one look at the session, in one rex do: its view, and
-// each terminal's size (with full, its directory and processes too).
+// each tiled terminal's size (with full, its directory and processes too).
+// A floating layer's terminals (popups, messages) are never panes.
 const snapshotLua = `
 local view, err = rex.session.view{}
 if not view then error(err, 0) end
@@ -22,14 +23,16 @@ local term = "` + terminal + `"
 local blocks = {}
 for _, w in ipairs(view.windows or {}) do
   for _, layer in ipairs(w.layers or {}) do
-    for _, b in ipairs(layer.blocks or {}) do
-      if b.creator_name == term then
-        local info = { size = rex.block.call(term, "size", { block_id = b.block_id }) }
-        if rex.args.full then
-          info.pwd = rex.block.call(term, "pwd", { block_id = b.block_id })
-          info.process = rex.block.call(term, "process", { block_id = b.block_id })
+    if layer.kind == "tiled" then
+      for _, b in ipairs(layer.blocks or {}) do
+        if b.creator_name == term then
+          local info = { size = rex.block.call(term, "size", { block_id = b.block_id }) }
+          if rex.args.full then
+            info.pwd = rex.block.call(term, "pwd", { block_id = b.block_id })
+            info.process = rex.block.call(term, "process", { block_id = b.block_id })
+          end
+          blocks[b.block_id] = info
         end
-        blocks[b.block_id] = info
       end
     end
   end
@@ -163,6 +166,17 @@ func (sn snapshot) size(w window) (int, int) {
 		return int(math.Round(float64(i.Size.Columns) / r[2])), int(math.Round(float64(i.Size.Rows) / r[3]))
 	}
 	return 0, 0
+}
+
+// activeSize is the active window's columns and lines; 160 by 48 when
+// they are not known.
+func (sn snapshot) activeSize() (int, int) {
+	for _, w := range sn.View.Windows {
+		if c, l := sn.size(w); w.ID == sn.View.Active && c > 0 && l > 0 {
+			return c, l
+		}
+	}
+	return 160, 48
 }
 
 // border is the border to move for block b to be cols wide, when b and

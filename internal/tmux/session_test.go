@@ -3,6 +3,7 @@ package tmux
 import (
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,12 +50,12 @@ func TestBreakOutNextFreeStaysInSession(t *testing.T) {
 	p, _ := ParsePane(tm("split-window", "-d", "-P", "-F", "#{pane_id}", "-t", "=a:", "/bin/sleep 600"))
 	tm("new-session", "-d", "-s", "b", "/bin/sleep 600")
 
-	w, err := Session{Name: "a", Sock: srv}.BreakOut(p, "out", -1, false)
+	w, width, err := Session{Name: "a", Sock: srv}.BreakOut(p, "out", mux.NextFree, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := tm("display-message", "-p", "-t", WindowTarget(w), "#{session_name}"); got != "a" {
-		t.Errorf("broken out to session %q, want a", got)
+	if got := tm("display-message", "-p", "-t", WindowTarget(w), "#{session_name} #{window_width}"); got != "a "+strconv.Itoa(width) || width <= 0 {
+		t.Errorf("broken out to session and width %q, said %d; want a and its width", got, width)
 	}
 }
 
@@ -77,7 +78,7 @@ func TestKeepStaysWhenTheProgramExits(t *testing.T) {
 		return out
 	}
 
-	_, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: exit3, Keep: keep}, Label: "kept", At: -1, Background: true})
+	_, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: exit3, Keep: keep}, Label: "kept", At: mux.NextFree, Background: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestKeepStaysWhenTheProgramExits(t *testing.T) {
 		t.Errorf("respawned pane: dead and status %q, want 1 4", got)
 	}
 
-	if _, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: exit3}, Label: "gone", At: -1, Background: true}); err != nil {
+	if _, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: exit3}, Label: "gone", At: mux.NextFree, Background: true}); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(300 * time.Millisecond)

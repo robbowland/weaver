@@ -135,7 +135,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
 		Spawn: e.agentSpawn(tok, kind, dir),
-		Label: name, At: -1, Background: nofocus,
+		Label: name, At: mux.NextFree, Background: nofocus,
 	})
 	if err != nil {
 		return "", false

@@ -170,24 +170,20 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 		e.Mux().Label(tab, label)
 		e.threadPlace(tab, n)
 	} else {
-		focus := p == e.MyPane
-		w, err := e.Mux().BreakOut(p, label, n, focus)
+		background := p != e.MyPane
+		w, width, err := e.Mux().BreakOut(p, label, n, background)
 		if err != nil {
 			// Its number is another window's: where the multiplexer puts it.
-			w, err = e.Mux().BreakOut(p, label, -1, focus)
+			w, width, err = e.Mux().BreakOut(p, label, mux.NextFree, background)
 		}
 		if err != nil {
 			return ""
 		}
-		tab = w
+		tab, win.Width = w, width
 	}
 	if nv == "" {
-		// The width of its window: one it was just broken out to is asked.
-		total, ok := win.Width, win.Width > 0
-		if tab != win.ID {
-			total, ok = e.windowWidth(tab)
-		}
-		if !ok {
+		total := win.Width
+		if total <= 0 {
 			total = 200
 		}
 		e.splitNvim(p, dir, total)

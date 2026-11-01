@@ -202,17 +202,19 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 	return p, pid, nil
 }
 
-func (s Session) BreakOut(p mux.PaneID, label string, at int, focus bool) (mux.WindowID, error) {
-	args := []string{"break-pane", "-P", "-F", "#{window_id}", "-s", Target(p), "-n", Text(label), "-t", s.at(at)}
-	if !focus {
+func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (mux.WindowID, int, error) {
+	args := []string{"break-pane", "-P", "-F", "#{window_id} #{window_width}", "-s", Target(p), "-n", Text(label), "-t", s.at(at)}
+	if background {
 		args = append(args, "-d")
 	}
 	out, err := s.Run(args...)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	w, _ := ParseWindow(string(out))
-	return w, nil
+	id, width, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+	w, _ := ParseWindow(id)
+	cols, _ := strconv.Atoi(width)
+	return w, cols, nil
 }
 
 func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
