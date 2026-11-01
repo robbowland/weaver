@@ -62,6 +62,20 @@ func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
 	if got.Old.Files != nil || got.Old.TurnRoots != nil {
 		t.Errorf("the stored state's lists went too: %q %q", got.Old.Files, got.Old.TurnRoots)
 	}
+	// Not followed, or more than the environment should carry: not handed
+	// on, and the background run asks git.
+	for _, c := range []struct {
+		follow string
+		n      int
+	}{{"", 2}, {"1", maxChangedHandedOn + 1}} {
+		x := *h
+		x.FollowBash, x.Changed = c.follow, make([]string, c.n)
+		b, err := bgRun(&x)
+		var y hk
+		if err != nil || json.Unmarshal(b, &y) != nil || y.ChangedKnown || y.Changed != nil {
+			t.Errorf("follow %q, %d files: handed on %v %d", c.follow, c.n, y.ChangedKnown, len(y.Changed))
+		}
+	}
 	want := map[string]bool{"sf": true, "changes": true, "launchID": true, "launchType": true, "launchAs": true, "rc": true}
 	rt := reflect.TypeOf(hk{})
 	gv, hv := reflect.ValueOf(got).Elem(), reflect.ValueOf(h).Elem()

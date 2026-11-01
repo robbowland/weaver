@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
@@ -75,7 +76,7 @@ func (e *Env) Start(name string) error {
 	if os.Chdir("/") != nil {
 		return errors.New("cannot cd /")
 	}
-	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", homeName, "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
+	return fmt.Errorf("tmux: %w", syscall.Exec(bin, append(base, "new-session", "-s", name, "-n", mux.HomeName, "-c", tmux.Text(here), "-e", "WEAVER_TMUX_SESSION="+name,
 		e.Self, "home", ";", "set-environment", "-t", "="+name, "WEAVER_TMUX_SESSION", name, ";", "source-file", conf), env))
 }
 
@@ -115,7 +116,9 @@ func (e *Env) startRex(name string) error {
 	if husk != nil {
 		fmt.Printf("weaver: Rex restarted and brought the %s session back without what ran in it: started again, its threads with it\n", name)
 		// Last: this wvr may be running in it.
-		_ = husk.Quit()
+		if err := husk.Quit(); err != nil {
+			fmt.Fprintf(os.Stderr, "weaver: could not end what Rex brought back (%s): close it in Rex: %v\n", husk.ID, err)
+		}
 	}
 	return nil
 }

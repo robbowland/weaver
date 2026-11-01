@@ -35,7 +35,7 @@ func Chosen(dir string) bool {
 	case "tmux":
 		return false
 	}
-	_, _, ok := ids{dir}.session(os.Getenv("REX_SESSION"))
+	_, ok := ids{dir}.session(os.Getenv("REX_SESSION"))
 	return ok && os.Getenv("REX_SESSION") != ""
 }
 
@@ -48,8 +48,8 @@ func FromEnv(dir string) Here {
 	}
 	r := ids{dir}
 	h := Here{Inside: true, ID: sid, Where: agent.Where{Server: serverPID(), Session: sid}}
-	if name, _, ok := r.session(sid); ok {
-		h.Name = name
+	if m, ok := r.session(sid); ok {
+		h.Name = m.name
 	} else {
 		h.Name = strings.TrimPrefix(sid, "session:")
 	}
@@ -208,7 +208,7 @@ func Start(dir, name, here string, home []string) (Session, error) {
 		} `json:"initial_windows"`
 	}
 	if err := call("session.create", map[string]any{"label": cut(name, 128), "initial_windows": []any{
-		map[string]any{"window_label": "home", "layout": layout(mux.Spawn{Argv: home, Dir: here}, "")},
+		map[string]any{"window_label": mux.HomeName, "layout": layout(mux.Spawn{Argv: home, Dir: here}, "")},
 	}}, &out); err != nil {
 		return Session{}, err
 	}

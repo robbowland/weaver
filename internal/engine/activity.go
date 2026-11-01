@@ -139,7 +139,8 @@ type nvimHead struct {
 
 func (n nvimHead) name() string { return n.Ev }
 
-// nvimMessage is an event to the agent's nvim.
+// nvimMessage is an event to the agent's nvim: the nvim events below, and
+// nothing else, have name.
 type nvimMessage interface{ name() string }
 
 // The nvim events, each with its own members.

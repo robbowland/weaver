@@ -41,13 +41,10 @@ func (e *Env) Goto(pane, tab string) {
 	e.PushStatus()
 }
 
-// homeName is the name weaver gives home's window.
-const homeName = "home"
-
 // isHome: is w home's window? The one named home that shows no view: at
 // index 0 where weaver places it, or wherever it was made again when 0 was
 // taken (selectHome).
-func isHome(w mux.Window) bool { return w.Name == homeName && w.View == "" }
+func isHome(w mux.Window) bool { return w.Name == mux.HomeName && w.View == "" }
 
 // The session's panes and windows are fetched once for all an operation
 // looks up in them (on Rex each fetch is a snapshot of the session), then
@@ -223,7 +220,7 @@ func (e *Env) showHome() {
 // selectHome shows home (window home), made again first if it was closed.
 func (e *Env) selectHome(home mux.WindowID) {
 	if home == "" {
-		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: homeName, At: 0}
+		w := mux.NewWindow{Spawn: mux.Spawn{Argv: []string{e.Self, "home"}}, Label: mux.HomeName, At: 0}
 		if _, _, _, err := e.Mux().OpenWindow(w); err != nil {
 			w.At = mux.NextFree
 			_, _, _, _ = e.Mux().OpenWindow(w) // 0 is taken: wherever it goes; nothing more to try

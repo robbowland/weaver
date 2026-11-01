@@ -59,7 +59,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "weaver: inside tmux, weaver runs on that tmux; wvr --rex starts it on Rex from outside tmux")
 	}
 	if c.session && e.Session == "" {
-		exit(errNoSession)
+		exit(noSession(e))
 	}
 	exit(c.run(e, args))
 }
@@ -84,7 +84,11 @@ func exit(err error) {
 	os.Exit(1)
 }
 
-var errNoSession = errors.New("not inside a tmux session (start one with `wvr`)")
+// noSession is why a command that acts on the session you are in cannot:
+// you are in none, on the multiplexer weaver acts on.
+func noSession(e *wvr.Env) error {
+	return fmt.Errorf("not inside a %s session (start one with `wvr`)", e.MuxName())
+}
 
 // command is one of wvr's commands: whether it runs only inside a weaver
 // tmux session, and what it does with its arguments.
@@ -147,7 +151,7 @@ var commands = map[string]command{
 	"next":    {session: true, run: done(func(e *wvr.Env, _ []string) { e.Next() })},
 	"go": {run: func(e *wvr.Env, args []string) error {
 		if e.Session == "" {
-			return errNoSession
+			return noSession(e)
 		}
 		switch arg(args, 0) {
 		case "home":

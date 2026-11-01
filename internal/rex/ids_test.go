@@ -54,6 +54,15 @@ func TestReplaceRetires(t *testing.T) {
 	if next, _ := r.num("block:other"); next == n {
 		t.Errorf("a new block took %q again", next)
 	}
+	// It did not close after all: it is a pane again, of a number of its
+	// own; the number it gave up stays the new block's.
+	r.unretire("block:old")
+	if got, err := r.num("block:old"); err != nil || got == "" || got == n {
+		t.Errorf("unretired: %q %v, want a number of its own", got, err)
+	}
+	if got, _ := r.num("block:new"); got != n {
+		t.Errorf("the new block: %q, want %q", got, n)
+	}
 }
 
 // Of two sessions of a name made within one second, the later is found;
@@ -73,7 +82,7 @@ func TestLatestWithinASecond(t *testing.T) {
 	if err := r.write("sessions", fileName("session:old"), "o\n1700000000"); err != nil {
 		t.Fatal(err)
 	}
-	if name, made, ok := r.session("session:old"); !ok || name != "o" || made != 1700000000 {
-		t.Errorf("an older record: %q %v %v", name, made, ok)
+	if m, ok := r.session("session:old"); !ok || m.name != "o" || m.at != 1700000000 || m.server != 0 {
+		t.Errorf("an older record: %+v %v", m, ok)
 	}
 }

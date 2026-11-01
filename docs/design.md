@@ -1018,7 +1018,8 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `tmux.WindowTarget` give them back). Rex's blocks and windows are UUIDs,
   so `rex` numbers them: `$STATE_DIR/rex/n/<num>` is the block or window a
   number names, `u/<id>` (`:` as `_`) the number of an id, given under
-  `rex/lock`, never twice; `Respawn` points the pane's number at the block
+  `rex/lock`, never twice (`rex/start` is held while `wvr` asks whether
+  weaver's session runs and makes it, so two at once make one); `Respawn` points the pane's number at the block
   that takes its place, holding `rex/lock` from before that block is made
   until its number names it, so the program it starts, asking its number
   however soon, gets the pane's. The old block, until it has closed, is

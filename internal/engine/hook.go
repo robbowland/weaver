@@ -455,7 +455,7 @@ func writeState(e *session.Env, h *hk) {
 		st.NvimPane = &nv
 	}
 	// The life of the tmux session it runs in: a server or session made
-	// again is another, however soon (serverLost).
+	// again is another, however soon (session's lives.lost).
 	st.Where = e.Where
 	if h.Sid != "" {
 		st.Log = e.LogDir + "/" + h.Sid + ".jsonl"
@@ -598,12 +598,21 @@ func spawnBg(e *session.Env, h *hk) {
 
 // bgRun is h as the background run takes it ($WEAVER_BG, hookBg). The
 // stored state's lists stay behind: the background run has the new ones,
-// and its environment has room for so much.
+// and its environment has room for so much. The files the call changed go
+// only for it to follow them (FollowBash), and only so many: more (a
+// formatter over a whole tree), and it asks git, as for a call that does
+// not say.
 func bgRun(h *hk) ([]byte, error) {
 	bg := *h
 	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents, bg.Old.TurnRoots = nil, nil, nil, nil
+	if bg.FollowBash == "" || len(bg.Changed) > maxChangedHandedOn {
+		bg.Changed, bg.ChangedKnown = nil, false
+	}
 	return json.Marshal(&bg)
 }
+
+// maxChangedHandedOn is how many changed files go with a background run.
+const maxChangedHandedOn = 200
 
 // HookMain is `wvr hook [--async|--bg]`.
 func HookMain(e *session.Env, args []string) {

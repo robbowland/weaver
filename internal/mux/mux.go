@@ -61,6 +61,10 @@ type Exit struct {
 	What, Hint string
 }
 
+// HomeName is the name of home's window, weaver's board: the window so
+// named that shows no view is home, wherever it is.
+const HomeName = "home"
+
 // NextFree is the index to open a window at, or break a pane out to, when
 // any free one will do: the session's next.
 const NextFree = -1

@@ -152,18 +152,28 @@ func (s Session) Life() agent.Where {
 
 // Made is when weaver made the session (Rex does not say).
 func (s Session) Made() (int64, bool) {
-	_, made, ok := s.ids().session(s.ID)
-	return int64(made), ok && made > 0
+	m, ok := s.ids().session(s.ID)
+	return int64(m.at), ok && m.at > 0
 }
 
 // Restored: did Rex bring the session back after its server restarted?
 // Rex restores a session as it was, its ids and all, with a fresh shell in
 // each terminal: every program weaver ran in it (home, agents, nvims)
-// ended with the server weaver made it on. False when that is not known: a
-// record from before weaver kept its server, or no server answering.
+// ended with the server weaver made it on. Known when the machine has
+// started since weaver made it (no program outlives that, and a server
+// started since may have the old one's pid), or when the server running is
+// not the one weaver made it on; not, for a record from before weaver kept
+// its server, or with no server answering.
 func (s Session) Restored() bool {
-	was, now := s.ids().server(s.ID), serverPID()
-	return was > 0 && now > 0 && now != was
+	m, ok := s.ids().session(s.ID)
+	if !ok {
+		return false
+	}
+	if boot := process.BootTime(); boot > 0 && m.at > 0 && m.at < float64(boot) {
+		return true
+	}
+	now := serverPID()
+	return m.server > 0 && now > 0 && now != m.server
 }
 
 func (s Session) Running() bool {
@@ -430,7 +440,10 @@ func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 		return err
 	}
 	_ = s.ids().note("cmd", string(p), strings.Join(sp.Argv, " "))
-	_ = s.callS("block.close", map[string]any{"block_id": old}, nil)
+	if s.callS("block.close", map[string]any{"block_id": old}, nil) != nil {
+		// Still there: a pane of its own again, not one weaver cannot see.
+		s.ids().unretire(old)
+	}
 	if focused {
 		s.Focus(p)
 	}

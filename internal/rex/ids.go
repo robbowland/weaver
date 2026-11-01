@@ -23,6 +23,9 @@ import (
 //	want/<num>     the place weaver gave window num (home 0, a thread its
 //	               number, a view 900 and on)
 //	view/<num>     the view window num shows
+//	sessions/<id>  a session weaver made: its name, when, and its server
+//	lock, start    held while a number is given or moved, and while wvr
+//	               asks whether weaver's session runs and makes it (Ensure)
 //
 // A number is never given twice, and follows its block when weaver starts
 // another in its place (Respawn); the block it leaves gets none again
@@ -137,6 +140,15 @@ func (r ids) replace(n string, start func() (string, error), drop func(id string
 	return nil
 }
 
+// unretire forgets that block id was retired (replace), when it was: a
+// block that has not gone after all gets a number of its own when next
+// asked.
+func (r ids) unretire(id string) {
+	if n, err := files.FirstLine(r.path("u", fileName(id))); err == nil && n == retired {
+		os.Remove(r.path("u", fileName(id)))
+	}
+}
+
 // note keeps what weaver knows of number n under kind (cmd, want, view);
 // empty forgets it.
 func (r ids) note(kind, n, v string) error {
@@ -152,20 +164,31 @@ func (r ids) noted(kind, n string) string {
 	return strings.TrimSuffix(string(v), "\n")
 }
 
-// session is weaver's name for Rex session id, and when weaver made it,
-// in epoch seconds to the millisecond (made; whole seconds in older
-// records).
-func (r ids) session(id string) (string, float64, bool) {
+// madeSession is weaver's record of a Rex session it made
+// (sessions/<id>, made): the name it gave it, when (epoch seconds to the
+// millisecond; whole seconds in older records), and the pid of the server
+// it made it on (0 in older records).
+type madeSession struct {
+	name   string
+	at     float64
+	server int
+}
+
+// session is weaver's record of Rex session id, when weaver made it.
+func (r ids) session(id string) (madeSession, bool) {
 	b, err := os.ReadFile(r.path("sessions", fileName(id)))
 	if err != nil {
-		return "", 0, false
+		return madeSession{}, false
 	}
 	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
-	var t float64
+	m := madeSession{name: ls[0]}
 	if len(ls) > 1 {
-		t, _ = strconv.ParseFloat(ls[1], 64)
+		m.at, _ = strconv.ParseFloat(ls[1], 64)
 	}
-	return ls[0], t, ls[0] != ""
+	if len(ls) > 2 {
+		m.server, _ = strconv.Atoi(ls[2])
+	}
+	return m, m.name != ""
 }
 
 // named is the Rex session weaver made last for name.
@@ -188,8 +211,8 @@ func (r ids) latest(match func(name string) bool) (string, string, bool) {
 	at := -1.0
 	for _, d := range ents {
 		id := strings.Replace(d.Name(), "_", ":", 1)
-		if n, made, ok := r.session(id); ok && match(n) && made > at {
-			best, bestName, at = id, n, made
+		if m, ok := r.session(id); ok && match(m.name) && m.at > at {
+			best, bestName, at = id, m.name, m.at
 		}
 	}
 	return best, bestName, best != ""
@@ -202,18 +225,6 @@ func (r ids) latest(match func(name string) bool) (string, string, bool) {
 func (r ids) made(id, name string, at time.Time, server int) error {
 	t := strconv.FormatFloat(float64(at.UnixMilli())/1000, 'f', 3, 64)
 	return r.write("sessions", fileName(id), name+"\n"+t+"\n"+strconv.Itoa(server))
-}
-
-// server is the pid of the server weaver made session id on; 0 when not
-// known (a record from before weaver kept it).
-func (r ids) server(id string) int {
-	b, _ := os.ReadFile(r.path("sessions", fileName(id)))
-	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(ls) < 3 {
-		return 0
-	}
-	n, _ := strconv.Atoi(ls[2])
-	return n
 }
 
 func (r ids) write(kind, name, v string) error {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex/rextest"
 )
 
@@ -871,4 +872,25 @@ func TestEnsureRestored(t *testing.T) {
 		t.Errorf("after: %q %v, want %q", again.ID, err, got.ID)
 	}
 	t.Cleanup(func() { _ = got.Quit() })
+}
+
+// A session weaver made before the machine started, running now, is one
+// Rex brought back, whatever pid its server has; one made since is not
+// (no server answering to say otherwise).
+func TestRestoredAcrossABoot(t *testing.T) {
+	rextest.NoRex(t)
+	dir := t.TempDir()
+	r := ids{dir}
+	if err := r.made("session:before", "w", time.Unix(process.BootTime()-60, 0), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.made("session:since", "w", time.Now(), 0); err != nil {
+		t.Fatal(err)
+	}
+	if !(Session{ID: "session:before", Dir: dir}).Restored() {
+		t.Error("made before the machine started: not restored")
+	}
+	if (Session{ID: "session:since", Dir: dir}).Restored() {
+		t.Error("made since, its server not known: restored")
+	}
 }

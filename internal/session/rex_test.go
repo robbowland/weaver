@@ -123,7 +123,7 @@ func TestRexLostAndGC(t *testing.T) {
 	thread("9002", "-", now)
 	thread("9003", "", now)
 	if lost, known := e.newLives().lost(skey, now, life); lost || !known {
-		t.Errorf("running: serverLost %v, known %v", lost, known)
+		t.Errorf("running: lost %v, known %v", lost, known)
 	}
 	os.Remove(log)
 	e.gcAgents()
@@ -149,7 +149,7 @@ func TestRexLostAndGC(t *testing.T) {
 		thread(p, "", now-7200)
 	}
 	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
-		t.Errorf("gone: serverLost %v, known %v", lost, known)
+		t.Errorf("gone: lost %v, known %v", lost, known)
 	}
 	os.Remove(log)
 	e.gcAgents()
@@ -169,11 +169,11 @@ func TestRexLostAndGC(t *testing.T) {
 		t.Fatal(err)
 	}
 	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
-		t.Errorf("its server stopped: serverLost %v, known %v", lost, known)
+		t.Errorf("its server stopped: lost %v, known %v", lost, known)
 	}
 	where = agent.Where{Server: os.Getpid(), Session: s.ID}
 	if lost, known := e.newLives().lost(skey, now, where); lost || known {
-		t.Errorf("no answer: serverLost %v, known %v", lost, known)
+		t.Errorf("no answer: lost %v, known %v", lost, known)
 	}
 	for _, p := range shown {
 		thread(p, dead, now)

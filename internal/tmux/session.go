@@ -322,8 +322,8 @@ func (s Session) Strip(items []mux.StripItem) {
 	for _, it := range items {
 		var p string
 		if it.View == "" {
-			// Home's window: the one named home that shows no view.
-			p = "#[range=user|home]#{?#{&&:#{==:#{window_name},home},#{==:#{@weaver-view},}},#[fg=#ffffff],#[fg=#616161]}" + Text(it.Label) + "#[norange]"
+			// Home's window: the one so named that shows no view.
+			p = "#[range=user|home]#{?#{&&:#{==:#{window_name}," + mux.HomeName + "},#{==:#{@weaver-view},}},#[fg=#ffffff],#[fg=#616161]}" + Text(it.Label) + "#[norange]"
 		} else {
 			p = "#[range=user|" + it.View + "]#{?#{==:#{@weaver-view}," + it.View + "},#[fg=#ffffff],#[fg=#616161]}" + Text(it.Label) + "#[norange]"
 		}
