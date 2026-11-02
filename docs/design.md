@@ -1078,10 +1078,24 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   `BreakOut` in the foreground ask the app (`rex do session.select` with
   the window: Remote Control on), else make it the server's active window.
   weaver.lua's keys run wvr with `REX_BIN_DIR` where the wvr that wrote it
-  found rex: Rex's server runs them with an app's environment, where
-  `rex.Bin` would find no rex but the app's server's own; they run in the
-  pane's directory (its program's when it reports none), and what wvr says
-  on stderr goes to Rex's log. `SplitLeft` gives pid 0, not known yet (Rex runs
+  found rex, and the settings a key's wvr reads that it had set
+  (`rexSettings`: `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+  `WEAVER_AGENT_WIDTH`, `WEAVER_AGENT_MIN_COLS`, `WEAVER_VIEWS`): Rex's server
+  runs them with an app's environment, where `rex.Bin` would find no rex but
+  the app's server's own, and weaver its state in the wrong place. They run
+  in the pane's directory (its program's when it reports none), from home
+  when that has gone; what wvr says on stderr goes to Rex's log, and a key
+  whose wvr cannot run at all is the terminal's, not swallowed. In a
+  floating layer (weaver's popups: the form, a card, alt+y's board) the keys
+  are the popup's program's, as tmux's popups take every key. Rex starts a
+  key's wvr at once, not after the last one's as tmux's command queue does:
+  `wvr go window` (alt+j/k) takes the session's UI lock (`uiLock`, which
+  `wvr edit` holds and `wvr next` tries), so each press moves on from where
+  the last left you. A background `BreakOut` puts the server's active window
+  back after `session.move_block`, which makes the moved block's new window
+  active when it had its window's focus (the app shows what it showed). A
+  window's width is its zoomed block's while one is zoomed
+  (`zoomed_block_id`), whatever that block's share of the layout. `SplitLeft` gives pid 0, not known yet (Rex runs
   a command through the login shell, whose pid it would be): `wvr nvim`
   records its own pid as it starts. Rex has no message line: `Say` and
   `SayToSession` show their text as one line in a small floating layer at

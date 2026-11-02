@@ -135,6 +135,25 @@ k="$k|$(active)|$(alt j)"
 waitfor '[ "$(active)" != home ]' 50
 ok "keys: Alt k, home; Alt j, the thread again" "$k|$(active)" "true|home|true|01 say hello · repo/main" ||
 	{ grep -i weaver "$AT/server.log" | tail -5 | sed 's/^/  server: /'; }
+# Rex starts each key's wvr at once, so a press can come while the last is
+# at work: every press moves one window on from where the last left you, as
+# tmux's next-window does (two from the thread: home, then the thread).
+k="$(alt j)$(alt j)"
+sleep 1.5
+ok "keys: Alt j twice at once, two windows on" "$k|$(active)" "truetrue|01 say hello · repo/main"
+# In one of weaver's popups (here Ctrl q's card) its keys are the popup's
+# program's, as tmux's popups take every key: Alt j stays in the card.
+popup() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .layer_id][0] // ""'; }
+(REX_SESSION=$SID wvr _popup quit >/dev/null 2>&1 &)
+waitfor '[ -n "$(popup)" ]' 50
+# (The app focuses the popup's block; a server without one leaves it.)
+R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$(view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .blocks[0].block_id][0]')\"}" >/dev/null
+k=$(alt j)
+sleep 0.5
+ok "keys: in a popup, Alt j is the popup's" "$k|$(active)|$([ -n "$(popup)" ] && echo open)" "false|01 say hello · repo/main|open" ||
+	view | jq -c '.active_window_id as $a | .windows[] | {label, active: (.window_id == $a), f: .focused_block_id[-6:], layers: [.layers[] | {kind, b: [.blocks[].block_id[-6:]]}]}' | sed 's/^/  view: /'
+R api call session.close_layer "{\"session_id\":\"$SID\",\"layer_id\":\"$(popup)\"}" >/dev/null 2>&1
+waitfor '[ -z "$(popup)" ]' 50
 ok "new: its thread record, under the session's Rex key and the agent's number" \
 	"$(jq -r .num "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "1"
 

@@ -158,9 +158,9 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 		return f, false, false, err
 	}
 	// Inside Lua strings: a path's \ and " escaped.
-	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace
+	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace
 	keys := strings.NewReplacer("@WVR@", lua(e.Self), "@SESSIONS@", lua(e.RexDir()+"/sessions"),
-		"@REXBIN@", lua(rex.BinDir())).Replace(string(src))
+		"@REXBIN@", lua(rex.BinDir()), "--[[@SETTINGS@]]", luaSettings(lua)).Replace(string(src))
 	if old, err := os.ReadFile(f); err != nil || string(old) != keys {
 		if err := store.WriteAtomic(f, []byte(keys)); err != nil {
 			return f, false, false, err
@@ -169,6 +169,27 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	}
 	b, _ := os.ReadFile(init)
 	return f, loadsWeaver(string(b)), changed, nil
+}
+
+// rexSettings are the variables a wvr run by a key reads that Rex's server
+// does not have: it runs keys' commands with an app's environment, not a
+// shell's (tmux's run-shell has its server's, the one weaver started it
+// with). Where weaver keeps its state (its sessions' record, which the keys
+// themselves are baked with), finds its runtime and config, a thread's
+// widths, and its views.
+var rexSettings = []string{"XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
+	"WEAVER_AGENT_WIDTH", "WEAVER_AGENT_MIN_COLS", "WEAVER_VIEWS"}
+
+// luaSettings is those of rexSettings set here as a Lua table's fields,
+// each value escaped by lua (set but empty kept: WEAVER_VIEWS= means none).
+func luaSettings(lua func(string) string) string {
+	var f []string
+	for _, k := range rexSettings {
+		if v, ok := os.LookupEnv(k); ok {
+			f = append(f, k+` = "`+lua(v)+`"`)
+		}
+	}
+	return strings.Join(f, ", ")
 }
 
 // reRequireWeaver is a Lua require of weaver: require("weaver"), require

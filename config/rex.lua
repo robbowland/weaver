@@ -14,6 +14,11 @@ local sessions = "@SESSIONS@"
 -- no rex on its PATH and no REX_BIN_DIR: without it, wvr would find no rex
 -- (but the Rex app's own), and every key would do nothing.
 local rexbin = "@REXBIN@"
+-- The settings a key's wvr reads (where weaver keeps its state, its
+-- widths, its views) that the wvr writing this had set: Rex's server runs
+-- these keys' commands with an app's environment, which has none of a
+-- shell's, as tmux's run-shell has its server's.
+local settings = { --[[@SETTINGS@]] }
 
 local terminal = "com.superlogical.terminal"
 
@@ -44,21 +49,35 @@ end
 
 -- run runs wvr with args for the session the key was pressed in, as tmux's
 -- run-shell does: in no pane of its own, so weaver acts on the focused one.
--- What it says when it fails goes to Rex's log (rex server logs).
+-- From cwd, else home (as well when cwd has gone: a removed worktree's).
+-- What it says when it fails goes to Rex's log (rex server logs). False
+-- when it could not run at all (no wvr where it was): the key is the
+-- terminal's then, not swallowed.
 local function run(ctx, args, cwd)
   local argv = { wvr }
   for _, a in ipairs(args) do argv[#argv + 1] = a end
-  local _, err = rex.exec.start(argv, {
-    cwd = (cwd ~= nil and cwd ~= "") and cwd or (home() ~= "" and home() or nil),
-    env = {
-      REX_SESSION = ctx.session_id, REX_BLOCK = false, WEAVER_MUX = "rex",
-      REX_BIN_DIR = rexbin ~= "" and rexbin or false,
-    },
+  local env = {}
+  for k, v in pairs(settings) do env[k] = v end
+  env.REX_SESSION, env.REX_BLOCK, env.WEAVER_MUX = ctx.session_id, false, "rex"
+  env.REX_BIN_DIR = rexbin ~= "" and rexbin or false
+  local opts = {
+    cwd = (cwd ~= nil and cwd ~= "") and cwd or nil,
+    env = env,
     stdout = false,
     stderr = function(s) rex.log("warn", "weaver: " .. s) end,
     detach = true,
-  })
-  if err then rex.log("warn", "weaver: could not run wvr: " .. tostring(err)) end
+  }
+  local h, err = nil, nil
+  if opts.cwd then h, err = rex.exec.start(argv, opts) end
+  if not h then
+    opts.cwd = home() ~= "" and home() or nil
+    h, err = rex.exec.start(argv, opts)
+  end
+  if not h then
+    rex.log("warn", "weaver: could not run " .. wvr .. ": " .. tostring(err))
+    return false
+  end
+  return true
 end
 
 -- inView: is the key pressed in one of weaver's views (GITHUB, LINEAR),
@@ -86,30 +105,48 @@ local function weavers(ctx)
   return false
 end
 
--- key binds k to fn in weaver's sessions; fn returns false to let the key
--- through there too.
+-- inPopup: is the key pressed in a floating layer, one of weaver's popups
+-- (a new thread's form, a card, Alt y's board)? tmux's popups take every
+-- key, its own bindings never reach them: the popup's program reads it.
+local function inPopup(ctx)
+  if not ctx.block_id then return false end
+  local v = rex.session.view{}
+  for _, w in ipairs(v and v.windows or {}) do
+    for _, l in ipairs(w.layers or {}) do
+      if l.kind ~= "tiled" then
+        for _, b in ipairs(l.blocks or {}) do
+          if b.block_id == ctx.block_id then return true end
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- key binds k to fn in weaver's sessions, outside its popups; fn returns
+-- false to let the key through there too.
 local function key(k, fn)
   rex.bind(k, function(ctx)
-    if not weavers(ctx) then return false end
+    if not weavers(ctx) or inPopup(ctx) then return false end
     return fn(ctx) ~= false
   end)
 end
 
-key("alt+y", function(ctx) run(ctx, { "go", "home" }, pwd(ctx)) end)
+key("alt+y", function(ctx) return run(ctx, { "go", "home" }, pwd(ctx)) end)
 key("alt+shift+n", function(ctx)
   if inView(ctx) then return false end
-  run(ctx, { "_popup", "new" }, pwd(ctx))
+  return run(ctx, { "_popup", "new" }, pwd(ctx))
 end)
-key("alt+v", function(ctx) run(ctx, { "edit" }) end)
-key("alt+shift+v", function(ctx) run(ctx, { "edit", "--full" }) end)
-key("alt+1", function(ctx) run(ctx, { "next" }) end)
+key("alt+v", function(ctx) return run(ctx, { "edit" }) end)
+key("alt+shift+v", function(ctx) return run(ctx, { "edit", "--full" }) end)
+key("alt+1", function(ctx) return run(ctx, { "next" }) end)
 -- Quit the session, every agent and nvim in it, after asking (tmux's
 -- Ctrl q asks only while a turn is under way).
-key("ctrl+q", function(ctx) run(ctx, { "_popup", "quit" }) end)
+key("ctrl+q", function(ctx) return run(ctx, { "_popup", "quit" }) end)
 -- The next and previous window that shows no view, as tmux's: through wvr,
 -- since the app shows only a window it is asked to (the server's active
 -- window is not what it shows).
-key("alt+j", function(ctx) run(ctx, { "go", "window", "next" }) end)
-key("alt+k", function(ctx) run(ctx, { "go", "window", "prev" }) end)
+key("alt+j", function(ctx) return run(ctx, { "go", "window", "next" }) end)
+key("alt+k", function(ctx) return run(ctx, { "go", "window", "prev" }) end)
 key("alt+h", function() rex.session.focus_direction{ direction = "left" } end)
 key("alt+l", function() rex.session.focus_direction{ direction = "right" } end)

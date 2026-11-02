@@ -353,6 +353,102 @@ func TestKeysWeavers(t *testing.T) {
 	}
 }
 
+// keysLua is config/rex.lua as wvr writes it: run by wvr, with sessions'
+// record and settings, and then more Lua of the test's.
+func keysLua(t *testing.T, wvr, sessions, settings, more string) string {
+	t.Helper()
+	src, err := os.ReadFile("../../config/rex.lua")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.NewReplacer("@WVR@", wvr, "@SESSIONS@", sessions, "--[[@SETTINGS@]]", settings).Replace(string(src)) + "\n" + more
+}
+
+// A key's wvr runs with the settings wvr baked in (Rex's server has an
+// app's environment), from home when the pane's directory has gone; when it
+// cannot run at all, the key is the terminal's (false), not swallowed.
+func TestKeysRun(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	out := filepath.Join(t.TempDir(), "env")
+	gone := filepath.Join(t.TempDir(), "gone")
+	script := keysLua(t, "/bin/sh", dir+"/sessions", `XDG_STATE_HOME = "/the/state", WEAVER_VIEWS = ""`,
+		`return { run({ session_id = rex.args.sid }, { "-c", "env > " .. rex.args.out .. "; pwd >> " .. rex.args.out }, rex.args.gone) }`)
+	var ran []bool
+	if err := do(s.ID, script, map[string]any{"sid": s.ID, "out": out, "gone": gone}, &ran); err != nil {
+		t.Fatal(err)
+	}
+	var env string
+	for i := 0; i < 50; i++ {
+		if b, _ := os.ReadFile(out); strings.Contains(string(b), "WEAVER_MUX") {
+			env = string(b)
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for _, want := range []string{"XDG_STATE_HOME=/the/state\n", "WEAVER_VIEWS=\n", "REX_SESSION=" + s.ID + "\n", "WEAVER_MUX=rex\n"} {
+		if !strings.Contains(env, want) {
+			t.Errorf("a key's wvr has no %q in its environment:\n%s", want, env)
+		}
+	}
+	if !slices.Equal(ran, []bool{true}) || !strings.HasSuffix(env, os.Getenv("HOME")+"\n") {
+		t.Errorf("run from a directory gone: %v, ran in %q, want true, from home", ran, env[strings.LastIndex(strings.TrimSuffix(env, "\n"), "\n")+1:])
+	}
+	script = keysLua(t, "/no/such/wvr", dir+"/sessions", "", `return { run({ session_id = rex.args.sid }, { "go", "home" }) }`)
+	if err := do(s.ID, script, map[string]any{"sid": s.ID}, &ran); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(ran, []bool{false}) {
+		t.Errorf("run with no wvr there: %v, want false (the key the terminal's)", ran)
+	}
+}
+
+// In one of weaver's popups (a floating layer: the form, a card, Alt y's
+// board) weaver's keys are the popup's program's, as tmux's popups take
+// every key.
+func TestKeysInPopup(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	v, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tiled string
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			for _, b := range l.Blocks {
+				tiled = b.ID
+			}
+		}
+	}
+	var out struct {
+		Blocks []string `json:"block_ids"`
+	}
+	if err := s.callS("session.new_layer", map[string]any{"bounds": []float64{0.25, 0.25, 0.5, 0.5}, "focus": true,
+		"layout": layout(mux.Spawn{Argv: []string{"/bin/sleep", "600"}}, "weaver")}, &out); err != nil || len(out.Blocks) == 0 {
+		t.Fatal(err, out)
+	}
+	script := keysLua(t, "/usr/bin/true", dir+"/sessions", "",
+		`return { inPopup({ block_id = rex.args.popup }), inPopup({ block_id = rex.args.tiled }), inPopup({}) }`)
+	var got []bool
+	if err := do(s.ID, script, map[string]any{"popup": out.Blocks[0], "tiled": tiled}, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []bool{true, false, false}) {
+		t.Errorf("inPopup: a popup's block, a window's, none = %v, want [true false false]", got)
+	}
+}
+
 // A pane's width is set in its own window, whatever the windows before it:
 // here one of blocks that are not terminals, whose width is not known.
 func TestBorder(t *testing.T) {

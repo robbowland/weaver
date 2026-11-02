@@ -213,8 +213,13 @@ func (e *Env) GoView(step int) {
 
 // GoWindow is `wvr go window next|prev` (Alt j, Alt k in Rex, as tmux.conf
 // binds them in tmux): the next or previous window that shows no view
-// (home, a thread), around the end.
+// (home, a thread), around the end. Each press moves on from where the last
+// left you, as tmux's next-window does: Rex starts a key's wvr at once, so
+// a press can come while the last one's is at work, and both would read the
+// same window.
 func (e *Env) GoWindow(step int) {
+	release := e.uiLock()
+	defer release()
 	ws, cur, _ := e.where()
 	var in []mux.Window
 	at := 0
@@ -317,8 +322,9 @@ func (e *Env) goBack(ws []mux.Window, cur mux.Window, home mux.WindowID) {
 	}
 }
 
-// uiLock is one `wvr edit` or `wvr next` per session at a time: it waits
-// for the one at work (at most 10 s). A lock older than 10 s was left by a
+// uiLock is one `wvr edit`, `wvr next` or `wvr go window` per session at a
+// time: it waits for the one at work (at most 10 s), looking every 20 ms so
+// a queue of key presses keeps up. A lock older than 10 s was left by a
 // killed process. Its release.
 func (e *Env) uiLock() func() {
 	release, _ := e.takeUILock(false)
@@ -352,10 +358,10 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 		if nowait {
 			return func() {}, false
 		}
-		if i >= 100 {
+		if i >= 500 {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
 	os.WriteFile(d+"/at", []byte(strconv.FormatInt(time.Now().Unix(), 10)+"\n"), 0o644)
 	return func() { os.RemoveAll(d) }, true

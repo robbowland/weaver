@@ -86,7 +86,11 @@ Rex read it when it is new to Rex, and says to load it by adding
 weaver's tmux does, and `ctrl+q`, which asks every time before it quits.
 Rex's configuration is one for every session, so the keys are weaver's only
 in the Rex sessions weaver made; in any other they are the terminal's, so a
-weaver on tmux in a Rex terminal still gets its own.
+weaver on tmux in a Rex terminal still gets its own. In weaver's popups (a
+new thread's form, a card, Alt y's board) they are the popup's, as in tmux.
+Rex runs them without your shell's environment: weaver's settings that they
+read (`XDG_STATE_HOME`, `WEAVER_AGENT_WIDTH` and the like) are the ones set
+where you last ran `wvr`.
 
 The Rex app shows the window it is asked to, so weaver's moves (its keys,
 enter on the board, a new thread) ask it, which it does only with Remote

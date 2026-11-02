@@ -80,3 +80,22 @@ func TestLoadsWeaver(t *testing.T) {
 		}
 	}
 }
+
+// weaver's keys on Rex carry the settings a key's wvr reads that are set
+// where wvr writes them (Rex's server has an app's environment): as Lua
+// fields, escaped; set but empty kept, unset left out.
+func TestLuaSettings(t *testing.T) {
+	for _, k := range rexSettings {
+		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("XDG_STATE_HOME", `/a "b"\c`)
+	t.Setenv("WEAVER_VIEWS", "")
+	lua := func(s string) string { return "<" + s + ">" }
+	want := `XDG_STATE_HOME = "</a "b"\c>", WEAVER_VIEWS = "<>"`
+	if got := luaSettings(lua); got != want {
+		t.Errorf("luaSettings = %s, want %s", got, want)
+	}
+}
