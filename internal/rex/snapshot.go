@@ -81,6 +81,7 @@ type window struct {
 	ID      string      `json:"window_id"`
 	Label   string      `json:"label"`
 	Focused string      `json:"focused_block_id"`
+	Zoomed  string      `json:"zoomed_block_id"` // the block filling it, while one does
 	Layers  list[layer] `json:"layers"`
 }
 
@@ -172,6 +173,14 @@ func (w window) tiled() ([]block, map[string][]float64) {
 // size is a window's columns and lines, from a block's size and its share
 // of the window.
 func (sn snapshot) size(w window) (int, int) {
+	// A zoomed block fills the window, whatever its share of the layout
+	// says (and the others keep the sizes they had): its own size, or none.
+	if w.Zoomed != "" {
+		if i := sn.Blocks[w.Zoomed]; i.Size != nil {
+			return i.Size.Columns, i.Size.Rows
+		}
+		return 0, 0
+	}
 	bs, at := w.tiled()
 	for _, b := range bs {
 		i, r := sn.Blocks[b.ID], at[b.ID]

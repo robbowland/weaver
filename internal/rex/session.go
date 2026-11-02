@@ -379,6 +379,11 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 	if err != nil {
 		return "", 0, err
 	}
+	if background && !seen {
+		if x, err := s.view(); err == nil {
+			v = x
+		}
+	}
 	var out struct {
 		Window string   `json:"window_id"`
 		Blocks []string `json:"block_ids"`
@@ -403,9 +408,16 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 	if at >= 0 {
 		s.placeIn(v, seen, out.Window, mux.WindowID(wn), at)
 	}
-	if !background {
+	switch {
+	case !background:
 		s.show(out.Window)
 		_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
+	case v.Active != "" && v.Active != out.Window:
+		// A block with its window's focus takes it along, and Rex makes its
+		// new window the active one; the app goes on showing what it showed
+		// (it follows no server change). The active window goes back, so
+		// the two agree: Focus and GoWindow start from it.
+		_ = s.callS("session.focus_window", map[string]any{"window_id": v.Active}, nil)
 	}
 	return mux.WindowID(wn), s.cols(p), nil
 }

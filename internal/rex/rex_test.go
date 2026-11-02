@@ -380,6 +380,17 @@ func TestBorder(t *testing.T) {
 	if _, _, _, ok := sn.border("block:a1", 30); ok {
 		t.Error("a pane in a window of no known width was given one")
 	}
+	// Zoomed (Alt V), the zoomed block fills the window and the other keeps
+	// the size it had: the window is the zoomed one's width, not its share's.
+	z := `{"view":{"windows":[{"window_id":"window:z","zoomed_block_id":"block:z1","layers":[` + split("block:z1", "block:z2", 0.75) + `"blocks":[
+		{"block_id":"block:z1","creator_name":"` + terminal + `"},{"block_id":"block:z2","creator_name":"` + terminal + `"}]}]}]},
+		"blocks":{"block:z1":{"size":{"columns":160,"rows":50}},"block:z2":{"size":{"columns":40,"rows":50}}}}`
+	if err := json.Unmarshal([]byte(z), &sn); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ratio, ok := sn.border("block:z2", 40); !ok || math.Abs(ratio-0.75) > 1e-9 {
+		t.Errorf("zoomed: the agent 40 of 160 wide at ratio %v %v, want 0.75", ratio, ok)
+	}
 }
 
 // What is on screen: Rex does not say which session an app shows, so no
@@ -766,6 +777,19 @@ func TestBreakOut(t *testing.T) {
 	if _, _, err := s.BreakOut(q, "taken", 1, true); err == nil {
 		t.Error("broken out to a place another window has")
 	}
+	// The pane has its window's focus, and another window is the one shown
+	// (active): in the background, that stays the active one.
+	before, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	qb, _ := s.block(q)
+	if err := s.callS("session.focus_block", map[string]any{"block_id": qb}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.callS("session.focus_window", map[string]any{"window_id": before.Active}, nil); err != nil {
+		t.Fatal(err)
+	}
 	log := logRex(t)
 	out, width, err := s.BreakOut(q, "02 out", 2, true)
 	if err != nil {
@@ -785,6 +809,9 @@ func TestBreakOut(t *testing.T) {
 	}
 	if x, ok := paneIn(ps, p); !ok || x.Window != w {
 		t.Errorf("the pane left: %+v %v, want in %q", x, ok, w)
+	}
+	if after, _ := s.view(); after.Active != before.Active {
+		t.Errorf("active window after a break-out in the background: %q, want %q as before", after.Active, before.Active)
 	}
 }
 
