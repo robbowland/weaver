@@ -838,7 +838,9 @@ vfzf() { pgrep -f -- "--listen /tmp/weaver-$(id -u)/tmux-$S.view.$1." | head -n 
 old=$(vfzf github)
 touch "$AT/bin/wvr"
 tx run-shell -t "=$S:" "wvr _items github fetch >/dev/null 2>&1"
-waitfor '[ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ]' 100
+# (Its new fzf draws a moment after it starts: wait for that too, as a busy
+# machine takes longer.)
+waitfor '[ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ] && tx capture-pane -p -t "=$S:900" | grep -q "QUEUE · 1"' 100
 ok "GITHUB: a newer weaver installed, the view starts again in it at its next reload" \
 	"$([ -n "$old" ] && [ -n "$(vfzf github)" ] && [ "$(vfzf github)" != "$old" ] && echo again)|$(tx capture-pane -p -t "=$S:900" | grep -c 'QUEUE · 1')" "again|1"
 # weaver installed ahead on PATH (install.sh's over Homebrew's): the view

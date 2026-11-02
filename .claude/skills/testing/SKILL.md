@@ -25,8 +25,10 @@ own sockets and sessions (a real weaver session on the machine made a
 
 - `05-latency`'s idle async hook is measured against `wvr version` started
   in the same run (process start is most of it: ~2 ms idle, 10+ ms loaded).
-- `test/tmux.sh` "GITHUB: a newer weaver installed …" can capture the view
-  before its new fzf draws when the machine is busy.
+- `test/tmux.sh` "GITHUB: a newer weaver installed …" captured the view
+  before its new fzf drew when the machine was busy; it now waits for the
+  draw. A check that reads the screen after a restart must wait for what
+  it reads, not only for the process.
 
 To tell: rerun the suite alone with the machine idle, and compare against
 the base commit in a temporary `git worktree`. Never run `go test` or builds
