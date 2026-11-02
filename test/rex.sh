@@ -167,6 +167,24 @@ hookj "$(ev UserPromptSubmit ',"prompt":"say hello"')"
 ok "hook: working, turn 1, its nvim" "$(jq -r '"\(.state) \(.turn) \(.nvim_pane)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1 $NV"
 ok "status: one working" "$(REX_SESSION=$SID wvr status)" "[/] 1"
 
+# --- seen when you look: Rex has no pane-focus-in hook; home's board follows
+# the session's events, so a thread done while you are elsewhere stays new
+# until you stay on its window a moment, however you came (here the server's
+# own focus_window, as the app's tabs change it)
+winat() { view | jq -r --argjson n "$1" '.windows[$n - 1].window_id'; }
+look() { R api call session.focus_window "{\"session_id\":\"$SID\",\"window_id\":\"$(winat "$1")\"}" >/dev/null; }
+look 1
+hookj "$(ev Stop ',"prompt_id":"p1","last_assistant_message":"hello"')"
+ok "seen: a thread done while you are elsewhere is new" "$(jq -r '"\(.state) \(.seen)"' "$SD/rex-${S}_$AG.json")" "done false"
+look 2
+sleep 0.3
+look 1
+sleep 2.5
+ok "...passing through its window, it stays new" "$(jq -r .seen "$SD/rex-${S}_$AG.json")" "false"
+look 2
+waitfor '[ "$(jq -r .seen "$SD/rex-${S}_$AG.json")" = true ]' 60
+ok "...staying on it, it is seen" "$(jq -r .seen "$SD/rex-${S}_$AG.json")" "true"
+
 # --- the board's edits: rename (as its enter does it), and hold
 REX_SESSION=$SID wvr _modedone "rename 01 › " "Greeting" >/dev/null 2>&1
 waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 50

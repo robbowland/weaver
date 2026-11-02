@@ -75,6 +75,11 @@ func (e *Env) ls(peek, at string) (string, error) {
 		fmt.Print(e.PlainRows())
 		return "", nil
 	}
+	// Rex's stand-in for tmux's pane-focus-in hook runs beside the home
+	// board, also one started again in a newer weaver (exec'd as `wvr ls`).
+	if home && peek == "" && e.OnRex() && e.WeaverSession() {
+		go e.seeAsYouLook()
+	}
 	q := session.Quote(e.Self)
 	sh := "/bin/sh"
 	if st, err := os.Stat("/bin/dash"); err == nil && st.Mode()&0o111 != 0 {

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -16,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/tmux"
 )
@@ -493,12 +495,8 @@ func (e *Env) Seen(window string) {
 		return
 	}
 	p, _ := tmux.ParsePane(f[2])
-	a := e.agentOf(p)
-	if a == "" {
+	if a, _ := e.see(p); a == "" {
 		return
-	}
-	if l, _ := files.FirstLine(e.StateFile(a)); doneUnseen(l) {
-		e.MarkSeen(a)
 	}
 	left := false
 	ps, _ := e.Mux().Panes()
@@ -511,6 +509,57 @@ func (e *Env) Seen(window string) {
 		e.Mux().MarkUnseen(p, false)
 	}
 	e.PushStatus()
+}
+
+// see marks seen the agent pane p is, or whose nvim it is, when it is done
+// and unseen: that agent ("" for none), and whether it was marked.
+func (e *Env) see(p mux.PaneID) (mux.PaneID, bool) {
+	a := e.agentOf(p)
+	if a == "" {
+		return "", false
+	}
+	if l, _ := files.FirstLine(e.StateFile(a)); doneUnseen(l) {
+		e.MarkSeen(a)
+		return a, true
+	}
+	return a, false
+}
+
+// seeAsYouLook is, on Rex, what tmux's pane-focus-in hook (Seen) does:
+// while home's board runs, the agent of the pane you stay on 1.5 s is seen,
+// however you came to its window (weaver's keys, the board, the app's own
+// tabs). Rex has no such hook: the board follows the session's events
+// (rex.Session.WatchActive) and, 1.5 s after the last change of window,
+// sees what is focused then; passing through, a window stays new. Rex does
+// not say whether an app shows the session, so this counts the session's
+// active window as looked at.
+func (e *Env) seeAsYouLook() {
+	s, ok := e.Mux().(rex.Session)
+	if !ok {
+		return
+	}
+	var mu sync.Mutex
+	var t *time.Timer
+	look := func() {
+		if p, ok := e.Mux().Active(); ok && p != "" {
+			if _, marked := e.see(p); marked {
+				e.PushStatus()
+			}
+		}
+	}
+	for {
+		_ = s.WatchActive(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			if t != nil {
+				t.Stop()
+			}
+			t = time.AfterFunc(1500*time.Millisecond, look)
+		})
+		// The stream ended: the session went (the board with it), or rex
+		// failed for now.
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // agentCols is the agent's columns in a thread window total columns wide:

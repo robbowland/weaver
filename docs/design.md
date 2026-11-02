@@ -963,6 +963,11 @@ else weaver's.
   done agents seen only if the window is still the session's current one:
   passing through with alt+j/k leaves them new. (A thread that finishes while
   you are on it, or on its nvim, is seen at once: the counts see the clients' panes.)
+  Rex has no such hook: home's board follows the session's events
+  (`rex events --session`, `rex.Session.WatchActive`) and, 1.5 s after the
+  last change of active window (weaver's moves, the app's own tabs), marks
+  the focused pane's agent seen (`seeAsYouLook`), also when the board starts
+  again in a newer weaver.
 - **alt+1** says where it landed in tmux's message line: `[2/3] 02 name ·
   needs you · what it waits on`.
 - **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
@@ -1109,8 +1114,9 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   and keeps its own there, under a lock of its own (`$STATE_DIR/rex/say`),
   so two at once never both show. `Looking` claims no pane and says it cannot tell (nothing
   in Rex's API says which session an app shows, and the app stays attached
-  to every session it has shown), so on Rex an agent is marked seen only by
-  weaver's own moves to it (`_goto`, alt+1 and the like). Rex has no
+  to every session it has shown), so on Rex an agent is marked seen by
+  weaver's own moves to it (`_goto`, alt+1 and the like) and by home's
+  board watching the active window (see Seen as you look). Rex has no
   status line or window marks: `Publish`, `Strip` and `MarkUnseen` do
   nothing there.
 - **Start:** `wvr` with `$WEAVER_MUX=rex` makes the Rex session (home its
