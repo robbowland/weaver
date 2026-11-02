@@ -72,7 +72,35 @@ Multiplexers section with this.
     app that is waiting on it. Prefer running `wvr`.
 11. `session.swap_blocks` refuses a detached block (`session.new_block`):
     "not found in any window".
-12. The sidebar's colour is not configurable (a raised surface over the
+13. **Keys' commands run at once, side by side.** `rex.exec.start` in a
+    bound function does not wait (tmux's run-shell queue does), so a second
+    press's wvr runs while the first's is at work. A key that reads where you
+    are and then moves must hold the session's UI lock (`uiLock`); `go
+    window` does. `rex do session.select` changes the server's active
+    window before it returns.
+14. **Rex's keys fire inside floating layers** (weaver's popups); tmux's
+    root bindings never reach a popup. weaver.lua's `inPopup` lets them
+    through. With no app attached, `session.new_layer{focus=true}` leaves
+    focus on the tiled block (the app focuses the popup), so a test must
+    `session.focus_block` the popup itself.
+15. **No focus hook, but events:** `rex.on` does nothing in the config file
+    (scripts only). `rex events --session S --json` streams
+    `session_event`s; `active_window_changed` fires for weaver's moves and
+    for the app's own tab changes (and every API call shows up as a
+    `client_connected`/`client_disconnected`). Home's board follows it
+    (`seeAsYouLook`) for tmux's pane-focus-in `_seen`. The board re-execs
+    itself as `wvr ls` when a newer weaver is installed: start anything it
+    runs from `ls`, not only `Home`.
+16. **Zoom is in the view:** a zoomed window has `zoomed_block_id`; the
+    zoomed block's size is the window's and the others keep the sizes they
+    had, so a size from a block's share of the layout is wrong while zoomed.
+    `resize_pane` on a zoomed window keeps the zoom.
+17. **`session.move_block`** makes the moved block's new window active when
+    it had its window's focus (its docs say so): in the background, put the
+    server's active window back.
+18. The app's Cmd+digit and `client.tab.goto index=N` switch *sessions*
+    (the sidebar), not windows.
+19. The sidebar's colour is not configurable (a raised surface over the
     theme's background, rgb(19,20,19) on black); `interfaceStyle`
     (`system | useTheme | blendTheme`) does not change it.
 
@@ -97,6 +125,15 @@ Multiplexers section with this.
   working tree (`go build -o /tmp/wqa/bin/wvr ./cmd/wvr`), a fake agent in
   `WEAVER_CLAUDE`, and back up `~/.config/rex/weaver.lua` first (a QA start
   rewrites it); restore it and `rex config reload` after.
+- **Set `WEAVER_SELF_SETUP=0`** in the QA shell: with the QA build first on
+  PATH it counts as installed, and its start points the user's Claude Code
+  and Codex hooks at the QA binary (restore from the `.bak.<time>` beside
+  them if it happens).
+- **A QA session destroyed with threads in it leaves them lost**, and the
+  next start's boot (home's board, in Rex's environment, not the QA shell's)
+  resumes them with the real `claude --resume`. Before starting the QA
+  session again, remove its `rex-wqa_*` state files; if a real agent starts,
+  end it by pid.
 - See the app: `screencapture -x -o -l<windowid>` of the Rex window (window
   id via CGWindowListCopyWindowInfo, owner "Rex Beta"; needs Screen
   Recording). Without screenshots, a block's `size` method shows which
