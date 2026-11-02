@@ -984,7 +984,15 @@ else weaver's.
   the agent, so a `window-resized` hook runs `wvr _fit <window>`, which
   sets each thread agent there back to its width (one `resize-pane -x`), only
   while nvim and the agent are the window's only panes. Below 104 columns
-  nvim keeps 60 and the agent gets the rest.
+  nvim keeps 60 and the agent gets the rest. Rex's splits are ratios, so
+  the app's window resizing keeps them; but the app evens out a window it
+  shows when its panes change (a split made, a block swapped in), so after
+  such a change weaver puts the thread's widths back twice, late
+  (`settleWidths`: `wvr _width`, 1 and 2.5 s on), unless the split has been
+  moved since by you (`rex.Session.Moved`: neither even nor at the ratio
+  weaver last gave it, kept in the registry's `split/`). A window made
+  behind you is not drawn yet (Rex's 80 by 24 terminals): its widths come
+  from the width the app draws the session's windows at (`drawnCols`).
 - **Look:** popups, menus and copy mode in ink and greys, and one faint
   divider between panes (`pane-border-indicators off`); tmux 3.8's theme
   colours (`dark-theme-*`, server options) too, set inside `%if
@@ -1081,7 +1089,9 @@ nothing of failing. What only tmux runs (its menus, its hooks:
   server's active window (`session.focus_window`) is not what it shows, and
   it sets it back to its tab. So `Show`, `Focus`, and `OpenWindow` and
   `BreakOut` in the foreground ask the app (`rex do session.select` with
-  the window: Remote Control on), else make it the server's active window.
+  the window: Remote Control on; with more than one app connected, which
+  `rex do` cannot choose among, each app attached to the session by name),
+  else make it the server's active window.
   weaver.lua's keys run wvr with `REX_BIN_DIR` where the wvr that wrote it
   found rex, and the settings a key's wvr reads that it had set
   (`rexSettings`: `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,

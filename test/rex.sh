@@ -124,6 +124,16 @@ AG=$(num "$AGB") NV=$(num "$NVB")
 waitfor '[ -f "$SD/rex-${S}_$AG.nvim" ]' 100
 ok "new: the agent took the task, and its nvim is bound to it" \
 	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.nvim" 2>/dev/null)" "say hello|$NV"
+# The width passes after a change (settleWidths' `wvr _width`) put back a
+# split the Rex app evened out, and leave one you moved since.
+ratio() { view | jq -r '.windows[1].layers[] | select(.kind == "tiled") | .layout.split.ratio'; }
+split_at() { R api call session.resize_pane "{\"session_id\":\"$SID\",\"before_block_id\":\"$NVB\",\"after_block_id\":\"$AGB\",\"direction\":\"horizontal\",\"ratio\":$1}" >/dev/null; }
+split_at 0.5
+REX_SESSION=$SID wvr _width "$AG"
+k=$(ratio)
+split_at 0.6
+REX_SESSION=$SID wvr _width "$AG"
+ok "widths: a split evened out put back, one you moved left be" "$([ "$k" != 0.5 ] && echo back)|$(ratio)" "back|0.6"
 # --- weaver's keys, pressed as the Rex app sends a bound key (its bindings
 # first): Alt k home, Alt j back to the thread, though wvr runs with the
 # server's environment

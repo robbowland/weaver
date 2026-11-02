@@ -101,6 +101,11 @@ type info struct {
 	Size *struct {
 		Columns int `json:"columns"`
 		Rows    int `json:"rows"`
+		// The sizes clients (an app) ask for: none until an app has drawn
+		// the terminal, which is Rex's 80 by 24 till then.
+		Desired list[struct {
+			Columns int `json:"columns"`
+		}] `json:"desired"`
 	} `json:"size"`
 	Pwd *struct {
 		Pwd string `json:"pwd"`
@@ -171,8 +176,33 @@ func (w window) tiled() ([]block, map[string][]float64) {
 }
 
 // size is a window's columns and lines, from a block's size and its share
-// of the window.
+// of the window. A window no app has drawn yet (made behind you: its
+// terminals still Rex's 80 by 24) is as big as the active window, when an
+// app has drawn that: the app draws a session's windows at one size.
 func (sn snapshot) size(w window) (int, int) {
+	if w.ID != sn.View.Active && !sn.drawn(w) {
+		for _, a := range sn.View.Windows {
+			if a.ID == sn.View.Active && sn.drawn(a) {
+				return sn.ownSize(a)
+			}
+		}
+	}
+	return sn.ownSize(w)
+}
+
+// drawn: has an app drawn one of window w's terminals (asked for a size)?
+func (sn snapshot) drawn(w window) bool {
+	bs, _ := w.tiled()
+	for _, b := range bs {
+		if i := sn.Blocks[b.ID]; i.Size != nil && len(i.Size.Desired) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// ownSize is size from window w's own terminals.
+func (sn snapshot) ownSize(w window) (int, int) {
 	// A zoomed block fills the window, whatever its share of the layout
 	// says (and the others keep the sizes they had): its own size, or none.
 	if w.Zoomed != "" {
@@ -181,13 +211,17 @@ func (sn snapshot) size(w window) (int, int) {
 		}
 		return 0, 0
 	}
+	// A terminal an app has drawn first: one just split in is Rex's 80 by
+	// 24 till the app draws it.
 	bs, at := w.tiled()
-	for _, b := range bs {
-		i, r := sn.Blocks[b.ID], at[b.ID]
-		if i.Size == nil || len(r) != 4 || r[2] <= 0 || r[3] <= 0 {
-			continue
+	for _, drawn := range []bool{true, false} {
+		for _, b := range bs {
+			i, r := sn.Blocks[b.ID], at[b.ID]
+			if i.Size == nil || len(r) != 4 || r[2] <= 0 || r[3] <= 0 || drawn && len(i.Size.Desired) == 0 {
+				continue
+			}
+			return int(math.Round(float64(i.Size.Columns) / r[2])), int(math.Round(float64(i.Size.Rows) / r[3]))
 		}
-		return int(math.Round(float64(i.Size.Columns) / r[2])), int(math.Round(float64(i.Size.Rows) / r[3]))
 	}
 	return 0, 0
 }
@@ -201,6 +235,24 @@ func (sn snapshot) activeSize() (int, int) {
 		}
 	}
 	return 160, 48
+}
+
+// splitBeside is the ratio of the side-by-side split block b is one half
+// of, in any window.
+func (v view) splitBeside(b string) (float64, bool) {
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			sp := l.Layout
+			if l.Kind != "tiled" || sp == nil || sp.Split == nil || sp.Split.Direction != "horizontal" ||
+				sp.Split.Before == nil || sp.Split.After == nil {
+				continue
+			}
+			if sp.Split.Before.Block == b || sp.Split.After.Block == b {
+				return sp.Split.Ratio, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // border is the border to move for block b to be cols wide, when b and

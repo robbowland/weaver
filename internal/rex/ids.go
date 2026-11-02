@@ -23,6 +23,8 @@ import (
 //	want/<num>     the place weaver gave window num (home 0, a thread its
 //	               number, a view 900 and on)
 //	view/<num>     the view window num shows
+//	split/<num>    the ratio weaver last gave the split beside block num
+//	               (SetWidth), for Moved to tell from one you moved
 //	sessions/<id>  a session weaver made: its name, when, and its server
 //	said/<sid>     the block of the message last shown in session sid (Say)
 //	remote-off     when weaver last said the app takes no actions

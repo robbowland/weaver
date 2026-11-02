@@ -28,8 +28,9 @@ Multiplexers section with this.
    A split made in a window it is *not* showing keeps its ratio, also once
    shown. So: build windows whole behind you, then show them (threadTab);
    after changing a shown window's panes, put widths back late
-   (`settleWidths` → `wvr _width AGENT`, detached, twice). `resize_pane`
-   after the rebalance sticks. `Workspace.balancesSplitsOnCreation=false`
+   (`settleWidths` → `wvr _width AGENT`, detached, twice), unless the user
+   moved the split meanwhile (`Moved`: the ratio is neither 0.5 nor the one
+   weaver recorded in `split/`). `resize_pane` after the rebalance sticks. `Workspace.balancesSplitsOnCreation=false`
    did not stop it.
 3. **The server reads its config only at start or `rex config reload`.**
    `pcall(require, "weaver")` in init.lua fails silently if weaver.lua was
@@ -61,7 +62,16 @@ Multiplexers section with this.
    setting for it (`RemoteActionNotices`).
 8. **An unviewed block is 80×24** until an app shows it; a client's size
    applies only when it owns the block or none does. `session.create`'s
-   first block is owned by its (short-lived) caller.
+   first block is owned by its (short-lived) caller. A block's `size` method
+   says whether an app has drawn it: `desired` lists the sizes clients asked
+   for, empty until then (and no `owner`). Right after a split, the blocks
+   may still report their old sizes. Size an undrawn window from the active
+   one (`snapshot.size`, `drawnCols`); without an app (a throwaway server)
+   every terminal reports 80 columns whatever the split, so a check there
+   reads the layout's ratio, not sizes.
+   **More than one app client** (`rex client ls`, KIND app): `rex do`
+   without `-C`/`REX_CLIENT` refuses to choose; `-C client:<id>` with the
+   full id works.
 9. **A server restart at the same endpoint restores sessions** with the same
    session/window/block ids but a fresh shell in every block (husks).
    weaver records the server pid per session (`sessions/<id>` line 3) and

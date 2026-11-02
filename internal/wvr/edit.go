@@ -33,11 +33,19 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 	return p, err
 }
 
-// ThreadWidth is `wvr _width AGENT`: threadWidth, of a pane as given.
+// ThreadWidth is `wvr _width AGENT` (settleWidths' passes): threadWidth,
+// of a pane as given, unless you moved its split since (a multiplexer that
+// can tell: Rex, whose app evens a split out, and weaver sets it back):
+// then it is yours.
 func (e *Env) ThreadWidth(agent string) {
-	if p, ok := tmux.ParsePane(agent); ok {
-		e.threadWidth(p)
+	p, ok := tmux.ParsePane(agent)
+	if !ok {
+		return
 	}
+	if m, ok := e.Mux().(interface{ Moved(mux.PaneID) bool }); ok && m.Moved(p) {
+		return
+	}
+	e.threadWidth(p)
 }
 
 // threadWidth: back to a thread's split once its nvim reopens beside the
@@ -56,7 +64,7 @@ func (e *Env) threadWidth(agent mux.PaneID) {
 	e.Mux().SetWidth(agent, agentCols(total))
 }
 
-// settleWidths puts thread agent's window back to its widths (threadWidth)
+// settleWidths puts thread agent's window back to its widths (ThreadWidth)
 // once the Rex app has evened out its panes: it does that, within a second
 // or so and with nothing to say when, to the window it shows whenever its
 // panes change (a pane split in, or put in another's place). Detached, so

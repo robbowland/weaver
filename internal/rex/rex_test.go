@@ -489,6 +489,66 @@ func TestBorder(t *testing.T) {
 	}
 }
 
+// A window made behind you is not drawn yet (its terminals Rex's 80 by
+// 24, which no app has asked a size of): it is as wide as the window the
+// app shows, which it will be drawn at. Without an app (none drawn), each
+// window is what its terminals say.
+func TestSizeUndrawn(t *testing.T) {
+	in := func(desired string) string {
+		return `{"view":{"active_window_id":"window:a","windows":[
+		{"window_id":"window:a","layers":[{"kind":"tiled","layout":{"rect":[0,0,1,1],"block_id":"block:a1"},"blocks":[{"block_id":"block:a1","creator_name":"` + terminal + `"}]}]},
+		{"window_id":"window:b","layers":[{"kind":"tiled","layout":{"rect":[0,0,1,1],"block_id":"block:b1"},"blocks":[{"block_id":"block:b1","creator_name":"` + terminal + `"}]}]}]},
+		"blocks":{"block:a1":{"size":{"columns":185,"rows":50` + desired + `}},"block:b1":{"size":{"columns":80,"rows":24,"desired":[]}}}}`
+	}
+	var sn snapshot
+	if err := json.Unmarshal([]byte(in(`,"desired":[{"columns":185}]`)), &sn); err != nil {
+		t.Fatal(err)
+	}
+	if c, l := sn.size(sn.View.Windows[1]); c != 185 || l != 50 {
+		t.Errorf("a window not drawn yet: %dx%d, want the shown one's 185x50", c, l)
+	}
+	if err := json.Unmarshal([]byte(in(``)), &sn); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := sn.size(sn.View.Windows[1]); c != 80 {
+		t.Errorf("no app: %d wide, want its terminal's 80", c)
+	}
+}
+
+// rex do picks the app only when one is connected: with two, weaver asks
+// each app attached to the session by name (-C), and the session is shown
+// when one takes it; the Remote Control notice only when every app refused
+// for want of it.
+func TestShowInAppMany(t *testing.T) {
+	rextest.NoRex(t)
+	bin := t.TempDir()
+	log := filepath.Join(bin, "calls")
+	fake := "#!/bin/sh\necho \"$*\" >> '" + log + "'\n" + `case "$2 $3 $4 $5" in
+"do session.select "*) echo "Error: more than one app is connected: name one with -C" >&2; exit 1 ;;
+"-C client:a do session.select") [ -n "$OFF" ] && { echo "Error: Rex.app is not accepting actions. Turn on Remote Control in Rex's settings." >&2; exit 1; }; exit 0 ;;
+"-C client:b do session.select") echo "Error: Rex.app is not accepting actions. Turn on Remote Control in Rex's settings." >&2; exit 1 ;;
+"api call session.list_clients "*) echo '{"clients":[{"client_id":"client:a","info":{"kind":"app"}},{"client_id":"client:c","info":{"kind":"cli"}},{"client_id":"client:b","info":{"kind":"app"}}]}' ;;
+*) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "rex"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", bin)
+	s := Session{ID: "session:x", Name: "w", Dir: t.TempDir()}
+	if err := s.showInApp("window:w"); err != nil {
+		t.Errorf("shown by app a: %v", err)
+	}
+	b, _ := os.ReadFile(log)
+	if strings.Contains(string(b), "client:c") || !strings.Contains(string(b), "-C client:a do session.select session_id=session:x window_id=window:w") {
+		t.Errorf("asked, want each app (not the cli) by name:\n%s", b)
+	}
+	t.Setenv("OFF", "1")
+	if err := s.showInApp("window:w"); !remoteOff(err) {
+		t.Errorf("every app refused for want of Remote Control: %v, want that", err)
+	}
+}
+
 // What is on screen: Rex does not say which session an app shows, so no
 // pane is known to be looked at, though the session has an active one.
 func TestOnScreen(t *testing.T) {

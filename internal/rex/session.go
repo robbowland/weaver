@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -230,6 +231,7 @@ func (s Session) Looking() ([]mux.PaneID, error) { return nil, errUnseen }
 // client is a client attached to a session, as session.list_clients
 // gives it.
 type client struct {
+	ID   string `json:"client_id"`
 	Info struct {
 		Kind string `json:"kind"`
 	} `json:"info"`
@@ -325,15 +327,38 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 		s.show(out.Window)
 	}
 	// Its one pane fills it: the window is as wide as the pane.
-	return mux.WindowID(wn), mux.PaneID(pn), s.cols(mux.PaneID(pn)), nil
+	return mux.WindowID(wn), mux.PaneID(pn), s.drawnCols(mux.PaneID(pn)), nil
 }
 
-// cols is pane p's columns.
-func (s Session) cols(p mux.PaneID) int {
+// drawnCols is the columns pane p is drawn at, or will be: its own once an
+// app has drawn it (asked it for a size). Rex sizes a terminal no app has
+// drawn at 80 columns (a window made behind you), so then, with an app
+// attached, its share of the width the app draws the session's windows
+// at, the active window's (snapshot.size); with none, its own.
+func (s Session) drawnCols(p mux.PaneID) int {
 	var sz struct {
-		Columns int `json:"columns"`
+		Columns int                         `json:"columns"`
+		Desired list[struct{ Columns int }] `json:"desired"`
 	}
 	_ = s.blockMethod(p, "size", nil, &sz)
+	if len(sz.Desired) > 0 || !s.attached() {
+		return sz.Columns
+	}
+	b, err := s.block(p)
+	if err != nil {
+		return sz.Columns
+	}
+	sn, err := s.snapshot(false)
+	if err != nil {
+		return sz.Columns
+	}
+	for _, w := range sn.View.Windows {
+		if _, at := w.tiled(); len(at[b]) == 4 {
+			if c, _ := sn.size(w); c > 0 {
+				return int(math.Round(at[b][2] * float64(c)))
+			}
+		}
+	}
 	return sz.Columns
 }
 
@@ -346,7 +371,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 		return "", 0, err
 	}
 	ratio := 0.8
-	if total := s.cols(of); n.Cols > 0 && total > 0 {
+	if total := s.drawnCols(of); n.Cols > 0 && total > 0 {
 		ratio = min(max(float64(n.Cols)/float64(total), 0.05), 0.95)
 	}
 	var out struct {
@@ -364,6 +389,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 		return "", 0, err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(n.Argv, " "))
+	_ = s.ids().note("split", string(of), strconv.FormatFloat(ratio, 'f', -1, 64))
 	return mux.PaneID(pn), 0, nil
 }
 
@@ -419,7 +445,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		// the two agree: Focus and GoWindow start from it.
 		_ = s.callS("session.focus_window", map[string]any{"window_id": v.Active}, nil)
 	}
-	return mux.WindowID(wn), s.cols(p), nil
+	return mux.WindowID(wn), s.drawnCols(p), nil
 }
 
 // Respawn starts sp in a block beside p's, which it then closes, and has
@@ -536,9 +562,36 @@ func (s Session) SetWidth(p mux.PaneID, cols int) {
 		return
 	}
 	if before, after, ratio, ok := sn.border(b, cols); ok {
-		_ = s.callS("session.resize_pane", map[string]any{"before_block_id": before, "after_block_id": after,
-			"direction": "horizontal", "ratio": ratio}, nil)
+		if s.callS("session.resize_pane", map[string]any{"before_block_id": before, "after_block_id": after,
+			"direction": "horizontal", "ratio": ratio}, nil) == nil {
+			_ = s.ids().note("split", string(p), strconv.FormatFloat(ratio, 'f', -1, 64))
+		}
 	}
+}
+
+// Moved: was the split beside pane p moved by someone else than weaver
+// and the Rex app? It is where neither left it: not even (the app evens a
+// window's panes out when they change) and not at the ratio weaver last
+// gave it (SetWidth). Not known (no split, Rex not answering): false.
+func (s Session) Moved(p mux.PaneID) bool {
+	b, err := s.block(p)
+	if err != nil {
+		return false
+	}
+	v, err := s.view()
+	if err != nil {
+		return false
+	}
+	ratio, ok := v.splitBeside(b)
+	if !ok {
+		return false
+	}
+	near := func(a, b float64) bool { return math.Abs(a-b) < 0.005 }
+	if near(ratio, 0.5) {
+		return false
+	}
+	last, err := strconv.ParseFloat(s.ids().noted("split", string(p)), 64)
+	return err != nil || !near(ratio, last)
 }
 
 func (s Session) Zoom(p mux.PaneID) {
@@ -578,7 +631,7 @@ func (s Session) show(id string) {
 	if err == nil {
 		return
 	}
-	if strings.Contains(err.Error(), "Remote Control") {
+	if remoteOff(err) {
 		s.sayRemoteOff()
 	}
 	_ = s.callS("session.focus_window", map[string]any{"window_id": id}, nil)
@@ -592,14 +645,44 @@ func (s Session) show(id string) {
 // which takes actions only with Remote Control on (an error otherwise).
 // Not for what happens behind you (a hook, threads restored at start): it
 // takes the app to this session.
+//
+// rex do picks the app only when exactly one is connected (or REX_CLIENT
+// names one): with more (two Macs on one server, say) each app attached to
+// the session is asked by name (-C), and it is shown when one took it.
 func (s Session) showInApp(id string) error {
 	args := []string{"do", "session.select", "session_id=" + s.ID}
 	if id != "" {
 		args = append(args, "window_id="+id)
 	}
 	_, err := run(args...)
+	if err == nil || remoteOff(err) {
+		return err
+	}
+	var l struct {
+		Clients []client `json:"clients"`
+	}
+	if s.callS("session.list_clients", nil, &l) != nil {
+		return err
+	}
+	shown := false
+	for _, c := range l.Clients {
+		if !c.app() || c.ID == "" {
+			continue
+		}
+		if _, e := run(append([]string{"-C", c.ID}, args...)...); e == nil {
+			shown = true
+		} else if remoteOff(e) {
+			err = e // why it was not shown: said (show)
+		}
+	}
+	if shown {
+		return nil
+	}
 	return err
 }
+
+// remoteOff: is err an app's refusal for want of Remote Control?
+func remoteOff(err error) bool { return err != nil && strings.Contains(err.Error(), "Remote Control") }
 
 // remoteOffEvery is how often weaver says the app takes no actions.
 const remoteOffEvery = 10 * time.Minute
