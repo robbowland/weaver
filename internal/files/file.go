@@ -4,6 +4,7 @@ package files
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -41,15 +42,29 @@ func Put(f, text string) error {
 	if cur == text {
 		return nil
 	}
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, []byte(text+"\n"), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, f)
+	return WriteAtomic(f, []byte(text+"\n"))
 }
 
 // Exists is whether f is there (a broken link counts).
 func Exists(f string) bool {
 	_, err := os.Lstat(f)
 	return err == nil
+}
+
+// WriteAtomic writes b to file f through a temporary file beside it, so a
+// reader sees the old content or the new, never half.
+func WriteAtomic(f string, b []byte) error {
+	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+		return err
+	}
+	tmp := f + "." + strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, f); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }

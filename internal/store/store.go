@@ -143,25 +143,7 @@ func Write(f string, v any) error {
 	if err := enc.Encode(v); err != nil {
 		return err
 	}
-	return WriteAtomic(f, b.Bytes())
-}
-
-// WriteAtomic writes b to file f through a temporary file beside it, so a
-// reader sees the old content or the new, never half.
-func WriteAtomic(f string, b []byte) error {
-	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
-		return err
-	}
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, f); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
+	return files.WriteAtomic(f, b.Bytes())
 }
 
 // ReadState is the agent state in file sf.

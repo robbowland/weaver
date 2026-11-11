@@ -14,7 +14,6 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/mux"
-	"github.com/robbowland/weaver/internal/store"
 )
 
 // Views: the weaver session's windows beside home that show work from
@@ -85,7 +84,7 @@ func (e *Env) setHidden(name string, hide bool) {
 		}
 	}
 	sort.Strings(ns)
-	bestEffort(store.WriteAtomic(e.StateDir+"/hidden-views", []byte(strings.Join(ns, "\n")+"\n")))
+	bestEffort(files.WriteAtomic(e.StateDir+"/hidden-views", []byte(strings.Join(ns, "\n")+"\n")))
 }
 
 // viewState is how ready a view is to show.
@@ -163,7 +162,7 @@ func (e *Env) signedIn(name string) bool {
 	if ok {
 		ans = "yes"
 	}
-	bestEffort(store.WriteAtomic(f, []byte(ans+"\n")))
+	bestEffort(files.WriteAtomic(f, []byte(ans+"\n")))
 	return ok
 }
 

@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robbowland/weaver/internal/files"
+
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/setup"
-	"github.com/robbowland/weaver/internal/store"
 )
 
 // Start is `wvr [start [session]]` outside a session: weaver's Rex
@@ -99,7 +100,7 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	keys := strings.NewReplacer("@WVR@", lua(e.Self), "@SESSIONS@", lua(e.RexDir()+"/sessions"),
 		"@REXBIN@", lua(rex.BinDir()), "--[[@SETTINGS@]]", luaSettings(lua)).Replace(string(src))
 	if old, err := os.ReadFile(f); err != nil || string(old) != keys {
-		if err := store.WriteAtomic(f, []byte(keys)); err != nil {
+		if err := files.WriteAtomic(f, []byte(keys)); err != nil {
 			return f, false, false, err
 		}
 		changed = true

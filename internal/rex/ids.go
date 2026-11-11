@@ -289,16 +289,7 @@ func (r ids) allThreads() []string {
 }
 
 func (r ids) write(kind, name, v string) error {
-	d := filepath.Join(r.dir, kind)
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		return err
-	}
-	f := filepath.Join(d, name)
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, []byte(v+"\n"), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, f)
+	return files.WriteAtomic(filepath.Join(r.dir, kind, name), []byte(v+"\n"))
 }
 
 // lock is the registry's lock, held while a number is given or moved.

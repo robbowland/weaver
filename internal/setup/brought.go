@@ -6,10 +6,10 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
+
+	"github.com/robbowland/weaver/internal/files"
 
 	weaver "github.com/robbowland/weaver"
-	"github.com/robbowland/weaver/internal/store"
 )
 
 // mark is in each file weaver brings to another program's configuration:
@@ -54,12 +54,7 @@ func (f Brought) Fate() Fate {
 }
 
 // Write writes f in its place.
-func (f Brought) Write() error {
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
-		return err
-	}
-	return store.WriteAtomic(f.Path, f.Text)
-}
+func (f Brought) Write() error { return files.WriteAtomic(f.Path, f.Text) }
 
 // BroughtFiles are what weaver brings: tuicr's settings for its review
 // panel (where you have none: diff_watch_interval_ms, which no flag sets)

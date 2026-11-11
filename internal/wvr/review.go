@@ -347,5 +347,5 @@ func (e *Env) bindPanel(agent, rp mux.PaneID, pid int) {
 	} else if l, err := files.FirstLine(f); err == nil && l == string(rp) {
 		return
 	}
-	bestEffort(store.WriteAtomic(f, []byte(string(rp)+"\n"+n+"\n")))
+	bestEffort(files.WriteAtomic(f, []byte(string(rp)+"\n"+n+"\n")))
 }

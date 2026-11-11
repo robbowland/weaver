@@ -169,10 +169,7 @@ func (e *Env) rememberRepo(r string) {
 	if len(ls) > 20 {
 		ls = ls[:20]
 	}
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(strings.Join(ls, "\n")+"\n"), 0o644) == nil {
-		os.Rename(tmp, f)
-	}
+	bestEffort(files.WriteAtomic(f, []byte(strings.Join(ls, "\n")+"\n")))
 }
 
 // fetchResult is how a wait for a fetch ended.

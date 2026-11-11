@@ -341,7 +341,7 @@ func (e *Env) switchKind(src itemSource) {
 			next = ks[(i+1)%len(ks)]
 		}
 	}
-	bestEffort(store.WriteAtomic(e.StateDir+"/"+e.SKey+"."+src.name()+"-kind", []byte(next+"\n")))
+	bestEffort(files.WriteAtomic(e.StateDir+"/"+e.SKey+"."+src.name()+"-kind", []byte(next+"\n")))
 }
 
 // itemSock is where src's views listen: <skey>.view.<name>.<pid>.sock.

@@ -56,7 +56,7 @@ func (e *Env) editWorktrees(edit func([]madeWorktree) []madeWorktree) {
 	for _, w := range edit(e.worktreesMade()) {
 		fmt.Fprintf(&b, "%s\t%s\t%d\n", w.dir, w.repo, w.at)
 	}
-	bestEffort(store.WriteAtomic(f, []byte(b.String())))
+	bestEffort(files.WriteAtomic(f, []byte(b.String())))
 }
 
 // noteWorktree adds a worktree weaver made for a thread.

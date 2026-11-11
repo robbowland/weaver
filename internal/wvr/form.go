@@ -164,10 +164,7 @@ func (e *Env) Fetch(repo, remote, f, sf string) {
 			rc = x.ExitCode()
 		}
 	}
-	tmp := f + ".rc." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(strconv.Itoa(rc)+"\n"), 0o644) == nil {
-		os.Rename(tmp, f+".rc")
-	}
+	bestEffort(files.WriteAtomic(f+".rc", []byte(strconv.Itoa(rc)+"\n")))
 	os.Remove(f + ".pid")
 	if sf == "" {
 		return
