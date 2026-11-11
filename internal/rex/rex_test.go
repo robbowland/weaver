@@ -412,6 +412,31 @@ func TestKeysRun(t *testing.T) {
 	}
 }
 
+// In one of weaver's views (its list takes Alt N), as weaver's registry
+// says of the window by its id: not by its label, which anyone may change.
+func TestKeysInView(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	script := keysLua(t, "/usr/bin/true", dir+"/sessions", "", `return { inView({}) }`)
+	var got []bool
+	if err := do(s.ID, script, map[string]any{}, &got); err != nil || !slices.Equal(got, []bool{false}) {
+		t.Fatalf("inView on home: %v %v, want false", got, err)
+	}
+	w, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/sleep", "600"}}, Label: "home", View: "github", At: 900})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Show(w)
+	if err := do(s.ID, script, map[string]any{}, &got); err != nil || !slices.Equal(got, []bool{true}) {
+		t.Errorf("inView on a view labelled home: %v %v, want true", got, err)
+	}
+}
+
 // In one of weaver's popups (a floating layer: the form, a card, Alt y's
 // board) weaver's keys are the popup's program's: it takes every key.
 func TestKeysInPopup(t *testing.T) {

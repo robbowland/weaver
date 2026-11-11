@@ -9,6 +9,8 @@
 local wvr = "@WVR@"
 -- weaver's record of the Rex sessions it made, one file each:
 local sessions = "@SESSIONS@"
+-- weaver's numbers for Rex's blocks and windows, beside it.
+local registry = sessions:gsub("/sessions$", "")
 -- Where rex is, as the wvr that wrote this (from a terminal) found it.
 -- Rex's server runs these keys' commands with an app's environment, with
 -- no rex on its PATH and no REX_BIN_DIR: without it, wvr would find no rex
@@ -80,16 +82,24 @@ local function run(ctx, args, cwd)
   return true
 end
 
+-- noted: the first line of weaver's registry file kind/name, or "".
+local function noted(kind, name)
+  local f = io.open(registry .. "/" .. kind .. "/" .. name)
+  if not f then return "" end
+  local l = f:read("*l") or ""
+  f:close()
+  return l
+end
+
 -- inView: is the key pressed in one of weaver's views (GITHUB, LINEAR),
--- whose lists take Alt N themselves?
+-- whose lists take Alt N themselves? As weaver's registry says of the
+-- active window, by its id (a label is anyone's to change).
 local function inView(ctx)
   local v = rex.session.view{}
-  for _, w in ipairs(v and v.windows or {}) do
-    if w.window_id == v.active_window_id then
-      return w.label == "GITHUB" or w.label == "LINEAR"
-    end
-  end
-  return false
+  local id = (v and v.active_window_id or ""):gsub(":", "_")
+  if id == "" then return false end
+  local n = noted("u", id)
+  return n ~= "" and noted("view", n) ~= ""
 end
 
 -- weavers: is the key pressed in a Rex session weaver made? Rex's
