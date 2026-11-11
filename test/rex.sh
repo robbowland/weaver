@@ -235,6 +235,38 @@ ok "rename in place: the thread its prompt names takes the name, and its window;
 R session rename "$T" demo-greet >/dev/null
 ok "a thread's session renamed in Rex: still the thread, its agent still followed" \
 	"$(threads)|$(REX_SESSION=$SID wvr ls 2>/dev/null | grep -c Greeting)" "$T|1"
+# --- a helper: an agent the thread's agent starts in a window of the
+# thread's session (the weaver skill's way), reporting as agents do
+HS=aaaaaaaa-0000-4000-8000-000000000001
+mkdir -p "$AT/claude/projects/repo"
+printf '{"type":"user","cwd":"%s","gitBranch":"main","message":{"role":"user","content":"check the tests"}}\n' "$AT/repo" \
+	>"$AT/claude/projects/repo/$HS.jsonl"
+HB=$(R window new -s "$T" helper --focus=false -c "$AT/repo" --shell=none --json -- "$AT/bin/claude" "check the tests" | jq -r '.block_ids[0]')
+waitfor '[ -f "$AT/pid.${HB#block:}" ]' 100
+helperj() {
+	printf '%s' "$1" | CLAUDE_PID=$(cat "$AT/pid.${HB#block:}") REX_SESSION=$T REX_BLOCK=$HB wvr hook >/dev/null
+}
+hev() { printf '{"session_id":"%s","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"%s"%s}' "$HS" "$AT/repo" "$1" "${2:-}"; }
+helperj "$(hev SessionStart ',"source":"startup"')"
+helperj "$(hev UserPromptSubmit ',"prompt":"check the tests"')"
+helperj "$(hev Stop ',"prompt_id":"h1","last_assistant_message":"tests pass"')"
+HP=$(num "$HB")
+ok "helper: a window of the thread's session, weaver following its agent" \
+	"$(windows "$T")|$(jq -r '"\(.state) \(.rex_session)"' "$SD/rex-${S}_$HP.json" 2>/dev/null)" "01 Greeting · repo/main/2 helper/1|done $T"
+# Adopted: its agent ends with its window, its conversation resumes as a
+# thread in a session of its own.
+REX_SESSION=$SID wvr adopt "$HP" >"$AT/adopt.out" 2>&1
+waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
+A=$(threads | grep -vx "$T")
+AB=$(block_at "$A" 1 1)
+waitfor '[ -f "$AT/args.${AB#block:}" ]' 100
+ok "adopt: the helper's window goes, its conversation resumes in a thread's session of its own" \
+	"$(windows "$T")|$(label "$A")|$(windows "$A")|$(tr '\n' ' ' <"$AT/args.${AB#block:}" 2>/dev/null)|$([ -f "$SD/rex-${S}_$HP.json" ] && echo kept)" \
+	"01 Greeting · repo/main/2|check-the-tests|02 check the tests · repo/main/2|--resume $HS |" ||
+	sed 's/^/  adopt: /' "$AT/adopt.out"
+REX_SESSION=$SID wvr close --yes "$(num "$AB")" >/dev/null 2>&1
+waitfor '[ "$(threads)" = "$T" ]' 100
+ok "close: the adopted thread's session goes, the other stays" "$(threads)|$(label "$A")" "$T|"
 held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id)"' "$f"; done; }
 REX_SESSION=$SID wvr hold "$AG" "write the reply" >"$AT/hold.out" 2>&1
 waitfor '[ -z "$(threads)" ]' 100

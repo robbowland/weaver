@@ -13,7 +13,6 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
-	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
@@ -23,13 +22,13 @@ import (
 
 // Adopting: a conversation weaver did not start becomes a thread, kept as
 // threads are (lost with its session, brought back as weaver starts). An
-// agent you started by hand becomes one where it runs; a conversation that
-// runs nowhere is resumed in a thread's window.
+// agent you started by hand, and a conversation that runs nowhere, resume
+// in a thread's session of its own.
 
 const adoptUsage = "usage: wvr adopt [pane-id | session-id]"
 
 // Adopt is `wvr adopt [PANE | SESSION-ID]`: the agent in PANE, else the
-// one in this pane, made a thread where it runs; conversation SESSION-ID
+// one in this pane, made a thread from its pane; conversation SESSION-ID
 // (or its first 4+ characters) resumed as a thread; with neither, a picker
 // of Claude Code's recent conversations. Outside it, into the weaver
 // session.
@@ -87,105 +86,47 @@ func (e *Env) paneArg(which string) (mux.PaneID, bool) {
 const sidPrefix = 4
 
 // adoptPane makes the agent in pane p, which weaver follows but did not
-// start, a thread where it runs: its record (in the checkout it is in,
-// which close never offers to remove), and in the weaver session a window
-// of its own at its number, its nvim on its left. Nothing restarts: a turn
-// under way goes on.
+// start, a thread: its agent ends with its pane, between turns (one
+// process to a conversation), and its conversation resumes in a thread's
+// session of its own (resumeThread). Typed into the agent (`! wvr adopt`),
+// this runs in the pane that goes: the rest is done from outside it.
 func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	st, err := store.ReadState(e.StateFile(p))
 	if err != nil {
 		return "", fmt.Errorf("weaver follows no agent in pane %s", p)
 	}
 	sid := oneline.Line(st.SessionID)
-	if st.State == agent.StateEnded || st.Pid != "" && !process.StillRuns(string(st.Pid), st.ProcStart, nil) {
+	pid, start := oneline.Line(string(st.Pid)), oneline.Line(st.ProcStart)
+	switch {
+	case st.State == agent.StateEnded || pid != "" && !process.StillRuns(pid, start, nil):
 		return "", fmt.Errorf("its agent has ended: `wvr adopt %s` resumes its conversation as a thread", cmp.Or(sid, "SESSION-ID"))
-	}
-	kind, ok := agent.ParseKind(st.Agent)
-	if !ok {
-		return "", fmt.Errorf("weaver cannot resume a %s agent, so cannot keep it as a thread", st.Agent)
-	}
-	if sid == "" {
+	case sid == "":
 		return "", errors.New("its agent has not said which conversation it is in yet")
+	case st.State == agent.StateWorking || st.State == agent.StateNeedsYou:
+		return "", errors.New("its turn is under way: adopt it once it is done")
 	}
-	root := cmp.Or(oneline.Line(st.Root), oneline.Line(st.Cwd))
-	repo, _, _ := git.RepoOf(root)
-	branch, _ := git.Line(root, "symbolic-ref", "--short", "-q", "HEAD")
-	about := cmp.Or(oneline.Line(st.Title), oneline.Line(st.Prompt))
-	name := cmp.Or(items.Slugify(about), branch, "thread-"+time.Now().Format("150405"))
-	pn, _ := atoi(string(p))
-	pane := jsonx.Int(pn)
-	// Of two adopting it at once, one numbers it.
-	unlock := e.numLock()
 	if th, err := store.ReadThread(e.ThreadFile(p)); err == nil {
-		unlock()
 		return "", fmt.Errorf("%s is thread %d already", cmp.Or(oneline.Line(th.Name), "it"), th.Num)
 	}
-	n, _ := e.threadNum()
-	th := store.Thread{Num: n, Cmd: agentCmd(kind), Name: name, Repo: repo, Branch: branch, Worktree: root, Here: true,
-		Agent: kind, Created: time.Now().Unix(), Pane: &pane, SessionID: sid}
-	err = store.Write(e.ThreadFile(p), th)
-	unlock()
-	if err != nil {
-		return "", errors.New("cannot write its thread record")
+	if p == e.MyPane {
+		e.outside("adopt", sid)
+		return "weaver: its agent ends here, and its conversation resumes in a thread's session", nil
 	}
-	where := ""
-	if e.WeaverSession() {
-		if tab := e.adoptWindow(p, session.ThreadLabel(n, cmp.Or(about, name), root), root); tab != "" {
-			where = " (window " + string(tab) + ")"
-		}
+	e.Mux().Close(p)
+	for i := 0; i < 50 && pid != "" && process.StillRuns(pid, start, nil); i++ {
+		time.Sleep(100 * time.Millisecond)
 	}
-	e.PushStatusAndLabels()
-	return fmt.Sprintf("weaver: %s is thread %d%s", name, n, where), nil
-}
-
-// adoptWindow gives an adopted agent, pane p, its thread's window: the one
-// it is in when it has it to itself (but for its review panel), else one of
-// its own broken out of the window it shares (home, a view, another
-// thread's); named label, with a review panel on its left in dir when it
-// has none. You go with it when it is the pane you are in. Its window.
-func (e *Env) adoptWindow(p mux.PaneID, label, dir string) mux.WindowID {
-	ps, _ := e.Mux().Panes()
-	ap, ok := session.PaneIn(ps, p)
-	if !ok {
-		return ""
+	if pid != "" && process.StillRuns(pid, start, nil) {
+		return "", fmt.Errorf("its agent (pid %s) is still running: adopt it once it has exited", pid)
 	}
-	tab := ap.Window
-	nv := e.PanelPane(p)
-	ws, _ := e.Mux().Windows()
-	win, _ := windowIn(ws, tab)
-	own := win.View == "" && !isHome(win)
-	if own {
-		for _, q := range windowPanes(ps, tab) {
-			if q != p && q != nv {
-				own = false
-			}
-		}
-	}
-	if own {
-		e.Mux().Label(tab, label)
-	} else {
-		w, width, err := e.Mux().BreakOut(p, label, mux.NextFree, p != e.MyPane)
-		if err != nil {
-			return ""
-		}
-		tab, win.Width = w, width
-	}
-	if nv == "" {
-		total := win.Width
-		if total <= 0 {
-			total = 200
-		}
-		e.splitPanel(p, dir, total)
-		e.settleWidths(p)
-	}
-	return tab
+	e.Forget(e.StateFile(p), pid)
+	return e.resumeThread(sid)
 }
 
 // adoptConversation makes conversation which (its session id, or its
 // first 4+ characters) a thread: one a session lost is resumed as lost
-// threads are; one an agent here runs is adopted where it runs; one that
-// runs nowhere is resumed in a thread's window, in the directory it
-// started in.
+// threads are; one an agent here runs is adopted from its pane
+// (adoptPane); one that runs nowhere is resumed (resumeThread).
 func (e *Env) adoptConversation(which string) (string, error) {
 	match := func(sid string) bool {
 		return sid != "" && (sid == which || len(which) >= sidPrefix && strings.HasPrefix(sid, which))
@@ -200,6 +141,13 @@ func (e *Env) adoptConversation(which string) (string, error) {
 			return e.adoptPane(session.PaneOfFile(f))
 		}
 	}
+	return e.resumeThread(which)
+}
+
+// resumeThread resumes conversation which (its session id, or its first
+// 4+ characters), which runs nowhere, as a thread in a session of its own,
+// in the directory it started in.
+func (e *Env) resumeThread(which string) (string, error) {
 	c, err := e.findConversation(which)
 	if err != nil {
 		return "", err

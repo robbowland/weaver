@@ -357,10 +357,11 @@ weaver keeps only threads, so an agent you started yourself isn't kept until
 you adopt it. Adopting makes a conversation a thread, kept and brought back
 like any other:
 
-- **An agent you started by hand**, in a pane weaver follows: `a` on its row,
-  or `! wvr adopt` typed into the agent, makes it a thread where it runs. In
-  the weaver session it moves to a window of its own at its number, with a
-  review on its left. It is not restarted, so a turn in progress carries on.
+- **An agent you started by hand**, in a pane weaver follows (a helper in
+  a thread's session, say): `a` on its row, or `! wvr adopt` typed into the
+  agent, ends it with its pane and resumes its conversation as a thread in
+  a session of its own, with a review on its left. Adopt it between turns:
+  while a turn is under way it is refused.
 - **A conversation that isn't running**, such as one you ran outside weaver
   before a restart: `a` anywhere else on the board lists your recent Claude
   Code conversations, and `enter` resumes one as a thread, in the directory

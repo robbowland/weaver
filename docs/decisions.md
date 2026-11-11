@@ -495,6 +495,12 @@ can supersede an earlier one, and says so.
   when its agent is prompted. Home's board followed home's events alone
   (`rex events --session`), and Rex does not say which session an app
   shows, so a watcher would need one stream per thread for a guess.
+- 2026-11-11: Adopting an agent resumes its conversation in a new thread
+  session (Rob, choice a), superseding adoption in place: a thread is a
+  session of its own, and an agent weaver did not start runs in someone
+  else's (a helper's window in a thread's session, a pane of home's). Its
+  agent ends with its pane first, and only between turns, so no turn is
+  cut off and no two processes share the conversation.
 
 ## Work items and views
 

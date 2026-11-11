@@ -1327,19 +1327,26 @@ func (e *Env) Close(args []string) error {
 	// any popup in it: when this runs in one, finish from outside it.
 	me, ok := byID[e.MyPane]
 	if ownSession && e.RexHere == in || !ownSession && !others && ok && me.Window == tab {
-		os.MkdirAll(e.StateDir, 0o755)
-		// Out of this pane's session, and deaf to the hangup its closing
-		// sends.
-		signal.Ignore(syscall.SIGHUP, syscall.SIGTERM)
-		c := exec.Command(e.Self, append([]string{"_close"}, tail...)...)
-		if f, err := os.OpenFile(e.StateDir+"/close.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err == nil {
-			c.Stdout, c.Stderr = f, f
-		}
-		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		c.Start()
+		e.outside(append([]string{"_close"}, tail...)...)
 		return nil
 	}
 	return e.CloseTail(tail)
+}
+
+// outside runs `wvr args...` in a process of its own, out of this pane's
+// process group and deaf to the hangup its closing sends, in no pane
+// (REX_BLOCK unset), what it says going to close.log: for work that closes
+// the pane, popup or session this runs in.
+func (e *Env) outside(args ...string) {
+	os.MkdirAll(e.StateDir, 0o755)
+	signal.Ignore(syscall.SIGHUP, syscall.SIGTERM)
+	c := exec.Command(e.Self, args...)
+	c.Env = append(os.Environ(), "REX_BLOCK=")
+	if f, err := os.OpenFile(e.StateDir+"/close.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err == nil {
+		c.Stdout, c.Stderr = f, f
+	}
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	c.Start()
 }
 
 // CloseTail is the closing itself (`wvr _close AGENT PANEL PID START

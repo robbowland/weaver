@@ -223,22 +223,15 @@ weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
 `weaver`), as `wvr resume`, `wvr rename` and `wvr quit` do
 (`toWeaverSession`), and says so when that is not running.
 
-- **In place** (an agent weaver follows, without a thread record): refused
-  when its agent has ended, is not one weaver can resume, or has not said
-  its session id. Under the numbering lock (so two adopts never both number
-  it) it writes the record: `num` the lowest free, `name` the slug of its
-  title (else its prompt, else its branch), `repo` and `branch` of its
-  `root`, `worktree` its `root`, `here` true, `worktree_created` false (so
-  close never offers to remove it), `cmd` the agent's command, `pane`,
-  `session_id`. In the weaver session its window becomes the thread's: kept
-  when the agent has it to itself (with its bound panel at most) and it is
-  neither home nor a view, else `BreakOut` takes the agent (its process
-  untouched) to a window of its own at its number (the next free place when
-  that is taken), named with its label, in the background unless the
-  agent's is the pane adopt runs in. An agent with no bound panel gets one
-  on its left (`splitPanel`, as a new thread's).
+- **From its pane** (an agent weaver follows, without a thread record):
+  refused when its agent has ended, has not said its session id, or is in
+  a turn (working or needing you). Its pane closes, ending its agent (one
+  process to a conversation); once its process has gone its state is
+  forgotten and its conversation resumed as one by session id is, below.
+  Typed into the agent (`! wvr adopt`), wvr runs in the pane that goes, so
+  the rest runs in a process of its own (`outside`, as close's does).
 - **By session id:** a lost thread's is resumed (`threadRestore`); an agent
-  of this session running it is adopted in place; else its transcript,
+  of this session running it is adopted from its pane; else its transcript,
   `<claude dir>/projects/*/<id>.jsonl`, must be the only match, and no live
   Claude Code process may be in it (`~/.claude/sessions/<pid>.json`, its pid
   and `procStart` checked). Its record is made as a lost one's would be and
@@ -562,7 +555,7 @@ header: what to do on an empty board), `.room` and `.tight` (the card's
 Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
 `1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `a`
 adopt (`wvr _popup adopt <pane>`: an agent row that is no thread is adopted
-where it runs, said in a message; anything else, the empty board
+from its pane into a thread's session, said in a message; anything else, the empty board
 included, opens the picker of conversations in the form's popup), `e`
 (`ctrl-e`) jump and open its review, `s` card or screen, `tab` / `shift-tab` the
 next / previous view (`wvr go next|prev`, round home and the views as a

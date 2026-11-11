@@ -182,8 +182,8 @@ weaver can't bring back by itself waits on the board under LOST, where `enter`
 resumes it.
 
 weaver keeps only threads. To keep an agent you started yourself, *adopt*
-it: press `a` on its row, or type `! wvr adopt` into the agent, and it
-becomes a thread where it runs, without restarting. To bring in a conversation that
+it: press `a` on its row, or type `! wvr adopt` into the agent, between
+turns, and its conversation becomes a thread in a session of its own. To bring in a conversation that
 isn't running (one you ran outside weaver before a reboot, say), press `a`
 anywhere else on the board and pick it from your recent Claude Code
 conversations.
