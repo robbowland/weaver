@@ -618,8 +618,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 // read, and the board shows it exited, R to start it again, x to close the
 // thread, rather than its pane going and leaving its review panel alone.
 func (e *Env) agentSpawn(tok, dir string) mux.Spawn {
-	return mux.Spawn{Argv: []string{e.Self, "_agent", tok}, Dir: dir,
-		Keep: &mux.Exit{What: "weaver: " + agent.Claude + " exited", Hint: "on the board, R starts it again, x closes the thread"}}
+	return mux.Spawn{Argv: []string{e.Self, "_agent", tok}, Dir: dir, Keep: true}
 }
 
 // AgentPane is `wvr _agent TOKEN`, the agent's pane of a new

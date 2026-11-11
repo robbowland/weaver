@@ -89,7 +89,7 @@ after its session went leaves `resume` (the session id) there instead of
 (the agent afresh when unknown). A thread closed
 before its panel is recorded as bound is closed whole all the same: `close`
 finds that panel as the pane started for its agent. The pane is made to
-stay when its program exits (`Spawn.Keep`, naming the agent, and R and x),
+stay when its program exits (`Spawn.Keep`; Rex says how it exited),
 so an agent that
 exits, cleanly or not (a broken install, a bad flag in `WEAVER_CLAUDE`), or
 a `wvr _agent` that fails before it, leaves what it said on its pane and

@@ -34,18 +34,14 @@ func ParseWindow(s string) (WindowID, bool) {
 // Pane is one pane of weaver's sessions, in Session (the multiplexer's
 // id for it).
 type Pane struct {
-	ID          PaneID
-	Session     string
-	Window      WindowID
-	WindowName  string
-	WindowIndex int
-	Exited      bool
-	Cmd         string
-	W, H        int
-	X, Y        int
-	Title       string
-	Cwd         string
-	Focused     bool
+	ID         PaneID
+	Session    string
+	Window     WindowID
+	WindowName string
+	Exited     bool
+	Cmd        string
+	Title      string
+	Cwd        string
 }
 
 // Window is one window of a session: its place, its name, the view it
@@ -61,20 +57,13 @@ type Window struct {
 
 // Spawn is a program for a new pane: argv in Dir (empty: the
 // multiplexer's choice), with Env (KEY=VALUE) added to its environment.
-// Keep, when set, keeps the pane when the program exits, for what it said
-// last to be read; nil, the pane goes with it.
+// Keep keeps the pane when the program exits, for what it said last to be
+// read (Rex says how it exited); else the pane goes with it.
 type Spawn struct {
 	Argv []string
 	Dir  string
 	Env  []string
-	Keep *Exit
-}
-
-// Exit is what a pane kept when its program exits says, where its
-// multiplexer can say it (Rex shows its own): What happened, how the
-// program exited, and Hint, what to do next.
-type Exit struct {
-	What, Hint string
+	Keep bool
 }
 
 // HomeName is the label weaver gives home's window, weaver's board (which

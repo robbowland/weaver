@@ -64,7 +64,7 @@ func TestSession(t *testing.T) {
 		t.Fatalf("home: %+v %v", ws, err)
 	}
 
-	w, p, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: &mux.Exit{}},
+	w, p, width, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/bin/cat"}, Dir: "/tmp", Keep: true},
 		Label: "01 demo", At: 1, Background: true})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, ok := paneIn(ps, p); !ok || a.Window != w || a.WindowIndex != 1 || a.Cmd != "/bin/cat" || a.Exited {
+	if a, ok := paneIn(ps, p); !ok || a.Window != w || a.Cmd != "/bin/cat" || a.Exited {
 		t.Errorf("agent pane: %+v %v", a, ok)
 	}
 	if n, ok := paneIn(ps, nv); !ok || n.Window != w || n.Title != "review: demo" {
@@ -123,7 +123,7 @@ func TestSession(t *testing.T) {
 
 	// Started again, the agent is the same pane.
 	old, _ := s.block(p)
-	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: &mux.Exit{}}); err != nil {
+	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: true}); err != nil {
 		t.Fatal(err)
 	}
 	if now, _ := s.block(p); now == old || now == "" {
@@ -189,7 +189,7 @@ func TestRespawnNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.Respawn(p, mux.Spawn{Argv: []string{self, "-test.run=^TestRespawnedProgram$"},
-		Env: []string{"WVR_TEST_RESPAWNED=" + td}, Keep: &mux.Exit{}}); err != nil {
+		Env: []string{"WVR_TEST_RESPAWNED=" + td}, Keep: true}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; ; i++ {
@@ -228,7 +228,7 @@ func TestRespawnFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(u, 0o755) })
-	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: &mux.Exit{}}); err == nil {
+	if err := s.Respawn(p, mux.Spawn{Argv: sleep, Keep: true}); err == nil {
 		t.Fatal("Respawn kept no number, yet did not fail")
 	}
 	if err := os.Chmod(u, 0o755); err != nil {
@@ -594,31 +594,29 @@ func TestOnScreen(t *testing.T) {
 	// A message shows its text as it is, over the active window, for about
 	// the time given, and takes no focus (nor keys).
 	text := `it's $HOME; "$(echo not run)" ` + "`x`"
-	for name, say := range map[string]func(int, string){"Say": s.Say, "SayToSession": s.SayToSession} {
-		before, _ := s.Active()
-		start := time.Now()
-		say(1000, text)
-		for i := 0; !shows(t, s, text); i++ {
-			if i == 20 {
-				t.Fatalf("%s: the text is not shown", name)
-			}
-			time.Sleep(100 * time.Millisecond)
+	before, _ := s.Active()
+	start := time.Now()
+	s.Say(1000, text)
+	for i := 0; !shows(t, s, text); i++ {
+		if i == 20 {
+			t.Fatal("the text is not shown")
 		}
-		if now, _ := s.Active(); now != before {
-			t.Errorf("%s: the focus went from %q to %q", name, before, now)
+		time.Sleep(100 * time.Millisecond)
+	}
+	if now, _ := s.Active(); now != before {
+		t.Errorf("the focus went from %q to %q", before, now)
+	}
+	for floating(t, s) > 0 {
+		if time.Since(start) > 4*time.Second {
+			t.Fatal("the message stays")
 		}
-		for floating(t, s) > 0 {
-			if time.Since(start) > 4*time.Second {
-				t.Fatalf("%s: the message stays", name)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// A message replaces the one still shown, as on a message line, even
 	// one said at the same moment: never two at once.
 	s.Say(5000, "the first message")
-	s.SayToSession(5000, "the second message")
+	s.Say(5000, "the second message")
 	if n := floating(t, s); n != 1 {
 		t.Errorf("%d messages shown at once", n)
 	}

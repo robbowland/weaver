@@ -90,7 +90,7 @@ func layout(sp mux.Spawn, label string) map[string]any {
 	if sp.Dir != "" {
 		opts["cwd"] = sp.Dir
 	}
-	if sp.Keep != nil {
+	if sp.Keep {
 		opts["exit"] = map[string]any{"on_completion": false}
 	}
 	b := map[string]any{"flavor": terminal + ".shell", "options": opts}
@@ -656,9 +656,6 @@ func (s Session) Say(ms int, text string) {
 		_ = s.ids().note("said", said, out.Blocks[0])
 	}
 }
-
-// SayToSession is Say: what the session shows is its active window.
-func (s Session) SayToSession(ms int, text string) { s.Say(ms, text) }
 
 // head is text cut to n columns, an ellipsis ending it when cut: its start
 // always shows.

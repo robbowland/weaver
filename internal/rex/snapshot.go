@@ -314,23 +314,15 @@ func (s Session) panesOf(sn snapshot) []mux.Pane {
 		if err != nil {
 			continue
 		}
-		cols, lines := sn.size(w)
-		bs, at := w.tiled()
+		bs, _ := w.tiled()
 		for _, b := range bs {
 			n, err := s.num(b.ID)
 			if err != nil {
 				continue
 			}
 			i := sn.Blocks[b.ID]
-			p := mux.Pane{ID: mux.PaneID(n), Session: s.ID, Window: mux.WindowID(wn), WindowName: w.Label, WindowIndex: s.place(wn),
-				Cmd: s.ids().noted("cmd", n), Title: b.Label, Cwd: cwdOf(i),
-				Focused: w.ID == sn.View.Active && w.Focused == b.ID}
-			if i.Size != nil {
-				p.W, p.H = i.Size.Columns, i.Size.Rows
-			}
-			if r := at[b.ID]; len(r) == 4 {
-				p.X, p.Y = int(math.Round(r[0]*float64(cols))), int(math.Round(r[1]*float64(lines)))
-			}
+			p := mux.Pane{ID: mux.PaneID(n), Session: s.ID, Window: mux.WindowID(wn), WindowName: w.Label,
+				Cmd: s.ids().noted("cmd", n), Title: b.Label, Cwd: cwdOf(i)}
 			if pr := i.Process; pr != nil {
 				p.Exited = pr.Child == nil && len(pr.LastExit) > 0 && string(pr.LastExit) != "null"
 			}
