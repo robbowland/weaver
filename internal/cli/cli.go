@@ -46,14 +46,7 @@ func IsTTY(fd int) bool {
 }
 
 // EnvInt is $k as a whole number, if it is one.
-func EnvInt(k string) (int, bool) {
-	v := os.Getenv(k)
-	if !digits(v) {
-		return 0, false
-	}
-	n, err := strconv.Atoi(v)
-	return n, err == nil
-}
+func EnvInt(k string) (int, bool) { return Atoi(os.Getenv(k)) }
 
 // EnvSeconds is $k as a whole number of seconds, else d.
 func EnvSeconds(k string, d time.Duration) time.Duration {
@@ -63,7 +56,9 @@ func EnvSeconds(k string, d time.Duration) time.Duration {
 	return d
 }
 
-func digits(s string) bool {
+// Digits: is s one or more ASCII digits, a number as weaver's files keep
+// one (a pane, a pid, epoch seconds): never signed, never empty.
+func Digits(s string) bool {
 	if s == "" {
 		return false
 	}
@@ -73,4 +68,13 @@ func digits(s string) bool {
 		}
 	}
 	return true
+}
+
+// Atoi is s as a number when it is digits (Digits).
+func Atoi(s string) (int, bool) {
+	if !Digits(s) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
 }

@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/rex"
 )
@@ -132,31 +133,10 @@ func (e *Env) SessionFiles(ext string) []string {
 			continue
 		}
 		p := n[len(pre) : len(n)-len(suf)]
-		if p == "" || !digits(p) {
+		if p == "" || !cli.Digits(p) {
 			continue
 		}
 		out = append(out, e.StateDir+"/"+n)
 	}
 	return out
-}
-
-func digits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-// atoi is s as a number when it is digits.
-func atoi(s string) (int, bool) {
-	if !digits(s) {
-		return 0, false
-	}
-	n, err := strconv.Atoi(s)
-	return n, err == nil
 }

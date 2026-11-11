@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/process"
@@ -53,10 +54,10 @@ func (e *Env) PanelPane(pane mux.PaneID) mux.PaneID {
 	if len(ls) > 1 {
 		pid = ls[1]
 	}
-	if !digits(nv) && nv != "" {
+	if !cli.Digits(nv) && nv != "" {
 		return ""
 	}
-	if pid != "" && !digits(pid) {
+	if pid != "" && !cli.Digits(pid) {
 		pid = ""
 	}
 	if pid != "" {

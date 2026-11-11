@@ -205,7 +205,7 @@ func (e *Env) Preview(args []string) string {
 		return titleLine(title) + CDim + "⏎ shows every held thread, or folds them again" + COff + "\n"
 	}
 	// A lost thread (its item's id l…, or without one, its session id).
-	if strings.HasPrefix(id, "l") || id == "" && pane != "" && !digits(pane) {
+	if strings.HasPrefix(id, "l") || id == "" && pane != "" && !cli.Digits(pane) {
 		if view == "help" {
 			return Help()
 		}

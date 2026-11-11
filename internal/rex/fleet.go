@@ -2,8 +2,8 @@ package rex
 
 import (
 	"errors"
-	"slices"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"

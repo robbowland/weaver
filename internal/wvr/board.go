@@ -469,7 +469,7 @@ func (e *Env) rows(plain bool) string {
 			continue
 		}
 		since := now
-		if digits(l.Lost) {
+		if cli.Digits(l.Lost) {
 			since, _ = strconv.ParseInt(l.Lost, 10, 64)
 		}
 		// Named as it was when live.

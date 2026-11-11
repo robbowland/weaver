@@ -11,12 +11,11 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/term"
-
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/store"
+	"golang.org/x/term"
 )
 
 // The LINEAR view's source: the Linear issues of weaver's sections
@@ -66,7 +65,7 @@ func (c linCache) section(key string) (linear.Result, bool) {
 		}
 		return *c.Search, true
 	}
-	i, ok := atoi(key)
+	i, ok := cli.Atoi(key)
 	if !ok || i >= len(c.Results) {
 		return linear.Result{}, false
 	}

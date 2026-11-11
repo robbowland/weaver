@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
@@ -78,7 +79,7 @@ func (e *Env) gcAgents() {
 		ls := strings.SplitN(string(b), "\n", 3)
 		alive := false
 		if len(ls) > 1 {
-			if n, ok := atoi(ls[1]); ok {
+			if n, ok := cli.Atoi(ls[1]); ok {
 				alive = process.Alive(n)
 			}
 		}
@@ -157,7 +158,7 @@ func paneFiles(dir, ext string) []string {
 	var out []string
 	for _, m := range ms {
 		b := strings.TrimSuffix(filepath.Base(m), "."+ext)
-		if i := strings.LastIndexByte(b, '_'); i > 0 && digits(b[i+1:]) {
+		if i := strings.LastIndexByte(b, '_'); i > 0 && cli.Digits(b[i+1:]) {
 			out = append(out, m)
 		}
 	}

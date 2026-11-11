@@ -219,18 +219,10 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 // and for 1 or less, which is no agent (launchd, the parent of an orphaned
 // hook; 0, no process): recorded, it would read as dead, or as alive.
 func knownPid(pid string) string {
-	if n, ok := atoi(pid); ok && n > 1 {
+	if n, ok := cli.Atoi(pid); ok && n > 1 {
 		return pid
 	}
 	return ""
-}
-
-func atoi(s string) (int, bool) {
-	if !digits(s) {
-		return 0, false
-	}
-	n, err := strconv.Atoi(s)
-	return n, err == nil
 }
 
 var reProcStart = regexp.MustCompile(`"procStart":"([^"]*)"`)
@@ -258,7 +250,7 @@ func (h *hk) run(e *session.Env, me string) {
 		// Not Claude Code (or before it writes its session file): the
 		// kernel's, once.
 		if h.ProcStart == "" && h.Pid != h.oPid() {
-			if n, ok := atoi(h.Pid); ok {
+			if n, ok := cli.Atoi(h.Pid); ok {
 				h.ProcStart = strings.TrimRight(process.Starts([]int{n})[n], " ")
 			}
 		}
@@ -335,7 +327,7 @@ func (h *hk) run(e *session.Env, me string) {
 		h.Turn++
 	}
 
-	bg, _ := atoi(h.BgNew)
+	bg, _ := cli.Atoi(h.BgNew)
 	ch := agent.Transition(h.Old, h.sess(), agent.Event{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
 		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt != "", Rejected: h.Rejected != "",
 		Background: bg, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
@@ -371,7 +363,7 @@ func (h *hk) sess() agent.Record {
 
 // writeState writes the state file from the hook's fields (under its lock).
 func writeState(e *session.Env, h *hk) {
-	pane, _ := atoi(string(h.Pane))
+	pane, _ := cli.Atoi(string(h.Pane))
 	since := h.Since
 	if since == "" {
 		since = "0"
@@ -386,8 +378,8 @@ func writeState(e *session.Env, h *hk) {
 	if p := knownPid(h.Pid); p != "" {
 		st.Pid = json.Number(p)
 	}
-	if digits(h.Bg) {
-		st.Background, _ = atoi(h.Bg)
+	if cli.Digits(h.Bg) {
+		st.Background, _ = cli.Atoi(h.Bg)
 	}
 	if h.Doing != "" {
 		st.Doing, st.DoingID = h.Doing, h.DoingID

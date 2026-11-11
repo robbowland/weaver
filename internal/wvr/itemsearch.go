@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/session"
 )
 
@@ -35,7 +36,7 @@ func (it viewItem) names(q string) bool {
 		return true
 	}
 	n := strings.TrimPrefix(q, "#")
-	return digits(n) && (it.key == "#"+n || strings.HasSuffix(it.key, "-"+n))
+	return cli.Digits(n) && (it.key == "#"+n || strings.HasSuffix(it.key, "-"+n))
 }
 
 // keySearch is fzf's search for key q among its: the keys of the items q

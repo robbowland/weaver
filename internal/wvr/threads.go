@@ -50,7 +50,7 @@ func (e *Env) openingRecords() []string {
 	ms, _ := filepath.Glob(e.threadsNew() + "/" + e.SKey + "_*/thread.json")
 	var out []string
 	for _, m := range ms {
-		if tok := strings.TrimPrefix(filepath.Base(filepath.Dir(m)), e.SKey+"_"); digits(tok) {
+		if tok := strings.TrimPrefix(filepath.Base(filepath.Dir(m)), e.SKey+"_"); cli.Digits(tok) {
 			out = append(out, m)
 		}
 	}
@@ -85,7 +85,7 @@ func (e *Env) numLock() func() {
 		now := time.Now().Unix()
 		t := now
 		if l, err := files.FirstLine(d + "/at"); err == nil {
-			if n, ok := atoi(l); ok {
+			if n, ok := cli.Atoi(l); ok {
 				t = int64(n)
 			}
 		}
@@ -215,7 +215,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 			break
 		}
 		pid, _ = files.FirstLine(f + ".pid")
-		if n, ok := atoi(pid); !ok || !process.Alive(n) {
+		if n, ok := cli.Atoi(pid); !ok || !process.Alive(n) {
 			break
 		}
 		if !said && time.Since(start) >= 300*time.Millisecond {
@@ -230,7 +230,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	case "":
 		// Its group (a pid of 1 or less names none: kill(-1) is every
 		// process).
-		if n, ok := atoi(pid); ok && n > 1 {
+		if n, ok := cli.Atoi(pid); ok && n > 1 {
 			bestEffort(syscall.Kill(-n, syscall.SIGTERM))
 		}
 		os.Remove(f + ".pid")
@@ -637,7 +637,7 @@ func (e *Env) AgentPane(tok string) error {
 		}
 		mode = t.Mode
 	}
-	paneNum, _ := atoi(string(pane))
+	paneNum, _ := cli.Atoi(string(pane))
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
 		w := agent.Command(cmd, mode)
@@ -847,7 +847,7 @@ func (e *Env) ResumeSession() {
 		// A thread you put on hold waits for you.
 		if r.Held == "" && r.Skey == e.SKey {
 			n := 999
-			if v, ok := atoi(r.Num); ok {
+			if v, ok := cli.Atoi(r.Num); ok {
 				n = v
 			}
 			ls = append(ls, l{n, r.File})
@@ -1081,7 +1081,7 @@ func worktreeRemovable(dir string) string {
 		if ahead == "0" {
 			return ""
 		}
-		n, _ := atoi(ahead)
+		n, _ := cli.Atoi(ahead)
 		if ahead == "" {
 			ahead, n = "its", 2
 		}
@@ -1104,7 +1104,7 @@ func threadPanel(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 			break
 		}
 	}
-	if !digits(tok) {
+	if !cli.Digits(tok) {
 		return "", ""
 	}
 	for _, p := range panes {
@@ -1378,7 +1378,7 @@ func (e *Env) CloseTail(a []string) error {
 			e.Mux().Close(nv)
 		}
 	}
-	if digits(tok) {
+	if cli.Digits(tok) {
 		os.RemoveAll(e.opening(tok))
 	}
 	for i := 0; i < 50 && pid != "" && process.StillRuns(pid, start, nil); i++ {

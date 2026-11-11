@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"golang.org/x/sys/unix"
 )
 
@@ -26,7 +27,7 @@ func Alive(p int) bool { return p > 1 && syscall.Kill(p, 0) == nil }
 // it runs.
 func StillRuns(pid, start string, starts map[int]string) bool {
 	n, err := strconv.Atoi(pid)
-	if err != nil || !digits(pid) {
+	if err != nil || !cli.Digits(pid) {
 		return true
 	}
 	if !Alive(n) {
@@ -42,15 +43,6 @@ func StillRuns(pid, start string, starts map[int]string) bool {
 		}
 	}
 	return strings.Join(strings.Fields(now), " ") == strings.Join(strings.Fields(start), " ")
-}
-
-func digits(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return s != ""
 }
 
 // Starts are processes' start times as ps prints them (TZ=UTC, LC_ALL=C:

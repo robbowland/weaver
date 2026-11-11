@@ -4,7 +4,11 @@
 // state files, what counts as seen) stays out of it.
 package mux
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/robbowland/weaver/internal/cli"
+)
 
 // PaneID is a pane as weaver's file names and records keep it: the number
 // weaver gave its Rex block, "3".
@@ -17,26 +21,14 @@ type WindowID string
 // ParsePane is the pane s names (its number); false when it names none.
 func ParsePane(s string) (PaneID, bool) {
 	s = strings.TrimSpace(s)
-	return PaneID(s), digits(s)
+	return PaneID(s), cli.Digits(s)
 }
 
 // ParseWindow is the window s names (its number); false when it names
 // none.
 func ParseWindow(s string) (WindowID, bool) {
 	s = strings.TrimSpace(s)
-	return WindowID(s), digits(s)
-}
-
-func digits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
+	return WindowID(s), cli.Digits(s)
 }
 
 // Pane is one pane of weaver's sessions, in Session (the multiplexer's

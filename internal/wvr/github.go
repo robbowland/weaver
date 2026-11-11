@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/page"
@@ -97,7 +98,7 @@ func (c ghCache) section(k github.Kind, key string) (github.Result, bool) {
 		r, ok := c.Search[k]
 		return r, ok
 	}
-	i, ok := atoi(key)
+	i, ok := cli.Atoi(key)
 	if !ok || i >= len(c.Results[k]) {
 		return github.Result{}, false
 	}

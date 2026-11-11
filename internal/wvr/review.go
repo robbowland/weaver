@@ -86,7 +86,7 @@ func (e *Env) panelLock(agent mux.PaneID) func() {
 		now := time.Now().Unix()
 		t := now
 		if l, err := files.FirstLine(d + "/at"); err == nil {
-			if n, ok := atoi(l); ok {
+			if n, ok := cli.Atoi(l); ok {
 				t = int64(n)
 			}
 		}

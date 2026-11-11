@@ -126,7 +126,7 @@ func (e *Env) fetchStart(repo, sf string) {
 		return
 	}
 	if p, err := files.FirstLine(f + ".pid"); err == nil {
-		if n, ok := atoi(p); ok && process.Alive(n) {
+		if n, ok := cli.Atoi(p); ok && process.Alive(n) {
 			return
 		}
 	}
@@ -474,7 +474,7 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, c string)) {
 				v = "the default branch"
 			}
 		case pid != "":
-			if n, ok := atoi(pid); ok && process.Alive(n) {
+			if n, ok := cli.Atoi(pid); ok && process.Alive(n) {
 				note = "fetching…"
 			}
 		}

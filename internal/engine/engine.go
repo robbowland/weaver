@@ -3,19 +3,6 @@
 // background run.
 package engine
 
-// digits is whether s is one or more ASCII digits.
-func digits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 // bestEffort marks an error left unhandled on purpose: what failed (a
 // marker, a log line) costs nothing that matters.
 func bestEffort(error) {}

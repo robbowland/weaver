@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/markdown"
@@ -729,7 +730,7 @@ func (e *Env) itemPage(src itemSource, id, n string) {
 		session.FzfPost(asker, "change-header("+asking+")")
 	}
 	src.more(e, e.itemKind(src), rowKey(id))
-	if i, ok := atoi(n); ok && asker != "" && strings.HasPrefix(id, "m") {
+	if i, ok := cli.Atoi(n); ok && asker != "" && strings.HasPrefix(id, "m") {
 		bestEffort(os.WriteFile(asker+".pos", []byte(strconv.Itoa(i+1)+"\n"), 0o600))
 	}
 	e.reloadItems(src)
@@ -759,7 +760,7 @@ func (e *Env) itemFilter(src itemSource) {
 	out := e.pick(b.String(), formLabel("FILTER"), formPrompt("filter"), "a search, or words to ask "+src.service()+" for", at)
 	q, sel, _ := strings.Cut(out, "\n")
 	v, _, _ := strings.Cut(sel, "\t")
-	i, ok := atoi(v)
+	i, ok := cli.Atoi(v)
 	switch {
 	case v == "x", ok && i < len(fs) && fs[i].title == cur:
 		src.clear(e)
@@ -842,7 +843,7 @@ func (e *Env) itemLoaded(src itemSource) string {
 	}
 	if p, err := files.FirstLine(s + ".pos"); err == nil && s != "" {
 		os.Remove(s + ".pos")
-		if n, ok := atoi(p); ok {
+		if n, ok := cli.Atoi(p); ok {
 			out = strings.TrimSuffix(out, "\n") + "+pos(" + strconv.Itoa(n) + ")\n"
 		}
 	}

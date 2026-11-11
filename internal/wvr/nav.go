@@ -337,7 +337,7 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 		now := time.Now().Unix()
 		t := now
 		if l, err := files.FirstLine(d + "/at"); err == nil {
-			if n, ok := atoi(l); ok {
+			if n, ok := cli.Atoi(l); ok {
 				t = int64(n)
 			}
 		}
@@ -452,7 +452,7 @@ func (e *Env) Next() {
 // has state, a thread record or a review panel), or the agent whose review
 // panel it is.
 func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
-	if !digits(string(p)) {
+	if !cli.Digits(string(p)) {
 		return ""
 	}
 	for _, x := range []string{"json", "thread", "panel"} {
@@ -475,9 +475,9 @@ func agentCols(total int) int {
 	w := os.Getenv("WEAVER_AGENT_WIDTH")
 	pct := 20
 	switch {
-	case strings.HasSuffix(w, "%") && len(w) >= 2 && len(w) <= 3 && digits(w[:len(w)-1]) && w[0] != '0':
+	case strings.HasSuffix(w, "%") && len(w) >= 2 && len(w) <= 3 && cli.Digits(w[:len(w)-1]) && w[0] != '0':
 		pct, _ = strconv.Atoi(w[:len(w)-1])
-	case len(w) >= 1 && len(w) <= 3 && digits(w) && w[0] != '0':
+	case len(w) >= 1 && len(w) <= 3 && cli.Digits(w) && w[0] != '0':
 		n, _ := strconv.Atoi(w)
 		return n
 	}
