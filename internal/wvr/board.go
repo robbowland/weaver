@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -344,26 +343,7 @@ func (e *Env) rows(plain bool) string {
 			} else {
 				glyph = paint(GDone, green, dim, off)
 			}
-			roots := a.Troots
-			if len(roots) == 0 {
-				roots = []string{a.Root}
-			}
-			tf := e.turnFiles(a.Sid, strconv.Itoa(a.Turn), roots)
-			last := a.Last
-			switch tf {
-			case "", "0":
-				fact = last
-			case "1":
-				fact = "1 file"
-				if last != "" {
-					fact += " · " + last
-				}
-			default:
-				fact = tf + " files"
-				if last != "" {
-					fact += " · " + last
-				}
-			}
+			fact = a.Last
 		case a.State == agent.StateInterrupted:
 			fact = string(agent.StateInterrupted)
 			glyph = paint(GInt, grey, dim, off)
@@ -463,7 +443,7 @@ func (e *Env) rows(plain bool) string {
 		order[i] = i
 	}
 	sort.SliceStable(order, func(i, j int) bool { return rs[order[i]].key < rs[order[j]].key })
-	// Two agents in one worktree mix their per-turn diffs: say so (×2).
+	// Two agents in one worktree: say so (×2).
 	for i := 0; i < n; i++ {
 		if i < live {
 			c := 0
@@ -754,54 +734,6 @@ func (e *Env) rows(plain bool) string {
 	return b.String()
 }
 
-// turnFiles is how many files the agent's last turn changed, from the end
-// snapshots of turn turn of session sid in roots; empty when there is none.
-// Each snapshot commit is asked about once; the answer is kept under
-// $STATE_DIR/turns/<commit>.
-func (e *Env) turnFiles(sid, turn string, roots []string) string {
-	if sid == "" || turn == "0" {
-		return ""
-	}
-	total, counted := 0, false
-	for _, r := range roots {
-		if r == "" {
-			continue
-		}
-		w := git.WhereOf(r)
-		if w.GitDir == "" {
-			continue
-		}
-		sha, _ := files.FirstLine(w.GitDir + "/refs/worktree/weaver/sessions/" + sid)
-		if sha == "" || strings.Trim(sha, "0123456789abcdef") != "" {
-			continue
-		}
-		line, _ := files.FirstLine(e.StateDir + "/turns/" + sha)
-		if line == "" {
-			line = gitTurn(r, sha)
-			f := strings.Fields(line)
-			if len(f) != 3 || !digits(f[0][:1]) || f[1][0] < 'a' || f[1][0] > 'z' || !digits(f[2][:1]) {
-				continue
-			}
-			os.MkdirAll(e.StateDir+"/turns", 0o755)
-			tmp := e.StateDir + "/turns/" + sha + "." + strconv.Itoa(os.Getpid())
-			if os.WriteFile(tmp, []byte(line+"\n"), 0o644) == nil {
-				os.Rename(tmp, e.StateDir+"/turns/"+sha)
-			}
-		}
-		f := strings.Fields(line)
-		if len(f) < 3 || f[0] != turn || !strings.Contains(line, " end ") {
-			continue
-		}
-		c, _ := strconv.Atoi(f[2])
-		total += c
-		counted = true
-	}
-	if !counted {
-		return ""
-	}
-	return strconv.Itoa(total)
-}
-
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last; the rest are in its help. ⏎ opens a
 // row's thread: its window, or a lost or held one in a new window.
@@ -995,25 +927,3 @@ func (e *Env) Chrome() string {
 	return out + "change-border-label:" + label + "\n"
 }
 
-// gitTurn asks git about a snapshot commit: its turn and point (trailers),
-// then how many files it changed, "turn point n".
-func gitTurn(root, sha string) string {
-	out, err := exec.Command("git", "-C", root, "show", "--no-renames", "--name-only",
-		"--format=%(trailers:key=Weaver-Turn,valueonly,separator=) %(trailers:key=Weaver-Point,valueonly,separator=)",
-		sha, "--").Output()
-	if err != nil {
-		return ""
-	}
-	lines := strings.Split(string(out), "\n")
-	f := strings.Fields(lines[0])
-	for len(f) < 2 {
-		f = append(f, "")
-	}
-	n := 0
-	for _, l := range lines[1:] {
-		if strings.TrimSpace(l) != "" {
-			n++
-		}
-	}
-	return f[0] + " " + f[1] + " " + strconv.Itoa(n)
-}

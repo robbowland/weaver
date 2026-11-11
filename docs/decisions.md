@@ -148,6 +148,16 @@ can supersede an earlier one, and says so.
   edit (`originalFile`, `structuredPatch`, bashEditDiff's hunks) is no
   longer read. A repository's existing `refs/worktree/weaver/agents/` refs
   are left as they are.
+- 2026-11-11: Per-turn snapshots and the reviewed mark are gone,
+  superseding this section's entries on them: the review is tuicr's over the
+  branch's commits, the weaver skill has agents commit in small steps
+  (policy commits replace turns), and tuicr marks what was reviewed. With
+  them went `wvr snapshot --reviewed`, `turn_ended`, `turn_roots`, the
+  `.prompt` file and the done row's file count (Rob, decision 4), which read
+  the end snapshot; a done row shows the last reply. The turn counter stays:
+  it reads no snapshot. A repository's existing
+  `refs/worktree/weaver/{sessions,reviewed}` refs and private indexes are
+  left as they are.
 
 ## Holding threads
 

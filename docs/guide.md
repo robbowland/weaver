@@ -269,10 +269,10 @@ Agents are grouped under these headings:
 
 Each row shows the thread's number and name, its state as a cell (`[!]`,
 `[x]`, `[/]`, `[ ]`, `[-]`), one fact about it (what it waits on, the command
-it runs, what its last turn changed and said, or its subagents), its
+it runs, what its last turn said, or its subagents), its
 repository and branch when there is room, and how long it has been in that
 state. Titles are bright only where a thread needs you. `×2` after a branch
-means two agents share the worktree, so their per-turn diffs mix.
+means two agents work in the same worktree.
 
 The headings' counts are the board's border's. The cursor never rests on a
 heading, and stays on its agent as the board reloads itself.
@@ -394,8 +394,8 @@ needs:
 - **Processes.** Sockets nothing listens on are removed. What an agent
   left running in the background from its worktree (a dev server, a
   watcher) is not: end it yourself once its thread has gone.
-- **Files.** Agents that are gone are forgotten. Activity logs, per-turn
-  snapshots and lost threads go after a month.
+- **Files.** Agents that are gone are forgotten. Activity logs and lost
+  threads go after a month.
 
 ## What weaver tracks
 
@@ -426,14 +426,8 @@ polled.
 
 ### Turns and the activity log
 
-Each prompt of yours starts a turn. weaver snapshots the agent's worktree at
-the start and end of every turn into `refs/worktree/weaver/sessions/<session>`,
-through a private index, so your staging area is never touched. Each turn's
-diff, and `git blame` back to the prompt that produced a line, are a git
-command away. Edits you make between turns are their own commit.
-
-`wvr snapshot --reviewed` marks the worktree as reviewed
-(`refs/worktree/weaver/reviewed`). Everything an agent does is also logged to
+Each prompt of yours starts a turn, which the board and the card count.
+Everything an agent does is logged to
 `~/.local/state/weaver/log/<session>.jsonl`. The formats are in
 [design.md](design.md).
 
@@ -561,8 +555,6 @@ Environment variables change weaver's defaults.
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 | `WEAVER_WORKTRUNK` | `1` | `0`: create worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_WT_MARKERS` | `1` | `0`: stop setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
-| `WEAVER_SNAPSHOTS` | `1` | `0`: stop the per-turn snapshots |
-| `WEAVER_SNAPSHOT_MAX_KB` | `5120` | Untracked files bigger than this stay out of snapshots |
 | `WEAVER_VIEWS` | both, except hidden ones | The views beside home: `github`, `linear`, both, or `none` |
 | `WEAVER_ITEM_TASK` | `0` | `1`: a thread from a pull request or issue starts with weaver's task written into the form (`Review #45`, `Implement ENG-42`); otherwise the task is empty, and an empty task starts the agent with no prompt |
 | `LINEAR_API_KEY` | unset | The Linear API key to use instead of the one `wvr linear login` keeps in the Keychain |
@@ -587,7 +579,7 @@ python3 and Rex:
   the design doc (the states);
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
   state machine and its robustness, `alt+1`, the counts, subagents,
-  per-turn snapshots, other agents' events, the installer and the board's
+  other agents' events, the installer and the board's
   renderings. They run on a throwaway Rex server with three fake agents;
   `test/hooks.sh SUITE` runs one;
 - `test/rex.sh`: weaver on Rex end to end, on a throwaway Rex server with

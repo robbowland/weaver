@@ -1,8 +1,7 @@
 #!/bin/bash
 # weaver's hook engine on Rex: the suites in test/suites/ (the hooks' latency,
-# their state machine and its robustness, attention, subagents, per-turn
-# snapshots, other agents' events, the installer and the dashboard's
-# renderings), against a throwaway Rex server with three fake agents, a and b
+# their state machine and its robustness, attention, subagents, other
+# agents' events, the installer and the dashboard's renderings), against a throwaway Rex server with three fake agents, a and b
 # in window one, c in window two (weaver's panes 0, 1 and 2).
 #
 #   test/hooks.sh [suite...]   default: every suite in test/suites/

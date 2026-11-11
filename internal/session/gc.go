@@ -128,7 +128,6 @@ func (e *Env) gcFiles() {
 	}
 	old(e.LogDir, "*.jsonl", month, false)
 	old(e.LostDir, "*.json", month, false)
-	old(e.StateDir+"/turns", "*", month, false)
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)
 	e.sweepSockets(day)

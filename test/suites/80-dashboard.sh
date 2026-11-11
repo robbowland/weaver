@@ -20,7 +20,7 @@ put() {
 }
 
 # --- the scene, in a repository of its own (the other suites leave changes
-# in theirs): A needs you, B finished (2 files in its last turn), C works.
+# in theirs): A needs you, B finished, C works.
 D=$T/dash
 if [ ! -d "$D" ]; then
 	git init -q -b main "$D" && git -C "$D" config user.email test@example.com && git -C "$D" config user.name test &&
@@ -35,7 +35,7 @@ put 0 '{state: "needs-you", since: ($now - 270), title: "Add a CLI flag", turn: 
 	files: ["'"$T/dash-flag/app.py"'"]}'
 hook 1 SessionStart "$T/dash-readme"
 hook 1 UserPromptSubmit "$T/dash-readme" "" "write a README and a guide"
-settle # its start snapshot
+settle
 printf 'readme\nmore\n' >"$T/dash-readme/README.md"
 printf 'guide\n' >"$T/dash-readme/GUIDE.md"
 hook 1 PostToolUse "$T/dash-readme" "$T/dash-readme/README.md"

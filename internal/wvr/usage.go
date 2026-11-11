@@ -86,7 +86,6 @@ const Usage = `usage: wvr [command]
   view [github|linear]         go to a view beside home: GITHUB or LINEAR (one
                                not set up shows how; one you hid shows again)
   status                       agent counts
-  snapshot --reviewed [dir]    mark the worktree holding dir reviewed
   gc                           forget agents that are gone, and remove the worktrees
                                weaver left behind
   setup [--dry-run] [--no-codex] [--bin PATH]

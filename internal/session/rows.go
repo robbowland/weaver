@@ -52,12 +52,11 @@ type Row struct {
 	WindowName, Agent, Bgtasks, Ttask, Tname                          string
 	Since                                                             int64 // epoch s
 	Seen                                                              bool
-	Bg, Nsub, Turn                                                    int  // background tasks, subagents
-	Tdone, Ttotal                                                     int  // its tasks
-	Tnum                                                              int  // its thread's number; 0 for none
-	Review                                                            bool // its thread is read-only: a review, an investigation
-	Exited                                                            bool // its agent has exited and left its pane (kept: R starts it again, x closes it)
-	Troots                                                            []string
+	Bg, Nsub, Turn                                                    int    // background tasks, subagents
+	Tdone, Ttotal                                                     int    // its tasks
+	Tnum                                                              int    // its thread's number; 0 for none
+	Review                                                            bool   // its thread is read-only: a review, an investigation
+	Exited                                                            bool   // its agent has exited and left its pane (kept: R starts it again, x closes it)
 	Doing                                                             string // the command it runs now
 }
 
@@ -195,9 +194,6 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		r.Doing = oneline.Line(s.Doing)
 		if terr == nil {
 			r.Ttask, r.Tname, r.Tnum = oneline.Line(t.About()), oneline.Line(t.Name), t.Num
-		}
-		for _, x := range s.TurnRoots {
-			r.Troots = append(r.Troots, oneline.Line(x))
 		}
 		r.Exited = p.Exited
 		if n, err := strconv.Atoi(r.Pid); err == nil && !r.Exited {
@@ -472,9 +468,9 @@ func (e *Env) Forget(f, pid string) {
 
 // removePaneFiles removes the files weaver keeps for the agent in a pane,
 // b their path without extension (<skey>_<pane>): its state, thread record,
-// review panel binding, turn prompt, last Bash command and opening marker.
+// review panel binding, last Bash command and opening marker.
 func removePaneFiles(b string) {
-	for _, x := range []string{".json", ".panel", ".bash", ".prompt", ".thread"} {
+	for _, x := range []string{".json", ".panel", ".bash", ".thread"} {
 		os.Remove(b + x)
 	}
 	os.RemoveAll(b + ".opening")

@@ -183,14 +183,6 @@ var commands = map[string]command{
 		}
 		return engine.Event(e.Env, "codex", slices.Contains(args[1:], "--bell"))
 	}},
-	"snapshot": {run: func(_ *wvr.Env, args []string) error {
-		c, msg := engine.Snapshot(args)
-		if msg != "" {
-			return errors.New(msg)
-		}
-		fmt.Println(c)
-		return nil
-	}},
 
 	// The board's fzf, its preview and views.
 	"_rows": {session: true, run: prints(func(e *wvr.Env, _ []string) string {

@@ -22,10 +22,11 @@ done
 printf '{"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"%s"},"tool_response":{},"cwd":"%s",%s}' \
 	"$T/repo/README.md" "$T/repo" "$base" >"$J/read"
 
-# run FILE [ARGS]: one hook call, in ms: until the hook exits, which is what
-# the agent waits for (its background work goes on without it).
+# run FILE [ARGS]: one hook call from the agent's pane, in ms: until the hook
+# exits, which is what the agent waits for (its background work goes on
+# without it).
 run() {
-	perl -MTime::HiRes=time -e '
+	as_pane $P perl -MTime::HiRes=time -e '
 		open(STDIN, "<", shift) or die; open(my $out, ">&", \*STDOUT); open(STDOUT, ">", "/dev/null");
 		my $t = time; system(@ARGV); printf $out "%d", (time - $t) * 1000' "$1" wvr hook ${2:+"$2"}
 }
@@ -85,6 +86,8 @@ sleep 1
 # Generous budgets, so a loaded machine passes; what they catch is a
 # synchronous Rex call (10-25 ms each, 2 s when stuck) creeping
 # back in, or the async hook parsing events it has no use for.
+# A hook from no pane does nothing at all: these timed the agent's own.
+ok "latency: the hooks ran as the agent's pane" "$(st $P prompt)" "measure me"
 ok "latency: a prompt costs the agent under 25 ms" "$([ "$L_PROMPT" -lt 25 ] && echo y)" y
 ok "latency: an edit in the async hook does not wait on Rex (under 40 ms)" \
 	"$([ "$L_EDIT" -lt 40 ] && echo y)" y

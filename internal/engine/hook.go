@@ -28,7 +28,6 @@ import (
 // agent's, made one by Event) folded into its state file. What it needs besides the state (Rex, Worktrunk,
 // snapshots, the status) runs after it in a detached `wvr hook --bg`.
 
-const rs = "\x1e" // separates the members of the hook's lists
 
 // bellJSON rings the bell: Claude Code writes terminalSequence to the agent's
 // terminal.
@@ -53,9 +52,8 @@ type hk struct {
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
-	Old        agent.Record
-	Same       bool
-	OTurnRoots string
+	Old  agent.Record
+	Same bool
 	// Paths are where a command or MCP tool may have changed files.
 	Paths []string
 	// The lists after the event, written in the foreground only.
@@ -66,10 +64,8 @@ type hk struct {
 	State                                                                 agent.State
 	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
 	Marked, Marker, MarkDir, Bg, Bgdesc, Pid, ProcStart, Title, EndReason string
-	Turn, TurnEnded                                                       int
-	TurnRoots                                                             string
+	Turn                                                                  int
 	Moved                                                                 bool
-	SnapPrev, SnapStart, SnapEnd, FirstTouch, PrevPrompt, TurnPrompt      string
 	// What it is running now (a Bash command, from the async PreToolUse
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
@@ -224,11 +220,6 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.Files = hooks.Files(h.sess().Files, h.File)
 	h.Subagents = hooks.Subagents(h.sess().Subagents, in, h.Aid, h.Now)
 	h.Tasks = hooks.Tasks(h.sess().Tasks, in)
-	var tr []string
-	for _, r := range h.sess().TurnRoots {
-		tr = append(tr, oneline.Line(r))
-	}
-	h.OTurnRoots = strings.Join(tr, rs)
 	h.Paths = in.CommandPaths()
 	h.Changed, h.ChangedKnown = in.Changes()
 	h.launchID, h.launchType, h.launchAs = in.Launched()
@@ -352,40 +343,10 @@ func (h *hk) run(e *session.Env, me string) {
 			h.Root = h.Old.Root
 		}
 	}
-	// Turns: each prompt of yours starts one; it ends at Stop, StopFailure
-	// or an interrupt. The roots it touches are snapshotted at its end.
-	h.Turn, h.TurnEnded = h.sess().Turn, h.sess().TurnEnded
-	h.TurnRoots = h.OTurnRoots
-	if h.Event == "UserPromptSubmit" && h.Prompt != "" {
-		// Esc while the model was writing fires nothing: the previous turn
-		// ends here.
-		if h.Turn > h.TurnEnded {
-			h.SnapPrev = strconv.Itoa(h.Turn)
-		}
+	// Turns: each prompt of yours starts one.
+	h.Turn = h.sess().Turn
+	if h.yourPrompt() {
 		h.Turn++
-		h.TurnEnded = h.Turn - 1
-		h.TurnRoots, h.SnapStart = h.Root, "1"
-	} else if h.Turn > 0 && h.Root != "" && (h.EvFile != "" || h.Moved) {
-		if !strings.Contains(rs+h.TurnRoots+rs, rs+h.Root+rs) {
-			if h.TurnRoots != "" {
-				h.TurnRoots += rs
-			}
-			h.TurnRoots += h.Root
-			h.FirstTouch = h.Root
-		}
-	}
-	switch h.Event {
-	case "Stop", "StopFailure":
-		if h.Turn > 0 {
-			h.SnapEnd = "1"
-		}
-	case "PostToolUseFailure":
-		if h.Interrupt != "" && h.Turn > 0 {
-			h.SnapEnd = "1"
-		}
-	}
-	if h.SnapEnd != "" {
-		h.TurnEnded = h.Turn
 	}
 
 	bg, _ := atoi(h.BgNew)
@@ -411,6 +372,9 @@ func (h *hk) run(e *session.Env, me string) {
 
 func (h *hk) oPid() string { return string(h.Old.Pid) }
 
+// yourPrompt: is the event a prompt of yours, which starts a turn?
+func (h *hk) yourPrompt() bool { return h.Event == "UserPromptSubmit" && h.Prompt != "" }
+
 // sess is the stored state when it is this session's, else none.
 func (h *hk) sess() agent.Record {
 	if h.Same {
@@ -427,11 +391,11 @@ func writeState(e *session.Env, h *hk) {
 		since = "0"
 	}
 	st := agent.Record{Pane: jsonx.Int(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
-		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn, TurnEnded: h.TurnEnded,
+		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn,
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
 		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
-		TurnRoots: []string{}}
+	}
 	st.Files, st.Subagents, st.Tasks = orEmpty(h.Files), orEmpty(h.Subagents), orEmpty(h.Tasks)
 	if p := knownPid(h.Pid); p != "" {
 		st.Pid = json.Number(p)
@@ -447,11 +411,6 @@ func writeState(e *session.Env, h *hk) {
 	st.Where = e.Where
 	if h.Sid != "" {
 		st.Log = e.LogDir + "/" + h.Sid + ".jsonl"
-	}
-	for _, r := range strings.Split(h.TurnRoots, rs) {
-		if r != "" {
-			st.TurnRoots = append(st.TurnRoots, r)
-		}
 	}
 	bestEffort(store.Write(h.sf, st))
 }
@@ -475,7 +434,7 @@ func (h *hk) hookLog(e *session.Env) {
 	case "SessionStart":
 		h.logLine(e, logSession{h.logHead("session"), h.Source})
 	case "UserPromptSubmit":
-		if h.SnapStart != "" {
+		if h.yourPrompt() {
 			h.logLine(e, logPrompt{h.logHead("prompt"), h.PromptLong, h.PromptID})
 		}
 	case "PostToolUse":
@@ -522,15 +481,6 @@ func afterWrite(e *session.Env, h *hk) {
 	if h.Event == "SessionStart" {
 		e.ThreadLearns(h.Pane, h.Sid)
 	}
-	pf := e.PaneFile(h.Pane, "prompt")
-	if h.SnapPrev+h.SnapEnd != "" && files.Exists(pf) {
-		h.TurnPrompt, _ = files.FirstLine(pf)
-		h.PrevPrompt = h.TurnPrompt
-	}
-	if h.SnapStart != "" {
-		// Unwritten, the turn's snapshot goes without its prompt.
-		bestEffort(os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644))
-	}
 	h.hookLog(e)
 	// Following a Bash or MCP edit needs git: here when this process runs in
 	// the background anyway (Claude Code's async hook), else in the
@@ -544,7 +494,7 @@ func afterWrite(e *session.Env, h *hk) {
 		}
 	}
 	// The background work, only when there is some.
-	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch+h.FollowBash != "" ||
+	if h.State != h.Old.State || h.Root != h.Old.Root || h.FollowBash != "" ||
 		h.Waiting != h.Old.Waiting ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
@@ -567,7 +517,7 @@ func spawnBg(e *session.Env, h *hk) {
 		}
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	// Not started, Rex and the snapshots catch up at the next event.
+	// Not started, Rex catches up at the next event.
 	bestEffort(c.Start())
 }
 
@@ -579,7 +529,7 @@ func spawnBg(e *session.Env, h *hk) {
 // not say.
 func bgRun(h *hk) ([]byte, error) {
 	bg := *h
-	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents, bg.Old.TurnRoots = nil, nil, nil, nil
+	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents = nil, nil, nil
 	if bg.FollowBash == "" || len(bg.Changed) > maxChangedHandedOn {
 		bg.Changed, bg.ChangedKnown = nil, false
 	}

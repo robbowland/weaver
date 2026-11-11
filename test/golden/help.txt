@@ -24,7 +24,7 @@ THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working
   [x]  done, seen   [ ]  idle    [-]  interrupted
 
-  ×2  two agents share the worktree: their turn diffs mix
+  ×2  two agents work in the worktree
 
 LOST (its session went: a crash, or quit)  HELD (you held it)
   ⏎               resume it in a new window (wvr resume)

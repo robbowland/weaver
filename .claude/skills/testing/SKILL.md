@@ -27,9 +27,9 @@ own sockets and sessions (a real weaver session on the machine made a
 - A check that reads the screen after a restart must wait for what it
   reads, not only for the process (a view captured before its new fzf drew,
   on a busy machine).
-- `05-latency` runs its hooks in no pane, so it measures wvr's start and
-  the hook's gate, not the work an event does (an async Edit with a pane
-  costs ~70 ms, at 61dca98 on tmux too).
+- `05-latency` times hooks run as the agent's pane, and checks they were:
+  a hook from no pane does nothing, which is all it timed for a while
+  (zellij's `ZELLIJ_PANE_ID`, which named the pane, outlived zellij).
 
 To tell: rerun the suite alone with the machine idle, and compare against
 the base commit in a temporary `git worktree`. Never run `go test` or builds

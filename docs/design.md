@@ -13,7 +13,6 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
-| `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below) |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread window being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
@@ -21,7 +20,6 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
 | `$STATE_DIR/github.json`, `linear.json` | what GitHub and Linear said last for the views' sections, each section with when it was read and why asking for it last failed; changed under `.lock` beside it (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
-| `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
 | `$STATE_DIR/rex/` | weaver's numbers for Rex's blocks and windows, and what Rex does not keep of them (see [Rex](#rex)) |
 
@@ -54,8 +52,6 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 | `files` | [string] | absolute paths edited this session, most recent last, at most 200 |
 | `subagents` | [{id, type, since}] | subagents running now |
 | `tasks` | [{id, subject, done}] | its task list (TaskCreated, TaskCompleted), at most 30 |
-| `turn_ended` | int | the last turn that got its `end` snapshot |
-| `turn_roots` | [string] | the roots the current (or last) turn touched |
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
 | `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
@@ -63,64 +59,6 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
 | `tmux_session` | string | the id of its Rex session (the name is from when weaver ran on tmux); a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
-
-## Snapshots
-
-Per-turn snapshots use a private index, so your staging area is never touched:
-
-1. the index is `$(git rev-parse --git-path weaver)/index-<sid>`, seeded from the real index the first time;
-2. `git add --all`, `write-tree`; skip if the tree equals the tip's tree;
-3. `commit-tree` with the tip as parent (the first snapshot is a root commit);
-4. `update-ref` with the old value, so racing writers cannot lose a link.
-
-| Ref (per worktree) | Chain |
-| --- | --- |
-| `refs/worktree/weaver/sessions/<session_id>` | the agent session's turns |
-| `refs/worktree/weaver/reviewed` | what you marked reviewed, shared by every agent in the worktree |
-
-Points: `start` at your prompt (UserPromptSubmit), `end` at Stop, StopFailure,
-or an interrupt (PostToolUseFailure with `is_interrupt`). When a prompt arrives
-and the previous turn never got an `end` (Esc during generation fires nothing),
-the snapshot is labelled `end` of the previous turn. Snapshots are taken in the
-agent's root and in every root it edited during the turn, in the background.
-
-Author and committer `weaver <weaver@localhost>`; message:
-
-    weaver: turn N end: <prompt, one line, at most 72 chars>
-
-    <prompt, at most 2000 chars>
-
-    Weaver-Session: <session_id>
-    Weaver-Turn: N
-    Weaver-Point: start|end|reviewed
-    Weaver-Pane: <pane>
-    Prompt-Id: <prompt_id>
-    Transcript: <transcript_path>
-
-So: turn N's diff is `end_N^..end_N`; the live turn is tip..worktree; since
-reviewed is `reviewed..worktree`; `git blame` against the tip maps a line to
-its turn and prompt.
-
-A root first touched mid-turn (a subagent in a fresh worktree) whose chain
-does not exist yet gets a `start` commit with HEAD's tree, so the turn there
-has a parent to diff against. An `end` on top of an `end` of the same turn
-(a turn that resumes after background work) replaces it: one `end` per turn.
-
-`wvr snapshot --reviewed [dir]` snapshots `dir` (default: cwd) onto
-`refs/worktree/weaver/reviewed` and prints the commit, or the existing tip when
-the tree is unchanged; it exits non-zero with a message when `dir` is not in a
-repo. `Weaver-Point: reviewed` commits appear only on the reviewed chain, so
-any other point is `start` or `end`.
-
-Untracked files larger than `WEAVER_SNAPSHOT_MAX_KB` (5 MB) are left out;
-`WEAVER_SNAPSHOTS=0` turns snapshots off.
-
-As a chain starts in a worktree (once per session there), that
-worktree's session chains whose last snapshot is more than 31 days
-old are deleted, and so are the private indexes no snapshot has written in
-that time (the compiled half only). A worktree's refs go with it when it is
-removed; this keeps a main checkout from holding every session's chain, and
-a copy of its index for each, for good. The reviewed chain stays.
 
 ## Activity log
 
@@ -142,7 +80,6 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 | `agent` | `agent_id`, `agent_type`, `desc` (the Agent call's description, at most 200 chars): what a subagent was asked to do |
 | `stop` | `last` (at most 400 chars) |
 | `error` | `error` |
-| `snapshot` | `root`, `commit`, `point` |
 | `end` | |
 
 ## Events from other agents
@@ -178,7 +115,7 @@ call's edits) goes to the background run.
 `tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
 `session_end`, `subagent_start`, `subagent_stop`. Each maps onto the Claude
 Code event the state machine already handles, so every agent gets the same
-states, turns, snapshots and log.
+states, turns and log.
 
 ## Threads
 
@@ -542,7 +479,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   would guess another's); the panel binds as for a new thread. A
   conversation Claude Code runs elsewhere is refused, not resumed beside it. The state
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
-  title and last reply, and its snapshot chain and activity log continue.
+  title and last reply, and its activity log continues.
   A record whose directory is gone stays lost.
 - **The weaver session:** as it starts, its home (`wvr home`, behind the
   board as `wvr _boot`) runs `GC`, then resumes every thread lost by a
@@ -626,7 +563,7 @@ visits, but for read-only threads: REVIEWS holds them whatever their state
 (the title's counts, by state, still include them). A row: its number (1-9), glyph, name (`Row.Called`, as everything that
 names it: the name you gave the thread, else Claude Code's title, else the
 thread's task or item, else the last prompt; at most 40 columns), one fact (what it
-waits on; for a finished turn, the files it changed and its last reply;
+waits on; for a finished turn, its last reply;
 the command it runs (`running npm test`), background tasks, subagents, task
 progress or the file being edited; the
 reason it is not reporting), repo/branch (from 96 columns; `×N` when N agents
@@ -634,11 +571,7 @@ share the worktree) and its age in that state. Columns are no wider than
 their longest entry, so repo/branch and age stay close at any width.
 
 Rows cost no git command: repo and branch come from the checkout's `.git`
-file, `commondir` and `HEAD`; a finished turn's file count from the end
-snapshot at the tip of `refs/worktree/weaver/sessions/<sid>` (read as a file),
-asked of git once per commit (`git show --name-only` with its Weaver-Turn and
-Weaver-Point trailers) and kept in `$STATE_DIR/turns/`. Only a tip that is the
-`end` of the agent's current turn counts.
+file, `commondir` and `HEAD`.
 
 ### Items
 

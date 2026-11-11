@@ -43,7 +43,7 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
 	resp, _ := json.Marshal(map[string]any{"bashEditDiff": map[string]any{"changedFiles": []string{"/w/a.go", "/w/b.go"}}})
 	h := &hk{Pane: "5", Session: "s", Mode: "sync"}
-	h.Old.Files, h.Old.TurnRoots = []string{"/w/old.go"}, []string{"/w"}
+	h.Old.Files = []string{"/w/old.go"}
 	if !h.parse(hooks.Input{Event: "PostToolUse", SessionID: "conv", Cwd: "/w", ToolName: "Bash", ToolResponse: resp}, nil) {
 		t.Fatal("not parsed")
 	}
@@ -59,8 +59,8 @@ func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
 	if !got.ChangedKnown || !slices.Equal(got.Changed, []string{"/w/a.go", "/w/b.go"}) || got.FollowBash != "1" {
 		t.Errorf("the files the call changed: %v %q, follow %q", got.ChangedKnown, got.Changed, got.FollowBash)
 	}
-	if got.Old.Files != nil || got.Old.TurnRoots != nil {
-		t.Errorf("the stored state's lists went too: %q %q", got.Old.Files, got.Old.TurnRoots)
+	if got.Old.Files != nil {
+		t.Errorf("the stored state's lists went too: %q", got.Old.Files)
 	}
 	// Not followed, or more than the environment should carry: not handed
 	// on, and the background run asks git.

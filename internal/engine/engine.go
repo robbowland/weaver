@@ -1,7 +1,7 @@
 // Package engine is weaver's hook engine: what each event of a coding
 // agent's hooks (or another agent's, through wvr event) does to the agent's
-// state file, its activity log, its turn snapshots and its nvim, in the
-// hook and then in a background run.
+// state file and its activity log, in the hook and then in a background
+// run.
 package engine
 
 // digits is whether s is one or more ASCII digits.
@@ -18,5 +18,5 @@ func digits(s string) bool {
 }
 
 // bestEffort marks an error left unhandled on purpose: what failed (a
-// marker, a log line, a stalled nvim's mark) costs nothing that matters.
+// marker, a log line) costs nothing that matters.
 func bestEffort(error) {}

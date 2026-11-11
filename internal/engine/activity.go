@@ -75,14 +75,6 @@ type (
 		logHead
 		State agent.State `json:"state"`
 	}
-	logSnapshot struct {
-		logHead
-		Root   string `json:"root"`
-		Commit string `json:"commit"`
-		Point  string `json:"point"`
-		// An agent chain's (point agent): main, or the subagent's id.
-		AgentID string `json:"agent_id,omitempty"`
-	}
 	logAgent struct {
 		logHead
 		AgentID   string `json:"agent_id"`

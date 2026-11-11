@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,7 +51,6 @@ func hookBg(e *session.Env) {
 	if h.Event == "SessionStart" {
 		e.GC()
 	}
-	hookSnapshots(e, h)
 }
 
 // actOn has e act on the session the hook acted on, not the one its
@@ -147,14 +145,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 				fs = fs[len(fs)-200:]
 			}
 			st.Files = fs
-			if h.Turn > 0 && !slices.Contains(st.TurnRoots, r) {
-				st.TurnRoots = append(st.TurnRoots, r)
-			}
 		})
-	}
-	// A root first touched this turn starts its chain from HEAD.
-	if !strings.Contains(rs+h.TurnRoots+rs, rs+r+rs) && h.Turn > 0 && h.Sid != "" {
-		snapRoots(e, h, "base", h.Turn, r, "", h.PromptID)
 	}
 	if h.Tool == "Bash" {
 		h.logLine(e, logBash{h.logHead("bash"), h.Cmd, newest})

@@ -129,7 +129,7 @@ func Help() string {
 		"  " + p(GNeed, CRed) + "  needs you    " + p(GDone, CGreen) + "  done, not yet seen    " + p(GWork, g) + "  working\n" +
 		"  " + p(GSeen, d) + "  done, seen   " + p(GIdle, d) + "  idle    " + p(GInt, g) + "  interrupted\n" +
 		"\n" +
-		"  " + d + "×2" + o + "  " + d + "two agents share the worktree: their turn diffs mix" + o + "\n" +
+		"  " + d + "×2" + o + "  " + d + "two agents work in the worktree" + o + "\n" +
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "  " + g + "HELD" + o + " " + d + "(you held it)" + o + "\n" +
 		helpRow("⏎", "resume it in a new window", "(wvr resume)") +
@@ -258,7 +258,7 @@ func (e *Env) Preview(args []string) string {
 	if m := re.FindStringSubmatch(l); m != nil {
 		root = m[1]
 	}
-	// Other agents in the same worktree: their turn diffs mix.
+	// Other agents in the same worktree.
 	shared := 0
 	for _, f := range e.SessionFiles("json") {
 		if f == sf {
@@ -451,7 +451,7 @@ func card(s agent.Record, sh shown, from string, w int, head, ab string, changed
 		add(field(w, "git", t, CDim, 1))
 	}
 	if shared > 0 {
-		add(field(w, "shared", strconv.Itoa(shared+1)+" agents work in this worktree: their turn diffs mix", CDim, 2))
+		add(field(w, "shared", strconv.Itoa(shared+1)+" agents work in this worktree", CDim, 2))
 	}
 	return strings.ReplaceAll(strings.Join(ls, "\n"), nbsp, " ") + "\n"
 }

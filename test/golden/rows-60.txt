@@ -4,7 +4,7 @@ NEEDS YOU · 1
 [!]  Add a CLI flag        Bash: python app.py --name …   4m
 
 DONE · 1
-[x]  Add a README          2 files · Wrote README.md a…   1m
+[x]  Add a README          Wrote README.md and GUIDE.m…   1m
 
 WORKING · 1
 [/]  Refine the dashboard  2 subagents                   10m

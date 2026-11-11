@@ -21,7 +21,6 @@ type Record struct {
 	ProcStart       string      `json:"proc_start"`
 	Title           string      `json:"title"`
 	Turn            int         `json:"turn"`
-	TurnEnded       int         `json:"turn_ended"`
 	PromptID        string      `json:"prompt_id"`
 	Transcript      string      `json:"transcript"`
 	Cwd             string      `json:"cwd"`
@@ -45,7 +44,6 @@ type Record struct {
 	Log       string     `json:"log,omitempty"`
 	Subagents []Subagent `json:"subagents"`
 	Tasks     []Task     `json:"tasks"`
-	TurnRoots []string   `json:"turn_roots"`
 	Files     []string   `json:"files"`
 }
 
@@ -78,8 +76,8 @@ type Where struct {
 // process's and pane's gone; idle, and seen.
 func (r Record) Resumed(now int64, w Where) Record {
 	return Record{Agent: r.Agent, State: StateIdle, TS: now, Since: json.Number(strconv.FormatInt(now, 10)), Seen: true,
-		SessionID: r.SessionID, Title: r.Title, Turn: r.Turn, TurnEnded: r.TurnEnded, PromptID: r.PromptID,
+		SessionID: r.SessionID, Title: r.Title, Turn: r.Turn, PromptID: r.PromptID,
 		Transcript: r.Transcript, Cwd: r.Cwd, Root: r.Root, StartCwd: r.StartCwd, ProjectRoot: r.ProjectRoot,
 		File: r.File, Prompt: r.Prompt, LastMessage: r.LastMessage, Log: r.Log, Where: w,
-		Subagents: []Subagent{}, Tasks: r.Tasks, TurnRoots: r.TurnRoots, Files: r.Files}
+		Subagents: []Subagent{}, Tasks: r.Tasks, Files: r.Files}
 }
