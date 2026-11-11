@@ -180,7 +180,6 @@ var commands = map[string]command{
 	"_refresh": {session: true, run: prints(func(e *wvr.Env, _ []string) string { return e.Refresh() })},
 	"_preview": {session: true, run: prints((*wvr.Env).Preview)},
 	"_view":    {run: prints(func(_ *wvr.Env, args []string) string { return wvr.View(arg(args, 0)) })},
-	"_title":   {run: prints(func(*wvr.Env, []string) string { return wvr.Title() })},
 	"_footer":  {run: prints(func(e *wvr.Env, _ []string) string { return e.Footer() })},
 	"_hf":      {run: prints(func(e *wvr.Env, _ []string) string { return e.HF() + "\n" })},
 	"_chrome":  {run: prints(func(e *wvr.Env, _ []string) string { return e.Chrome() })},
@@ -219,10 +218,8 @@ var commands = map[string]command{
 		return nil
 	}},
 	"_agent":     {session: true, run: func(e *wvr.Env, args []string) error { return e.AgentPane(arg(args, 0)) }},
-	"_resume":    {session: true, run: done(func(e *wvr.Env, _ []string) { e.ResumeSession() })},
 	"_viewsetup": {session: true, run: func(e *wvr.Env, args []string) error { return e.ViewSetup(arg(args, 0)) }},
 	"_items":     {session: true, run: (*wvr.Env).Items},
-	"_github":    {session: true, run: func(e *wvr.Env, args []string) error { return e.Items(append([]string{"github"}, args...)) }},
 	"linear":     {run: (*wvr.Env).Linear},
 	"_close":     {session: true, run: (*wvr.Env).CloseTail},
 }

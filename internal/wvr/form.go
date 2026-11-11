@@ -185,8 +185,8 @@ func (e *Env) formSock(sf string) string {
 }
 
 // formField is one of the form's rows: its id (what enter and a click on it
-// do), its label, and its value, plain and coloured.
-type formField struct{ id, label, plain, col string }
+// do), its label, and its value, coloured.
+type formField struct{ id, label, col string }
 
 // FormHeader is the form's header for form file sf and the task typed so
 // far: what went wrong starting the thread, and how much of the task is
@@ -240,14 +240,14 @@ func (e *Env) FormHeader(sf, task, errs string) string {
 func (e *Env) formFields(sf, task string) []formField {
 	fm := loadForm(sf)
 	var fs []formField
-	add := func(id, l, p, c string) { fs = append(fs, formField{id, l, p, c}) }
+	add := func(id, l, c string) { fs = append(fs, formField{id, l, c}) }
 	if n := formName(fm); n != "" {
 		if rlen(n) > 56 {
 			n = oneline.Cut(n, 55) + "…"
 		}
-		add("name", "name", n, n)
+		add("name", "name", n)
 	} else {
-		add("name", "name", "its agent's title", CGrey+"its agent's title"+COff)
+		add("name", "name", CGrey+"its agent's title"+COff)
 	}
 	if fm.Item != nil {
 		it := fm.Item.Item
@@ -255,18 +255,18 @@ func (e *Env) formFields(sf, task string) []formField {
 		if rlen(title) > 56 {
 			title = oneline.Cut(title, 55) + "…"
 		}
-		add("from", "from", it.Label()+"  "+title, CBold+it.Label()+COff+"  "+title)
+		add("from", "from", CBold+it.Label()+COff+"  "+title)
 		if fm.Mode == items.ModeReview {
-			add("mode", "mode", "review  read-only", "review  "+CGrey+"read-only"+COff)
+			add("mode", "mode", "review  "+CGrey+"read-only"+COff)
 		} else {
-			add("mode", "mode", "work", "work")
+			add("mode", "mode", "work")
 		}
 	}
 	if fm.Repo != "" {
 		t := formPath(fm.Repo)
-		add("repo", "repo", filepath.Base(fm.Repo)+"  "+t, CBold+filepath.Base(fm.Repo)+COff+"  "+CGrey+t+COff)
+		add("repo", "repo", CBold+filepath.Base(fm.Repo)+COff+"  "+CGrey+t+COff)
 	} else {
-		add("repo", "repo", "not in a git repository", CGrey+"not in a git repository"+COff)
+		add("repo", "repo", CGrey+"not in a git repository"+COff)
 	}
 	if fm.Where == WhereHere {
 		cur, _ := git.Line(fm.Here, "symbolic-ref", "--short", "-q", "HEAD")
@@ -274,13 +274,13 @@ func (e *Env) formFields(sf, task string) []formField {
 			cur = "this directory"
 		}
 		t := formPath(fm.Here)
-		add("where", "where", cur+"  "+t, cur+"  "+CGrey+t+COff)
+		add("where", "where", cur+"  "+CGrey+t+COff)
 		// The rows stay, so nothing below moves: they say why they do not
 		// apply, and choosing one makes it a new worktree again.
-		add("branch", "branch", cur+"  the checkout's", cur+"  "+CGrey+"the checkout's"+COff)
-		add("base", "base", "-  it works where it is", CDim+"-"+COff+"  "+CGrey+"it works where it is"+COff)
+		add("branch", "branch", cur+"  "+CGrey+"the checkout's"+COff)
+		add("base", "base", CDim+"-"+COff+"  "+CGrey+"it works where it is"+COff)
 	} else {
-		add("where", "where", "new worktree", "new worktree")
+		add("where", "where", "new worktree")
 		br := fm.Branch
 		if br == "" {
 			br = items.Slugify(task)
@@ -291,17 +291,17 @@ func (e *Env) formFields(sf, task string) []formField {
 		}
 		switch {
 		case br == "":
-			add("branch", "branch", "from the task", CGrey+"from the task"+COff)
+			add("branch", "branch", CGrey+"from the task"+COff)
 			e.baseRow(fm, m, add)
 		case fm.Repo != "" && (m.HasBranch(br) ||
 			func() bool {
 				rm := git.PreferredRemote(fm.Repo)
 				return rm != "" && m.HasRemoteBranch(rm, br)
 			}()):
-			add("branch", "branch", br+"  exists: continue on it", br+"  "+CGrey+"exists: continue on it"+COff)
-			add("base", "base", "-  it carries on from the branch", CDim+"-"+COff+"  "+CGrey+"it carries on from the branch"+COff)
+			add("branch", "branch", br+"  "+CGrey+"exists: continue on it"+COff)
+			add("base", "base", CDim+"-"+COff+"  "+CGrey+"it carries on from the branch"+COff)
 		default:
-			add("branch", "branch", br, br)
+			add("branch", "branch", br)
 			e.baseRow(fm, m, add)
 		}
 	}
@@ -424,7 +424,7 @@ func formRowFooter(id string) string { return hintLine(formHints(id), 3) }
 
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
-func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
+func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, c string)) {
 	if fm.Base != "" {
 		note := ""
 		switch fm.Base {
@@ -440,16 +440,15 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 		case "^":
 			note = "the local default branch"
 		}
-		p, c := fm.Base, fm.Base
+		c := fm.Base
 		if note != "" {
-			p += "  " + note
 			c += "  " + CGrey + note + COff
 		}
-		add("base", "base", p, c)
+		add("base", "base", c)
 		return
 	}
 	if fm.Repo == "" {
-		add("base", "base", "-  no repository", CDim+"-"+COff+"  "+CGrey+"no repository"+COff)
+		add("base", "base", CDim+"-"+COff+"  "+CGrey+"no repository"+COff)
 		return
 	}
 	v, note := "", ""
@@ -480,12 +479,11 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 			}
 		}
 	}
-	p, c := v, v
+	c := v
 	if note != "" {
-		p += "  " + note
 		c += "  " + CGrey + note + COff
 	}
-	add("base", "base", p, c)
+	add("base", "base", c)
 }
 
 // newFormLabel is the new-thread form's label: a review says so.
@@ -929,12 +927,9 @@ func formAct(q, qs, id string) string {
 }
 
 // Form is `wvr _form OP FILE [QUERY]`: what the form's keys do, run by fzf;
-// `wvr _form footer ID` and `wvr _form keys ID FILE` for its rows.
+// `wvr _form keys ID FILE` for its rows.
 func (e *Env) Form(op, sf, q string) {
 	switch op {
-	case "footer":
-		fmt.Print(formRowFooter(sf))
-		return
 	case "focus":
 		fmt.Print(formFocus(sf))
 		return
@@ -966,11 +961,6 @@ func (e *Env) Form(op, sf, q string) {
 			if id, _, _ := strings.Cut(l, "\t"); id == at {
 				fmt.Printf("pos(%d)\n", i+1)
 			}
-		}
-	case "fields":
-		// The choices as text, as the form shows them.
-		for _, f := range e.formFields(sf, q) {
-			fmt.Printf("%6s  %s\n", f.label, f.plain)
 		}
 	case "where":
 		if fm.Repo == "" {
