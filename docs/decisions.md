@@ -471,6 +471,20 @@ can supersede an earlier one, and says so.
   report, a failure and its buttons) showed bare, unlike the form before
   them and every card. weaver draws the frame itself rather than giving the
   popup tmux's border, which would put a second border round the form.
+- 2026-11-11: Each thread is a Rex session of its own (Rob), superseding
+  the 2026-10-15 entries' thread window in weaver's session and placing it
+  at its number: home's session keeps home and the views; a thread's holds
+  its agent and review in its first window and its helpers' windows beside
+  it. Rex finds a block only in its own session, so weaver's registry
+  records each number's session (`in/<num>`) and a thread's session record
+  names home; `rex.Fleet` routes each call. The session is labelled with
+  the thread's name as it is made and never again, and nothing finds a
+  thread by a label: Claude Code's agents are told to rename their Rex
+  sessions, and anyone may. Closing or holding a thread ends its session,
+  its helpers with it; Rex's sidebar keeps the order sessions were made in
+  (Rob: the board keeps the numbers). After a server restart the husks Rex
+  brings back (home and the threads' sessions) are ended and each lost
+  thread resumes in a new session.
 
 ## Work items and views
 

@@ -1,8 +1,9 @@
 #!/bin/bash
 # weaver on Rex, end to end, smoke: `wvr` starts its session on a
-# throwaway Rex server of its own, a thread opens with its review panel
-# (a fake tuicr) and its agent, the agent's hooks reach its state under the session's Rex key, and
-# quitting ends the session. Its own server, state, config, Claude Code dir
+# throwaway Rex server of its own, a thread opens in a Rex session of its
+# own with its review panel (a fake tuicr) and its agent, the agent's hooks
+# reach its state under the session's Rex key, and quitting ends the
+# sessions. Its own server, state, config, Claude Code dir
 # and PATH, with a fake agent: never your Rex, agents or keys. Skipped
 # without rex.
 #   test/rex.sh
@@ -94,12 +95,25 @@ waitfor() {
 R() { rex --autostart=false "$@"; }
 waitfor 'R api call server.status "{}" >/dev/null 2>&1' 100
 sid() { R api call session.list '{}' | jq -r --arg s "$S" '.sessions[] | select(.label == $s) | .session_id'; }
-view() { R api call session.view "{\"session_id\":\"$SID\"}"; }
-# windows: each window's label and how many terminals it has.
-windows() { view | jq -r '[.windows[] | "\(.label)/\([.layers[] | select(.kind == "tiled") | .blocks[]] | length)"] | join(" ")'; }
-# block_at N I: the I-th block (from the left) of window N (from 1).
-block_at() { view | jq -r --argjson n "$1" --argjson i "$2" '.windows[$n - 1].layers[] | select(.kind == "tiled") | .layout.split | [.before.block_id, .after.block_id][$i]'; }
+# view [SESSION]: the session's view (home's).
+view() { R api call session.view "{\"session_id\":\"${1:-$SID}\"}"; }
+# windows [SESSION]: each window's label and how many terminals it has.
+windows() { view "$@" | jq -r '[.windows[] | "\(.label)/\([.layers[] | select(.kind == "tiled") | .blocks[]] | length)"] | join(" ")'; }
+# block_at SESSION N I: the I-th block (from the left) of window N (from 1).
+block_at() { view "$1" | jq -r --argjson n "$2" --argjson i "$3" '.windows[$n - 1].layers[] | select(.kind == "tiled") | .layout.split | [.before.block_id, .after.block_id][$i]'; }
 num() { head -n 1 "$SD/rex/u/$(printf '%s' "$1" | tr ':' '_')"; }
+# threads: the sessions Rex runs that weaver's record makes threads of
+# home's (by id: Rex's labels are anyone's to change).
+threads() {
+	local live f
+	live=$(R api call session.list '{}' | jq -r '.sessions[].session_id')
+	for f in "$SD"/rex/sessions/*; do
+		[ "$(sed -n 4p "$f")" = "$SID" ] || continue
+		f=$(basename "$f" | sed 's/_/:/')
+		printf '%s\n' "$live" | grep -qx "$f" && echo "$f"
+	done
+}
+label() { R api call session.list '{}' | jq -r --arg s "$1" '.sessions[] | select(.session_id == $s) | .label'; }
 
 # --- weaver: home first with the board
 wvr >"$AT/start.out" 2>&1
@@ -126,9 +140,11 @@ R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
 
 # --- a thread (wvr new, here), as Alt N's form makes it
 (cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'say hello' >"$AT/new.out" 2>&1)
-waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/2" ]' 100
-ok "new: window 2, its label, its review panel on the left and the agent on the right" "$(windows)" "home/1 01 say hello · repo/main/2"
-PB=$(block_at 2 0) AGB=$(block_at 2 1)
+waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 say hello · repo/main/2" ]' 100
+T=$(threads)
+ok "new: a session of its own, labelled with its name; its window, its review panel on the left and the agent on the right; home as it was" \
+	"$(threads | wc -l | tr -d ' ')|$(label "$T")|$(windows "$T")|$(windows)" "1|say-hello|01 say hello · repo/main/2|home/1"
+PB=$(block_at "$T" 1 0) AGB=$(block_at "$T" 1 1)
 waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
 AG=$(num "$AGB") PN=$(num "$PB")
 waitfor '[ -f "$SD/rex-${S}_$AG.panel" ]' 100
@@ -138,9 +154,9 @@ ok "new: the agent took the task, and its review panel is bound to it" \
 # branch is then: nothing while the branch has nothing of its own (tuicr
 # refuses an empty range), the work tree once there is an edit, then the
 # commits since the fork point, by SHA, and nvim for its e.
-waitfor 'R capture -s "$SID" -b "$PB" | grep -q "no changes on this branch yet"' 50
+waitfor 'R capture -s "$T" -b "$PB" | grep -q "no changes on this branch yet"' 50
 ok "panel: a branch with nothing of its own says so, and runs no tuicr" \
-	"$(R capture -s "$SID" -b "$PB" | grep -c 'no changes on this branch yet')|$([ -f "$AT/tuicr.runs" ] && echo ran || echo none)" "1|none"
+	"$(R capture -s "$T" -b "$PB" | grep -c 'no changes on this branch yet')|$([ -f "$AT/tuicr.runs" ] && echo ran || echo none)" "1|none"
 printf 'hello\n' >"$AT/repo/hello.txt"
 waitfor 'grep -q -- "^-w " "$AT/tuicr.runs" 2>/dev/null' 60
 ok "...an edit not yet committed: tuicr on the work tree, with nvim for its e" \
@@ -150,18 +166,18 @@ waitfor 'grep -q -- "^-r " "$AT/tuicr.runs" 2>/dev/null' 60
 ok "...a commit: its commits since the fork point, by SHA, with the work tree" \
 	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)" "-r $FORK..HEAD -w --theme micrographics --no-update-check"
 # alt+v on the agent with its panel closed: a panel again, on its left.
-R api call block.close "{\"session_id\":\"$SID\",\"block_id\":\"$PB\"}" >/dev/null
-waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/1" ]' 50
-R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$AGB\"}" >/dev/null
-k=$(R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_v\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":118}}" | jq -r .handled)
-waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/2" ]' 50
-PB=$(block_at 2 0) PN=$(num "$PB")
+R api call block.close "{\"session_id\":\"$T\",\"block_id\":\"$PB\"}" >/dev/null
+waitfor '[ "$(windows "$T")" = "01 say hello · repo/main/1" ]' 50
+R api call session.focus_block "{\"session_id\":\"$T\",\"block_id\":\"$AGB\"}" >/dev/null
+k=$(R api call client.key "{\"session_id\":\"$T\",\"key\":{\"action\":\"press\",\"key\":\"key_v\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":118}}" | jq -r .handled)
+waitfor '[ "$(windows "$T")" = "01 say hello · repo/main/2" ]' 50
+PB=$(block_at "$T" 1 0) PN=$(num "$PB")
 ok "alt+v: a closed review panel opens again on the agent's left, bound to it" \
-	"$k|$(windows)|$(block_at 2 1)|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "true|home/1 01 say hello · repo/main/2|$AGB|$PN"
+	"$k|$(windows "$T")|$(block_at "$T" 1 1)|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "true|01 say hello · repo/main/2|$AGB|$PN"
 # The width passes after a change (settleWidths' `wvr _width`) put back a
 # split the Rex app evened out, and leave one you moved since.
-ratio() { view | jq -r '.windows[1].layers[] | select(.kind == "tiled") | .layout.split.ratio'; }
-split_at() { R api call session.resize_pane "{\"session_id\":\"$SID\",\"before_block_id\":\"$PB\",\"after_block_id\":\"$AGB\",\"direction\":\"horizontal\",\"ratio\":$1}" >/dev/null; }
+ratio() { view "$T" | jq -r '.windows[0].layers[] | select(.kind == "tiled") | .layout.split.ratio'; }
+split_at() { R api call session.resize_pane "{\"session_id\":\"$T\",\"before_block_id\":\"$PB\",\"after_block_id\":\"$AGB\",\"direction\":\"horizontal\",\"ratio\":$1}" >/dev/null; }
 split_at 0.5
 REX_SESSION=$SID wvr _width "$AG"
 k=$(ratio)
@@ -169,22 +185,9 @@ split_at 0.6
 REX_SESSION=$SID wvr _width "$AG"
 ok "widths: a split evened out put back, one you moved left be" "$([ "$k" != 0.5 ] && echo back)|$(ratio)" "back|0.6"
 # --- weaver's keys, pressed as the Rex app sends a bound key (its bindings
-# first): Alt k home, Alt j back to the thread, though wvr runs with the
-# server's environment
+# first), though wvr runs with the server's environment
 active() { view | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .label'; }
 alt() { R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_$1\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":$(printf '%d' "'$1")}}" | jq -r .handled; }
-k=$(alt k)
-waitfor '[ "$(active)" = home ]' 50
-k="$k|$(active)|$(alt j)"
-waitfor '[ "$(active)" != home ]' 50
-ok "keys: Alt k, home; Alt j, the thread again" "$k|$(active)" "true|home|true|01 say hello · repo/main" ||
-	{ grep -i weaver "$AT/server.log" | tail -5 | sed 's/^/  server: /'; }
-# Rex starts each key's wvr at once, so a press can come while the last is
-# at work: every press moves one window on from where the last left you, as
-# a next window should (two from the thread: home, then the thread).
-k="$(alt j)$(alt j)"
-sleep 1.5
-ok "keys: Alt j twice at once, two windows on" "$k|$(active)" "truetrue|01 say hello · repo/main"
 # In one of weaver's popups (here Ctrl q's card) its keys are the popup's
 # program's, as a popup takes every key: Alt j stays in the card.
 popup() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .layer_id][0] // ""'; }
@@ -194,7 +197,7 @@ waitfor '[ -n "$(popup)" ]' 50
 R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$(view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .blocks[0].block_id][0]')\"}" >/dev/null
 k=$(alt j)
 sleep 0.5
-ok "keys: in a popup, Alt j is the popup's" "$k|$(active)|$([ -n "$(popup)" ] && echo open)" "false|01 say hello · repo/main|open" ||
+ok "keys: in a popup, Alt j is the popup's" "$k|$(active)|$([ -n "$(popup)" ] && echo open)" "false|home|open" ||
 	view | jq -c '.active_window_id as $a | .windows[] | {label, active: (.window_id == $a), f: .focused_block_id[-6:], layers: [.layers[] | {kind, b: [.blocks[].block_id[-6:]]}]}' | sed 's/^/  view: /'
 R api call session.close_layer "{\"session_id\":\"$SID\",\"layer_id\":\"$(popup)\"}" >/dev/null 2>&1
 waitfor '[ -z "$(popup)" ]' 50
@@ -203,58 +206,50 @@ ok "new: its thread record, under the session's Rex key and the agent's number" 
 
 # --- hooks: the agent's state under the session's Rex key and its number
 hookj() {
-	printf '%s' "$1" | CLAUDE_PID=$(cat "$AT/pid.${AGB#block:}") REX_SESSION=$SID REX_BLOCK=$AGB wvr hook >/dev/null
+	printf '%s' "$1" | CLAUDE_PID=$(cat "$AT/pid.${AGB#block:}") REX_SESSION=$T REX_BLOCK=$AGB wvr hook >/dev/null
 }
 ev() { printf '{"session_id":"sid-1","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"%s"%s}' "$AT/repo" "$1" "${2:-}"; }
 hookj "$(ev SessionStart ',"source":"startup"')"
 hookj "$(ev UserPromptSubmit ',"prompt":"say hello"')"
-ok "hook: working, turn 1" "$(jq -r '"\(.state) \(.turn)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1"
-ok "status: one working" "$(REX_SESSION=$SID wvr status)" "[/] 1"
+ok "hook: working, turn 1, under home's key in the thread's session's life" \
+	"$(jq -r '"\(.state) \(.turn) \(.rex_session)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1 $T"
+ok "status: one working, from home or the thread" "$(REX_SESSION=$SID wvr status)|$(REX_SESSION=$T wvr status)" "[/] 1|[/] 1"
 
-# --- seen when you look: Rex has no pane-focus-in hook; home's board follows
-# the session's events, so a thread done while you are elsewhere stays new
-# until you stay on its window a moment, however you came (here the server's
-# own focus_window, as the app's tabs change it)
-winat() { view | jq -r --argjson n "$1" '.windows[$n - 1].window_id'; }
-look() { R api call session.focus_window "{\"session_id\":\"$SID\",\"window_id\":\"$(winat "$1")\"}" >/dev/null; }
-look 1
 hookj "$(ev Stop ',"prompt_id":"p1","last_assistant_message":"hello"')"
-ok "seen: a thread done while you are elsewhere is new" "$(jq -r '"\(.state) \(.seen)"' "$SD/rex-${S}_$AG.json")" "done false"
-look 2
-sleep 0.3
-look 1
-sleep 2.5
-ok "...passing through its window, it stays new" "$(jq -r .seen "$SD/rex-${S}_$AG.json")" "false"
-look 2
-waitfor '[ "$(jq -r .seen "$SD/rex-${S}_$AG.json")" = true ]' 60
-ok "...staying on it, it is seen" "$(jq -r .seen "$SD/rex-${S}_$AG.json")" "true"
 
 # --- the board's edits: rename (as its enter does it), and hold
 REX_SESSION=$SID wvr _modedone "rename 01 › " "Greeting" >/dev/null 2>&1
-waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 50
-ok "rename in place: the thread its prompt names takes the name, and its window" \
-	"$(windows)|$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "home/1 01 Greeting · repo/main/2|Greeting"
+waitfor '[ "$(windows "$T")" = "01 Greeting · repo/main/2" ]' 50
+ok "rename in place: the thread its prompt names takes the name, and its window; its session keeps its label" \
+	"$(windows "$T")|$(label "$T")|$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "01 Greeting · repo/main/2|say-hello|Greeting"
+# Rex's labels are anyone's (Claude Code's agents rename their sessions):
+# weaver goes on finding the thread by id.
+R session rename "$T" demo-greet >/dev/null
+ok "a thread's session renamed in Rex: still the thread, its agent still followed" \
+	"$(threads)|$(REX_SESSION=$SID wvr status)" "$T|[x] 1"
 held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id)"' "$f"; done; }
 REX_SESSION=$SID wvr hold "$AG" "write the reply" >"$AT/hold.out" 2>&1
-waitfor '[ "$(windows)" = "home/1" ]' 100
-ok "hold: its window goes, the thread kept as held with your note" "$(windows)|$(held)" "home/1|write the reply|sid-1" ||
+waitfor '[ -z "$(threads)" ]' 100
+ok "hold: its session goes, home stays, the thread kept as held with your note" "$(threads)|$(windows)|$(held)" "|home/1|write the reply|sid-1" ||
 	sed 's/^/  hold: /' "$AT/hold.out"
 REX_SESSION=$SID wvr resume --all >/dev/null 2>&1
 sleep 1
-ok "...resume --all (what the session lost) leaves it waiting" "$(windows)|$(held | wc -l | tr -d ' ')" "home/1|1"
+ok "...resume --all (what the session lost) leaves it waiting" "$(threads)|$(held | wc -l | tr -d ' ')" "|1"
 REX_SESSION=$SID wvr resume sid-1 >"$AT/resume.out" 2>&1
-waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 100
-AGB=$(block_at 2 1)
+waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 Greeting · repo/main/2" ]' 100
+T=$(threads) AGB=$(block_at "$T" 1 1)
 waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
-ok "...resumed, it comes back named and on its conversation" \
-	"$(windows)|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "home/1 01 Greeting · repo/main/2|--resume sid-1 |0" ||
+ok "...resumed, it comes back in a session of its own, named and on its conversation" \
+	"$(windows "$T")|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "01 Greeting · repo/main/2|--resume sid-1 |0" ||
 	sed 's/^/  resume: /' "$AT/resume.out"
+AG=$(num "$AGB")
 hookj "$(ev SessionStart ',"source":"resume"')"
 
-# --- Rex restarts: it brings the session back, its ids and all, but a
-# shell in each terminal, what ran there gone. wvr starts the session
-# again, the thread back on its conversation, and ends what Rex brought back.
-OLD=$SID
+# --- Rex restarts: it brings the sessions back, their ids and all, but a
+# shell in each terminal, what ran there gone. wvr starts home again, the
+# thread back on its conversation in a session of its own, and ends what
+# Rex brought back.
+OLD=$SID OLDT=$T
 kill "$server"
 wait "$server" 2>/dev/null
 serve
@@ -266,19 +261,22 @@ else
 	wvr >"$AT/restart.out" 2>&1
 	waitfor '[ -n "$(sid)" ] && [ "$(sid)" != "$OLD" ]' 100
 	SID=$(sid)
-	waitfor '[ "$(windows)" = "home/1 01 Greeting · repo/main/2" ]' 200
-	AGB=$(block_at 2 1)
+	waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 Greeting · repo/main/2" ]' 200
+	T=$(threads) AGB=$(block_at "$(threads)" 1 1)
 	waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
-	ok "restart: a session of its own again, the thread back on its conversation, Rex's husk gone" \
-		"$(sid | wc -l | tr -d ' ')|$([ "$SID" != "$OLD" ] && echo new)|$(windows)|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)" \
-		"1|new|home/1 01 Greeting · repo/main/2|--resume sid-1 " ||
+	gone=$(R api call session.list '{}' | jq -r --arg o "$OLD" --arg t "$OLDT" '[.sessions[] | select(.session_id == $o or .session_id == $t)] | length')
+	ok "restart: home and the thread's session made again, the thread back on its conversation, Rex's husks gone" \
+		"$(sid | wc -l | tr -d ' ')|$([ "$SID" != "$OLD" ] && [ "$T" != "$OLDT" ] && echo new)|$(windows)|$(windows "$T")|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$gone" \
+		"1|new|home/1|01 Greeting · repo/main/2|--resume sid-1 |0" ||
 		sed 's/^/  restart: /' "$AT/restart.out"
 fi
 
-# --- quit: the session ends, its thread kept
+# --- quit: the sessions end, the thread kept
+T=$(threads)
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1
 waitfor '[ -z "$(sid)" ]' 50
-ok "quit: the session has gone, its thread kept" "$([ -z "$(sid)" ] && echo gone)|$(ls "$SD"/rex-"${S}"_*.thread 2>/dev/null | wc -l | tr -d ' ')" "gone|1"
+ok "quit: home and the thread's session have gone, the thread kept" \
+	"$([ -z "$(sid)" ] && echo gone)|$(label "$T")|$(ls "$SD"/rex-"${S}"_*.thread 2>/dev/null | wc -l | tr -d ' ')" "gone||1"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

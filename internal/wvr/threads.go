@@ -123,17 +123,16 @@ func (e *Env) threadNum() (int, map[int]bool) {
 	return n, used
 }
 
-// threadTab opens a thread's window, named name, in dir: its agent first
-// (`wvr _agent tok kind`), then its nvim on the agent's left (`wvr nvim
-// --fresh AGENT`), told the agent's pane and bound to it before this
-// returns; the agent at its width, with the focus (not gone to when
-// nofocus), nvim with nvimEnv too. Its window id. The window is made
-// whole behind you, then shown: the Rex app evens out a split made in the
-// window it shows (its balancing on creation), not one it is shown made.
-func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool) (mux.WindowID, bool) {
-	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
-		Spawn: e.agentSpawn(tok, kind, dir),
-		Label: name, At: mux.NextFree, Background: true,
+// threadTab opens a thread's session, labelled name (its branch) for good:
+// its first window, labelled label, in dir, its agent first (`wvr _agent
+// tok kind`), then its review panel on the agent's left, bound to it
+// before this returns; the agent at its width, with the focus (not gone
+// to when nofocus). Its window id. The window is made whole behind you,
+// then shown: the Rex app evens out a split made in the window it shows
+// (its balancing on creation), not one it is shown made.
+func (e *Env) threadTab(tok string, kind agent.Kind, dir, name, label string, nofocus bool) (mux.WindowID, bool) {
+	tab, agentPane, total, err := e.Mux().OpenSession(name, mux.NewWindow{
+		Spawn: e.agentSpawn(tok, kind, dir), Label: label, Background: true,
 	})
 	if err != nil {
 		return "", false
@@ -142,7 +141,7 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 		total = 200
 	}
 	if !e.splitPanel(agentPane, dir, total) {
-		e.Mux().CloseWindow(tab)
+		e.Mux().CloseSession(agentPane)
 		return "", false
 	}
 	if !nofocus {
@@ -167,14 +166,6 @@ func (e *Env) splitPanel(agentPane mux.PaneID, dir string, total int) bool {
 	}
 	e.bindPanel(agentPane, rp, pid)
 	return true
-}
-
-// threadPlace: in the weaver session a thread's window index is its number
-// (home is 0), when free.
-func (e *Env) threadPlace(tab mux.WindowID, n int) {
-	if e.WeaverSession() {
-		e.Mux().Place(tab, n)
-	}
 }
 
 // rememberRepo keeps the repositories used for threads, most recent first,
@@ -577,15 +568,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if e.WeaverSession() {
 		wname = session.ThreadLabel(n, label, dir)
 	}
-	tab, ok := e.threadTab(tok, fm.Agent, dir, wname, nofocus)
+	tab, ok := e.threadTab(tok, fm.Agent, dir, name, wname, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("Rex could not open the window for %s (its new worktree stays: %s)", name, dir)
+			return fmt.Errorf("Rex could not open the session for %s (its new worktree stays: %s)", name, dir)
 		}
-		return fmt.Errorf("Rex could not open the window for %s", name)
+		return fmt.Errorf("Rex could not open the session for %s", name)
 	}
-	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
 	// The boards and the GITHUB view show it now, not at its agent's first
 	// hook.
@@ -821,11 +811,10 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		}
 		wname = session.ThreadLabel(n, t, dir)
 	}
-	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
+	tab, ok := e.threadTab(tok, kind, dir, nm, wname, nofocus)
 	if !ok {
-		return "", fmt.Errorf("%s: Rex could not open its window", nm)
+		return "", fmt.Errorf("%s: Rex could not open its session", nm)
 	}
-	e.threadPlace(tab, n)
 	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
 }
 
@@ -1124,8 +1113,9 @@ func threadPanel(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 }
 
 // Close is `wvr close [--yes] [--remove-worktree] [PANE]`: close an
-// agent (the focused one) with its review panel, and its thread's window; offers to
-// remove a thread's worktree when it is clean and merged or pushed.
+// agent (the focused one) with its review panel, and a thread's session
+// with every pane in it (its helpers'); offers to remove a thread's
+// worktree when it is clean and merged or pushed.
 func (e *Env) Close(args []string) error {
 	yes, rmwt, hold, target := false, false, false, mux.PaneID("")
 	for _, a := range args {
@@ -1193,14 +1183,21 @@ func (e *Env) Close(args []string) error {
 		st, pid, start = s.State, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart)
 		title, kind = oneline.Line(s.Title), oneline.Line(s.Agent)
 	}
-	tab := byID[agentPane].Window
-	// The window's other panes, which close must leave alone (and which
-	// keep it open).
-	others := false
+	tab, in := byID[agentPane].Window, byID[agentPane].Session
+	// A thread's session goes whole, the other panes in it (its helpers')
+	// with it; another agent's window keeps its other panes, which keep it
+	// open.
+	ownSession := th.Name != "" && in != "" && in != e.RexID
+	others, rest := false, 0
 	for _, p := range panes {
-		id := p.ID
-		if p.Window == tab && id != agentPane && id != nv && !strings.HasSuffix(p.Cmd, " sidebar") {
+		if p.ID == agentPane || p.ID == nv || strings.HasSuffix(p.Cmd, " sidebar") {
+			continue
+		}
+		if p.Window == tab {
 			others = true
+		}
+		if ownSession && p.Session == in {
+			rest++
 		}
 	}
 	name := oneline.Line(th.Name)
@@ -1262,12 +1259,15 @@ func (e *Env) Close(args []string) error {
 	if nv != "" {
 		goes = "the agent and its review"
 	}
-	if !others && th.Name != "" {
+	if ownSession {
 		goes = "the agent"
 		if nv != "" {
 			goes += ", its review"
 		}
-		goes += " and its window"
+		goes += " and its session"
+		if rest > 0 {
+			goes += fmt.Sprintf(", with the %d other pane%s in it", rest, plural(rest))
+		}
 	}
 	pad := "  "
 	if tty != nil {
@@ -1323,9 +1323,10 @@ func (e *Env) Close(args []string) error {
 		}
 	}
 	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
-	// Closing the last panes of the window closes it, and any popup in it:
-	// when this runs in one, finish from outside it.
-	if me, ok := byID[e.MyPane]; !others && ok && me.Window == tab {
+	// Closing a thread's session, or the last panes of a window, closes
+	// any popup in it: when this runs in one, finish from outside it.
+	me, ok := byID[e.MyPane]
+	if ownSession && e.RexHere == in || !ownSession && !others && ok && me.Window == tab {
 		os.MkdirAll(e.StateDir, 0o755)
 		// Out of this pane's session, and deaf to the hangup its closing
 		// sends.
@@ -1342,10 +1343,11 @@ func (e *Env) Close(args []string) error {
 }
 
 // CloseTail is the closing itself (`wvr _close AGENT PANEL PID START
-// REMOVE DIR REPO [TOK]`): close the agent's pane and its review panel's,
-// wait for the agent to exit, forget it, and remove its worktree if asked,
-// checking again first. TOK: the thread was still being opened (its panel
-// had not been bound), and its record of that goes too.
+// REMOVE DIR REPO [TOK]`): close a thread's session, or another agent's
+// pane and its review panel's, wait for the agent to exit, forget it, and
+// remove its worktree if asked, checking again first. TOK: the thread was
+// still being opened (its panel had not been bound), and its record of
+// that goes too.
 func (e *Env) CloseTail(a []string) error {
 	for len(a) < 8 {
 		a = append(a, "")
@@ -1354,16 +1356,22 @@ func (e *Env) CloseTail(a []string) error {
 	nv, _ := mux.ParsePane(a[1])
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
 	// Closing the thread you are looking at: home, where the rest are, not
-	// whichever window Rex would show next.
+	// whichever window or session Rex would show next.
 	ps, _ := e.Mux().Panes()
-	if ap, ok := session.PaneIn(ps, agent); ok {
-		if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window {
+	ap, shown := session.PaneIn(ps, agent)
+	ownSession := shown && ap.Session != e.RexID && files.Exists(e.ThreadFile(agent))
+	if shown {
+		if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window || ownSession && ap.Session == e.RexHere {
 			e.selectHome(home)
 		}
 	}
-	e.Mux().Close(agent)
-	if nv != "" {
-		e.Mux().Close(nv)
+	if ownSession {
+		e.Mux().CloseSession(agent)
+	} else {
+		e.Mux().Close(agent)
+		if nv != "" {
+			e.Mux().Close(nv)
+		}
 	}
 	if digits(tok) {
 		os.RemoveAll(e.opening(tok))

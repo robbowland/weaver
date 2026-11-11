@@ -25,10 +25,11 @@ type lives struct {
 	rexes map[string]*rexLife
 }
 
-// rexLife is a Rex session, as one key names it: whether it runs and
-// whether Rex said, and its panes once asked (a snapshot of the session).
+// rexLife is a Rex session, as one key names it, with its threads'
+// sessions: whether it runs and whether Rex said, and their panes once
+// asked (a snapshot of each session).
 type rexLife struct {
-	s                 rex.Session
+	s                 rex.Fleet
 	running, answered bool
 	listed            bool
 	panes             []mux.Pane
@@ -90,7 +91,7 @@ func (l *lives) kept(skey string, st agent.Record) bool {
 		return false
 	case l.held(a, st.TS):
 		return true
-	case !a.running || a.s.ID != st.Session:
+	case !a.running || !a.s.Has(st.Session):
 		return false
 	}
 	if !a.listed {

@@ -130,7 +130,7 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	}
 	where := ""
 	if e.WeaverSession() {
-		if tab := e.adoptWindow(p, n, session.ThreadLabel(n, cmp.Or(about, name), root), root); tab != "" {
+		if tab := e.adoptWindow(p, session.ThreadLabel(n, cmp.Or(about, name), root), root); tab != "" {
 			where = " (window " + string(tab) + ")"
 		}
 	}
@@ -141,9 +141,9 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 // adoptWindow gives an adopted agent, pane p, its thread's window: the one
 // it is in when it has it to itself (but for its review panel), else one of
 // its own broken out of the window it shares (home, a view, another
-// thread's); at its number, named label, with a review panel on its left
-// in dir when it has none. You go with it when it is the pane you are in. Its window.
-func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
+// thread's); named label, with a review panel on its left in dir when it
+// has none. You go with it when it is the pane you are in. Its window.
+func (e *Env) adoptWindow(p mux.PaneID, label, dir string) mux.WindowID {
 	ps, _ := e.Mux().Panes()
 	ap, ok := session.PaneIn(ps, p)
 	if !ok {
@@ -163,14 +163,8 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 	}
 	if own {
 		e.Mux().Label(tab, label)
-		e.threadPlace(tab, n)
 	} else {
-		background := p != e.MyPane
-		w, width, err := e.Mux().BreakOut(p, label, n, background)
-		if err != nil {
-			// Its number is another window's: where the multiplexer puts it.
-			w, width, err = e.Mux().BreakOut(p, label, mux.NextFree, background)
-		}
+		w, width, err := e.Mux().BreakOut(p, label, mux.NextFree, p != e.MyPane)
 		if err != nil {
 			return ""
 		}

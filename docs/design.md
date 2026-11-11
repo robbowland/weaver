@@ -127,8 +127,8 @@ exits, cleanly or not (a broken install, a bad flag in `WEAVER_CLAUDE`), or
 a `wvr _agent` that fails before it, leaves what it said on its pane and
 its thread on the board, exited: `R` (`wvr restart`) starts its agent again in that pane on
 its conversation (afresh when none is known), `x` closes the thread. A
-thread lasts until you close it, so its window never stays with its panel
-alone in it.
+thread lasts until you close it, so its session never stays with its
+panel alone in it.
 
 ### Review panel
 
@@ -202,8 +202,11 @@ the agent's other files. Readers ignore fields they don't know.
 | `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan`; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
-The window's current name is Rex's; in the weaver session weaver labels it
-(`threadTabLabels`).
+A thread is a Rex session of its own, labelled with its `name` as it is
+made and never again: Rex's labels are anyone's (Claude Code's agents
+rename their sessions), so weaver finds a thread by ids alone. Its first
+window holds its review panel and its agent, labelled by weaver
+(`threadTabLabels`); its helpers' windows beside it are theirs.
 
 A task's slug: its first line in lowercase ASCII letters and digits, every
 other run of characters one `-`, at most 48 characters, cut at a `-`.
@@ -657,20 +660,22 @@ weaver runs on Rex alone. `wvr` outside weaver's session (`Start`) makes
 its Rex session, `$WEAVER_SESSION` else `weaver`, with home in its first
 window (see Start, under [Rex](#rex)), or shows the one running. A session
 made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; thread labels
-and numbered placement act only there.
+act only there. Each thread is a Rex session of its own beside it, made by
+weaver as a thread of that one (home's).
 
 - **Identity:** weaver acts on the Rex session it runs in (`rex.Chosen`)
-  when weaver made it (`$STATE_DIR/rex/sessions/<id>`); in another Rex
-  session's terminal, or outside Rex, it
+  when weaver made it (`$STATE_DIR/rex/sessions/<id>`), home's or a
+  thread's; in another Rex session's terminal, or outside Rex, it
   is in none, and commands that act on a session act on weaver's.
-  `Session` is the name weaver gave it (one it did not make is named by
-  its id), `SKey` is `rex-<session>` (a `/` as `_`), and `MyPane` the
+  `Session` is the name weaver gave home, a thread's session's too (one it
+  did not make is named by its id), `RexID` home's Rex id and `RexHere`
+  the one weaver runs in, `SKey` is `rex-<session>` (a `/` as `_`), and `MyPane` the
   number of the block weaver runs in (`$REX_BLOCK`; empty in a key's
   command, which runs in no block).
 - **Numbers:** a thread's number is its place: `num` in its thread record,
   the lowest free among the session's thread records (those being opened
-  included, for at most 30 s), under `$STATE_DIR/<skey>.num.lock`. Its window
-  moves to the place of its number (home is 0), when that is free. Wherever a
+  included, for at most 30 s), under `$STATE_DIR/<skey>.num.lock`. Rex's
+  sidebar keeps its sessions in the order they were made. Wherever a
   row is numbered (the home board, a dashboard) the number is the thread's
   `num` when any agent has one, else the row's place, and the digits go by it.
 - **Home:** `wvr home`, in the first window, is the dashboard at full size
@@ -744,8 +749,13 @@ and numbered placement act only there.
 ## Rex
 
 Weaver acts on its session through `mux.Mux` (`internal/mux`), which
-`Env.Mux` returns: `rex.Session` (`internal/rex`). A method that steers what
-you see (focus, names, widths) is best-effort and says nothing of failing.
+`Env.Mux` returns: `rex.Fleet` (`internal/rex`), home's `rex.Session` with
+its threads' sessions. Rex finds a block or window only in its own session
+(a call naming another's answers `block not found`), so a pane's or
+window's call goes to the session its number is in; `Panes` and `Windows`
+are every session's, asked at once; a popup or message goes where wvr
+runs. A method that steers what you see (focus, names, widths) is
+best-effort and says nothing of failing.
 
 - **Ids:** `mux.PaneID` and `mux.WindowID` are what weaver's files keep,
   numbers (`mux.ParsePane`, `mux.ParseWindow`). Rex's blocks and windows
@@ -761,17 +771,22 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
   last hooks, which would reset the new agent's state under the pane's
   number, reach no pane. One that fails once the block is made closes it
   and leaves the old pane as it was, its number and all. Beside them:
-  `cmd/<num>` the argv weaver started a block with (Rex does not say;
-  `Pane.Cmd`), `want/<num>` the place a window was given (home 0, a thread
-  its number, a view 900 and on: Rex orders windows, it does not index
-  them, so `Place` moves a window before the first placed further on),
-  `view/<num>` its view, and `sessions/<id>` the name weaver gave a session
-  it made, when (epoch seconds to the millisecond) and the pid of the server
-  it made it on. Rex saves its sessions as its server stops and brings them
+  `in/<num>` the session a block or window is in (none for one numbered
+  before weaver kept it: home's), `cmd/<num>` the argv weaver started a
+  block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
+  window of home's was given (home 0, a view 900 and on: Rex orders
+  windows, it does not index them, so `Place` moves a window before the
+  first placed further on), `view/<num>` its view, and `sessions/<id>` the
+  name weaver gave a session it made, when (epoch seconds to the
+  millisecond), the pid of the server it made it on and, for a thread's,
+  home's id (a thread's session has home's name, so its agents' files are
+  keyed by home). The record of a thread's session that has gone goes a
+  minute after it was made. Rex saves its sessions as its server stops and brings them
   back when one starts again at that endpoint, ids and all, with a fresh
   shell in each terminal; one whose server is not the one weaver made it on
   is such a husk (`Restored`): `rex.Ensure` makes it again and gives it back
-  for `wvr` to end once the new one shows, and `wvr` in one starts again.
+  for `wvr` to end once the new one shows, with the threads' sessions Rex
+brought back with it, and `wvr` in one starts again.
 - **Keys:** files are keyed `rex-<name>`; a Rex session weaver did not make
   is named by its id. Files of another key (tmux's and zellij's, from before
   weaver ran on Rex alone) name a session that no longer runs, and go as

@@ -44,9 +44,11 @@ func digits(s string) bool {
 	return true
 }
 
-// Pane is one pane of a session.
+// Pane is one pane of weaver's sessions, in Session (the multiplexer's
+// id for it).
 type Pane struct {
 	ID          PaneID
+	Session     string
 	Window      WindowID
 	WindowName  string
 	WindowIndex int

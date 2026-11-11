@@ -107,15 +107,15 @@ func (a *Answer) Lost(w agent.Where) (lost, known bool) {
 	return !live[w.Session], true
 }
 
-// Keyed is the session whose files are keyed skey (Key of its name): one
-// weaver made of a name with that key, else the one whose id the key holds
-// (a session weaver did not make is named by its id); whether it runs, and
-// whether Rex answered at all. By key, not by a name taken back out of
-// it: Key turns a name's / into _.
-func (a *Answer) Keyed(dir, skey string) (s Session, running, answered bool) {
+// Keyed is the session whose files are keyed skey (Key of its name), with
+// its threads' sessions: one weaver made of a name with that key, else the
+// one whose id the key holds (a session weaver did not make is named by
+// its id); whether it runs, and whether Rex answered at all. By key, not
+// by a name taken back out of it: Key turns a name's / into _.
+func (a *Answer) Keyed(dir, skey string) (f Fleet, running, answered bool) {
 	live := a.sessions()
 	if live == nil {
-		return Session{}, false, false
+		return Fleet{}, false, false
 	}
 	id, name, ok := ids{dir}.keyed(skey)
 	if !ok {
@@ -123,9 +123,9 @@ func (a *Answer) Keyed(dir, skey string) (s Session, running, answered bool) {
 		id = "session:" + name
 	}
 	if live[id] {
-		return Session{ID: id, Name: name, Dir: dir}, true, true
+		return Fleet{Home: Session{ID: id, Name: name, Dir: dir}, live: live}, true, true
 	}
-	return Session{}, false, true
+	return Fleet{}, false, true
 }
 
 // sessions are the ids of the sessions Rex runs.

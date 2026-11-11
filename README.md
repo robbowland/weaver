@@ -105,7 +105,7 @@ The command is `wvr`. `brew upgrade` keeps it current.
    to it.
 
 5. **Close it when you're done.** On the board, `x` closes a thread: its
-   agent, its review and its window. If weaver created the worktree and
+   agent, its review and its session, with any helpers in it. If weaver created the worktree and
    nothing in it would be lost, weaver offers to remove it. The branch always
    stays.
 
@@ -115,11 +115,11 @@ come back the next time you run `wvr`.
 
 ## How it works
 
-**Threads.** A thread is one task for one agent, in a window of its own:
-its review on the left, the agent on the right, in a new worktree or a checkout
-you choose. Each thread has a number, shown in its window's name (`01 Add a
-CLI flag · repo/add-a-cli-flag`), and that number means the same thread on the
-board and in `Alt` keys.
+**Threads.** A thread is one task for one agent, in a Rex session of its
+own: its review on the left, the agent on the right, in a new worktree or a
+checkout you choose. Each thread has a number, shown in its window's name
+(`01 Add a CLI flag · repo/add-a-cli-flag`), and that number means the same
+thread on the board and in `Alt` keys.
 
 **Home.** Window 0 is home: the board of every thread. A card beside the
 board shows the selected thread's last prompt, what it is waiting on, what it
@@ -177,7 +177,7 @@ be clicked too: the hints under a list are buttons.
 
 A thread lasts until you close it. If Rex restarts, you quit with `ctrl+q`, or
 the machine restarts while its agent runs, `wvr` brings the session back with
-each thread in its window and each agent resuming its conversation. A thread
+each thread in a session of its own and each agent resuming its conversation. A thread
 weaver can't bring back by itself waits on the board under LOST, where `enter`
 resumes it.
 

@@ -64,8 +64,9 @@ func (e *Env) Start(name string) error {
 	}
 	if husk != nil {
 		fmt.Printf("weaver: Rex restarted and brought the %s session back without what ran in it: started again, its threads with it\n", name)
-		// Last: this wvr may be running in it.
-		if err := husk.Quit(); err != nil {
+		// Last: this wvr may be running in it, or in one of its threads'
+		// sessions, which Rex brought back as empty.
+		if err := (rex.Fleet{Home: *husk}).Quit(); err != nil {
 			fmt.Fprintf(os.Stderr, "weaver: could not end what Rex brought back (%s): close it in Rex: %v\n", husk.ID, err)
 		}
 	}

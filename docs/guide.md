@@ -18,21 +18,26 @@ a first thread, start with the [README](../README.md).
 ## The weaver session
 
 weaver runs on [Rex](https://www.superlogical.com/rex). Outside weaver's
-session, `wvr` starts a Rex session named `weaver` (home in its first window,
-a window per thread), or shows it when it is already running. To use another
+session, `wvr` starts a Rex session named `weaver` (home in its first
+window), or shows it when it is already running; each thread is a Rex
+session of its own beside it. To use another
 session name, set `WEAVER_SESSION` or run `wvr start NAME`. Inside it, `wvr`
 opens the board instead. Rex shows a session only when asked by an app with
 Remote Control on (Rex's settings, Rex Server); otherwise switch to it in Rex
 yourself. The session runs in Rex's server: closing the app leaves it
 running, and `wvr` shows it again.
 
-The session's windows are:
+The weaver session's windows are:
 
 - **home**, the first window: the board of every thread, full size;
-- **one window per thread**, in the order of the threads' numbers: the
-  thread's review on the left, the agent on the right;
 - **the views**, GITHUB and LINEAR, beside home
   ([Pull requests and issues](#pull-requests-and-issues)).
+
+A thread's session is labelled with its name (its branch) as it is made;
+its first window has the thread's review on the left and the agent on the
+right, and helpers its agent starts get windows beside it. Renaming the
+session in Rex changes only its label: weaver finds its threads by Rex's
+ids.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
@@ -311,8 +316,9 @@ A thread lasts until you close it. If Rex restarts, you quit the session, or
 the machine restarts while a thread's agent runs, weaver keeps the thread as
 *lost* rather than forgetting it:
 
-- `wvr` brings the `weaver` session back with its threads, each in its window
-  with its number, its agent resuming its conversation beside its review.
+- `wvr` brings the `weaver` session back with its threads, each in a
+  session of its own with its number, its agent resuming its conversation
+  beside its review.
   With `WEAVER_RESTORE=0`, it lists them on home instead.
 - Lost threads it doesn't bring back by itself (from another session, or
   with `WEAVER_RESTORE=0`) are listed last on the board, under LOST: `enter`

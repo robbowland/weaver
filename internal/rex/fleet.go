@@ -2,6 +2,7 @@ package rex
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 type Fleet struct {
 	Home Session
 	Here string
+	live map[string]bool // the sessions Rex runs, when asked already (Answer.Keyed)
 }
 
 var _ mux.Mux = Fleet{}
@@ -44,16 +46,32 @@ func (f Fleet) here() Session {
 	return f.in(f.Here)
 }
 
-// Threads are the sessions of the threads that run, as Rex lists them.
-func (f Fleet) Threads() ([]Session, error) {
-	live, err := sessions()
-	if err != nil {
-		return nil, err
+// Has: is session id home's, or one of its threads'?
+func (f Fleet) Has(id string) bool {
+	if id == f.Home.ID {
+		return true
 	}
+	m, ok := f.Home.ids().session(id)
+	return ok && m.home == f.Home.ID
+}
+
+// Threads are the sessions of the threads that run, as Rex lists them.
+// Weaver's record of one that has gone goes too, but not in its first
+// minute: it may have been made since Rex listed them.
+func (f Fleet) Threads() ([]Session, error) {
+	live, err := f.live, error(nil)
+	if live == nil {
+		if live, err = sessions(); err != nil {
+			return nil, err
+		}
+	}
+	r := f.Home.ids()
 	var out []Session
-	for _, id := range f.Home.ids().threads(f.Home.ID) {
+	for _, id := range r.threads(f.Home.ID) {
 		if live[id] {
 			out = append(out, f.in(id))
+		} else if m, _ := r.session(id); m.at < float64(time.Now().Unix()-60) {
+			os.Remove(r.path("sessions", fileName(id)))
 		}
 	}
 	return out, nil
