@@ -340,6 +340,8 @@ can supersede an earlier one, and says so.
   onto a newer base or the base merged in moves it; a base deleted falls
   back to the default branch. The panel fetches nothing, so a stale
   remote-tracking base is a limit.
+  A pull request's thread follows its pull request's base as the GITHUB
+  view refreshes it (Rob: no polling loop of its own).
 - 2026-11-11: The hooks no longer talk to Neovim, superseding the
   msgpack-RPC of 2026-10-15 (Performance and packaging) and every entry
   above on what nvim is told: with tuicr beside the agent, no nvim weaver

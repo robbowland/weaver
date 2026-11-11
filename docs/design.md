@@ -294,7 +294,10 @@ recent threads' and agents', `~/code/<name>` and the like, zoxide's of the
 same name) by the GitHub URL of a remote as configured; none known, the form
 asks (`^r`). A branch that already has a running thread in this session goes
 to that thread instead. A pull request's thread's record keeps what it
-merges into as its `base`, so reviews compare with that.
+merges into as its `base`, so reviews compare with that, and follows it:
+each time the GITHUB view asks GitHub again (`followBases`), a pull
+request retargeted there (a stacked one moved to main after its parent
+merged) changes its thread's `base`, which the panel's next round takes.
 
 The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
 and an item's thread may start without one: its agent then runs with no

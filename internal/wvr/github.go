@@ -204,6 +204,33 @@ func (githubSource) fetch(e *Env) {
 	}
 	got, found := github.Fetch(c.held, search...)
 	updateGitHub(e, func(c *ghCache) { c.refreshed(got, found) })
+	e.followBases(got)
+}
+
+// followBases keeps each pull request's thread's base what its pull
+// request merges into now, as GitHub has just said (got): one retargeted
+// on GitHub, a stacked one to main after its parent merged, say, is
+// reviewed against its new base from the panel's next round.
+func (e *Env) followBases(got map[github.Kind][]github.Result) {
+	base := map[string]string{} // owner/name#N: the branch it merges into
+	for _, r := range got[github.PRs] {
+		for _, it := range r.Items {
+			if it.Base != "" {
+				base[it.Repo+"#"+strconv.Itoa(it.Number)] = it.Base
+			}
+		}
+	}
+	for _, f := range e.SessionFiles("thread") {
+		th, err := store.ReadThread(f)
+		if err != nil || th.Item == nil || th.Item.Kind != "pr" {
+			continue
+		}
+		if b, ok := base[th.Item.Ref]; ok {
+			if want := prBaseRef(th.Repo, b); want != th.Base {
+				store.UpdateThread(f, func(t *store.Thread) { t.Base = want })
+			}
+		}
+	}
 }
 
 // more reads the page after section key's of kind, and keeps it (paged).

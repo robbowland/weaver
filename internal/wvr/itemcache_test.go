@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -16,8 +17,10 @@ import (
 
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/linear"
+	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/session"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // viewEnv is a session of no Rex server, its state in a directory of its
@@ -332,6 +335,37 @@ func TestLinearRefreshKeepsDepth(t *testing.T) {
 		want := map[string]int{"Queue": 250, "Backlog": 30, "Mine": 45, "Watch": 30}[r.Title]
 		if len(r.Items) != want || r.Err != "" || r.Next != "c"+strconv.Itoa(want) {
 			t.Errorf("%s, holding %d: %d after a refresh (next %q, err %q), want %d", r.Title, held[r.Title], len(r.Items), r.Next, r.Err, want)
+		}
+	}
+}
+
+// A pull request's thread follows what the pull request merges into as
+// GitHub says it now, a stacked one retargeted to main after its parent
+// merged; another thread, or a pull request GitHub did not list, stays.
+func TestFollowBases(t *testing.T) {
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://example.com/o/r.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-s"}}
+	pr := func(n int) *store.ThreadItem { return &store.ThreadItem{Kind: "pr", Ref: "o/r#" + strconv.Itoa(n)} }
+	for p, th := range map[string]store.Thread{
+		"1": {Num: 1, Repo: repo, Base: "origin/parent", Item: pr(45)},
+		"2": {Num: 2, Repo: repo, Base: "origin/main", Item: &store.ThreadItem{Kind: "issue", Ref: "o/r#46"}},
+		"3": {Num: 3, Repo: repo, Base: "origin/other", Item: pr(47)},
+	} {
+		if err := store.Write(e.ThreadFile(mux.PaneID(p)), th); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.followBases(map[github.Kind][]github.Result{github.PRs: {{List: page.List[github.Item]{Items: []github.Item{
+		{Kind: github.PRs, Repo: "o/r", Number: 45, Base: "main"}, {Kind: github.PRs, Repo: "o/r", Number: 46, Base: "x"},
+	}}}}})
+	for p, want := range map[string]string{"1": "origin/main", "2": "origin/main", "3": "origin/other"} {
+		if th, _ := store.ReadThread(e.ThreadFile(mux.PaneID(p))); th.Base != want {
+			t.Errorf("thread %s's base: %q, want %q", p, th.Base, want)
 		}
 	}
 }
