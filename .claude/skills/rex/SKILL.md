@@ -10,7 +10,7 @@ revision 8) is server > session > window ("tab") > block (pane). weaver
 drives it through the `rex` CLI: `rex api call METHOD JSON` (~20 ms each),
 `rex do` (a Lua snapshot, ~25 ms; app actions), and Lua in the server's
 config (weaver.lua, written from config/rex.lua). Read docs/design.md's
-Multiplexers section with this.
+Rex section with this.
 
 ## What Rex does that bit weaver (all verified; keep them true)
 
@@ -52,8 +52,7 @@ Multiplexers section with this.
    `Workspace.terminalOptionKeyBehavior` `automatic`, `composesText` or
    `actsAsAlt` alike, a pressed ⌥j fired weaver's `alt+j`. The setting
    (`automatic | composesText | actsAsAlt | leftActsAsAlt | rightActsAsAlt`)
-   matters for what reaches programs (weaver's tmux in a Rex terminal, nvim,
-   fzf): composed, ⌥ is a consumed modifier (`consumed_mods`).
+   matters for what reaches programs (nvim, fzf): composed, ⌥ is a consumed modifier (`consumed_mods`).
 6. **A floating layer is headed by its block's label**, over a one-row
    layer's only row: weaver's messages (Say) are labelled with their text.
    A popover's heading shows the terminal's title instead when the shell
@@ -83,13 +82,13 @@ Multiplexers section with this.
 11. `session.swap_blocks` refuses a detached block (`session.new_block`):
     "not found in any window".
 13. **Keys' commands run at once, side by side.** `rex.exec.start` in a
-    bound function does not wait (tmux's run-shell queue does), so a second
+    bound function does not wait, so a second
     press's wvr runs while the first's is at work. A key that reads where you
     are and then moves must hold the session's UI lock (`uiLock`); `go
     window` does. `rex do session.select` changes the server's active
     window before it returns.
-14. **Rex's keys fire inside floating layers** (weaver's popups); tmux's
-    root bindings never reach a popup. weaver.lua's `inPopup` lets them
+14. **Rex's keys fire inside floating layers** (weaver's popups).
+    weaver.lua's `inPopup` lets them
     through. With no app attached, `session.new_layer{focus=true}` leaves
     focus on the tiled block (the app focuses the popup), so a test must
     `session.focus_block` the popup itself.
@@ -98,7 +97,7 @@ Multiplexers section with this.
     `session_event`s; `active_window_changed` fires for weaver's moves and
     for the app's own tab changes (and every API call shows up as a
     `client_connected`/`client_disconnected`). Home's board follows it
-    (`seeAsYouLook`) for tmux's pane-focus-in `_seen`. The board re-execs
+    (`seeAsYouLook`) for a focus hook. The board re-execs
     itself as `wvr ls` when a newer weaver is installed: start anything it
     runs from `ls`, not only `Home`.
 16. **Zoom is in the view:** a zoomed window has `zoomed_block_id`; the

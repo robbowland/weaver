@@ -13,7 +13,7 @@ import (
 )
 
 // ids is weaver's numbers for Rex's blocks and windows. Weaver's files and
-// records name a pane by a number (tmux's %3 is 3), and Rex names its
+// records name a pane by a number, and Rex names its
 // blocks and windows by UUIDs, so each one weaver meets gets the next
 // number, kept in dir:
 //

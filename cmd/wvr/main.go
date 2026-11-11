@@ -1,4 +1,4 @@
-// weaver keeps track of the coding agents running in your tmux session and
+// weaver keeps track of the coding agents running in your Rex session and
 // opens Neovim in the worktree each is really editing.
 package main
 
@@ -13,7 +13,6 @@ import (
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/engine"
-	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/wvr"
 )
@@ -23,12 +22,6 @@ func main() {
 	cmd := ""
 	if len(args) > 0 {
 		cmd, args = args[0], args[1:]
-	}
-	// tmux's status line asks for the counts on every redraw: no more than a
-	// file read.
-	if cmd == "status" && len(args) >= 1 && args[0] == "--tmux" {
-		fmt.Println(session.StatusLine(args))
-		return
 	}
 	switch cmd {
 	case "help", "-h", "--help":
@@ -47,17 +40,12 @@ func main() {
 		_, err := setup.Runtime()
 		exit(err)
 	}
-	cmd, args, named := muxFlag(cmd, args)
 	c, ok := commands[cmd]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "weaver: unknown command: %s\n\n%s", cmd, wvr.Usage)
 		os.Exit(2)
 	}
 	e := wvr.Load()
-	if named == "rex" && e.InTmux {
-		// Inside a tmux pane weaver acts on that tmux (guide.md, On Rex).
-		fmt.Fprintln(os.Stderr, "weaver: inside tmux, weaver runs on that tmux; wvr --rex starts it on Rex from outside tmux")
-	}
 	if c.session && e.Session == "" {
 		exit(noSession(e))
 	}
@@ -85,13 +73,13 @@ func exit(err error) {
 }
 
 // noSession is why a command that acts on the session you are in cannot:
-// you are in none, on the multiplexer weaver acts on.
-func noSession(e *wvr.Env) error {
-	return fmt.Errorf("not inside a %s session (start one with `wvr`)", e.MuxName())
+// you are in none of weaver's.
+func noSession(*wvr.Env) error {
+	return errors.New("not inside a weaver session on Rex (start one with `wvr`)")
 }
 
 // command is one of wvr's commands: whether it runs only inside a weaver
-// tmux session, and what it does with its arguments.
+// session, and what it does with its arguments.
 type command struct {
 	session bool
 	run     func(e *wvr.Env, args []string) error
@@ -128,8 +116,8 @@ func helped(f func(e *wvr.Env, args []string) error) func(*wvr.Env, []string) er
 	}
 }
 
-// The commands (wvr help, and the ones tmux, fzf, nvim and the hooks run,
-// named with a leading _).
+// The commands (wvr help, and the ones Rex's keys, fzf, nvim and the hooks
+// run, named with a leading _).
 var commands = map[string]command{
 	// Outside a session it starts (or attaches to) one; inside, the board.
 	"": {run: start}, "start": {run: start},
@@ -183,7 +171,7 @@ var commands = map[string]command{
 			fmt.Println(e.StatusText())
 		}
 	})},
-	"gc": {run: done(func(e *wvr.Env, a []string) { e.Sweep(a) })},
+	"gc": {run: done(func(e *wvr.Env, _ []string) { e.Sweep() })},
 	"doctor": {run: func(e *wvr.Env, args []string) error {
 		switch arg(args, 0) {
 		case "":
@@ -229,10 +217,8 @@ var commands = map[string]command{
 	"_goto":    {session: true, run: done(func(e *wvr.Env, args []string) { e.Goto(arg(args, 0), arg(args, 1)) })},
 	"_pos":     {session: true, run: prints(func(e *wvr.Env, args []string) string { return e.Pos(arg(args, 0)) })},
 
-	// The mouse: a click on a footer's hint or the status line, a right
-	// click's menu.
+	// The mouse: a click on a footer's hint.
 	"_click": {run: done((*wvr.Env).Click)},
-	"_menu":  {run: done((*wvr.Env).Menu)},
 	"_popup": {session: true, run: (*wvr.Env).Popup},
 	"_peek":  {session: true, run: (*wvr.Env).Peek},
 	// What a board's action said, as a message (the multiplexer's own).
@@ -242,10 +228,7 @@ var commands = map[string]command{
 	"_modedone": {session: true, run: (*wvr.Env).EditDone},
 	"_fold":     {run: done(func(*wvr.Env, []string) { wvr.Fold() })},
 
-	// tmux's hooks.
-	"_seen": {session: true, run: done(func(e *wvr.Env, args []string) { e.Seen(arg(args, 0)) })},
-	"_fit":  {session: true, run: done(func(e *wvr.Env, args []string) { e.Fit(arg(args, 0)) })},
-	// Rex: a thread's widths back once the app has evened out its panes.
+	// A thread's widths back once the Rex app has evened out its panes.
 	"_width": {session: true, run: done(func(e *wvr.Env, args []string) { e.ThreadWidth(arg(args, 0)) })},
 	"_boot":  {session: true, run: done(func(e *wvr.Env, args []string) { e.Boot(arg(args, 0)) })},
 
@@ -272,43 +255,19 @@ var commands = map[string]command{
 	"_github":    {session: true, run: func(e *wvr.Env, args []string) error { return e.Items(append([]string{"github"}, args...)) }},
 	"linear":     {run: (*wvr.Env).Linear},
 	"_close":     {session: true, run: (*wvr.Env).CloseTail},
-	"_leftovers": {session: true, run: (*wvr.Env).EndLeftovers},
 }
 
-// muxFlag is `wvr --rex|--tmux [session]` and `wvr start --rex|--tmux
-// [session]`: start, on that multiplexer, as $WEAVER_MUX would say it (set
-// here for this process, before the environment is read), and the
-// multiplexer it named. Any other command is as it was.
-func muxFlag(cmd string, args []string) (string, []string, string) {
-	flag := cmd
-	if cmd == "start" && len(args) > 0 {
-		flag = args[0]
-	}
-	mux, ok := map[string]string{"--rex": "rex", "--tmux": "tmux"}[flag]
-	if !ok {
-		return cmd, args, ""
-	}
-	if cmd == "start" {
-		args = args[1:]
-	}
-	if err := os.Setenv("WEAVER_MUX", mux); err != nil {
-		exit(err)
-	}
-	return "start", args, mux
-}
-
-// start starts (or attaches to) a weaver session, named as given; inside
-// one, the board. Every Rex terminal is in a Rex session, so on Rex the
-// board is in place only in a session weaver made: from any other, wvr
-// starts or shows weaver's (wvr ls is the board of the session you are in).
-// One Rex brought back after a restart, its programs gone, is started
-// again.
+// start starts (or shows) a weaver session, named as given; inside one,
+// the board. Every Rex terminal is in a Rex session, so the board is in
+// place only in a session weaver made: from any other, wvr starts or shows
+// weaver's (wvr ls is the board of the session you are in). One Rex
+// brought back after a restart, its programs gone, is started again.
 func start(e *wvr.Env, args []string) error {
 	name := arg(args, 0)
-	if e.Session != "" && e.OnRex() && e.WeaverSession() && e.RexRestored() {
+	if e.Session != "" && e.WeaverSession() && e.RexRestored() {
 		return e.Start(cmp.Or(name, e.Session))
 	}
-	if e.Session != "" && (!e.OnRex() || e.WeaverSession()) {
+	if e.Session != "" && e.WeaverSession() {
 		return e.Ls()
 	}
 	return e.Start(name)

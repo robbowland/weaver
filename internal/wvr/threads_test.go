@@ -42,7 +42,7 @@ func TestThreadNvimByToken(t *testing.T) {
 // A thread still being opened holds its number; one left behind (older
 // than its nvim ever waits) does not.
 func TestThreadNumSkipsLeftovers(t *testing.T) {
-	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "tmux-s"}}
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-s"}}
 	put := func(tok, rec string, age time.Duration) {
 		d := filepath.Join(e.threadsNew(), e.SKey+"_"+tok)
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -66,7 +66,7 @@ func TestThreadNumSkipsLeftovers(t *testing.T) {
 
 // Weaver's per-agent files are named by their pane.
 func TestPaneOfFile(t *testing.T) {
-	if p := session.PaneOfFile("/s/tmux-w_1_42.thread"); p != "42" {
+	if p := session.PaneOfFile("/s/rex-w_1_42.thread"); p != "42" {
 		t.Errorf("paneOfFile: %q", p)
 	}
 }
@@ -75,12 +75,12 @@ func TestPaneOfFile(t *testing.T) {
 // leave free: session "a" does not count session "a_b"'s.
 func TestThreadNum(t *testing.T) {
 	dir := t.TempDir()
-	e := &Env{&session.Env{StateDir: dir, SKey: "tmux-a"}}
+	e := &Env{&session.Env{StateDir: dir, SKey: "rex-a"}}
 	for f, n := range map[string]string{
-		"tmux-a_1.thread":              `{"num":1}`,
-		"tmux-a_b_7.thread":            `{"num":2}`,
-		"new/tmux-a_123/thread.json":   `{"num":3}`,
-		"new/tmux-a_b_456/thread.json": `{"num":4}`,
+		"rex-a_1.thread":              `{"num":1}`,
+		"rex-a_b_7.thread":            `{"num":2}`,
+		"new/rex-a_123/thread.json":   `{"num":3}`,
+		"new/rex-a_b_456/thread.json": `{"num":4}`,
 	} {
 		p := filepath.Join(dir, f)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {

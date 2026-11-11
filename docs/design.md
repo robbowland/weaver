@@ -9,10 +9,9 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | Path | What |
 | --- | --- |
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
-| `$STATE_DIR/<skey>_<pane>.json` | state of the agent in tmux pane `%<pane>` of session `<skey>` (`tmux-` and the session name with `/` as `_`); one JSON object on one line |
+| `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid, empty while not known (the nvim writes its own as it starts); a pid of 1 or less is no process, never a live nvim |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
-| `$STATE_DIR/<skey>.status` | the session's counts for its status line: `needs-you done-unseen working` |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below) |
@@ -24,15 +23,21 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/turns/<commit>` | `<turn> <point> <files>` of a snapshot commit, for the dashboard's file counts; pruned after 30 days |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
-| `$STATE_DIR/rex/` | on Rex, weaver's numbers for its blocks and windows, and what Rex does not keep of them (see [Multiplexers](#multiplexers)) |
+| `$STATE_DIR/rex/` | weaver's numbers for Rex's blocks and windows, and what Rex does not keep of them (see [Rex](#rex)) |
 
 ## State file
 
 Readers must ignore fields they don't know and tolerate missing ones.
 
+Codex runs its hooks in its app server, a daemon every Codex session shares,
+with the environment of whichever session started it, and neither a hook's
+input nor its process says where its session runs: weaver cannot place
+them in a Rex block, so `wvr adapt codex` drops every one, and weaver
+opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
+
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `pane` | int | the agent's pane id (tmux's `%N` as `N`) |
+| `pane` | int | the agent's pane: weaver's number for its Rex block |
 | `agent` | string | `claude`, `codex`, ... |
 | `state` | string | `working`, `needs-you`, `done`, `idle`, `interrupted`, `ended` |
 | `since` | int | epoch s the state began; `ts` is the last event |
@@ -56,8 +61,8 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `log` | string | absolute path of the activity log |
 | `nvim_pane` | int or null | the agent's nvim pane |
-| `server` | int | tmux only: the pid of the tmux server the agent runs on (from `$TMUX`, or the pane a Codex daemon's hook is placed in); a server started again is another, however soon, so its threads count as lost (absent in older states: then a session made after `ts`) |
-| `tmux_session` | string | tmux only: the id of its session on that server (`$3`); a session quit and made again, even on the same server, is another (absent in older states: then a session made after `ts`). With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
+| `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
+| `tmux_session` | string | the id of its Rex session (the name is from when weaver ran on tmux); a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Hook to Neovim
@@ -228,45 +233,13 @@ under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
 ## Events from other agents
 
 `wvr event [--bell]` reads one event as JSON on stdin; the pane is
-`$TMUX_PANE` unless the event names one. Adapters translate an agent's own
+`$REX_BLOCK`'s unless the event names one. Adapters translate an agent's own
 hook input into it (`wvr adapt codex`). `--bell` rings the terminal bell on
-`/dev/tty` (a Codex daemon's hook: its pane's tty) when the agent starts
+`/dev/tty` when the agent starts
 needing you or finishes, for agents that cannot ring through their hook
 output. Codex runs each hook in turn and waits on it, so its events are all
 taken as sync ones; what would make a hook wait on git (following a shell
 call's edits) goes to the background run.
-
-Codex runs its hooks in its app server, a daemon every Codex session shares,
-with the environment of whichever session started it: `$TMUX`, `$TMUX_PANE`
-and the session there are that session's pane's, on a server that may have
-gone since. A Codex hook run from inside the pane `$TMUX_PANE` names (that
-pane's process is its ancestor, whatever it runs) is that pane's. One that
-is not finds its pane by its session (`engine.codexPane`): the pane bound to
-it on this server in `$STATE_DIR/codex/<session>` (`<pane> <server pid>`; a
-binding of another server, or one without its server, counts for nothing),
-else the one pane running `codex` whose directory is the session's `cwd` (of
-two, the one no other session is bound to), bound to it from then on. Its
-`pid` is that pane's process, and its session, key, `server`,
-`tmux_session` and bell are that pane's, not the daemon's environment's. A
-SessionEnd drops the binding, and GC old ones after a month. Neither found,
-the event is dropped: never filed under `$TMUX_PANE`'s pane.
-
-Neither a hook's input (its session, `cwd` and transcript) nor its process
-(the daemon's child) says where its session runs, and the daemon's
-environment is any session's, a Rex block's too: placing goes by tmux's
-panes alone, whatever started the daemon, so a tmux Codex thread reports
-whoever started it. A placed event acts on tmux entirely (no Rex session
-id: its keys, files and multiplexer calls are the tmux pane's), and so does
-its background run, which takes the session the hook acted on (`hk`'s
-`Session`, `SKey`, `RexID`) rather than its own environment's. A Codex in a
-Rex block is told only by its process: `codex`, its environment a Rex
-block's (`$REX_BLOCK`, no `$TMUX`), its directory `$PWD` or its `--cd`.
-While one runs in a directory, the directory names no tmux pane (the event
-may be its session's), and an unbound tmux Codex there waits to be placed
-until it has gone; a binding made before still places. A Codex weaver
-cannot read the environment of counts as tmux's. Weaver does not follow
-Codex on Rex, so it refuses a Codex thread there: `wvr new`, resuming,
-adopting and restarting one say so.
 
 | Field | For | Meaning |
 | --- | --- | --- |
@@ -274,7 +247,7 @@ adopting and restarting one say so.
 | `event` | all, required | below |
 | `session` | all | the agent's session id |
 | `pid` | all | the agent process (liveness); adapters find it at `session_start` |
-| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file; `pane` digits, a string or a number (tmux's `%3` and zellij's `terminal_3` are read as 3) |
+| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file; `pane` digits, a string or a number  |
 | `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
 | `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
 | `waiting` | `needs_you` | what it waits on |
@@ -329,9 +302,8 @@ after its session went leaves `resume` (the session id) there instead of
 (the agent afresh when unknown), `codex resume <id>`. A thread closed
 before its nvim is recorded as bound is closed whole all the same: `close`
 finds that nvim as the pane started for its agent. The pane is made to
-stay when its program exits (`Spawn.Keep`, naming the agent, and R and x):
-on tmux, it sets its own `remain-on-exit on` (and a `remain-on-exit-format`
-with those and its status) before `wvr _agent` runs, so an agent that
+stay when its program exits (`Spawn.Keep`, naming the agent, and R and x),
+so an agent that
 exits, cleanly or not (a broken install, a bad flag in `WEAVER_CLAUDE`), or
 a `wvr _agent` that fails before it, leaves what it said on its pane and
 its thread on the board, exited: `R` (`wvr restart`) starts its agent again in that pane on
@@ -364,7 +336,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan` or Codex's `--sandbox read-only`; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
-The window's current name is tmux's; in the weaver session weaver labels it
+The window's current name is Rex's; in the weaver session weaver labels it
 (`threadTabLabels`).
 
 A task's slug: its first line in lowercase ASCII letters and digits, every
@@ -373,14 +345,13 @@ other run of characters one `-`, at most 48 characters, cut at a `-`.
 ### Adopting
 
 `wvr adopt [PANE | SESSION-ID]` makes a conversation weaver did not start a
-thread. PANE is `%N` or a number (pane numbers have no length: on Rex they
-only grow); one of 4+ digits is a pane only when weaver follows an agent
+thread. PANE is a number (pane numbers have no length: they only grow); one of 4+ digits is a pane only when weaver follows an agent
 there (its state, thread or nvim file). Anything else is a session id or
 its first 4+ characters.
 Alone, it adopts the agent in its own pane when it has one (so `! wvr
 adopt` inside an agent), else opens the picker. Outside
-tmux it acts on the weaver session (`$WEAVER_SESSION`, else `weaver`) on
-weaver's own server, as `wvr resume`, `wvr rename` and `wvr quit` do
+weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
+`weaver`), as `wvr resume`, `wvr rename` and `wvr quit` do
 (`toWeaverSession`), and says so when that is not running.
 
 - **In place** (an agent weaver follows, without a thread record): refused
@@ -392,10 +363,10 @@ weaver's own server, as `wvr resume`, `wvr rename` and `wvr quit` do
   close never offers to remove it), `cmd` the agent's command, `pane`,
   `session_id`. In the weaver session its window becomes the thread's: kept
   when the agent has it to itself (with its bound nvim at most) and it is
-  neither home nor a view, else `break-pane` takes the agent (its process
-  untouched) to a window of its own at its number (tmux's choice when that
-  index is taken), named with its label; `-d` unless the agent's is the pane
-  adopt runs in. An agent with no bound nvim gets one on its left
+  neither home nor a view, else `BreakOut` takes the agent (its process
+  untouched) to a window of its own at its number (the next free place when
+  that is taken), named with its label, in the background unless the
+  agent's is the pane adopt runs in. An agent with no bound nvim gets one on its left
   (`splitNvim`, as a new thread's).
 - **By session id:** a lost thread's is resumed (`threadRestore`); an agent
   of this session running it is adopted in place; else its transcript,
@@ -410,8 +381,7 @@ weaver's own server, as `wvr resume`, `wvr rename` and `wvr quit` do
 - **Picker:** the newest 80 transcripts named by a session id that have a
   title and are not a thread of this session (by the records' and states'
   session ids), newest first: title, repo/branch, age, and `running` when a
-  process is in it. Errors go to the status line too, since the popup
-  closes.
+  process is in it. Errors go to a message too, since the popup closes.
 
 ### Renaming
 
@@ -428,24 +398,24 @@ thread it says to adopt it first. `enter` with such a prompt runs `wvr
 _modedone "$FZF_PROMPT" "$FZF_QUERY"`, which renames the thread the prompt
 names (a name unchanged is left as it is, so an agent's title is never
 taken for yours) and prints the actions back to browsing; `esc` goes back
-without it. The mouse menu's rename is the `r` key.
+without it.
 
 ### Restarting
 
 `wvr restart [--all] [--force] [PANE]` starts a thread's agent again in its
 own pane, resuming its conversation, for an updated harness to take over
 (PANE as for rename; `--all`, every thread record of the session; outside
-tmux, the weaver session). A thread whose state is `working` or `needs-you`
+weaver's session, the weaver session). A thread whose state is `working` or `needs-you`
 is left unless `--force`, and one whose agent has not said its session id
 cannot be. For each: its record (`pane` cleared), its state as a restored
 thread's carries on (`writeResume`: idle, seen, without its process's
 fields) and `resume` (its session id) go to `new/<skey>_<token>/`, then
-`respawn-pane -k -t PANE -c DIR 'wvr _agent TOKEN KIND'` ends the agent and
-runs the pane's command again, which takes them as a restored thread's pane
+`Respawn` starts `wvr _agent TOKEN KIND` in DIR in the pane's place, ending
+the agent, which takes them as a restored thread's pane
 does and resumes (`claude --resume`, `codex resume`). DIR is where a lost
 thread would resume (`Lost.Dir`). The pane id, its window, nvim and number
 stay. It says what it did (restarted, left mid-turn, failed) on stdout and
-on the status line, since the board's `R` and the popover run it out of
+in a message, since the board's `R` and the popover run it out of
 sight.
 
 ### Work items
@@ -524,10 +494,8 @@ it, it is a linked worktree (not the main checkout), not locked, `git status
 HEAD is an ancestor of `origin/HEAD`, `upstream/HEAD`, `main` or `master`, or
 of its upstream with nothing unpushed, and nothing else uses it
 (`worktreeUsers`, which the sweep asks too: a thread of any session working
-there, a lost one, a pane in it on weaver's server or yours, or on Rex the
-session's; not the thread being closed, whose panes are skipped only where
-they are: a pane of the same number on another server, or on tmux when the
-session is Rex's, is another pane). It checks again after the agent has exited, and never forces:
+there, a lost one, a pane of the session in it; not the thread being
+closed's). It checks again after the agent has exited, and never forces:
 Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
 worktree themselves. Its ignored files, which removing it would take (an
 `.env`, local settings; not whole ignored directories a build makes again,
@@ -538,7 +506,7 @@ stays.
 ## Lost threads
 
 A thread lasts until you close it. When its agent dies because its session
-went (its tmux server crashed or was killed, or you quit the session), its
+went (its Rex server crashed or was killed, or you quit the session), its
 thread is kept as lost rather than forgotten, so it can be resumed.
 
 - **When:** where an agent's files would be forgotten for a dead pid
@@ -546,12 +514,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   thread record (whether or not its conversation is known), its `end_reason` is not `prompt_input_exit`,
   `logout` or `clear` (ended on purpose), and its session has gone since its
   last event: the machine has started since its last event `ts`
-  (`kern.boottime`), or no tmux server (weaver's, or the caller's) has that
-  life of the session any more: none of its name, or one on another server
-  (the state's `server`), or one made again on the same server (another
-  `tmux_session`; for older states without one, one created after `ts`;
-  without `server` either, one created after `ts`). A Rex session's has gone
-  when the machine has started since, or its server's process has ended
+  (`kern.boottime`), or its server's process has ended
   (neither asks Rex), or Rex says another server runs or the session is no
   longer on it (`rex.Answer.Lost`); when a call that takes fails, neither: its
   files stay as they are for a later look (one taken for lost while it runs
@@ -559,7 +522,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   retires and loses nothing of a Rex session it cannot ask about, but what
   is from before the machine started. One pass (a `GC` run, the board's
   rows) judges every file by one answer from each multiplexer
-  (`session.lives`): tmux's sessions listed once, Rex's server and sessions
+  (`session.lives`): Rex's server and sessions
   asked once, each session's panes looked at once. Anything else is
   forgotten as before; a pane closed while its
   session runs on is not lost. The hook does
@@ -581,8 +544,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   not its agent's state survives.
 - **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json` (a thread whose
   conversation was never known: `<skey>_thread-<created>-<num>.json`), one object:
-  `lost` (epoch s), `skey` (the session key it was lost from, `tmux-` first
-  for a tmux session; records before 2026-10-15 call it `session`), `state`
+  `lost` (epoch s), `skey` (the session key it was lost from; records
+  before 2026-10-15 call it `session`), `state`
   (the state file) and `thread` (the thread record). The pane's files go.
   Readers take its directory and key through `lostDir` and its `skey`, where
   an empty field counts as none.
@@ -622,59 +585,38 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   A record whose directory is gone stays lost.
 - **The weaver session:** as it starts, its home (`wvr home`, behind the
   board as `wvr _boot`) runs `GC`, then resumes every thread lost by a
-  session of its name (and by the zellij session of that name, from before
-  weaver ran on tmux only), in number order, without leaving home
+  session of its name, in number order, without leaving home
   (`WEAVER_RESTORE=0`: listed instead), then sweeps worktrees (below).
 - **Sweeping:** `GC` (also on every SessionStart hook) ends weaver's nvims
   whose parent has gone (`--listen` in the socket dir, parent pid 1 or a
   systemd subreaper: a server that crashed or was killed left them, with
-  their language servers), ends what agents left running in panes that
-  have gone (`SweepLeftovers`, below), and removes sockets in the socket
-  dir nothing accepts on, a day after they were made.
-- **Leftovers:** in a process tree launchd adopted (parent 1, yours), each
-  process a weaver pane started (`WEAVER_TMUX_SESSION`, `TMUX` and
-  `TMUX_PANE` in its own environment, read from `kern.procargs2`, or, where
-  macOS hides it, its own programs' and `/bin/sh`'s, its parent's; never
-  another process's in the tree), whose pane has gone (or whose server
-  has: another `#{pid}`, or none), and that runs from the checkout it was
-  started in (`PWD`'s top level: its program, argv[0] or the script
-  argv[1], under it, as run; a virtualenv's python is a link elsewhere),
-  with all under it (`condemned`). A process whose own environment says no
-  pane is never one (CI's runner, whose test script runs from a checkout
-  while a hook of a pane runs under it). A server put in the background goes; a daemon a tool
-  started on the way (Codex's app server, gpg-agent) runs from elsewhere and
-  stays, even when a gone thread's command runs under it. Each is sent TERM, then
-  KILL after 2 s, and said in `$STATE_DIR/gc.log`; GC says how many on the
-  status line. `wvr close` has `wvr _leftovers SHELL...` do it once the
-  panes' shells have gone, in a process of its own, so closing never waits.
-  `wvr gc --dry-run` lists them, with their memory as top counts it, and
-  ends nothing. `$STATE_DIR/worktrees` lists the
-  worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
+  their language servers), and removes sockets in the socket dir nothing
+  accepts on, a day after they were made. What an agent left running in a
+  pane that has gone (a server put in the background) is not swept: weaver
+  told such panes by tmux's environment, and has not learnt Rex's yet.
+- **Worktrees:** `$STATE_DIR/worktrees` lists the worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
   before the list join it as they are seen); `SweepWorktrees` (at `_boot`,
   and `wvr gc`) removes one an hour or more old that nothing uses
   (`worktreeUsers`, as close asks), when `worktreeRemovable` holds
   (clean, its HEAD merged into a default branch or pushed), its ignored
   files kept first as close keeps them, with `wt remove
-  --no-delete-branch` or `git worktree remove`, and says so on the status
-  line. Close's `keep` takes a worktree off the list.
+  --no-delete-branch` or `git worktree remove`, and says so in a message.
+  Close's `keep` takes a worktree off the list.
 - **Dashboard:** lost threads (of every session) last, under `LOST`, glyph
   `[-]`, without a number or a 1-9 key and not counted in the title; their item
   id is `l<session id>` and field 2 the session id. Enter resumes one
   (`wvr resume`), x forgets it (`wvr resume --forget`), and the preview
   shows its card (`wvr _preview <session id>`).
 - **Quit:** `ctrl+q` kills the session, and the threads come back as above.
-  While an agent is mid-turn (the session option `@weaver-busy`, needs-you
-  plus working, set with the counts), tmux asks first (`confirm-before`).
-  `wvr quit [--yes]` kills the session you are in (outside tmux,
-  `$WEAVER_SESSION`) after a card: the threads kept, the turns under way, and
+  `wvr quit [--yes]` kills the session you are in (outside it,
+  `$WEAVER_SESSION`) after a card (ctrl+q's, in a popup): the threads kept, the turns under way, and
   the agents' nvims' unsaved buffers (each nvim asked over its socket, as
   `wvr close` does). The footer shows `^q QUIT`.
 
 ## Dashboard
 
 The dashboard is fzf: `wvr home` in the weaver session's home window, at
-full size, and `wvr ls` (or `wvr` inside any other tmux session) in the
-pane it runs in. `PushStatus`, run by every hook that changes a state,
+full size, and `wvr ls` in the pane it runs in. `PushStatus`, run by every hook that changes a state,
 refreshes it through its `--listen` socket (`transform(_refresh)`, the views'
 `_items NAME refresh`).
 
@@ -688,14 +630,13 @@ Rows that do change (an age, what an agent runs) still would, so a card you
 scroll holds the list: the wheel and `shift+↑↓` over it set the input's
 label to `scrolled` (no list has an input border, so it shows nowhere; a
 transform reads it as `$FZF_INPUT_LABEL`), and a refresh then does nothing
-while the list's pane is on a client's screen (`cardHold`). The hold ends
-as the cursor moves (the focus event clears the mark and refreshes), as the
-card is shown from its top again (`ctrl+r`, `s`, `?`), or at the first
-refresh while the list is off screen.
+(`cardHeld`; Rex does not say whether the list is on screen, so it is taken
+to be). The hold ends as the cursor moves (the focus event clears the mark
+and refreshes), or as the card is shown from its top again (`ctrl+r`, `s`,
+`?`).
 
 fzf draws one sharp border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
-title and the status bar's counts in its label (home leaves the counts to the
-status line, below it). Inside, from the top: a blank
+title and the counts in its label. Inside, from the top: a blank
 line (the search input takes its place, so nothing moves), the agents under a
 heading per group, groups apart by one blank line, fzf's footer with the keys
 that work now, then the card. The card goes beside the list when the pane can
@@ -759,7 +700,7 @@ header: what to do on an empty board), `.room` and `.tight` (the card's
 Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
 `1`-`9` jump, `j k g G` and the arrows move, `n` new thread, `x` close, `a`
 adopt (`wvr _popup adopt <pane>`: an agent row that is no thread is adopted
-where it runs, said on the status line; anything else, the empty board
+where it runs, said in a message; anything else, the empty board
 included, opens the picker of conversations in the form's popup), `e`
 (`ctrl-e`) jump and open nvim, `s` card or screen, `tab` / `shift-tab` the
 next / previous view (`wvr go next|prev`, round home and the views as a
@@ -785,7 +726,7 @@ jumps and runs `wvr edit`; `n` runs `wvr new --from <pane>` on the
 pane's terminal and reopens the dashboard when it is cancelled (130) or
 fails. Home keeps running: `e` and enter act in the background
 (`execute-silent`), as does enter on a lost thread (`wvr resume`, its
-failure said on the status line), and `n` and `x` open the dialogs
+failure said in a message), and `n` and `x` open the dialogs
 everything else opens (`wvr _popup new --from <pane>`, `_popup close
 <pane>`, `_popup forget <thread>`: the form 96 x 20, a card 80 x 12, over
 the board), whose status push reloads it.
@@ -796,13 +737,13 @@ Changing view keeps you oriented (where you are, how you got there, how
 to get back) and changes one thing at a time:
 
 - **One dialog, one place:** the form and the cards are popups over where
-  you are, the same size whichever key, click or menu asks (`popup.go`);
+  you are, the same size whichever key or click asks (`popup.go`);
   never the board replaced by a full-screen one, nor fzf's `execute`,
   which shows the pane's own screen between.
-- **Back where you were:** going home from a thread (THREADS, a menu) puts
+- **Back where you were:** going home from a thread puts
   the boards' cursor on its row (`_pos`, posted to each board), and alt+y's
   popover over a thread opens with its cursor there;
-  closing the thread you are in lands home, not on whichever window tmux
+  closing the thread you are in lands home, not on whichever window Rex
   showed before.
 - **No shifts:** search takes the header's line on the board and in the
   views alike, so the list does not move; lists reload with
@@ -839,30 +780,8 @@ Whatever shows a key is its button, and every mouse action has its key.
   drawn by `hintLine`. fzf's `click-footer` runs `wvr _click board`, `_click
   form <row>`, `_click pick` or `_items NAME click`, which finds the hint
   at `$FZF_CLICK_FOOTER_COLUMN` in the same list (`hintAt`) and prints its
-  action (`hintAct`): `trigger(<its fzf key>)`, `^q` as `tmux send-keys -K
-  C-q` (tmux's binding, which asks mid-turn), nothing for `1-9` and `↑↓`.
-- **Status line:** `MouseUp1Status` (on the release: a second click soon
-  after the first is tmux's double click, never its `MouseDown`) runs `wvr
-  _click status <range>`: `home` goes home (`toHome`, not alt+y's cycle),
-  `next` is `wvr next`, a view's name opens it.
-- **Right click:** `MouseDown3Pane`, on a program that takes the mouse,
-  sets the pane option `@weaver-mouse` to `<client> <x> <y>` (the click,
-  in the client's cells from 0) and forwards the click; the board's and
-  the views' fzf bind `right-click` (the cursor on the clicked row first)
-  to `wvr _menu board <kind>` and `wvr _items NAME menu <kind>`, which show
-  that row's menu there. On a program that does not, `wvr _menu pane
-  <client> <x> <y> <pane>`; on the status line, `wvr _menu status <client>
-  <x>`, over it. The menus are `display-menu -MO` (they take the mouse,
-  and the right click's release off them leaves them open) under the
-  click, or over it with no room below. A row's items send the row's keys
-  to its list (searching, only those that do not type); the others run
-  weaver's commands (`nvim`, `close thread` in an 80 x 12 popup, the
-  views, `next`, alt+N and ctrl+q as `send-keys -K`). tmux's own menus,
-  whose Kill and Respawn would end an agent behind weaver's back, stay on
-  Alt and a right click.
-- **Scrolling back:** `pane-scrollbars modal` (tmux 3.6 and on): a
-  scrollbar while a pane is in copy mode.
-
+  action (`hintAct`): `trigger(<its fzf key>)`, `^q` as `wvr _popup quit`
+  (ctrl+q's card), nothing for `1-9` and `↑↓`.
 ### Resume card
 
 `wvr _preview PANE LABEL`: the label in bold, then the state and its age,
@@ -870,280 +789,222 @@ then aligned fields (asked, waits, background, said, tasks, subagents, files,
 git), each wrapped under itself, at most a few lines. `git` is the worktree's
 `git status` in one line: branch, ahead/behind, changed and new files. A
 thread whose agent has not reported shows its record (task, worktree).
-`s`/`tab` swap in the agent's screen (`tmux capture-pane`) under
+`s`/`tab` swap in the agent's screen (`Mux.Screen`) under
 `screen · name · repo/branch · turn`, as many lines as fit; `?` the keys.
 
 ## The weaver session
 
-`wvr` outside tmux (`Start`) runs `tmux -L ${WEAVER_TMUX_SOCKET:-weaver} -f
-config/tmux.conf`, without an outer tmux's or zellij's variables:
-`new-session -s weaver -n home 'weaver home'`, or `source-file` and
-`attach-session` when it runs. A session made that way has
-`$STATE_DIR/<skey>.layout` saying `weaver`; thread labels and numbered
-placement act only there. The server starts from `/` (the home window keeps
-your directory, `-c`), so a worktree removed under it can never be its
-directory. `$WEAVER_TMUX_SOCKET` is a name (`-L`) or a socket's path (`-S`,
-which the tests use). Inside tmux, weaver talks to the server `$TMUX` names,
-else weaver's.
+weaver runs on Rex alone. `wvr` outside weaver's session (`Start`) makes
+its Rex session, `$WEAVER_SESSION` else `weaver`, with home in its first
+window (see Start, under [Rex](#rex)), or shows the one running. A session
+made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; thread labels
+and numbered placement act only there.
 
-- **Identity:** `MyPane` is the pane weaver runs in (`$TMUX_PANE` without its
-  `%`; empty in a tmux popup or `run-shell`, which are not panes). `Session`
-  is `$WEAVER_TMUX_SESSION`, which weaver's sessions set for their panes
-  (`new-session -e`, `set-environment`, and `-e` on every window and split it
-  makes), else `tmux display-message -p '#S'`; the session's key (`SKey`) is
-  `tmux-<session>`.
-- **Panes:** `Panes` is one `list-panes -s` with its fields split on US: a
-  window `@N` as `N` (its index too), a pane `%N` as `N`.
+- **Identity:** weaver acts on the Rex session it runs in (`rex.Chosen`)
+  when weaver made it (`$STATE_DIR/rex/sessions/<id>`), or in any with
+  `$WEAVER_MUX=rex`; in another Rex session's terminal, or outside Rex, it
+  is in none, and commands that act on a session act on weaver's.
+  `Session` is the name weaver gave it (one it did not make is named by
+  its id), `SKey` is `rex-<session>` (a `/` as `_`), and `MyPane` the
+  number of the block weaver runs in (`$REX_BLOCK`; empty in a key's
+  command, which runs in no block).
 - **Numbers:** a thread's number is its place: `num` in its thread record,
   the lowest free among the session's thread records (those being opened
   included, for at most 30 s), under `$STATE_DIR/<skey>.num.lock`. Its window
-  moves to the index of its number (home is 0), when that is free. Wherever a
+  moves to the place of its number (home is 0), when that is free. Wherever a
   row is numbered (the home board, a dashboard) the number is the thread's
   `num` when any agent has one, else the row's place, and the digits go by it.
-- **Home:** `wvr home`, in window 0, is the dashboard at full size that
-  never ends: enter, digits and `e` go to a thread and leave it running, `n`
-  runs `wvr new` inside it (also on an empty board), `q` and `esc` go back
-  to the window you came from, as alt+y does. It outlives installs of weaver
-  (`installs.go`), so it writes `<skey>.fzf.<pid>.born` as it starts: its
-  time is when, and it holds the real path of the binary it runs. It starts
-  again in the weaver `wvr` resolves to on `$PATH` (else its own), as tmux's
-  keys and the hooks run it, once that is another file than the one in
+- **Home:** `wvr home`, in the first window, is the dashboard at full size
+  that never ends: enter, digits and `e` go to a thread and leave it running,
+  `n` runs `wvr new` inside it (also on an empty board), `q` and `esc` go
+  back to the window you came from, as alt+y does. It outlives installs of
+  weaver (`installs.go`), so it writes `<skey>.fzf.<pid>.born` as it starts:
+  its time is when, and it holds the real path of the binary it runs. It
+  starts again in the weaver `wvr` resolves to on `$PATH` (else its own), as
+  Rex's keys and the hooks run it, once that is another file than the one in
   `.born` (an upgrade; Homebrew's and `install.sh`'s `~/.local/bin/wvr`
   swapped, either way) or one changed since: `_chrome`, on the first reload
   after, aborts the board, which then execs that weaver's board (`LS_HOME=1
   wvr ls`) in the same pane and process. The board's own process asks too,
   every 5 s, and aborts its fzf through its socket: its keys cannot once the
   binary they run by has gone. Its old keys never meet rows they do not
-  know. The PR and
-  issue Inbox, when it comes, is a second window beside home, out of the
-  thread numbering.
+  know.
 - **alt+y:** `wvr go home` (run in the pane's directory). From a thread, a
-  popover over it (`peek`): `display-popup -B -E` at 90% of the client,
+  popover over it (`peek`): a floating layer over most of the window,
   running `wvr _peek FILE AGENT`, whose pages are the board (`ls` with its
   socket named `.fzf.p<pid>`, so hooks reload it, and its cursor on AGENT's
   row) and each view that is set up (`itemsView`), `tab` and `shift-tab`
-  going round them. A popup cannot open over a popup, so a key there that
-  would open a dialog or go elsewhere ends the popover with its choice
-  (`peekChoice`, `peekItemChoice`) written to FILE, one wvr command a line,
-  its words tab-separated; `go home`, which waits for the popover to close,
-  then runs them: a jump (`_goto`), `edit`, `resume`, `_popup new|close|
+  going round them. One popup at a time, so a key there that would open a
+  dialog or go elsewhere ends the popover with its choice (`peekChoice`,
+  `peekItemChoice`) written to FILE, one wvr command a line, its words
+  tab-separated; `go home`, which waits for the popover to close, then runs
+  them: a jump (`_goto`), `edit`, `resume`, `_popup new|close|
   forget|adopt`, `_items NAME from REF [--review]`, or `next` (alt+1).
-  `esc`, `q` and alt+y close it with nothing to run; right clicks do
-  nothing in it. Without a client to show it on, alt+y goes home as from
-  anywhere else. From home, on to each view in turn, and from the last back
-  to the thread's window home was left from (`$STATE_DIR/<skey>.last`, or
-  home when it has gone); from anywhere else home, made again if it was
-  closed.
+  `esc`, `q` and alt+y close it with nothing to run. Without an app attached
+  to show it in, alt+y goes home as from anywhere else. From home, on to
+  each view in turn, and from the last back to the thread's window home was
+  left from (`$STATE_DIR/<skey>.last`, or home when it has gone); from
+  anywhere else home, made again if it was closed.
 - **Views:** see [Views](#views).
-- **Threads:** `new-window -d -n LABEL -c DIR 'weaver _agent TOK KIND'`, then
-  `split-window -d -h -b -l NVIM_COLS 'weaver nvim --fresh AGENT'` (argv, no
-  shell), the nvim pane titled `nvim: <dir>`, then the agent focused (its
-  window selected): whole before it is shown, as Rex needs. `alt+v`'s nvim is a
-  `split-window -h -b -l 80%` on the agent's left.
-- **Text:** tmux reads a window's or pane's name, a start directory and a
-  message as a format (`#H`, `#{...}`, `#[...]`). What weaver did not write
-  itself (an item's title, an agent's, a branch, a path, an error) goes
-  through `tmux.Text` (each `#` doubled) and `Env.Say`, so it shows as
-  written and never draws a style or a button on the status line.
-- **Focus:** `select-window` and `select-pane` work from anywhere, and the
-  focused pane (in a popup or `run-shell`) is the session's active pane.
-  weaver's keys pass `#{pane_id}` to `run-shell` as well.
-- **Status line:** tmux's own, one line: on the left the strip (below), then
-  on a thread's window, after a faint rule, the window's name, which in the
-  weaver session `PushStatus` keeps as each thread's label
-  (`<num> <title, else task, at most 30> · <repo>/<branch>`, grey;
-  renamed only when it is not its label, since window ids start again with
-  each server); on the right the session's `@weaver-counts` (`CountsFmt`),
-  set when the counts change or as the session starts, so nothing polls
-  (`status-interval` 0), then `[CPY]` in copy mode, `[PFX]` while the prefix
-  is down, else `[NRM]`. `wvr status --tmux SESSION` prints the counts.
-- **Seen as you look:** when an agent finishes, the hook's background run
-  flags its window (`@weaver-unseen`). tmux's `pane-focus-in` hook, on a
-  flagged window, runs `wvr _seen <window>` 1.5 s later, which marks its
-  done agents seen only if the window is still the session's current one:
-  passing through with alt+j/k leaves them new. (A thread that finishes while
-  you are on it, or on its nvim, is seen at once: the counts see the clients' panes.)
-  Rex has no such hook: home's board follows the session's events
-  (`rex events --session`, `rex.Session.WatchActive`) and, 1.5 s after the
-  last change of active window (weaver's moves, the app's own tabs), marks
-  the focused pane's agent seen (`seeAsYouLook`), also when the board starts
-  again in a newer weaver.
-- **alt+1** says where it landed in tmux's message line: `[2/3] 02 name ·
+- **Threads:** a window labelled LABEL in DIR running `wvr _agent TOK
+  KIND`, then a split on its left running `wvr nvim --fresh AGENT` (argv,
+  no shell), the nvim pane titled `nvim: <dir>`, then the agent focused:
+  whole before it is shown, as Rex needs. `alt+v`'s nvim is a split on the
+  agent's left, 80% of the window.
+- **Seen as you look:** Rex has no focus hook: home's board follows the
+  session's events (`rex events --session`, `rex.Session.WatchActive`) and,
+  1.5 s after the last change of active window (weaver's moves, the app's
+  own tabs), marks the focused pane's agent seen (`seeAsYouLook`), also when
+  the board starts again in a newer weaver; passing through with alt+j/k
+  leaves them new. Rex does not say which session an app shows, so weaver's
+  own moves to an agent (`_goto`, alt+1 and the like) mark it seen too.
+- **alt+1** says where it landed in a message (`Say`): `[2/3] 02 name ·
   needs you · what it waits on`.
 - **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
   its repository, lines, the version a review shows them in, the lines' text,
   your note) and `:AgentSend` pipes them, as one message, to `$WEAVER_BIN send
   $WEAVER_PANE`. `wvr send` checks the agent's state as the board has it:
   only idle, done or interrupted take it (a dialog could take pasted text as
-  an answer), unless `--force`. Then `load-buffer`, `paste-buffer -p -d`
-  (bracketed, so its newlines do not submit) and `Enter`.
+  an answer), unless `--force`. Then one paste (`block.event`, so its
+  newlines do not submit) and Enter.
 - **Resume:** a lost thread whose directory has gone resumes in its
   repository's main checkout (`.thread.repo`), from which Claude Code finds
   the session in any of its worktrees (and since 2.1.223, in any project).
-- **Resizing:** tmux gives a narrower window's columns to the rightmost pane,
-  the agent, so a `window-resized` hook runs `wvr _fit <window>`, which
-  sets each thread agent there back to its width (one `resize-pane -x`), only
-  while nvim and the agent are the window's only panes. Below 104 columns
-  nvim keeps 60 and the agent gets the rest. Rex's splits are ratios, so
-  the app's window resizing keeps them; but the app evens out a window it
-  shows when its panes change (a split made, a block swapped in), so after
-  such a change weaver puts the thread's widths back twice, late
-  (`settleWidths`: `wvr _width`, 1 and 2.5 s on), unless the split has been
-  moved since by you (`rex.Session.Moved`: neither even nor at the ratio
-  weaver last gave it, kept in the registry's `split/`). A window made
-  behind you is not drawn yet (Rex's 80 by 24 terminals): its widths come
-  from the width the app draws the session's windows at (`drawnCols`).
-- **Look:** popups, menus and copy mode in ink and greys, and one faint
-  divider between panes (`pane-border-indicators off`); tmux 3.8's theme
-  colours (`dark-theme-*`, server options) too, set inside `%if
-  "#{dark-theme-black}"`, which an older tmux, without them, reads as false.
-  `extended-keys-format csi-u` (3.5+, guarded the same way) gives apps keys
-  like Shift+Enter in the form they read.
-- **Keys:** `config/tmux.conf` binds them without a prefix (`bind -n`). Those
-  that run weaver use `run-shell -b` with their output discarded (tmux shows a
-  run-shell's output over the pane), passing `#{pane_id}`; alt+N is a
-  `display-popup -B -E` 96 x 18, tall enough for the form's pickers, since a
-  popup cannot be resized. Without tmux's border there, the form draws its
-  own (fzf's), and what follows it in the popup, the thread being made, is
-  drawn in a frame like it (`framed`): stderr goes through a pipe for the
-  while, so Worktrunk's and git's lines land inside too, cut to its width,
-  and a failure's buttons sit on a row of it (`frame.choose`). Pane splits arrive as `ESC [ 100 ; 9 ~` and
-  `ESC [ 100 ; 10 ~`, sent by whatever keys the terminal binds to them
-  (Ghostty's `csi:100;9~`), caught as `user-keys`.
-- **Config:** `config/tmux.conf`, then `~/.config/weaver/tmux.conf`; read with
-  `-f` as the server starts and again (`source-file`) each time `wvr`
-  starts or attaches a session, so an install reaches a running server. Every
-  setting may be read twice: array options take explicit indices
-  (`terminal-features[90]`).
+- **Resizing:** Rex's splits are ratios, so the app's window resizing keeps
+  them, and below 104 columns nvim keeps 60 and the agent gets the rest. But
+  the app evens out a window it shows when its panes change (a split made,
+  a block swapped in), so after such a change weaver puts the thread's
+  widths back twice, late (`settleWidths`: `wvr _width`, 1 and 2.5 s on),
+  unless the split has been moved since by you (`rex.Session.Moved`:
+  neither even nor at the ratio weaver last gave it, kept in the registry's
+  `split/`). A window made behind you is not drawn yet (Rex's 80 by 24
+  terminals): its widths come from the width the app draws the session's
+  windows at (`drawnCols`).
+- **Keys:** `config/rex.lua` (see Start, under [Rex](#rex)). alt+N opens
+  the form in a floating layer, which draws its own border (fzf's), and
+  what follows it there, the thread being made, is drawn in a frame like it
+  (`framed`): stderr goes through a pipe for the while, so Worktrunk's and
+  git's lines land inside too, cut to its width, and a failure's buttons sit
+  on a row of it (`frame.choose`).
 
-## Multiplexers
+## Rex
 
 Weaver acts on its session through `mux.Mux` (`internal/mux`), which
-`Env.Mux` returns: `tmux.Session` (`internal/tmux`), or with
-`$WEAVER_MUX=rex`, or in a Rex session weaver made, `rex.Session`
-(`internal/rex`). Inside a tmux pane (`$TMUX`), tmux always. A method that
-steers what you see (focus, names, widths, marks) is best-effort and says
-nothing of failing. What only tmux runs (its menus, its hooks:
-`_seen`, `_fit`, `_menu`, `_click`) and the sweeps of tmux processes
-(`gc`, leftovers) use tmux directly (`Env.Tmux`, `Env.TmuxSession`).
+`Env.Mux` returns: `rex.Session` (`internal/rex`). A method that steers what
+you see (focus, names, widths) is best-effort and says nothing of failing.
 
 - **Ids:** `mux.PaneID` and `mux.WindowID` are what weaver's files keep,
-  numbers: tmux's `%3` and `@12` are `3` and `12` (`tmux.Target`,
-  `tmux.WindowTarget` give them back). Rex's blocks and windows are UUIDs,
-  so `rex` numbers them: `$STATE_DIR/rex/n/<num>` is the block or window a
-  number names, `u/<id>` (`:` as `_`) the number of an id, given under
-  `rex/lock`, never twice (`rex/start` is held while `wvr` asks whether
-  weaver's session runs and makes it, so two at once make one); `Respawn` points the pane's number at the block
-  that takes its place, holding `rex/lock` from before that block is made
-  until its number names it, so the program it starts, asking its number
-  however soon, gets the pane's. The old block, until it has closed, is
-  retired (`u/<id>` holds `-`): no number, neither the pane's nor one of
-  its own, so its agent's last hooks, which would reset the new agent's
-  state under the pane's number, reach no pane (on tmux, `respawn-pane -k`
-  ends the old agent before it starts the new). One that fails once the
-  block is made closes it and leaves the old pane as it was, its number
-  and all. Beside
-  them: `cmd/<num>` the argv weaver started a
-  block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
-  window was given (home 0, a thread its number, a view 900 and on: Rex
-  orders windows, it does not index them, so `Place` moves a window before
-  the first placed further on), `view/<num>` its view, and
-  `sessions/<id>` the name weaver gave a session it made, when (epoch
-  seconds to the millisecond) and the pid of the server it made it on.
-  Rex saves its sessions as its server stops and brings them back when
-  one starts again at that endpoint, ids and all, with a fresh shell in
-  each terminal; one whose server is not the one weaver made it on is such
-  a husk (`Restored`): `rex.Ensure` makes it again and gives it back for
-  `wvr` to end once the new one shows, and `wvr` in one starts again.
-- **Keys:** files are keyed `tmux-<name>` or `rex-<name>`; a Rex session
-  weaver did not make is named by its id.
-- **Where:** on Rex, `agent.Where` is the Rex server's pid and the
-  session's id. `serverPID` reads the pid from Rex's runtime file for
-  `$REX_SERVER`, `servers/<SHA-256 of the endpoint, hex>/runtime.json` in
-  `$REX_RUNTIME_DIR`, else `~/Library/Application Support/rex` (its endpoint
-  and pid checked), so hooks make no call; without one it asks the server
-  (`server.status`). `rex.Answer` asks the server's pid, then its sessions,
-  each once and only when needed; its `Lost` says whether a life has gone and whether it
-  could tell: gone when its server's process has ended (no call), when
-  another server runs, or when the session is no longer on it; not known
-  when a call that takes fails, when weaver takes nothing for lost (see
-  [Lost threads](#lost-threads)).
-- **Codex:** not followed on Rex. Its hooks' events are placed among tmux's
-  panes whatever started its daemon, and act on tmux; a Codex running in a
-  Rex block keeps its directory from naming a tmux pane (see [Events from
-  other agents](#events-from-other-agents)).
-- **Rex:** each look at the session is one `rex do` (its view, and each
+  numbers (`mux.ParsePane`, `mux.ParseWindow`). Rex's blocks and windows
+  are UUIDs, so `rex` numbers them: `$STATE_DIR/rex/n/<num>` is the block or
+  window a number names, `u/<id>` (`:` as `_`) the number of an id, given
+  under `rex/lock`, never twice (`rex/start` is held while `wvr` asks
+  whether weaver's session runs and makes it, so two at once make one);
+  `Respawn` points the pane's number at the block that takes its place,
+  holding `rex/lock` from before that block is made until its number names
+  it, so the program it starts, asking its number however soon, gets the
+  pane's. The old block, until it has closed, is retired (`u/<id>` holds
+  `-`): no number, neither the pane's nor one of its own, so its agent's
+  last hooks, which would reset the new agent's state under the pane's
+  number, reach no pane. One that fails once the block is made closes it
+  and leaves the old pane as it was, its number and all. Beside them:
+  `cmd/<num>` the argv weaver started a block with (Rex does not say;
+  `Pane.Cmd`), `want/<num>` the place a window was given (home 0, a thread
+  its number, a view 900 and on: Rex orders windows, it does not index
+  them, so `Place` moves a window before the first placed further on),
+  `view/<num>` its view, and `sessions/<id>` the name weaver gave a session
+  it made, when (epoch seconds to the millisecond) and the pid of the server
+  it made it on. Rex saves its sessions as its server stops and brings them
+  back when one starts again at that endpoint, ids and all, with a fresh
+  shell in each terminal; one whose server is not the one weaver made it on
+  is such a husk (`Restored`): `rex.Ensure` makes it again and gives it back
+  for `wvr` to end once the new one shows, and `wvr` in one starts again.
+- **Keys:** files are keyed `rex-<name>`; a Rex session weaver did not make
+  is named by its id. Files of another key (tmux's and zellij's, from before
+  weaver ran on Rex alone) name a session that no longer runs, and go as
+  their agents do.
+- **Where:** `agent.Where` is the Rex server's pid and the session's id
+  (stored as `server` and `tmux_session`, its name from before). `serverPID`
+  reads the pid from Rex's runtime file for `$REX_SERVER`, `servers/<SHA-256
+  of the endpoint, hex>/runtime.json` in `$REX_RUNTIME_DIR`, else
+  `~/Library/Application Support/rex` (its endpoint and pid checked), so
+  hooks make no call; without one it asks the server (`server.status`).
+  `rex.Answer` asks the server's pid, then its sessions, each once and only
+  when needed; its `Lost` says whether a life has gone and whether it could
+  tell: gone when its server's process has ended (no call), when another
+  server runs, or when the session is no longer on it; not known when a call
+  that takes fails, when weaver takes nothing for lost (see [Lost
+  threads](#lost-threads)).
+- **Codex:** not followed. Codex runs every session's hooks in its app
+  server, with the environment of whichever session started it, and weaver
+  cannot place them in a Rex block: `wvr adapt codex` drops them, and
+  weaver opens, resumes, adopts and restarts no Codex thread
+  (`errCodexOnRex`).
+- **Calls:** each look at the session is one `rex do` (its view, and each
   terminal's size, with `Panes` its directory and processes too); every
   other method one `rex api call`. A pane's environment goes through
   `env(1)`, Rex setting none: `WEAVER_MUX=rex`, and `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay
-  when its program exits: Rex is told as it is made; on tmux the pane's
-  command is a `sh` that sets the pane's `remain-on-exit` from inside it,
-  then execs the program (set from outside, once the pane is made, it
-  would come too late for a program that ends at once). A popup is a floating layer, its command `rex wait` on
-  it, made only when an app is attached to the session: otherwise `Popup`
-  says false, makes nothing, and gives a command whose `Start` fails with
-  why. `BreakOut` opens a window with a stand-in, moves the pane beside it
-  and closes the stand-in. The app keeps its own tab for each session: the
-  server's active window (`session.focus_window`) is not what it shows, and
-  it sets it back to its tab. So `Show`, `Focus`, and `OpenWindow` and
-  `BreakOut` in the foreground ask the app (`rex do session.select` with
-  the window: Remote Control on; with more than one app connected, which
-  `rex do` cannot choose among, each app attached to the session by name),
-  else make it the server's active window.
-  weaver.lua's keys run wvr with `REX_BIN_DIR` where the wvr that wrote it
-  found rex, and the settings a key's wvr reads that it had set
-  (`rexSettings`: `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
-  `WEAVER_AGENT_WIDTH`, `WEAVER_AGENT_MIN_COLS`, `WEAVER_VIEWS`): Rex's server
-  runs them with an app's environment, where `rex.Bin` would find no rex but
-  the app's server's own, and weaver its state in the wrong place. They run
-  in the pane's directory (its program's when it reports none), from home
-  when that has gone; what wvr says on stderr goes to Rex's log, and a key
-  whose wvr cannot run at all is the terminal's, not swallowed. In a
-  floating layer (weaver's popups: the form, a card, alt+y's board) the keys
-  are the popup's program's, as tmux's popups take every key. Rex starts a
-  key's wvr at once, not after the last one's as tmux's command queue does:
-  `wvr go window` (alt+j/k) takes the session's UI lock (`uiLock`, which
-  `wvr edit` holds and `wvr next` tries), so each press moves on from where
-  the last left you. A background `BreakOut` puts the server's active window
-  back after `session.move_block`, which makes the moved block's new window
-  active when it had its window's focus (the app shows what it showed). A
-  window's width is its zoomed block's while one is zoomed
-  (`zoomed_block_id`), whatever that block's share of the layout. `SplitLeft` gives pid 0, not known yet (Rex runs
-  a command through the login shell, whose pid it would be): `wvr nvim`
-  records its own pid as it starts. Rex has no message line: `Say` and
-  `SayToSession` show their text as one line in a small floating layer at
-  the foot of the active window that takes no focus (`focus: false`) and
-  closes on its own after its time (what the session shows is its active
-  window, so both are the same). It is sized by the text's columns (wide
-  characters two), and text wider than the window is cut keeping its start,
-  ending in `…`. Its block is labelled with the text: Rex heads a floating
-  layer with its label, over its one row. A new message replaces the one
-  before: each `Say` closes the block kept in `$STATE_DIR/rex/said/<session>`
-  and keeps its own there, under a lock of its own (`$STATE_DIR/rex/say`),
-  so two at once never both show. `Looking` claims no pane and says it cannot tell (nothing
-  in Rex's API says which session an app shows, and the app stays attached
-  to every session it has shown), so on Rex an agent is marked seen by
-  weaver's own moves to it (`_goto`, alt+1 and the like) and by home's
-  board watching the active window (see Seen as you look). Rex has no
-  status line or window marks: `Publish`, `Strip` and `MarkUnseen` do
-  nothing there.
-- **Start:** `wvr` with `$WEAVER_MUX=rex` makes the Rex session (home its
-  first window, `want` 0) unless one weaver made of that name runs, asks
-  the app to show it (`session.select`, with Remote Control on), and
-  writes `config/rex.lua`, run by its own path, to `weaver.lua` beside the
-  init.lua Rex reads (`$REX_CONFIG`, else `~/.config/rex/init.lua`) for it to
-  `require`; when weaver.lua changed, or the server's keymap
-  (`client.keymap`) has none of its bindings, it has Rex read its
-  configuration again (`rex config reload`), the server having read init.lua
-  before weaver.lua was there.
+  when its program exits: Rex is told as it is made. A popup is a floating
+  layer, its command `rex wait` on it, made only when an app is attached to
+  the session: otherwise `Popup` says false, makes nothing, and gives a
+  command whose `Start` fails with why. `BreakOut` opens a window with a
+  stand-in, moves the pane beside it and closes the stand-in. The app keeps
+  its own tab for each session: the server's active window
+  (`session.focus_window`) is not what it shows, and it sets it back to its
+  tab. So `Show`, `Focus`, and `OpenWindow` and `BreakOut` in the foreground
+  ask the app (`rex do session.select` with the window: Remote Control on;
+  with more than one app connected, which `rex do` cannot choose among, each
+  app attached to the session by name), else make it the server's active
+  window. A background `BreakOut` puts the server's active window back after
+  `session.move_block`, which makes the moved block's new window active when
+  it had its window's focus (the app shows what it showed). A window's width
+  is its zoomed block's while one is zoomed (`zoomed_block_id`), whatever
+  that block's share of the layout. `SplitLeft` gives pid 0, not known yet
+  (Rex runs a command through the login shell, whose pid it would be): `wvr
+  nvim` records its own pid as it starts.
+- **Messages:** Rex has no message line: `Say` and `SayToSession` show
+  their text as one line in a small floating layer at the foot of the
+  active window that takes no focus (`focus: false`) and closes on its own
+  after its time (what the session shows is its active window, so both are
+  the same). It is sized by the text's columns (wide characters two), and
+  text wider than the window is cut keeping its start, ending in `…`. Its
+  block is labelled with the text: Rex heads a floating layer with its
+  label, over its one row. A new message replaces the one before: each
+  `Say` closes the block kept in `$STATE_DIR/rex/said/<session>` and keeps
+  its own there, under a lock of its own (`$STATE_DIR/rex/say`), so two at
+  once never both show. Rex has no status line or window marks, and does
+  not say which session an app shows.
+- **Start:** `wvr` makes the Rex session (home its first window, `want` 0)
+  unless one weaver made of that name runs, asks the app to show it
+  (`session.select`, with Remote Control on), and writes `config/rex.lua`,
+  run by its own path, to `weaver.lua` beside the init.lua Rex reads
+  (`$REX_CONFIG`, else `~/.config/rex/init.lua`) for it to `require`; when
+  weaver.lua changed, or the server's keymap (`client.keymap`) has none of
+  its bindings, it has Rex read its configuration again (`rex config
+  reload`), the server having read init.lua before weaver.lua was there.
+  weaver.lua's keys are weaver's only in the sessions it made, and run wvr
+  with `REX_BIN_DIR` where the wvr that wrote it found rex, and the settings
+  a key's wvr reads that it had set (`rexSettings`: `XDG_STATE_HOME`,
+  `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `WEAVER_AGENT_WIDTH`,
+  `WEAVER_AGENT_MIN_COLS`, `WEAVER_VIEWS`): Rex's server runs them with an
+  app's environment, where `rex.Bin` would find no rex but the app's
+  server's own, and weaver its state in the wrong place. They run in the
+  pane's directory (its program's when it reports none), from home when
+  that has gone; what wvr says on stderr goes to Rex's log, and a key whose
+  wvr cannot run at all is the terminal's, not swallowed. In a floating
+  layer (weaver's popups: the form, a card, alt+y's board) the keys are the
+  popup's program's. Rex starts a key's wvr at once, not after the last
+  one's: `wvr go window` (alt+j/k) takes the session's UI lock (`uiLock`,
+  which `wvr edit` holds and `wvr next` tries), so each press moves on from
+  where the last left you.
 
 ## Setting itself up
 
-`wvr` outside tmux (`Start`), when `$WEAVER_SELF_SETUP` is not `0` and it is
-the `wvr` on PATH (`os.SameFile` with `exec.LookPath`; a build run from a
-checkout never takes the hooks), runs `SelfSetup` before tmux: for Claude
+`wvr` outside weaver's session (`Start`), when `$WEAVER_SELF_SETUP` is not
+`0` and it is the `wvr` on PATH (`os.SameFile` with `exec.LookPath`; a build
+run from a checkout never takes the hooks), runs `SelfSetup` before it
+starts or shows the session: for Claude
 Code (`$CLAUDE_CONFIG_DIR`, else `~/.claude`) and Codex (`$CODEX_HOME`, else
 `~/.codex`), when that directory exists, the hooks are merged as `wvr setup`
 merges them (`mergeHooks`, a backup first when the file was there), and one
@@ -1332,7 +1193,7 @@ point), strong in bold, code in ink between faint backticks (in a
 terminal all is monospace, so the token marks it, as the theme shows a
 link's); links `[ SRC: text ]` (the token marks them; no underline) and
 hyperlinks (OSC 8, which
-fzf's preview and tmux pass on: Cmd and a click opens one in Ghostty), as
+fzf's preview passes on: Cmd and a click opens one), as
 is the card's title, to the item; images `[ IMG: alt ]`;
 code in crop corners with its language at the top right; a GitHub alert
 (`> [!WARNING]`) under an ink stripe, its kind a `[ LABEL ]` (red for one
@@ -1342,17 +1203,12 @@ by space; rules the card's width. Not glamour, whose highlighter
 registers every lexer as it loads, which costs every hook 6 ms.
 
 - **alt+N / alt+m** in a view: a thread from the item under the cursor, or a
-  read-only review of it. tmux passes the key to the view, whose fzf (also
+  read-only review of it. weaver's keys leave alt+N to a view, whose fzf (also
   enter) runs `wvr _items NAME from REF [--review]`, which runs `wvr _from
   github pr|issue <owner/name> <number>` or `wvr _from linear <ID>`. `_from`
   opens `wvr new --pr/--issue … [--review]` in a popup (96 x 20) from a
   detached process, so the view goes on; a Linear issue's thread starts in
   the repository used last (`$STATE_DIR/repos`).
-- **Strip:** the session option `@weaver-strip`, set as the views start, is
-  `THREADS` and each view's label, the current one in ink; the status line
-  shows it on every window. Each is a tmux user range
-  (`#[range=user|home]`, `|github`, `|linear`), as `@weaver-counts`' counts
-  are (`|next` for needs you and done, `|home` for working).
-- **alt+j / alt+k** step past the views (`next-window` again while
-  `@weaver-view` is set), so they cycle threads and home only.
+- **alt+j / alt+k** step past the views (`wvr go window`), so they cycle
+  threads and home only.
 

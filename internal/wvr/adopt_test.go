@@ -14,21 +14,17 @@ import (
 	"github.com/robbowland/weaver/internal/store"
 )
 
-// On Rex a Codex thread would never report (its hooks' events are placed
-// among tmux's panes only): starting one, bringing a lost one back and
-// adopting one are refused, saying so. Claude Code's are not, nor Codex's
-// on tmux.
+// A Codex thread would never report (weaver cannot place its hooks'
+// events in a Rex block): starting one, bringing a lost one back and
+// adopting one are refused, saying so. Claude Code's are not.
 func TestCodexRefusedOnRex(t *testing.T) {
 	dir := t.TempDir()
 	// Whatever runs past the refusal finds no Rex.
 	rextest.NoRex(t)
 	e := &Env{&session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock",
-		Session: "w", SKey: "rex-w", RexID: "session:w", TSock: []string{"-S", dir + "/no-tmux.sock"}}}
+		Session: "w", SKey: "rex-w", RexID: "session:w"}}
 	if err := e.followable(agent.Claude); err != nil {
 		t.Errorf("Claude Code on Rex: %v", err)
-	}
-	if err := (&Env{&session.Env{SKey: "tmux-w"}}).followable(agent.Codex); err != nil {
-		t.Errorf("Codex on tmux: %v", err)
 	}
 
 	if err := e.threadCreate("a task", form{Here: dir, Where: WhereHere, Agent: agent.Codex}, true); !errors.Is(err, errCodexOnRex) {
@@ -57,7 +53,7 @@ func TestCodexRefusedOnRex(t *testing.T) {
 }
 
 // A pane is a number of any length: one of four digits or more (Rex's
-// numbers only grow, and a long-lived tmux server's do) when weaver follows
+// numbers only grow) when weaver follows
 // an agent there; else, as the start of a session id could be, no pane.
 func TestPaneArg(t *testing.T) {
 	dir := t.TempDir()
@@ -75,7 +71,6 @@ func TestPaneArg(t *testing.T) {
 		{"1234", "1234", true},
 		{"20250", "20250", true},
 		{"31337", "31337", true},
-		{"%4567", "4567", true},
 		{"12", "12", true},
 		{"999", "999", true},
 		{"4567", "", false},     // no agent there: a session id's start

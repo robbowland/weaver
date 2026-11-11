@@ -329,7 +329,7 @@ func TestKeysPwd(t *testing.T) {
 
 // weaver's keys are weaver's only in the Rex sessions it made (its record
 // of them, the registry's sessions/): in any other, the key is the
-// terminal's, for a weaver on tmux there to read. config/rex.lua's weavers.
+// terminal's. config/rex.lua's weavers.
 func TestKeysWeavers(t *testing.T) {
 	server(t)
 	src, err := os.ReadFile("../../config/rex.lua")
@@ -409,8 +409,7 @@ func TestKeysRun(t *testing.T) {
 }
 
 // In one of weaver's popups (a floating layer: the form, a card, Alt y's
-// board) weaver's keys are the popup's program's, as tmux's popups take
-// every key.
+// board) weaver's keys are the popup's program's: it takes every key.
 func TestKeysInPopup(t *testing.T) {
 	server(t)
 	dir := t.TempDir()
@@ -560,9 +559,6 @@ func TestOnScreen(t *testing.T) {
 	t.Cleanup(func() { _ = s.Quit() })
 	if _, ok := s.Active(); !ok {
 		t.Fatal("no active pane")
-	}
-	if ps, err := s.Looking(); len(ps) > 0 || err == nil {
-		t.Errorf("looking: %q %v", ps, err)
 	}
 
 	// No app is attached: a popup cannot show, so none is made, and its

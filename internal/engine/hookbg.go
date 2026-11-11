@@ -24,7 +24,7 @@ import (
 
 // hookBg is `wvr hook --bg`: everything a hook does besides writing the
 // state, after it, so the agent never waits on nvim,
-// tmux, git or Worktrunk.
+// Rex, git or Worktrunk.
 func hookBg(e *session.Env) {
 	h := &hk{}
 	if json.Unmarshal([]byte(os.Getenv("WEAVER_BG")), h) != nil {
@@ -47,15 +47,6 @@ func hookBg(e *session.Env) {
 		if h.State != h.Old.State || h.Turn != h.sess().Turn || h.Prompt != h.Old.Prompt || h.Title != h.sess().Title || h.Doing != h.sess().Doing ||
 			h.Waiting != h.Old.Waiting {
 			nvimStateEvent(e, h)
-		}
-	}
-	// The window of an agent that has just finished is marked, for it to
-	// be seen when you look (tmux: config/tmux.conf's pane-focus-in hook).
-	if h.State != h.Old.State {
-		if h.State == agent.StateDone {
-			e.Mux().MarkUnseen(h.Pane, true)
-		} else if h.Old.State == agent.StateDone {
-			e.Mux().MarkUnseen(h.Pane, false)
 		}
 	}
 	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
@@ -88,9 +79,8 @@ func hookBg(e *session.Env) {
 }
 
 // actOn has e act on the session the hook acted on, not the one its
-// environment names (a Codex daemon's hook placed in a tmux pane has a Rex
-// block's, or another session's). A run started by an older weaver says
-// none: its environment's, as then.
+// environment names (a background run's may be another session's). A run
+// started by an older weaver says none: its environment's, as then.
 func (h *hk) actOn(e *session.Env) {
 	if h.Session != "" {
 		e.Session, e.SKey, e.RexID = h.Session, h.SKey, h.RexID

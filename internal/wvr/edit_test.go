@@ -19,7 +19,7 @@ func TestAgentWhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &Env{&session.Env{StateDir: td + "/state", SKey: "tmux-s"}}
+	e := &Env{&session.Env{StateDir: td + "/state", SKey: "rex-s"}}
 	wt := td + "/wt"
 	if err := os.MkdirAll(wt+"/src", 0o755); err != nil {
 		t.Fatal(err)

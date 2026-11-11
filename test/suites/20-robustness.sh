@@ -54,7 +54,7 @@ ok "12 concurrent edits: valid state, every file listed" \
 ok "...and no lock or temp file left behind" "$(ls "$SD" | grep -c -E '\.lock$|\.tmp$')" "0"
 
 # --- a session nested in the pane's agent (claude -p, an SDK script) inherits
-# ZELLIJ_PANE_ID, but must not take the pane over (defect 7)
+# its pane ($REX_BLOCK), but must not take the pane over (defect 7)
 live_pid
 AGENT=$LIVE_PID
 nested() { printf '%s' "$2" | CLAUDE_PID=$1 as_pane 1 wvr hook >/dev/null; }
@@ -93,16 +93,16 @@ kill "$LIVE_PID"
 
 # --- a stale nvim file (that nvim has exited) never renames a pane
 hook 2 UserPromptSubmit "$T/repo" "" "renaming"
-title=$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id==1) | .title')
+title=$(title 1)
 printf '1\n424242\n' >"$SD/${SK}_2.nvim"
 hook 2 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
 settle
 ok "a stale nvim file: the pane it names keeps its title" \
-	"$(Z list-panes -a -j | jq -r '.[] | select((.is_plugin|not) and .id==1) | .title')" "$title"
+	"$(title 1)" "$title"
 rm -f "$SD/${SK}_2.nvim"
 
-# --- state of a session that no longer exists (a zellij one from before
-# weaver ran on tmux only, or one whose name was reused) is cleaned up
+# --- state of a session that no longer exists (a tmux one from before
+# weaver ran on Rex only, or one whose name was reused) is cleaned up
 jq -c '.ts -= 7200' "$SD/${SK}_0.json" >"$SD/weaver-gone-session_0.json"
 cp "$SD/${SK}_0.json" "$SD/weaver-busy-session_0.json"
 wvr gc >/dev/null

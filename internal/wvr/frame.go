@@ -16,7 +16,7 @@ import (
 
 // framed runs fn with what it writes to stderr, and what the commands it
 // starts write there (Worktrunk's, git's), shown inside a frame drawn as
-// fzf draws the form's border: the form's popup has no border of tmux's,
+// fzf draws the form's border: the form's popup has no border of its own,
 // so what follows the form (the thread being made) showed bare, unlike the
 // form before it and the cards. fn gets the frame, to ask in it
 // (frame.choose); off a terminal it gets none, and stderr is as it was.

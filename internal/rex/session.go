@@ -22,10 +22,9 @@ import (
 
 // Session is the Rex session ID as weaver acts on it (mux.Mux). Weaver
 // calls it Name (its files' key is Key(Name)) and keeps its numbers for
-// Rex's blocks and windows in Dir. Rex has no status line or window marks:
-// Publish, Strip and MarkUnseen do nothing (Rex shows an agent's state
-// itself, from what Claude Code reports to it). Nor has it a message
-// line: Say shows its text in a floating layer of its own.
+// Rex's blocks and windows in Dir. Rex has no status line or window marks
+// (it shows an agent's state itself, from what Claude Code reports to it),
+// nor a message line: Say shows its text in a floating layer of its own.
 type Session struct {
 	ID   string
 	Name string
@@ -219,14 +218,6 @@ func (s Session) Active() (mux.PaneID, bool) {
 	}
 	return "", false
 }
-
-// errUnseen is why Looking knows no pane.
-var errUnseen = errors.New("rex: Rex does not say which session an app shows")
-
-// Looking is no pane, and errUnseen: Rex does not say which session an
-// app shows (it stays attached to every session it has shown), so no pane
-// is known to be on screen.
-func (s Session) Looking() ([]mux.PaneID, error) { return nil, errUnseen }
 
 // client is a client attached to a session, as session.list_clients
 // gives it.
@@ -725,7 +716,7 @@ func (s Session) Type(p mux.PaneID, text string) error {
 const sayScript = `printf '\033[2J\033[H\033[?25l\033[?7l %s' "$1"; exec /bin/sleep "$2"`
 
 // Say shows text for about ms milliseconds at the foot of the active
-// window, as tmux's message line does: a floating layer that takes no
+// window: a floating layer that takes no
 // focus (nor keys), whose program prints it and exits, which closes it.
 // The layer is labelled with the text: Rex heads a floating layer with its
 // label, over its one row. It replaces the message shown before, in any
@@ -831,10 +822,6 @@ var wide = [][2]rune{
 	{0x1F300, 0x1F64F}, {0x1F680, 0x1F6FF}, {0x1F7E0, 0x1F7EB}, {0x1F90C, 0x1F9FF}, {0x1FA70, 0x1FAFF},
 	{0x20000, 0x2FFFD}, {0x30000, 0x3FFFD},
 }
-
-func (s Session) MarkUnseen(mux.PaneID, bool) {}
-func (s Session) Publish(mux.Counts)          {}
-func (s Session) Strip([]mux.StripItem)       {}
 
 // Popup opens argv in a floating layer over the active window, sized by
 // size from the window's columns and lines; the command waits for it to

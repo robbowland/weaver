@@ -16,7 +16,7 @@ import (
 )
 
 // Runtime is the directory holding what the binary carries (nvim/ and
-// config/) as files, for what needs them on disk: Neovim and tmux. Unpacked
+// config/) as files, for what needs them on disk: Neovim and Rex. Unpacked
 // once per build, under a name made of its content, into
 // $XDG_DATA_HOME/weaver/runtime/.
 func Runtime() (string, error) {
@@ -43,7 +43,7 @@ func Runtime() (string, error) {
 	}
 	id := hex.EncodeToString(h.Sum(nil))[:16]
 	dir := data + "/weaver/runtime/" + id
-	if _, err := os.Stat(dir + "/config/tmux.conf"); err == nil {
+	if _, err := os.Stat(dir + "/config/rex.lua"); err == nil {
 		syncNvim(data+"/weaver", id)
 		return dir, nil
 	}
@@ -68,7 +68,7 @@ func Runtime() (string, error) {
 	if err := os.Rename(tmp, dir); err != nil {
 		// Another weaver unpacked it meanwhile.
 		os.RemoveAll(tmp)
-		if _, err2 := os.Stat(dir + "/config/tmux.conf"); err2 != nil {
+		if _, err2 := os.Stat(dir + "/config/rex.lua"); err2 != nil {
 			return "", err
 		}
 	}

@@ -1,81 +1,29 @@
 package session
 
 import (
-	"os/exec"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/process"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 )
 
 // An agent that last reported before the machine started lost its session,
 // even when a server started since has its old server's pid and a session
-// of its name.
-func TestServerLostAcrossABoot(t *testing.T) {
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("no tmux")
+// of its name; one of a key of another multiplexer's (tmux's, from before
+// weaver ran on Rex only) never is, Rex answering or not.
+func TestLostAcrossABoot(t *testing.T) {
+	rextest.NoRex(t)
+	e := &Env{StateDir: t.TempDir()}
+	w := agent.Where{Session: "session:s"}
+	if lost, known := e.newLives().lost("rex-s", process.BootTime()-60, w); !lost || !known {
+		t.Errorf("it reported before the machine started: lost %v (known %v), want lost", lost, known)
 	}
-	sock := t.TempDir() + "/tmux.sock"
-	tm := func(args ...string) string {
-		t.Helper()
-		out, err := exec.Command("tmux", append([]string{"-S", sock, "-f", "/dev/null"}, args...)...).Output()
-		if err != nil {
-			t.Fatalf("tmux %v: %v", args, err)
-		}
-		return strings.TrimSpace(string(out))
+	if lost, known := e.newLives().lost("rex-s", time.Now().Unix(), w); lost || known {
+		t.Errorf("Rex does not answer: lost %v (known %v), want not known", lost, known)
 	}
-	tm("new-session", "-d", "-s", "s")
-	t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() })
-	srv, _ := strconv.Atoi(tm("display-message", "-p", "-t", "=s:", "#{pid}"))
-	w := agent.Where{Server: srv, Session: tm("display-message", "-p", "-t", "=s:", "#{session_id}")}
-	e := &Env{TSock: []string{"-S", sock}}
-
-	if lost, _ := e.newLives().lost("tmux-s", time.Now().Unix(), w); lost {
-		t.Error("its server runs on: lost")
-	}
-	if lost, _ := e.newLives().lost("tmux-s", process.BootTime()-60, w); !lost {
-		t.Error("it reported before the machine started, on a server with the same pid: not lost")
-	}
-}
-
-// A session quit and made again on a server that stayed (another session
-// kept it running) is another life of it: what ran in the old one is lost,
-// what runs in the new one is not.
-func TestServerLostSessionMadeAgain(t *testing.T) {
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("no tmux")
-	}
-	sock := t.TempDir() + "/tmux.sock"
-	tm := func(args ...string) string {
-		t.Helper()
-		out, err := exec.Command("tmux", append([]string{"-S", sock, "-f", "/dev/null"}, args...)...).Output()
-		if err != nil {
-			t.Fatalf("tmux %v: %v", args, err)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	tm("new-session", "-d", "-s", "keep")
-	tm("new-session", "-d", "-s", "s")
-	t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() })
-	srv, _ := strconv.Atoi(tm("display-message", "-p", "-t", "=s:", "#{pid}"))
-	old := agent.Where{Server: srv, Session: tm("display-message", "-p", "-t", "=s:", "#{session_id}")}
-	then := time.Now().Unix() - 5
-	e := &Env{TSock: []string{"-S", sock}}
-	tm("kill-session", "-t", "=s")
-	time.Sleep(1100 * time.Millisecond)
-	tm("new-session", "-d", "-s", "s")
-	now := agent.Where{Server: srv, Session: tm("display-message", "-p", "-t", "=s:", "#{session_id}")}
-
-	if lost, _ := e.newLives().lost("tmux-s", then, old); !lost {
-		t.Error("its session was quit and made again: not lost")
-	}
-	if lost, _ := e.newLives().lost("tmux-s", then, agent.Where{Server: srv}); !lost {
-		t.Error("an older state (no session id), from before the session was made again: not lost")
-	}
-	if lost, _ := e.newLives().lost("tmux-s", time.Now().Unix(), now); lost {
-		t.Error("the session it runs in: lost")
+	if lost, _ := e.newLives().lost("tmux-s", process.BootTime()-60, w); lost {
+		t.Error("a tmux session's key: lost")
 	}
 }

@@ -1,13 +1,13 @@
 # weaver
 
-**Run several coding agents side by side in tmux, and always know which one
+**Run several coding agents side by side in Rex, and always know which one
 needs you.**
 
-weaver gives each task its own tmux window, called a *thread*: the agent
+weaver gives each task its own Rex window, called a *thread*: the agent
 (Claude Code or Codex) on the right and a Neovim that reviews its work on the
 left, in a git worktree of its own. One board shows every thread and what it
 is doing. One key jumps to the agent that has waited on you longest. And your
-threads come back after tmux crashes or the machine restarts.
+threads come back after Rex restarts or the machine does.
 
 ![A thread started from the form and named, a pull request reviewed from the
 GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver.gif)
@@ -54,15 +54,19 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 ## Requirements
 
 - macOS, with [Homebrew](https://brew.sh).
+- [Rex](https://www.superlogical.com/rex), the terminal weaver runs in, with
+  Remote Control on in its settings (so `wvr` can show you its session).
 - [Claude Code](https://github.com/anthropics/claude-code) or
   [Codex](https://github.com/openai/codex), installed and signed in.
-- A terminal that sends Option as Alt, since weaver's keys are Alt keys. In
-  Ghostty, set `macos-option-as-alt = true`; in iTerm2, set the Option key to
-  `Esc+`; in Rex, run Change Option Key Behavior from its command palette and
-  have Option send Alt (its default, Automatic, sends Alt only on a U.S.
-  keyboard layout, and types special characters on any other).
+- Option sending Alt to programs, since some of weaver's keys are its
+  lists' own (`alt+m` in a view): in Rex, run Change Option Key Behavior from
+  its command palette and have Option send Alt (its default, Automatic,
+  sends Alt only on a U.S. keyboard layout, and types special characters on
+  any other).
+- Codex threads are not followed yet: Codex runs its hooks in a daemon
+  shared by every session, which weaver cannot place in a Rex block.
 
-Homebrew installs everything else weaver uses: tmux, Neovim, fzf,
+Homebrew installs everything else weaver uses: Neovim, fzf,
 [Worktrunk](https://worktrunk.dev) for worktrees, and gh.
 
 ## Install
@@ -81,7 +85,7 @@ The command is `wvr`. `brew upgrade` keeps it current.
    wvr
    ```
 
-   This opens weaver's tmux session on *home*, the board of your threads.
+   This opens weaver's Rex session on *home*, the board of your threads.
    The first time, `wvr` adds its hooks to Claude Code (and to Codex, if you
    use it). Restart any Claude Code session that was already running so it
    picks them up.
@@ -105,8 +109,8 @@ The command is `wvr`. `brew upgrade` keeps it current.
    nothing in it would be lost, weaver offers to remove it. The branch always
    stays.
 
-Closing the terminal only detaches you: the session keeps running, and `wvr`
-reattaches. `ctrl+q` quits the session and every agent in it; your threads
+The session runs in Rex's server: closing the app leaves it running, and
+`wvr` shows it again. `ctrl+q` quits the session and every agent in it; your threads
 come back the next time you run `wvr`.
 
 ## How it works
@@ -115,7 +119,7 @@ come back the next time you run `wvr`.
 Neovim on the left, the agent on the right, in a new worktree or a checkout
 you choose. Each thread has a number, shown in its window's name (`01 Add a
 CLI flag · repo/add-a-cli-flag`), and that number means the same thread on the
-board, in `Alt` keys and on the status line.
+board and in `Alt` keys.
 
 **Home.** Window 0 is home: the board of every thread. A card beside the
 board shows the selected thread's last prompt, what it is waiting on, what it
@@ -139,8 +143,8 @@ as a cell that reads without colour:
 | `[ ]` | idle | It is waiting for your next prompt |
 | `[-]` | interrupted | You pressed Esc, or rejected a dialog |
 
-**Its own tmux.** The session runs on a tmux server of its own (`tmux -L
-weaver`), so it never touches your own tmux sessions or config.
+**Its own session.** weaver works in the Rex session it made, `weaver`, and
+leaves your other Rex sessions alone: its keys are weaver's only there.
 
 ## Keys
 
@@ -157,18 +161,17 @@ Shift and V.
 | `alt+v` / `alt+V` | The focused agent's Neovim / the same, full screen |
 | `alt+m` | In a view: a read-only review of the selected item |
 | `tab` / `shift+tab` | On home or in a view: the next / previous view |
-| `ctrl+q` | Quit the session (it asks first while an agent is mid-turn) |
+| `ctrl+q` | Quit the session, after asking |
 
 On the board, `enter` or `1`–`9` jumps to a thread, `n` starts one, `x`
 closes one, `r` renames one, `R` restarts its agent after an update, `a`
 adopts one (below), `v` opens its Neovim, `s` swaps the card
 for the agent's screen, `/` searches, and `?` lists every key. Everything can
-be clicked too: the hints under a list are buttons, and a right click opens a
-menu. tmux's own keys work behind its prefix, `ctrl+b`.
+be clicked too: the hints under a list are buttons.
 
 ## Threads survive crashes and restarts
 
-A thread lasts until you close it. If tmux crashes, you quit with `ctrl+q`, or
+A thread lasts until you close it. If Rex restarts, you quit with `ctrl+q`, or
 the machine restarts while its agent runs, `wvr` brings the session back with
 each thread in its window and each agent resuming its conversation. A thread
 weaver can't bring back by itself waits on the board under LOST, where `enter`
@@ -177,7 +180,7 @@ resumes it.
 weaver keeps only threads. To keep an agent you started yourself, *adopt*
 it: press `a` on its row, or type `! wvr adopt` into the agent, and it
 becomes a thread where it runs, without restarting. To bring in a conversation that
-isn't running (one you ran outside tmux before a reboot, say), press `a`
+isn't running (one you ran outside weaver before a reboot, say), press `a`
 anywhere else on the board and pick it from your recent Claude Code
 conversations.
 
@@ -229,7 +232,7 @@ The engine is Go (`cmd/wvr`, `internal/`) and the Neovim side is Lua
 (`nvim/`). They meet at the contracts in [docs/design.md](docs/design.md).
 
 ```sh
-test/run.sh    # every suite, each on a throwaway tmux server (needs jq and python3)
+test/run.sh    # every suite, each on a throwaway Rex server (needs rex, jq and python3)
 ./install.sh   # build this checkout into ~/.local/bin/wvr, ahead of Homebrew's
 ```
 

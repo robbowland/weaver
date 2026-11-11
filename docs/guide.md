@@ -17,80 +17,42 @@ a first thread, start with the [README](../README.md).
 
 ## The weaver session
 
-Outside tmux, `wvr` starts the tmux session `weaver`, or attaches to it if it
-is already running. To use another session name, set `WEAVER_SESSION` or run
-`wvr start NAME`. Inside tmux, `wvr` opens the board instead.
-
-The session runs on a tmux server of its own (`tmux -L weaver`), so it never
-touches your own tmux sessions. That server reads weaver's tmux config, then
-`~/.config/weaver/tmux.conf` if you have one. Closing the terminal only
-detaches from the session; `wvr` picks up where you were.
+weaver runs on [Rex](https://www.superlogical.com/rex). Outside weaver's
+session, `wvr` starts a Rex session named `weaver` (home in its first window,
+a window per thread), or shows it when it is already running. To use another
+session name, set `WEAVER_SESSION` or run `wvr start NAME`. Inside it, `wvr`
+opens the board instead. Rex shows a session only when asked by an app with
+Remote Control on (Rex's settings, Rex Server); otherwise switch to it in Rex
+yourself. The session runs in Rex's server: closing the app leaves it
+running, and `wvr` shows it again.
 
 The session's windows are:
 
-- **home**, window 0: the board of every thread, full size;
-- **one window per thread**, its index the thread's number: the thread's
-  Neovim on the left, the agent on the right;
+- **home**, the first window: the board of every thread, full size;
+- **one window per thread**, in the order of the threads' numbers: the
+  thread's Neovim on the left, the agent on the right;
 - **the views**, GITHUB and LINEAR, beside home
   ([Pull requests and issues](#pull-requests-and-issues)).
-
-There is no window list. Instead, one status line shows the current thread
-with its repository and branch, the counts of agents in each state, the strip
-of views (`THREADS   GITHUB   LINEAR`), and tmux's mode: `[NRM]`, `[PFX]` while
-the prefix is down, or `[CPY]` in copy mode.
-
-tmux's own keys work behind its prefix, `ctrl+b`: `ctrl+b d` detaches, and
-`ctrl+b [` scrolls back.
-
-To split a pane in weaver's tmux, bind keys in your terminal to send
-`ESC [ 100 ; 9 ~` (split right) and `ESC [ 100 ; 10 ~` (split down). In
-Ghostty, for example, this keeps `cmd+d` for Ghostty's own splits and gives
-weaver `cmd+alt+d`:
-
-```
-keybind = super+alt+d=csi:100;9~
-keybind = super+alt+shift+d=csi:100;10~
-```
-
-Outside weaver's tmux, those keys do nothing.
-
-Agents you start by hand in any tmux session also report to weaver, and `wvr`
-inside such a session opens a board of that session's agents.
-
-### On Rex (experimental)
-
-`wvr --rex` runs weaver on [Rex](https://www.superlogical.com/rex) instead
-of tmux (as `WEAVER_MUX=rex wvr` does; `wvr --tmux` is tmux, whatever
-`WEAVER_MUX` says): it starts a Rex session named `weaver` (home in its first
-window, a window per thread), or shows it when it is already running. Rex
-shows a session only when asked by an app with Remote Control on (Rex's
-settings, Rex Server); otherwise switch to it in Rex yourself. Every Rex
-terminal is in some Rex session, so the board opens in place only in one
-weaver made; in any other, with `WEAVER_MUX=rex`, `wvr ls` is the board of
-its agents.
-
-weaver's keys are Alt keys, in Rex as anywhere: run Change Option Key
-Behavior from Rex's command palette and have Option send Alt. Rex's default,
-Automatic, sends Alt only on a U.S. keyboard layout; on any other (ABC,
-British, ...) Option types special characters, `alt+y` types `¥`, and only
-`cmd+y` reaches weaver's tmux, as the Meta it reads Rex's Cmd as. weaver on
-Rex binds its keys in Rex, which takes them before Option types anything, so
-they work whatever Option sends; the setting is for weaver's tmux in a Rex
-terminal, and for programs' own Alt keys.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
 Rex read it when it is new to Rex, and says to load it by adding
 `require("weaver")` to `init.lua` when that does not. It binds `alt+y`,
-`alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k` and `alt+h`/`alt+l` as
-weaver's tmux does, and `ctrl+q`, which asks every time before it quits.
-Rex's configuration is one for every session, so the keys are weaver's only
-in the Rex sessions weaver made; in any other they are the terminal's, so a
-weaver on tmux in a Rex terminal still gets its own. In weaver's popups (a
-new thread's form, a card, Alt y's board) they are the popup's, as in tmux.
-Rex runs them without your shell's environment: weaver's settings that they
-read (`XDG_STATE_HOME`, `WEAVER_AGENT_WIDTH` and the like) are the ones set
-where you last ran `wvr`.
+`alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k`, `alt+h`/`alt+l` and
+`ctrl+q`, which asks every time before it quits. Rex's configuration is one
+for every session, so the keys are weaver's only in the Rex sessions weaver
+made; in any other they are the terminal's. In weaver's popups (a new
+thread's form, a card, alt+y's board) they are the popup's. Rex runs them
+without your shell's environment: weaver's settings that they read
+(`XDG_STATE_HOME`, `WEAVER_AGENT_WIDTH` and the like) are the ones set where
+you last ran `wvr`.
+
+Rex takes weaver's keys before Option types anything, so they work whatever
+Option sends; programs' own Alt keys (`alt+m` in a view's list) need Option
+to send Alt: run Change Option Key Behavior from Rex's command palette and
+have Option send Alt. Rex's default, Automatic, sends Alt only on a U.S.
+keyboard layout; on any other (ABC, British, ...) Option types special
+characters.
 
 The Rex app shows the window it is asked to, so weaver's moves (its keys,
 enter on the board, a new thread) ask it, which it does only with Remote
@@ -98,18 +60,18 @@ Control on. When a key does nothing, `rex server logs` has what wvr said.
 
 Rex has no status line or message line: Rex shows each agent's state itself,
 from what Claude Code reports to it, the board shows the rest, and weaver's
-messages show for a moment at the foot of the window. Inside a
-tmux pane, weaver uses that tmux, so weaver on tmux in a Rex terminal works
-as before.
+messages show for a moment at the foot of the window.
 
 When Rex restarts (an update, say), it brings its sessions back without
-what ran in them, a shell where each program was. `wvr --rex` then starts
-the `weaver` session again, its threads back on their conversations, and
-ends the one Rex brought back.
+what ran in them, a shell where each program was. `wvr` then starts the
+`weaver` session again, its threads back on their conversations, and ends
+the one Rex brought back.
 
-Weaver does not follow Codex on Rex yet (its hooks would never reach the
-thread), so it says so rather than start, resume, adopt or restart a Codex
-thread there.
+weaver acts only on the session it made: agents you start by hand in another
+Rex session do not report to it (adopt them, below). weaver does not follow
+Codex yet (Codex runs its hooks in a daemon every session shares, which
+weaver cannot place in a Rex block), so it says so rather than start,
+resume, adopt or restart a Codex thread.
 
 ## Threads
 
@@ -187,8 +149,8 @@ it. With none, it is called by the title
 its agent gives it (Claude Code names its conversations as they go), else by
 its task. `r` on the board gives it a name of your own, there and then: the
 board's search line becomes `rename 02 › its name`, `enter` saves and `esc`
-leaves it as it was. The name shows on the board, its card, its window and
-the status line. An empty name gives the agent's title back, and saving the
+leaves it as it was. The name shows on the board, its card and its window.
+An empty name gives the agent's title back, and saving the
 agent's title as it is leaves it the agent's, to change as it goes. `wvr
 rename [PANE] [NAME]` does the same from a shell (with no name, it asks).
 The name stays with the thread when it is lost and resumed.
@@ -212,8 +174,7 @@ the views like tabs, both in their windows and in `alt+y`'s popover over a
 thread ([The board](#the-board)). On home, `alt+y` steps on through the
 views, then back to the thread you came from.
 
-A view that is not set up yet shows a dot on the status line (`LINEAR ·`).
-Its window says what it needs, such as gh installed and signed in, or a Linear
+A view that is not set up yet says in its window what it needs, such as gh installed and signed in, or a Linear
 API key, and `enter` sets that up. `h` in a view hides it; `wvr view linear`
 shows it again, and `WEAVER_VIEWS` chooses the views outright.
 
@@ -281,8 +242,7 @@ for the read-only version.
 
 ## The board
 
-The board is home's main content, and `wvr` opens it in any other tmux session
-too. The [README](../README.md) shows what it looks like.
+The board is home's main content. The [README](../README.md) shows what it looks like.
 
 In a thread, `alt+y` opens the board in a popover over the thread, covering
 most of the screen, with its cursor on the thread you are in. Its keys work
@@ -290,8 +250,7 @@ as they do on home; `tab` and `shift+tab` step to the views inside it, and
 `esc`, `q` or `alt+y` close it, leaving you where you were. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
-the home window itself, click THREADS on the status line, or use `alt+j` and
-`alt+k`.
+the home window itself, use `alt+j` and `alt+k`.
 
 Agents are grouped under these headings:
 
@@ -314,7 +273,7 @@ repository and branch when there is room, and how long it has been in that
 state. Titles are bright only where a thread needs you. `×2` after a branch
 means two agents share the worktree, so their per-turn diffs mix.
 
-The headings' counts are the status line's. The cursor never rests on a
+The headings' counts are the board's border's. The cursor never rests on a
 heading, and stays on its agent as the board reloads itself.
 
 When a thread's agent exits (you quit it, or it fails as it starts), its
@@ -351,7 +310,7 @@ it, and gives way to the list when space is short (`s` still shows it).
 
 ### When the session goes
 
-A thread lasts until you close it. If tmux crashes, you quit the session, or
+A thread lasts until you close it. If Rex restarts, you quit the session, or
 the machine restarts while a thread's agent runs, weaver keeps the thread as
 *lost* rather than forgetting it:
 
@@ -398,11 +357,11 @@ like any other:
   or `! wvr adopt` typed into the agent, makes it a thread where it runs. In
   the weaver session it moves to a window of its own at its number, with a
   Neovim on its left. It is not restarted, so a turn in progress carries on.
-- **A conversation that isn't running**, such as one you ran outside tmux
+- **A conversation that isn't running**, such as one you ran outside weaver
   before a restart: `a` anywhere else on the board lists your recent Claude
   Code conversations, and `enter` resumes one as a thread, in the directory
   it started in. Type or paste a session id (or its first four or more
-  characters) to find one, listed or not. From any shell, inside tmux or not, `wvr adopt SESSION-ID`
+  characters) to find one, listed or not. From any shell, `wvr adopt SESSION-ID`
   (or its first four or more characters) does the same, into the weaver
   session; `wvr adopt` alone opens the list there.
 
@@ -431,15 +390,11 @@ needs:
   ignored files (an `.env`, local settings) are kept a month in
   `trash/` in weaver's state directory first. Its branch stays. A worktree you chose to keep when you closed its thread is yours, and
   stays.
-- **Processes.** A Neovim that a crashed or killed tmux server left running,
+- **Processes.** A Neovim that a crashed or killed server left running,
   with its language servers, is ended, and sockets nothing listens on are
-  removed. So is what an agent left running in the background from its
-  worktree (a dev server, a watcher) once its thread has gone: closing a
-  thread ends it, and the next sweep catches any a crash or restart left.
-  A daemon that runs from elsewhere (Codex's app server, say) stays, even
-  when a gone thread's command runs under it (that command alone ends). `wvr gc
-  --dry-run` lists what would end, with its memory; `gc.log` in weaver's
-  state directory says what did.
+  removed. What an agent left running in the background from its worktree
+  (a dev server, a watcher) is not: end it yourself once its thread has
+  gone.
 - **Files.** Agents that are gone are forgotten. Activity logs, per-turn
   snapshots and lost threads go after a month.
 
@@ -460,16 +415,15 @@ without a word drops off the board. Where the hooks can't see what happened
 (Esc while the model writes, a long tool you approved), weaver refines the
 state from Claude Code's own session files.
 
-An agent that starts needing you, or finishes, rings the terminal bell, so
-tmux marks its window until you look at it. `WEAVER_BELL` changes that.
+An agent that starts needing you, or finishes, rings the terminal bell.
+`WEAVER_BELL` changes that.
 
-### Status line
+### Counts
 
 `wvr status` prints the counts: `[!] 1  [x] 2  [/] 3` means one agent needs
-you, two finished that you haven't seen, and three are working. weaver's tmux
-status line shows the same counts in colour, updated as they change rather
-than polled. Clicking a count goes to the agent it counts
-([Mouse](#mouse)).
+you, two finished that you haven't seen, and three are working. The board's
+border shows the same counts in colour, updated as they change rather than
+polled.
 
 ### Turns and the activity log
 
@@ -601,21 +555,13 @@ key:
   CANCEL`) does what it says when clicked, as do a card's choices.
 - **Rows.** A click selects a row, and a second opens it, like `enter`. In the
   form and its pickers, one click is enough.
-- **Right click** opens a menu of what can be done there, each item with its
-  key: on a row of the board or a view, that row's actions; on an agent, its
-  thread's; on the status line, weaver's (home, the views, the next agent that
-  needs you, a new thread, quit). tmux's own menu stays on `Alt` and a right
-  click.
-- **The status line.** `THREADS`, `GITHUB` and `LINEAR` go there. The counts
-  go to the agent that needs you (`[!]`, `[x]`), or home (`[/]`).
-- **The wheel** scrolls what is under it: a list, a card, or a pane's history,
-  with a scrollbar to drag while you are scrolled back. A card you scroll
+- **The wheel** scrolls what is under it: a list, a card, or a pane's
+  history. A card you scroll
   (the wheel, or `shift+↑↓`) stays where you left it: the list beside it
   holds still as threads change, and catches up when you move the cursor
   or leave it.
 
-Dragging in a pane selects and copies, in tmux's copy mode. To select the
-terminal's own way, hold `Shift` (Ghostty) or `Option` (iTerm2) as you drag.
+Dragging in a pane selects and copies, as Rex does.
 
 ## Setup
 
@@ -638,12 +584,11 @@ It prints one line whenever it changes a file. `wvr setup --dry-run` shows
 what it would change, and `WEAVER_SELF_SETUP=0` turns this off.
 
 Claude Code reads hooks only when a session starts, so restart running
-sessions after the hooks change. weaver's tmux needs no config of yours.
+sessions after the hooks change.
 
 ### Signing in
 
-The views sign in where you use them. A view that isn't set up has a dot on
-the status line; going there offers the one key that signs it in: `gh auth
+The views sign in where you use them. A view that isn't set up offers the one key that signs it in: `gh auth
 login` for GitHub, or `wvr linear login`, which asks for a Linear API key and
 keeps it in the macOS Keychain.
 
@@ -659,8 +604,8 @@ and each sign-in is offered.
 `brew upgrade` keeps weaver current, and `brew install --HEAD
 robbowland/kegs/weaver` installs what is on main, unreleased.
 
-After an upgrade, a running weaver session reads weaver's tmux config again
-the next time `wvr` attaches to it, and home and the views restart in the
+After an upgrade, a running weaver session's keys are rewritten the next
+time `wvr` runs, and home and the views restart in the
 `wvr` on your PATH at their next reload, or within a few seconds. That
 includes switching builds: `./install.sh`'s `~/.local/bin/wvr` ahead of
 Homebrew's, and Homebrew's again once you remove it.
@@ -679,9 +624,8 @@ Environment variables change weaver's defaults.
 | Variable | Default | Does |
 | --- | --- | --- |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
-| `WEAVER_SESSION` | `weaver` | The session `wvr` attaches to or starts |
-| `WEAVER_MUX` | `tmux` | `rex`: run on Rex, as `wvr --rex` does ([On Rex](#on-rex-experimental)) |
-| `WEAVER_TMUX_SOCKET` | `weaver` | The name of weaver's own tmux server (`tmux -L <name>`) |
+| `WEAVER_SESSION` | `weaver` | The session `wvr` shows or starts |
+| `WEAVER_MUX` | | `rex`: act on the Rex session you are in, whether weaver made it or not (its blocks and keys set it) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
 | `WEAVER_WIP` | `5` | How many threads you mean to have open at once: past it, the board's count shows it (`7/5`) and the new-thread form says how to hold or close one; `0`: no limit |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |
@@ -709,8 +653,8 @@ on PATH. It needs Go, is safe to rerun, and `--dry-run` shows what it would
 do. Remove `~/.local/bin/wvr` to go back to Homebrew's build.
 
 `test/run.sh` runs every suite in a few minutes, each with its own state and
-nothing of yours touched. Besides weaver's own dependencies, they need jq and
-python3:
+nothing of yours touched. Besides weaver's own dependencies, they need jq,
+python3 and Rex:
 
 - `go vet` and `go test`, including the contracts between the Go half, its
   Neovim side and the design doc (the states and their cells);
@@ -718,17 +662,14 @@ python3:
   to a directory holding `diffview-plus.nvim` if lazy.nvim's plugin directory
   doesn't have it;
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
-  state machine and its robustness, `alt+1`, the status counts, subagents,
+  state machine and its robustness, `alt+1`, the counts, subagents,
   per-turn snapshots, other agents' events, the installer and the board's
-  renderings. They run on a throwaway tmux server with three fake agents and
-  a client attached; `test/hooks.sh SUITE` runs one;
-- `test/tmux.sh`: weaver on tmux end to end. `wvr` starts its session on a
-  throwaway tmux server in a pseudo-terminal, and the tests press its keys:
-  threads, hooks and their late async events, `alt+y`, `alt+v`, `alt+1`,
-  split keys, `alt+N`, the board, crashes and their threads resumed, adopting
-  and renaming,
-  `ctrl+q`, and threads from pull requests and issues in the views (with a
-  fake gh, Keychain and Linear API).
+  renderings. They run on a throwaway Rex server with three fake agents;
+  `test/hooks.sh SUITE` runs one;
+- `test/rex.sh`: weaver on Rex end to end, on a throwaway Rex server with
+  the app's environment: its session and board, a thread, widths, its keys
+  (pressed as the app sends them), hooks, seen as you look, rename, hold and
+  resume, a Rex restart and quit.
 
-`test/soak/nvim-exit.sh` is a long run to start by hand: Neovims weaver
-starts, killed together round after round, none of which may hang.
+`test/hooks.sh` and `test/rex.sh` need rex, and skip without it (CI has
+none).

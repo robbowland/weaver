@@ -38,33 +38,6 @@ func TestHintAct(t *testing.T) {
 	}
 }
 
-// A board row's menu has its keys while browsing; searching, only those
-// that do not type.
-func TestBoardMenu(t *testing.T) {
-	whats := func(ms []menuItem) []string {
-		var out []string
-		for _, m := range ms {
-			out = append(out, m.what+":"+m.cmd)
-		}
-		return out
-	}
-	t.Setenv("FZF_INPUT_STATE", "hidden")
-	got := whats(boardMenu("a1"))
-	want := []string{"jump to it:Enter", "nvim:C-e", "rename:r", "restart agent:R", "hold:h", "close:x", ":", "new thread:n", "help:?"}
-	if len(got) != len(want) {
-		t.Fatalf("thread row: %q, want %q", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("thread row: %q, want %q", got, want)
-		}
-	}
-	t.Setenv("FZF_INPUT_STATE", "enabled")
-	if got := whats(boardMenu("l2")); len(got) != 1 || got[0] != "resume:Enter" {
-		t.Fatalf("lost row, searching: %q", got)
-	}
-}
-
 // Each of the welcome's key lines is the button for its key; no other
 // line does anything.
 func TestWelcomeClicks(t *testing.T) {

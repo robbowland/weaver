@@ -5,20 +5,36 @@
 T=$AT/t
 SD=$AT/state/weaver
 SESSION=$(cat "$AT/session")
-# The session's key (its state files' prefix): tmux-<session>.
-SK="tmux-$SESSION"
-TSOCK=$(cat "$AT/socket")
-export WEAVER_TMUX_SOCKET=$TSOCK WEAVER_TMUX_SESSION=$SESSION TMUX="$TSOCK,0,0" \
-	XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
-unset TMUX_PANE
-# as_pane PANE CMD...: CMD as run from pane PANE ($TMUX_PANE); pane_env PANE:
-# the same as an assignment, for a command line.
-as_pane() {
-	local p=$1
-	shift
-	TMUX_PANE="%$p" "$@"
+SID=$(cat "$AT/sid")
+# The session's key (its state files' prefix): rex-<session>.
+SK="rex-$SESSION"
+# Every command acts on the test's session ($REX_SESSION), from no pane of
+# it unless as_pane says one.
+export REX_SESSION=$SID XDG_STATE_HOME=$AT/state PATH="$AT/bin:$PATH"
+unset REX_BLOCK
+R() { rex --autostart=false "$@"; }
+# block N: the Rex block weaver's pane N is; one weaver has no block for is
+# given a stand-in, as a block that has gone would be.
+block() {
+	local f=$SD/rex/n/$1
+	if [ ! -f "$f" ]; then
+		mkdir -p "$SD/rex/n" "$SD/rex/u"
+		printf 'block:gone-%s\n' "$1" >"$f"
+		printf '%s\n' "$1" >"$SD/rex/u/block_gone-$1"
+	fi
+	head -n 1 "$f"
 }
-pane_env() { printf 'TMUX_PANE=%%%s' "$1"; }
+# num BLOCK: weaver's number for a Rex block.
+num() { head -n 1 "$SD/rex/u/${1/:/_}" 2>/dev/null; }
+# as_pane PANE CMD...: CMD as run from pane PANE ($REX_BLOCK); pane_env
+# PANE: the same as an assignment, for a command line.
+as_pane() {
+	local b
+	b=$(block "$1")
+	shift
+	REX_BLOCK=$b "$@"
+}
+pane_env() { printf 'REX_BLOCK=%s' "$(block "$1")"; }
 pass=0 fail=0
 # weaver's state cells (G_NEED, G_DONE, ...), from their own definition;
 # done and seen is done's cell.
@@ -43,40 +59,31 @@ done_suite() {
 	exit $fail
 }
 
-# Z ARGS: the few multiplexer actions the suites ask, in the shape they read
-# (the pane list as JSON: id, tab_id, title, exited; closing a pane; a new
-# one).
-Z() {
-	case "$1 ${2:-}" in
-	"list-panes -a")
-		tmux -S "$TSOCK" list-panes -s -t "=$SESSION" -F '#{pane_id}	#{window_id}	#{pane_title}	#{pane_dead}' |
-			jq -R -s 'split("\n") | map(select(length > 0) | split("\t")
-				| {id: (.[0][1:] | tonumber), tab_id: (.[1][1:] | tonumber), title: .[2], exited: (.[3] == "1"),
-				   is_plugin: false, is_floating: false})'
-		;;
-	"close-pane --pane-id") tmux -S "$TSOCK" kill-pane -t "%${3#terminal_}" ;;
-	"new-pane --name")
-		# Z new-pane --name NAME -- CMD...: a pane beside agent a, as terminal_N.
-		shift 3
-		[ "${1:-}" = -- ] && shift
-		printf 'terminal_%s\n' "$(tmux -S "$TSOCK" split-window -d -P -F '#{pane_id}' -t "%0" -- "$@" | tr -d '%')"
-		;;
-	*)
-		echo "Z $*: not on tmux" >&2
-		return 1
-		;;
-	esac
+view() { R api call session.view "{\"session_id\":\"$SID\"}"; }
+# new_pane [-c DIR] CMD...: a pane beside agent a running CMD: its number
+# (weaver numbers a block it meets: here, as a command run in it would).
+new_pane() {
+	local b dir=$T/repo
+	[ "$1" = -c ] && { dir=$2; shift 2; }
+	b=$(R split -s "$SID" -b "$(block 0)" --focus=false --json -c "$dir" --shell=none -- "$@" | jq -r '.block_ids[0]')
+	REX_BLOCK=$b wvr status >/dev/null 2>&1
+	num "$b"
 }
-# key HEX: type bytes into the client (1b65 = Alt e, 0d = Enter, ...)
-key() { printf '%s\n' "$1" >"$AT/keys.fifo"; }
-# client: the pane the client is on (as terminal_N).
-client() { printf 'terminal_%s\n' "$(tmux -S "$TSOCK" list-clients -F '#{pane_id}' | tail -n 1 | tr -d '%')"; }
-# status_line: the counts as the session's status line shows them.
-status_line() { wvr status --tmux "$SESSION"; }
-# ring PANE: the shell in agent pane PANE rings the bell; bell_mark TAB: is
-# tab (window) TAB marked for it ("true")?
-ring() { tmux -S "$TSOCK" send-keys -t "%$1" "printf '\\a'" Enter; }
-bell_mark() { [ "$(tmux -S "$TSOCK" display -p -t "@$1" '#{window_bell_flag}')" = 1 ] && echo true || echo false; }
+# close_pane N: pane N closes.
+close_pane() { R api call block.close "{\"session_id\":\"$SID\",\"block_id\":\"$(block "$1")\"}" >/dev/null; }
+# title N: pane N's label.
+title() { view | jq -r --arg b "$(block "$1")" '.windows[].layers[].blocks[] | select(.block_id == $b) | .label // ""'; }
+# floating: how many floating layers (weaver's messages, popups) are open.
+floating() { view | jq '[.windows[].layers[] | select(.kind != "tiled")] | length'; }
+# client: the pane you are on (the active window's focused block).
+client() { num "$(view | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .focused_block_id')"; }
+# focus N: pane N's window shown, and it focused.
+focus() {
+	R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$(block "$1")\"}" >/dev/null
+	sleep 0.2
+}
+# next: Alt 1, as its key runs it (in no pane).
+next() { wvr next; }
 ms() { perl -MTime::HiRes=time -e 'my $t=time; system(@ARGV); printf "%d", (time-$t)*1000' -- "$@"; }
 
 # The events Claude Code sends to the async hook (config/claude-hooks.json).
@@ -147,16 +154,17 @@ feed() {
 }
 
 # Start a suite from a clean slate: no agent state, no agent nvims, no logs,
-# whatever the suites before it did. The three agent panes stay.
+# whatever the suites before it did. The three agent panes stay, and
+# weaver's record of the session and its numbers.
 fresh() {
 	local f p
 	for f in "$SD/${SK}"_*.nvim; do
 		[ -f "$f" ] || continue
 		read -r p <"$f"
-		case $p in '' | *[!0-9]*) ;; *) Z close-pane --pane-id "terminal_$p" >/dev/null 2>&1 ;; esac
+		case $p in '' | *[!0-9]*) ;; *) close_pane "$p" >/dev/null 2>&1 ;; esac
 	done
 	settle
-	rm -rf "$SD"
+	find "$SD" -mindepth 1 -maxdepth 1 ! -name rex -exec rm -rf {} +
 	mkdir -p "$SD"
 	rm -f "/tmp/weaver-$(id -u)/${SK}"_*.sock*
 	rm -f "$AT/claude/sessions/"*.json
@@ -201,9 +209,4 @@ claude_session() {
 		--arg ps "$(proc_start "$1")" \
 		'{pid: $pid, sessionId: $sid, cwd: "/", procStart: $ps, status: $st, statusUpdatedAt: $u}
 		+ (if $w != "" then {waitingFor: $w} else {} end)' >"$AT/claude/sessions/$1.json"
-}
-# Focus pane N, going to its window.
-focus() {
-	tmux -S "$TSOCK" select-window -t "%$1" \; select-pane -t "%$1"
-	sleep 0.2
 }

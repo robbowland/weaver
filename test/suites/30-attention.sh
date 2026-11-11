@@ -1,8 +1,7 @@
 #!/bin/bash
 # Attention: the state machine (needs you, done, interrupted, compaction, and
 # every notification type), the bell, Claude Code's own session status, the
-# dashboard's triage details, Alt 1, the status bar, unread, and Worktrunk
-# markers.
+# dashboard's triage details, Alt 1, the counts, and Worktrunk markers.
 . "$(dirname "$0")/../lib.sh"
 fresh
 feed >/dev/null
@@ -143,8 +142,7 @@ claude_session "$P1" sid-live idle $((($(date +%s) - 10) * 1000))
 ok "quiet, but Claude Code is idle: stopped with Esc" "$(wvr ls | grep -c '^\[-\] .*interrupted')" "1"
 kill "$P1"
 
-# --- the dashboard: what each agent waits on (looking at C: a done agent you
-# are looking at counts as seen, so look elsewhere)
+# --- the dashboard: what each agent waits on
 fresh
 focus 2
 feed >/dev/null
@@ -154,73 +152,42 @@ ok "dashboard: needs-you row shows what it waits on" "$(printf '%s\n' "$table" |
 hook 0 Stop "$T/repo" >/dev/null
 ok "Stop resets seen" "$(st 0 seen)" "false"
 
-# --- Alt 1: longest-waiting needs-you first, then unseen done, round and round
+# --- Alt 1 (wvr next, as its key runs it): longest-waiting needs-you first,
+# then unseen done, round and round
 focus 2
-key 1b31 # Alt 1
-sleep 2
-ok "Alt 1 jumps to the agent that needs you" "$(client)" "terminal_1"
-key 1b31
-sleep 2
-ok "Alt 1 again goes on to the unseen finished agent" "$(client)|$(st 0 seen)" "terminal_0|true"
-key 1b31
-sleep 2
-ok "...and round again to the one still waiting" "$(client)" "terminal_1"
+next
+ok "Alt 1 jumps to the agent that needs you" "$(client)" "1"
+next
+ok "Alt 1 again goes on to the unseen finished agent" "$(client)|$(st 0 seen)" "0|true"
+next
+ok "...and round again to the one still waiting" "$(client)" "1"
 hookj 1 "$(j PostToolUse "$bash_input")" --async
-key 1b31
-sleep 2
-ok "Alt 1 with nothing waiting stays put" "$(client)" "terminal_1"
+next
+ok "Alt 1 with nothing waiting stays put" "$(client)" "1"
 hook 2 PermissionRequest "$T/repo" >/dev/null
 sleep 1
 hook 0 PermissionRequest "$T/repo" >/dev/null
 focus 1
-key 1b31
-sleep 2
-ok "two agents waiting: Alt 1 takes the longest waiting first" "$(client)" "terminal_2"
-key 1b31
-sleep 2
-ok "...then the other" "$(client)" "terminal_0"
-key 1b31
-sleep 2
-ok "...and cycles back" "$(client)" "terminal_2"
+next
+ok "two agents waiting: Alt 1 takes the longest waiting first" "$(client)" "2"
+next
+ok "...then the other" "$(client)" "0"
+next
+ok "...and cycles back" "$(client)" "2"
 focus 1
-key 1b31
-key 1b31 # pressed twice at once: the second is dropped, not fought over
-sleep 4
-ok "Alt 1 twice at once: one step, cleanly" "$(client)|$(Z list-panes -a -j | jq '[.[] | select((.is_plugin|not) and .is_floating and (.exited|not))] | length')" "terminal_2|0"
+# Pressed twice at once (Rex starts each key's wvr at once): the second is
+# dropped, not fought over, and no message is left open.
+next &
+next
+wait
+sleep 4.5
+ok "Alt 1 twice at once: one step, cleanly" "$(client)|$(floating)" "2|0"
 cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 
-# --- the status line: counts, pushed to tmux, and unread
+# --- the counts
 hook 0 Stop "$T/repo" >/dev/null
 hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
 ok "status: needs you, done and unseen, working" "$(wvr status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
-settle
-ok "status for the status line, kept by the hooks: Micrographics signal colours, each a button" "$(status_line)" \
-	"#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|next]#[fg=#616161][#[fg=#39d97a]x#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
-focus 0
-wvr status --push
-ok "a done agent you are looking at counts as seen" "$(st 0 seen)|$(wvr status)" "true|$G_NEED 1  $G_WORK 1"
-# ...or at its nvim, beside it
-hook 0 UserPromptSubmit "$T/repo" "" "again" >/dev/null
-fake_nvim 0 2
-focus 2
-hook 0 Stop "$T/repo" >/dev/null
-wvr status --push
-ok "...or whose nvim you are looking at" "$(st 0 seen)" "true"
-kill "$FAKE_NVIM_PID" 2>/dev/null
-rm -f "$SD/${SK}_0.nvim"
-focus 0
-ok "...in the status line too" "$(status_line)" "#[range=user|next]#[fg=#616161][#[fg=#ff3b2f]!#[fg=#616161]]#[fg=#999999] 1#[norange]  #[range=user|home]#[fg=#616161][#[fg=#999999]/#[fg=#616161]]#[fg=#999999] 1#[norange]  "
-printf 'garbage\n' >"$SD/$SK.status"
-ok "status line: a bad counts file prints nothing, status 0" "$(status_line; echo "rc=$?")" "
-rc=0"
-ok "...and for no session" "$(wvr status --tmux ''; echo "rc=$?")" "
-rc=0"
-
-# --- the multiplexer marks a tab whose pane rings the bell (what
-# terminalSequence does)
-ring 2 >/dev/null
-sleep 1
-ok "bell in an unfocused tab marks it" "$(bell_mark 1)" "true"
 
 # --- Worktrunk marker on the worktree really being edited (A edits worktree a)
 if command -v wt >/dev/null 2>&1; then

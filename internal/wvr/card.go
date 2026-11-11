@@ -511,7 +511,7 @@ func (e *Env) lostCard(sid, title string) string {
 		ls = append(ls, field(w, "said", l, CGrey, 6)...)
 	}
 	ls = append(ls, field(w, "in", dir, CGrey, 1)...)
-	ls = append(ls, field(w, "session", strings.TrimPrefix(lo.Key(), "tmux-")+" · "+st.SessionID, CDim, 2)...)
+	ls = append(ls, field(w, "session", lo.Key()+" · "+st.SessionID, CDim, 2)...)
 	ls = append(ls, "", CDim+"⏎ resume it in a new window   x forget it"+COff)
 	return out + strings.Join(ls, "\n") + "\n"
 }

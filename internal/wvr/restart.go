@@ -108,8 +108,7 @@ func restartSummary(done, busy, failed []string) string {
 
 // restartAgent starts the agent of thread p again in its pane: its records
 // go through the meeting place a restored thread's do (writeResume), then
-// tmux's respawn-pane ends the agent there and runs the pane's `wvr _agent`
-// again, which resumes the conversation. The thread's label ("01"), and
+// Respawn ends the agent there and runs the pane's `wvr _agent` again, which resumes the conversation. The thread's label ("01"), and
 // errMidTurn when it is mid-turn and not forced.
 func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	th, err := store.ReadThread(e.ThreadFile(p))
@@ -145,7 +144,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	dir := store.Lost{State: st, Thread: th}.Dir()
 	if err := e.Mux().Respawn(p, e.agentSpawn(tok, kind, dir)); err != nil {
 		os.RemoveAll(d)
-		return label, errors.New(e.MuxName() + " could not restart it")
+		return label, errors.New("Rex could not restart it")
 	}
 	// On Rex the agent starts again in a pane put in its place.
 	e.settleWidths(p)

@@ -12,7 +12,6 @@ import (
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
-	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -50,8 +49,7 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	if agent == "" || agent[0] < 'a' || agent[0] > 'z' || strings.Trim(agent, "abcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
 		return nil
 	}
-	// tmux's %3 and zellij's terminal_3 are pane 3.
-	if p, ok := tmux.ParsePane(pane); ok {
+	if p, ok := mux.ParsePane(pane); ok {
 		pane = string(p)
 	} else {
 		pane = ""
@@ -66,23 +64,12 @@ func Event(e *session.Env, adapter string, bell bool) error {
 	}
 	// Where its bell rings: the terminal it runs in.
 	tty := "/dev/tty"
-	// Codex's hooks may run in its shared app server, with another pane's
-	// environment: its pane, session, server and terminal are the pane's
-	// it is placed in (codexPane), and one it cannot place is dropped. That
-	// is a tmux pane, so it acts on tmux, even from a daemon a Rex block
-	// started.
+	// Codex runs every session's hooks in its shared app server, with the
+	// environment of whichever session started it, not the hook's own
+	// pane's: weaver cannot place them in a Rex block yet, so it drops them
+	// (and opens no Codex thread: followable).
 	if adapter == "codex" {
-		at, ok := codexPane(e, mux.PaneID(pane), strip(n.Session), strip(n.Cwd))
-		if !ok {
-			return nil
-		}
-		pane, e = string(at.pane.id), at.env(e)
-		if !at.inPane {
-			pid, tty = strconv.Itoa(at.pane.pid), at.pane.tty
-		}
-		if h.Event == "SessionEnd" {
-			defer forgetCodexSession(e, strip(n.Session))
-		}
+		return nil
 	}
 	if pane == "" || e.Session == "" {
 		return nil

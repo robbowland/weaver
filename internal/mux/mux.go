@@ -1,21 +1,48 @@
 // Package mux is what weaver needs of the terminal multiplexer its session
-// runs on: its panes and windows, by ids weaver's files keep, and what
-// weaver does with them. tmux is one; weaver's own policy (thread numbers,
-// state files, what counts as seen) stays out of it.
+// runs on (Rex): its panes and windows, by ids weaver's files keep, and
+// what weaver does with them. weaver's own policy (thread numbers, state
+// files, what counts as seen) stays out of it.
 package mux
 
 import (
 	"os/exec"
+	"strings"
 
 	"github.com/robbowland/weaver/internal/agent"
 )
 
-// PaneID is a pane as weaver's file names and records keep it: tmux's %3
-// is "3".
+// PaneID is a pane as weaver's file names and records keep it: the number
+// weaver gave its Rex block, "3".
 type PaneID string
 
-// WindowID is a window as the multiplexer names it: tmux's @12 is "12".
+// WindowID is a window as weaver's files keep it: the number weaver gave
+// its Rex window, "12".
 type WindowID string
+
+// ParsePane is the pane s names (its number); false when it names none.
+func ParsePane(s string) (PaneID, bool) {
+	s = strings.TrimSpace(s)
+	return PaneID(s), digits(s)
+}
+
+// ParseWindow is the window s names (its number); false when it names
+// none.
+func ParseWindow(s string) (WindowID, bool) {
+	s = strings.TrimSpace(s)
+	return WindowID(s), digits(s)
+}
+
+func digits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // Pane is one pane of a session.
 type Pane struct {
@@ -55,7 +82,7 @@ type Spawn struct {
 }
 
 // Exit is what a pane kept when its program exits says, where its
-// multiplexer can say it (tmux; Rex shows its own): What happened, how the
+// multiplexer can say it (Rex shows its own): What happened, how the
 // program exited, and Hint, what to do next.
 type Exit struct {
 	What, Hint string
@@ -90,22 +117,6 @@ type NewSplit struct {
 	Background bool
 }
 
-// Counts are the session's agents as its status shows them: that need
-// you, done and unseen, working; and Busy, whether one is mid-turn, which
-// quitting would stop.
-type Counts struct {
-	Need, Done, Work int
-	Busy             bool
-}
-
-// StripItem is one name on the strip of weaver's windows (THREADS, and
-// each view): its view (empty: home), as shown, and whether it is set up.
-type StripItem struct {
-	View  string
-	Label string
-	Ready bool
-}
-
 // Mux is the session weaver acts on, on its multiplexer. Methods that
 // steer what you see (focus, names, widths, marks) are best-effort and say
 // nothing of failing; a caller that needs to know reads the state after.
@@ -124,10 +135,6 @@ type Mux interface {
 	Panes() ([]Pane, error)
 	// Windows are the session's windows.
 	Windows() ([]Window, error)
-	// Looking are the panes the multiplexer's clients show. An error when
-	// it cannot tell (Rex does not say what its app shows): no pane is
-	// known to be looked at, and none is known not to be.
-	Looking() ([]PaneID, error)
 	// Active is the session's active pane.
 	Active() (PaneID, bool)
 	// PID is the pid of the process pane p runs.
@@ -173,13 +180,6 @@ type Mux interface {
 	Say(ms int, text string)
 	SayToSession(ms int, text string)
 
-	// MarkUnseen marks the window pane p is in as holding an agent done
-	// and unseen, or clears it.
-	MarkUnseen(p PaneID, on bool)
-	// Publish shows the session's counts.
-	Publish(c Counts)
-	// Strip shows the strip of weaver's windows.
-	Strip(items []StripItem)
 	// Popup is the command that shows argv over where you are, sized by
 	// size from the terminal's columns and lines, bordered or not, in dir
 	// (empty: the multiplexer's choice); it returns when the popup closes.

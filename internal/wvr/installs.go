@@ -13,7 +13,7 @@ import (
 // The home board and the views outlive installs of weaver: each runs for
 // good, its keys bound to the weaver it started in, while what it shows is
 // read by whichever weaver runs. So each starts again, in the same pane and
-// process, in the weaver `wvr` resolves to now, as tmux's keys and the
+// process, in the weaver `wvr` resolves to now, as Rex's keys and the
 // hooks run it: when that is another file than the one it started as (an
 // upgrade, or Homebrew's swapped for install.sh's, either way), or that
 // file changed since. Its born file says when it started (its time) and

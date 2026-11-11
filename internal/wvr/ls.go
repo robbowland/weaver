@@ -75,9 +75,9 @@ func (e *Env) ls(peek, at string) (string, error) {
 		fmt.Print(e.PlainRows())
 		return "", nil
 	}
-	// Rex's stand-in for tmux's pane-focus-in hook runs beside the home
-	// board, also one started again in a newer weaver (exec'd as `wvr ls`).
-	if home && peek == "" && e.OnRex() && e.WeaverSession() {
+	// Seen as you look (Rex has no focus hook) runs beside the home board,
+	// also one started again in a newer weaver (exec'd as `wvr ls`).
+	if home && peek == "" && e.WeaverSession() {
 		go e.seeAsYouLook()
 	}
 	q := session.Quote(e.Self)
@@ -99,14 +99,13 @@ func (e *Env) ls(peek, at string) (string, error) {
 		quitAct = "execute-silent(" + q + " go back)"
 		// In the background, as a jump is: you land on its window (or are
 		// told why not), with no flash of the pane's own screen between.
-		// Its error as a message, on whichever multiplexer (wvr _say:
-		// tmux's takes it as text, never a format).
+		// Its error as a message (wvr _say).
 		resumeAct = "execute-silent(o=$(" + q + " resume {2} 2>&1) || " + q + " _say \"$o\")+reload-sync(" + q + " _rows)"
 	} else {
 		jumpAct, editAct, newAct, quitAct, resumeAct = "print(jump)+accept", "print(ctrl-e)+accept", "print(new)+accept",
 			"abort", "print(resume)+accept"
 	}
-	// x, a, tab and a right click open dialogs or go to other windows: in
+	// x, a and tab open dialogs or go to other windows: in
 	// the popover, which is in the way of both, they end it and say so.
 	closeAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " _popup close {2})' ;; l*) echo 'execute-silent(" + q + " _popup forget {2})' ;; esac"
 	// An agent you started by hand, adopted; else the picker of
@@ -116,11 +115,11 @@ func (e *Env) ls(peek, at string) (string, error) {
 	renameAct := "transform:case {1} in a*) " + q + " _mode rename {2} ;; esac"
 	holdAct := "transform:case {1} in a*) " + q + " _mode hold {2} ;; esac"
 	restartAct := "transform:case {1} in a*) echo 'execute-silent(" + q + " restart {2})' ;; esac"
-	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+q+" _menu board {1})"
+	nextAct, prevAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)"
 	if peek != "" {
 		closeAct = "transform:case {1} in a*|l*) echo 'print(close)+accept' ;; esac"
 		restartAct = "transform:case {1} in a*) echo 'print(restart)+accept' ;; esac"
-		adoptAct, nextAct, prevAct, menuAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept", "ignore"
+		adoptAct, nextAct, prevAct = "print(adopt)+accept", "print(next)+accept", "print(prev)+accept"
 	}
 	os.Setenv("LS_JUMP", jumpAct)
 	if err := e.SockDirReady(); err != nil {
@@ -166,10 +165,9 @@ func (e *Env) ls(peek, at string) (string, error) {
 	if home {
 		e.markBorn(base + ".born")
 		e.watchInstalls(base+".born", sock)
-		// The status line's strip and counts as this weaver draws them (and
-		// clicks them): an install may have changed that under a running
-		// session, whose home board then starts again in it.
-		e.SetStrip()
+		// The windows' labels as this weaver makes them: an install may
+		// have changed that under a running session, whose home board then
+		// starts again in it.
 		e.PushStatusAndLabels()
 	}
 	for {
@@ -231,10 +229,9 @@ func (e *Env) ls(peek, at string) (string, error) {
 			// Tab and shift-tab: the next and previous view, as a tab bar.
 			"--bind", "tab:"+nextAct, "--bind", "btab:"+prevAct,
 			"--bind", "?:transform("+q+" _view help)",
-			// The footer's hints are buttons; a right click, the row's menu.
+			// The footer's hints are buttons.
 			"--bind", "click-footer:transform("+q+" _click board)",
 			"--bind", "click-header:transform("+q+" _click title)",
-			"--bind", "right-click:"+menuAct,
 			"--bind", "ctrl-r:"+cardUnscrolled+"+reload-sync("+q+" _rows)+refresh-preview",
 			"--bind", "/:show-input+unbind("+lsKeys+")+transform("+q+" _hf)",
 			// Out of a search or an edit, the board as it was.

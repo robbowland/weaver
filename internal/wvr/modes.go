@@ -16,7 +16,6 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The board's edits in place: r (rename) and h (hold) turn its input line
@@ -169,7 +168,7 @@ func Fold() {
 // its number in this session, or %pane.
 func (e *Env) paneOfThread(which string) (mux.PaneID, bool) {
 	if strings.HasPrefix(which, "%") {
-		p, ok := tmux.ParsePane(which)
+		p, ok := mux.ParsePane(strings.TrimPrefix(which, "%"))
 		return p, ok && files.Exists(e.ThreadFile(p))
 	}
 	n, err := strconv.Atoi(which)

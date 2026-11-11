@@ -14,14 +14,10 @@ linters:
     - unused
   settings:
     # Unchecked: output to the terminal, removing what may already be gone,
-    # exec, which returns only when it failed, and tmux commands that steer
-    # the session (select, resize, rename, flag), which a caller needing
-    # their result reads. Everything else is checked or named as
-    # best-effort.
+    # and exec, which returns only when it failed. Everything else is
+    # checked or named as best-effort.
     errcheck:
       exclude-functions:
-        - (*github.com/robbowland/weaver/internal/session.Env).Tmux
-        - (github.com/robbowland/weaver/internal/tmux.Session).Run
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln

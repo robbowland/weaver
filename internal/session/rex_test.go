@@ -28,7 +28,7 @@ import (
 func TestRexLostAndGC(t *testing.T) {
 	stop := rextest.Server(t, rex.Bin())
 	dir := t.TempDir()
-	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", TSock: []string{"-S", dir + "/no-tmux.sock"}}
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost"}
 	for _, d := range []string{e.StateDir, e.LostDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)

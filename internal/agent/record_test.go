@@ -6,20 +6,6 @@ import (
 	"testing"
 )
 
-func TestParseWhere(t *testing.T) {
-	for in, want := range map[string]Where{
-		"/private/tmp/tmux-501/weaver,84824,3": {Server: 84824, Session: "$3"},
-		"/tmp/tmux-501/default,1,0":            {Server: 1, Session: "$0"},
-		"":                                     {},
-		"/tmp/x,abc,1":                         {},
-		"/tmp/x,12":                            {},
-	} {
-		if got := ParseWhere(in); got != want {
-			t.Errorf("ParseWhere(%q) = %+v, want %+v", in, got, want)
-		}
-	}
-}
-
 // What a resumed agent starts from: every field of a record is either the
 // conversation's (carried on) or its process's and pane's (gone), and a new
 // field must say which here, so none rides along by accident (as server

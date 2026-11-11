@@ -1,6 +1,6 @@
 #!/bin/bash
-# weaver on Rex, end to end, smoke: `WEAVER_MUX=rex wvr` starts its session
-# on a throwaway Rex server of its own, a thread opens with its nvim and its
+# weaver on Rex, end to end, smoke: `wvr` starts its session on a
+# throwaway Rex server of its own, a thread opens with its nvim and its
 # agent, the agent's hooks reach its state under the session's Rex key, and
 # quitting ends the session. Its own server, state, config, Claude Code dir
 # and PATH, with a fake agent: never your Rex, agents or keys. Skipped
@@ -13,12 +13,12 @@ command -v rex >/dev/null || { echo "SKIP rex is not installed"; exit 0; }
 # A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
 AT=$(mktemp -d /tmp/weaver-rex.XXXXXX)
 S=wr$$
-unset TMUX TMUX_PANE WEAVER_TMUX_SESSION WEAVER_RESTORE LINEAR_API_KEY
+unset WEAVER_MUX WEAVER_RESTORE LINEAR_API_KEY
 # Every Rex variable but where rex is (REX_BIN_DIR) is the caller's: gone.
 # Rex keeps a server's runtime files under REX_RUNTIME_DIR: here, never in
 # your Rex's directory, and rex never falls back to your server.
 for v in $(compgen -e | grep '^REX_' | grep -v '^REX_BIN_DIR$'); do unset "$v"; done
-export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock REX_CONFIG=$AT/init.lua WEAVER_MUX=rex WEAVER_SESSION=$S
+export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock REX_CONFIG=$AT/init.lua WEAVER_SESSION=$S
 export XDG_STATE_HOME=$AT/state XDG_CONFIG_HOME=$AT/config XDG_DATA_HOME=$AT/data CLAUDE_CONFIG_DIR=$AT/claude
 export WEAVER_VIEWS= WEAVER_SELF_SETUP=0 EDITOR=nvim VISUAL=nvim TERM=xterm-256color
 [ -f "$HERE/nvim/init.lua" ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
@@ -91,7 +91,7 @@ windows() { view | jq -r '[.windows[] | "\(.label)/\([.layers[] | select(.kind =
 block_at() { view | jq -r --argjson n "$1" --argjson i "$2" '.windows[$n - 1].layers[] | select(.kind == "tiled") | .layout.split | [.before.block_id, .after.block_id][$i]'; }
 num() { head -n 1 "$SD/rex/u/$(printf '%s' "$1" | tr ':' '_')"; }
 
-# --- weaver: on Rex with WEAVER_MUX=rex, home first with the board
+# --- weaver: home first with the board
 wvr >"$AT/start.out" 2>&1
 SID=$(sid)
 waitfor 'ls /tmp/weaver-$(id -u)/rex-$S.fzf.*.sock >/dev/null 2>&1' 100
@@ -105,10 +105,10 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 ok "start: weaver's keys written beside Rex's init.lua, and Rex told to read them" \
 	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|10"
 
-# --- wvr --rex in a Rex session weaver did not make (any Rex terminal's):
+# --- wvr in a Rex session weaver did not make (any Rex terminal's):
 # weaver's session, shown, never a board of that one
 OTHER=$(R api call session.create '{"label":"other"}' | jq -r .session_id)
-REX_SESSION=$OTHER perl -e 'alarm 10; exec @ARGV' wvr --rex >"$AT/other.out" 2>&1
+REX_SESSION=$OTHER perl -e 'alarm 10; exec @ARGV' wvr >"$AT/other.out" 2>&1
 ok "start in another Rex session: weaver's shown, no second one, no board there" \
 	"$(sid | wc -l | tr -d ' ')|$(ls /tmp/weaver-$(id -u)/rex-$S.fzf.*.sock /tmp/weaver-$(id -u)/rex-${OTHER#session:}.fzf.*.sock 2>/dev/null | wc -l | tr -d ' ')|$(grep -c "the $S session runs in Rex" "$AT/other.out")" \
 	"1|1|1" || sed 's/^/  other: /' "$AT/other.out"
@@ -147,12 +147,12 @@ ok "keys: Alt k, home; Alt j, the thread again" "$k|$(active)" "true|home|true|0
 	{ grep -i weaver "$AT/server.log" | tail -5 | sed 's/^/  server: /'; }
 # Rex starts each key's wvr at once, so a press can come while the last is
 # at work: every press moves one window on from where the last left you, as
-# tmux's next-window does (two from the thread: home, then the thread).
+# a next window should (two from the thread: home, then the thread).
 k="$(alt j)$(alt j)"
 sleep 1.5
 ok "keys: Alt j twice at once, two windows on" "$k|$(active)" "truetrue|01 say hello · repo/main"
 # In one of weaver's popups (here Ctrl q's card) its keys are the popup's
-# program's, as tmux's popups take every key: Alt j stays in the card.
+# program's, as a popup takes every key: Alt j stays in the card.
 popup() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .layer_id][0] // ""'; }
 (REX_SESSION=$SID wvr _popup quit >/dev/null 2>&1 &)
 waitfor '[ -n "$(popup)" ]' 50

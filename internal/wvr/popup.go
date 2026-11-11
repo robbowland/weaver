@@ -87,8 +87,7 @@ func (e *Env) Popup(args []string) error {
 	case "forget":
 		return e.cardPopup(append([]string{"resume", "--forget"}, args[1:]...)...)
 	case "quit":
-		// Ctrl q on Rex (tmux's is its own): what quitting stops and keeps,
-		// asked in the card.
+		// Ctrl q: what quitting stops and keeps, asked in the card.
 		return e.cardPopup("quit")
 	case "adopt":
 		// An agent you started by hand becomes a thread where it is, said on

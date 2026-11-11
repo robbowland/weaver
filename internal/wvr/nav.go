@@ -19,11 +19,10 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Moving between agents: the board's jumps, Alt y (go home), Alt 1 (next),
-// and tmux's hooks as you look (seen) or resize (fit).
+// and seen as you look.
 
 // focus moves your client to pane p (its window first).
 func (e *Env) focus(p mux.PaneID) { e.Mux().Focus(p) }
@@ -31,9 +30,9 @@ func (e *Env) focus(p mux.PaneID) { e.Mux().Focus(p) }
 // Goto is `wvr _goto PANE TAB`: jump to an agent from the home board
 // (which stays) and count it as seen; with no PANE, to the tab.
 func (e *Env) Goto(pane, tab string) {
-	p, ok := tmux.ParsePane(pane)
+	p, ok := mux.ParsePane(pane)
 	if !ok {
-		if w, ok := tmux.ParseWindow(tab); ok {
+		if w, ok := mux.ParseWindow(tab); ok {
 			e.Mux().Show(w)
 		}
 		return
@@ -115,8 +114,8 @@ func (e *Env) GoHome() {
 // peek shows Alt y's popover over thread window cur (`wvr _peek`): the
 // board, most of the terminal, its cursor on cur's thread, and on tab the
 // views. It waits for the popover to close, then runs what was chosen there
-// that the popover would have been in the way of: a jump, or a dialog (tmux
-// shows one popup at a time). False when no terminal looks at the session.
+// that the popover would have been in the way of: a jump, or a dialog (one
+// popup at a time). False when no terminal looks at the session.
 func (e *Env) peek(cur mux.Window) bool {
 	if e.SockDirReady() != nil {
 		return false
@@ -210,13 +209,13 @@ func (e *Env) GoView(step int) {
 			at = i
 		}
 	}
-	e.statusClick(order[((at+step)%len(order)+len(order))%len(order)])
+	e.goTo(order[((at+step)%len(order)+len(order))%len(order)])
 }
 
-// GoWindow is `wvr go window next|prev` (Alt j, Alt k in Rex, as tmux.conf
-// binds them in tmux): the next or previous window that shows no view
+// GoWindow is `wvr go window next|prev` (Alt j, Alt k): the next or
+// previous window that shows no view
 // (home, a thread), around the end. Each press moves on from where the last
-// left you, as tmux's next-window does: Rex starts a key's wvr at once, so
+// left you: Rex starts a key's wvr at once, so
 // a press can come while the last one's is at work, and both would read the
 // same window.
 func (e *Env) GoWindow(step int) {
@@ -311,7 +310,7 @@ func (e *Env) GoBack() {
 
 func (e *Env) goBack(ws []mux.Window, cur mux.Window, home mux.WindowID) {
 	if l, _ := files.FirstLine(e.lastFile()); l != "" {
-		last, _ := tmux.ParseWindow(l)
+		last, _ := mux.ParseWindow(l)
 		for _, w := range ws {
 			if w.ID == last && w.View == "" && w.ID != home {
 				e.Mux().Show(last)
@@ -402,7 +401,7 @@ func (e *Env) Next() {
 		case session.NeedWait, session.NeedNothing:
 			continue
 		}
-		// What tmux's message line says as you land: whose, and why.
+		// What the message says as you land: whose, and why.
 		l := r.Called()
 		if i := strings.IndexByte(l, '\n'); i >= 0 {
 			l = l[:i]
@@ -477,40 +476,6 @@ func doneUnseen(l string) bool {
 	return strings.Contains(l, `"state":"done"`) && !strings.Contains(l, `"seen":true`)
 }
 
-// Seen is `wvr _seen WINDOW` (tmux's pane-focus-in hook, 1.5 s after you
-// focus a window flagged as holding an agent done and unseen): if you are
-// still on it, the agent you are looking at is seen.
-func (e *Env) Seen(window string) {
-	win, ok := tmux.ParseWindow(window)
-	if !ok {
-		return
-	}
-	out, err := e.Tmux("display-message", "-p", "-t", tmux.WindowTarget(win), "#{window_active}:#{session_attached}:#{pane_id}")
-	if err != nil {
-		return
-	}
-	info := strings.TrimSpace(string(out))
-	f := strings.SplitN(info, ":", 3)
-	if len(f) != 3 || f[0] != "1" || f[1] == "" || f[1] == "0" || !strings.HasPrefix(f[2], "%") {
-		return
-	}
-	p, _ := tmux.ParsePane(f[2])
-	if a, _ := e.see(p); a == "" {
-		return
-	}
-	left := false
-	ps, _ := e.Mux().Panes()
-	for _, q := range windowPanes(ps, win) {
-		if l, _ := files.FirstLine(e.StateFile(q)); doneUnseen(l) {
-			left = true
-		}
-	}
-	if !left {
-		e.Mux().MarkUnseen(p, false)
-	}
-	e.PushStatus()
-}
-
 // see marks seen the agent pane p is, or whose nvim it is, when it is done
 // and unseen: that agent ("" for none), and whether it was marked.
 func (e *Env) see(p mux.PaneID) (mux.PaneID, bool) {
@@ -525,8 +490,8 @@ func (e *Env) see(p mux.PaneID) (mux.PaneID, bool) {
 	return a, false
 }
 
-// seeAsYouLook is, on Rex, what tmux's pane-focus-in hook (Seen) does:
-// while home's board runs, the agent of the pane you stay on 1.5 s is seen,
+// seeAsYouLook: while home's board runs, the agent of the pane you stay on
+// 1.5 s is seen,
 // however you came to its window (weaver's keys, the board, the app's own
 // tabs). Rex has no such hook: the board follows the session's events
 // (rex.Session.WatchActive) and, 1.5 s after the last change of window,
@@ -587,32 +552,4 @@ func agentCols(total int) int {
 		c = least
 	}
 	return c
-}
-
-// Fit is `wvr _fit WINDOW` (tmux's window-resized hook): its thread's
-// agent back to its width, since tmux takes a narrower window's columns from
-// the rightmost pane, the agent's.
-func (e *Env) Fit(window string) {
-	win, ok := tmux.ParseWindow(window)
-	if !ok {
-		return
-	}
-	all, _ := e.Mux().Panes()
-	ps := windowPanes(all, win)
-	if len(ps) != 2 {
-		return
-	}
-	total := 0
-	for _, p := range ps {
-		if !files.Exists(e.ThreadFile(p)) || e.NvimPane(p) == "" {
-			continue
-		}
-		if total == 0 {
-			var ok bool
-			if total, ok = e.windowWidth(win); !ok {
-				return
-			}
-		}
-		e.Mux().SetWidth(p, agentCols(total))
-	}
 }

@@ -7,8 +7,7 @@
 P=90
 N=${WEAVER_BENCH_N:-15}
 mkdir -p "/tmp/weaver-$(id -u)" "$SD" && chmod 700 "/tmp/weaver-$(id -u)"
-NVP=$(Z new-pane --name latency -- bash --noprofile --norc)
-NVP=${NVP#terminal_}
+NVP=$(new_pane bash --noprofile --norc)
 rm -f "$(sock $P)"
 nvim --clean --headless --listen "$(sock $P)" \
 	-c 'lua function WeaverEvent() return 0 end' \
@@ -35,7 +34,7 @@ printf '{"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_
 # run FILE [ARGS]: one hook call, in ms: until the hook exits, which is what
 # the agent waits for (its background work goes on without it).
 run() {
-	ZELLIJ_PANE_ID=$P perl -MTime::HiRes=time -e '
+	perl -MTime::HiRes=time -e '
 		open(STDIN, "<", shift) or die; open(my $out, ">&", \*STDOUT); open(STDOUT, ">", "/dev/null");
 		my $t = time; system(@ARGV); printf $out "%d", (time - $t) * 1000' "$1" wvr hook ${2:+"$2"}
 }
@@ -93,16 +92,16 @@ L_BASE=$LOW
 sleep 1
 
 # Generous budgets, so a loaded machine passes; what they catch is a
-# synchronous nvim or tmux call (10-15 ms each, 2 s when stuck) creeping
+# synchronous nvim or Rex call (10-25 ms each, 2 s when stuck) creeping
 # back in, or the async hook parsing events it has no use for.
 ok "latency: a prompt costs the agent under 25 ms" "$([ "$L_PROMPT" -lt 25 ] && echo y)" y
-ok "latency: an edit in the async hook waits on neither nvim nor tmux (under 40 ms)" \
+ok "latency: an edit in the async hook waits on neither nvim nor Rex (under 40 ms)" \
 	"$([ "$L_EDIT" -lt 40 ] && echo y)" y
 ok "latency: the async hook with nothing to do costs next to nothing over wvr starting (under 3 ms more)" \
 	"$([ "$L_ASYNC" -lt $((L_BASE + 3)) ] && echo y)" y ||
 	echo "  (async nothing ${L_ASYNC} ms, floor ${L_BASE} ms, lower quartiles)"
 
 kill "$nvpid" 2>/dev/null
-Z close-pane --pane-id "terminal_$NVP" >/dev/null 2>&1
+close_pane "$NVP" >/dev/null 2>&1
 rm -f "$SD/${SK}_$P".* "$(sock $P)"
 done_suite

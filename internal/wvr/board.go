@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -175,27 +174,9 @@ func focusRefresh(refresh string) string {
 	return `transform{[ "$FZF_INPUT_LABEL" = ` + scrolledMark + ` ] && echo "` + cardUnscrolled + `+` + refresh + `"}`
 }
 
-// cardHold is how a refresh treats a list whose card you scrolled: on
-// screen, it holds; off screen, unmark ends the hold before it goes ahead.
-func (e *Env) cardHold() (hold bool, unmark string) {
-	if os.Getenv("FZF_INPUT_LABEL") != scrolledMark {
-		return false, ""
-	}
-	if e.onScreen() {
-		return true, ""
-	}
-	return false, cardUnscrolled + "+"
-}
-
-// onScreen: is this list's pane one a client shows? (A popover has no
-// pane of its own: it shows while it runs.)
-func (e *Env) onScreen() bool {
-	if e.MyPane == "" {
-		return true
-	}
-	ps, err := e.Mux().Looking()
-	return err != nil || slices.Contains(ps, e.MyPane)
-}
+// cardHeld: does a refresh hold off for a list whose card you scrolled?
+// (Rex does not say whether the list is on screen: it is taken to be.)
+func cardHeld() bool { return os.Getenv("FZF_INPUT_LABEL") == scrolledMark }
 
 // cardRoom is where the card goes in a dashboard cols x lines with a list of
 // items lines (fzf's --preview-window), kept next to the socket (.room,
@@ -272,16 +253,15 @@ func (e *Env) Rows() string { return keepRows(sockBase(), e.rows(false)) }
 
 // Refresh is what the board does as threads change (`_refresh`, which
 // session.pushStatus posts): nothing while you read a card you scrolled
-// (cardHold); else its rows again if they changed, else its chrome alone.
+// (cardHeld); else its rows again if they changed, else its chrome alone.
 func (e *Env) Refresh() string {
-	hold, unmark := e.cardHold()
 	switch {
-	case hold:
+	case cardHeld():
 		return ""
 	case rowsChanged(sockBase(), e.rows(false)):
-		return unmark + "reload-sync(COLOR=1 " + session.Quote(e.Self) + " _rows)\n"
+		return "reload-sync(COLOR=1 " + session.Quote(e.Self) + " _rows)\n"
 	}
-	return unmark + e.Chrome()
+	return e.Chrome()
 }
 
 // PlainRows is the board as text, $COLUMNS wide (`wvr ls | cat`).
@@ -599,10 +579,6 @@ func (e *Env) rows(plain bool) string {
 		tc += paint(shown, c, dim, off) + " " + grey + strconv.Itoa(states[g]) + off + "  "
 	}
 	titleR, tc = strings.TrimSuffix(titleR, "  "), strings.TrimSuffix(tc, "  ")
-	// Home is in the weaver session, whose status line shows the counts.
-	if os.Getenv("LS_HOME") != "" {
-		titleR, tc = "", ""
-	}
 	gap := ""
 	if !plain {
 		k := max(lsCols-4-rlen(titleL)-rlen(titleR)-4, 1)
@@ -900,7 +876,7 @@ func (e *Env) Footer() string { return hintLine(e.boardHints(), 2) + "\n" }
 // the list has on a terminal cols x lines (a third of the way down, as a
 // card sits), and for each of its lines (from 1) what a click on it does,
 // "" for none: each key line is its key's button. An Alt key's button runs
-// what the key does (wvr, as q quotes it), on tmux or Rex alike.
+// what the key does (wvr, as q quotes it).
 func welcome(cols, lines int, views bool, q string) (string, []string) {
 	type row struct{ key, what, act string }
 	rows := []row{{"n", "start a thread here", "trigger(n)"}, {"alt+N", "start one from anywhere", "execute-silent(" + q + " _popup new)"},

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,39 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
-
-// StatusLine is `wvr status --tmux SESSION`: the counts PushStatus last
-// wrote for the session, in the status line's colours.
-func StatusLine(args []string) string {
-	k := ""
-	if len(args) > 1 && args[1] != "" {
-		k = "tmux-" + args[1]
-	}
-	state := os.Getenv("XDG_STATE_HOME")
-	if state == "" {
-		home := os.Getenv("HOME")
-		if home == "" {
-			home = "/nonexistent"
-		}
-		state = home + "/.local/state"
-	}
-	c := [3]int{}
-	if k != "" {
-		if l, err := files.FirstLine(state + "/weaver/" + strings.ReplaceAll(k, "/", "_") + ".status"); err == nil {
-			f := strings.Fields(l)
-			ok := len(f) >= 3
-			for i := 0; ok && i < 3; i++ {
-				ok = digits(f[i])
-			}
-			for i := 0; ok && i < 3; i++ {
-				c[i], _ = strconv.Atoi(f[i])
-			}
-		}
-	}
-	return tmux.Counts(c[0], c[1], c[2])
-}
 
 // StatusText is plain `wvr status`: the session's counts as cells,
 // `[!] 1  [x] 2  [/] 1`, each only when there are some (done counts the
@@ -84,9 +51,8 @@ func (e *Env) StatusText() string {
 	return strings.Join(out, "  ")
 }
 
-// PushStatus brings what shows the session's agents up to date: agents
-// done that a client looks at count as seen, the counts go to the status
-// file and tmux's status line, and every dashboard reloads.
+// PushStatus brings what shows the session's agents up to date: every
+// dashboard reloads.
 func (e *Env) PushStatus() { e.pushStatus(false) }
 
 // PushStatusAndLabels is PushStatus, and in the weaver session the threads'
@@ -94,48 +60,6 @@ func (e *Env) PushStatus() { e.pushStatus(false) }
 func (e *Env) PushStatusAndLabels() { e.pushStatus(true) }
 
 func (e *Env) pushStatus(labels bool) {
-	looking, _ := e.Mux().Looking()
-	rows, at := e.AgentRows()
-	var need, done, work int
-	var seenNow []mux.PaneID
-	for _, r := range rows {
-		if r.Pane == "" {
-			continue
-		}
-		switch r.Need(at) {
-		case NeedYou:
-			need++
-		case NeedLook:
-			// Done while you look at it (its pane or its nvim): seen at once.
-			if slices.Contains(looking, r.Pane) ||
-				slices.Contains(looking, e.NvimPane(r.Pane)) && e.NvimPane(r.Pane) != "" {
-				seenNow = append(seenNow, r.Pane)
-			} else {
-				done++
-			}
-		case NeedWait:
-			work++
-		case NeedNothing:
-		}
-	}
-	for _, p := range seenNow {
-		e.MarkSeen(p)
-	}
-	sf := e.StateDir + "/" + e.SKey + ".status"
-	old := ""
-	if l, err := files.FirstLine(sf); err == nil {
-		if f := strings.Fields(l); len(f) >= 3 {
-			old = strings.Join(f[:3], " ")
-		}
-	}
-	now := strconv.Itoa(need) + " " + strconv.Itoa(done) + " " + strconv.Itoa(work)
-	bestEffort(store.WriteAtomic(sf, []byte(now+"\n"))) // the counts again next time
-	// Shown, they redraw every client (tmux's status line): set them when
-	// they change.
-	if labels || now != old {
-		// An agent that needs you is mid-turn too: quitting stops it.
-		e.Mux().Publish(mux.Counts{Need: need, Done: done, Work: work, Busy: need+work > 0})
-	}
 	q := Quote(e.Self)
 	socks, _ := filepath.Glob(e.SockDir + "/" + e.SKey + ".fzf.*.sock")
 	for _, s := range socks {
@@ -161,6 +85,7 @@ func (e *Env) pushStatus(labels bool) {
 		}
 	}
 	if labels && e.WeaverSession() {
+		rows, _ := e.AgentRows()
 		e.threadTabLabels(rows)
 	}
 }

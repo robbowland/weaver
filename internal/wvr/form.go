@@ -23,7 +23,6 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -590,7 +589,7 @@ func (e *Env) New(args []string) error {
 			case "--repo":
 				repoArg = v
 			case "--from":
-				from, _ = tmux.ParsePane(v)
+				from, _ = mux.ParsePane(v)
 			case "--branch", "-b":
 				branch = v
 			case "--base":
@@ -624,7 +623,7 @@ func (e *Env) New(args []string) error {
 		}
 	}
 	if e.Session == "" {
-		return errors.New("not inside tmux: start it with `wvr`, then alt+N (or wvr new) there")
+		return errors.New("not inside a weaver session: start it with `wvr`, then alt+N (or wvr new) there")
 	}
 	kind, ok := agent.ParseKind(agentArg)
 	if !ok {

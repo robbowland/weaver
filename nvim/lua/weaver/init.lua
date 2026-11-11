@@ -159,7 +159,7 @@ local function keys()
   vim.g.weaver_review_key_label = ((prefix .. 't'):gsub('<[Ll]eader>', leader))
 end
 
--- No UI left (tmux closed the pane: a crash, quit or close) means nobody
+-- No UI left (its pane closed: a crash, quit or close) means nobody
 -- can answer a prompt, yet an error on the way out (most often a ShaDa file
 -- that several nvims, all told to go at once, race to write) makes nvim wait
 -- for a key, for good. So with no UI: write ShaDa with its errors silenced,

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// NoRex clears what weaver, Rex and tmux read from the environment (all
+// NoRex clears what weaver and Rex read from the environment (all
 // but where rex is, REX_BIN_DIR) and points rex at a server that is not
 // there, in a runtime directory of the test's own: rex never falls back
 // to the user's server, and no Rex answers. Its directory, under /tmp (a
@@ -22,7 +22,7 @@ func NoRex(t testing.TB) string {
 	t.Helper()
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
-		if k == "TMUX" || k == "TMUX_PANE" || strings.HasPrefix(k, "WEAVER_") ||
+		if strings.HasPrefix(k, "WEAVER_") ||
 			strings.HasPrefix(k, "REX_") && k != "REX_BIN_DIR" {
 			t.Setenv(k, "")
 			_ = os.Unsetenv(k)

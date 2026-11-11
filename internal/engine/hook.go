@@ -25,8 +25,8 @@ import (
 )
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
-// agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, tmux, Worktrunk,
-// snapshots, the status line) runs after it in a detached `wvr hook --bg`.
+// agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, Rex, Worktrunk,
+// snapshots, the status) runs after it in a detached `wvr hook --bg`.
 
 const rs = "\x1e" // separates the members of the hook's lists
 
@@ -39,9 +39,8 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 type hk struct {
 	Pane            mux.PaneID
 	AgentKind, SKey string
-	// The session it acts on (its name, and on Rex its id), which the
-	// background run takes rather than its environment's: a Codex daemon's
-	// is any session's.
+	// The session it acts on (its name and Rex id), which the background
+	// run takes rather than its environment's.
 	Session, RexID string
 	Mode           string `json:"-"`
 	sf             string
@@ -454,7 +453,7 @@ func writeState(e *session.Env, h *hk) {
 		nv := json.Number(h.NV)
 		st.NvimPane = &nv
 	}
-	// The life of the tmux session it runs in: a server or session made
+	// The life of the Rex session it runs in: a server or session made
 	// again is another, however soon (session's lives.lost).
 	st.Where = e.Where
 	if h.Sid != "" {
@@ -592,7 +591,7 @@ func spawnBg(e *session.Env, h *hk) {
 		}
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	// Not started, nvim, tmux and the snapshots catch up at the next event.
+	// Not started, nvim, Rex and the snapshots catch up at the next event.
 	bestEffort(c.Start())
 }
 

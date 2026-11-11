@@ -20,11 +20,11 @@ import (
 	"github.com/robbowland/weaver/internal/session"
 )
 
-// viewEnv is a session of no tmux server, its state in a directory of its
+// viewEnv is a session of no Rex server, its state in a directory of its
 // own.
 func viewEnv(t *testing.T) *Env {
 	t.Helper()
-	return &Env{&session.Env{StateDir: t.TempDir(), TSock: []string{"-S", filepath.Join(t.TempDir(), "none")}}}
+	return &Env{&session.Env{StateDir: t.TempDir()}}
 }
 
 func prs(ns ...int) []github.Item {

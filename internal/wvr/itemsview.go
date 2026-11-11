@@ -601,43 +601,6 @@ func (e *Env) itemHints(src itemSource) []choice {
 // itemFooter is the view's footer: its hints, each a button.
 func (e *Env) itemFooter(src itemSource) string { return hintLine(e.itemHints(src), 2) }
 
-// itemMenu is a right click's menu on a view's row of kind k: what its keys
-// do to the item (none on a section's heading), and the view's own.
-func (e *Env) itemMenu(src itemSource, k string) []menuItem {
-	var ms []menuItem
-	if strings.HasPrefix(k, "i") {
-		ms = []menuItem{{"start a thread", "", "Enter"}, {strings.ToLower(readOnly(e.itemKind(src))) + ", read-only", "m", "M-m"}}
-		if !searching() {
-			ms = append(ms, menuItem{"open in the browser", "o", "o"})
-		}
-	}
-	if searching() {
-		return ms
-	}
-	d := src.read(e)
-	// No key of its own in the menu: m there is alt+m's.
-	if s, ok := d.section(e.itemKind(src), rowKey(k)); ok && s.more {
-		ms = append(ms, menuItem{"more of " + strings.ToLower(s.title), "", "m"})
-	}
-	if len(ms) > 0 {
-		ms = append(ms, menuItem{})
-	}
-	if ks := src.kinds(); len(ks) > 1 {
-		next := ks[0]
-		for i, k := range ks {
-			if k == e.itemKind(src) {
-				next = ks[(i+1)%len(ks)]
-			}
-		}
-		ms = append(ms, menuItem{"show " + strings.ToLower(src.label(next)), "s", "s"})
-	}
-	ms = append(ms, menuItem{"filter", "f", "f"})
-	if d.searched() != "" {
-		ms = append(ms, menuItem{"clear the search", "", "Escape"})
-	}
-	return append(ms, menuItem{"refresh", "r", "C-r"}, menuItem{"help", "?", "?"})
-}
-
 // itemCardRoom is where a view's card goes, as the board's goes: beside the
 // list when there is room, else under it in what the list leaves.
 func itemCardRoom(rows int) string {
@@ -944,16 +907,15 @@ func (e *Env) Items(args []string) error {
 		return nil
 	case "refresh":
 		// As threads change, or behind a fetch: nothing while you read a
-		// card you scrolled (cardHold); else its rows again if they
+		// card you scrolled (cardHeld); else its rows again if they
 		// changed, else its chrome alone.
 		me := session.Quote(e.Self) + " _items " + src.name()
-		hold, unmark := e.cardHold()
 		switch {
-		case hold:
+		case cardHeld():
 		case rowsChanged(os.Getenv("WEAVER_VIEW_SOCK"), e.itemRows(src)):
-			fmt.Print(unmark + "reload-sync(" + me + " rows)\n")
+			fmt.Print("reload-sync(" + me + " rows)\n")
 		default:
-			fmt.Print(unmark + "transform(" + me + " chrome)\n")
+			fmt.Print("transform(" + me + " chrome)\n")
 		}
 		return nil
 	case "chrome", "loaded":
@@ -986,9 +948,6 @@ func (e *Env) Items(args []string) error {
 		return nil
 	case "click":
 		fmt.Print(footClick(e.itemHints(src), 2, session.Quote(e.Self)))
-		return nil
-	case "menu":
-		e.rowMenu(e.itemMenu(src, ref))
 		return nil
 	case "help":
 		// ? shows the keys in the card's place; ? again, the card.
@@ -1102,12 +1061,12 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	}
 	fromAct, reviewAct := "execute-silent("+me+" from {2})", "execute-silent("+me+" from {2} --review)"
 	backAct := "execute-silent(" + q + " go back)"
-	nextAct, prevAct, menuAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)", "execute-silent("+me+" menu {1})"
+	nextAct, prevAct := "execute-silent("+q+" go next)", "execute-silent("+q+" go prev)"
 	peekArg := ""
 	if peek != "" {
 		// In the popover, what opens a dialog or goes elsewhere ends it.
 		fromAct, reviewAct = "print(from)+accept", "print(review)+accept"
-		backAct, nextAct, prevAct, menuAct = "abort", "print(next)+accept", "print(prev)+accept", "ignore"
+		backAct, nextAct, prevAct = "abort", "print(next)+accept", "print(prev)+accept"
 		peekArg = " peek"
 	}
 	// Alt N on an item, its thread; enter too, and on a section's last
@@ -1165,9 +1124,8 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 			"--bind", "ctrl-s:execute-silent(" + me + " ask {q})",
 			"--bind", "q:" + backAct,
 			"--bind", "?:execute-silent(" + me + " help)+" + cardUnscrolled + "+refresh-preview+transform(" + me + " chrome)",
-			// The footer's hints are buttons; a right click, the row's menu.
+			// The footer's hints are buttons.
 			"--bind", "click-footer:transform(" + me + " click)",
-			"--bind", "right-click:" + menuAct,
 		}
 		args = append(args, cardScrollBinds...)
 		if peek != "" {

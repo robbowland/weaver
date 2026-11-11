@@ -1,4 +1,4 @@
--- weaver's keys in Rex, as config/tmux.conf binds them in tmux. wvr writes
+-- weaver's keys in Rex. wvr writes
 -- this file (weaver.lua, beside the init.lua Rex reads) each time it starts
 -- on Rex, and has Rex read it again when it is new to Rex; init.lua loads
 -- it with
@@ -17,7 +17,7 @@ local rexbin = "@REXBIN@"
 -- The settings a key's wvr reads (where weaver keeps its state, its
 -- widths, its views) that the wvr writing this had set: Rex's server runs
 -- these keys' commands with an app's environment, which has none of a
--- shell's, as tmux's run-shell has its server's.
+-- shell's.
 local settings = { --[[@SETTINGS@]] }
 
 local terminal = "com.superlogical.terminal"
@@ -47,8 +47,8 @@ local function pwd(ctx)
   return home()
 end
 
--- run runs wvr with args for the session the key was pressed in, as tmux's
--- run-shell does: in no pane of its own, so weaver acts on the focused one.
+-- run runs wvr with args for the session the key was pressed in, in no
+-- pane of its own, so weaver acts on the focused one.
 -- From cwd, else home (as well when cwd has gone: a removed worktree's).
 -- What it says when it fails goes to Rex's log (rex server logs). False
 -- when it could not run at all (no wvr where it was): the key is the
@@ -94,7 +94,7 @@ end
 
 -- weavers: is the key pressed in a Rex session weaver made? Rex's
 -- configuration is one for every session; elsewhere the key is the
--- terminal's (a weaver on tmux in a Rex terminal reads its own Alt keys).
+-- terminal's.
 local function weavers(ctx)
   local id = (ctx.session_id or ""):gsub(":", "_")
   local f = id ~= "" and io.open(sessions .. "/" .. id)
@@ -106,8 +106,8 @@ local function weavers(ctx)
 end
 
 -- inPopup: is the key pressed in a floating layer, one of weaver's popups
--- (a new thread's form, a card, Alt y's board)? tmux's popups take every
--- key, its own bindings never reach them: the popup's program reads it.
+-- (a new thread's form, a card, Alt y's board)? A popup takes every key:
+-- the popup's program reads it.
 local function inPopup(ctx)
   if not ctx.block_id then return false end
   local v = rex.session.view{}
@@ -140,10 +140,9 @@ end)
 key("alt+v", function(ctx) return run(ctx, { "edit" }) end)
 key("alt+shift+v", function(ctx) return run(ctx, { "edit", "--full" }) end)
 key("alt+1", function(ctx) return run(ctx, { "next" }) end)
--- Quit the session, every agent and nvim in it, after asking (tmux's
--- Ctrl q asks only while a turn is under way).
+-- Quit the session, every agent and nvim in it, after asking.
 key("ctrl+q", function(ctx) return run(ctx, { "_popup", "quit" }) end)
--- The next and previous window that shows no view, as tmux's: through wvr,
+-- The next and previous window that shows no view: through wvr,
 -- since the app shows only a window it is asked to (the server's active
 -- window is not what it shows).
 key("alt+j", function(ctx) return run(ctx, { "go", "window", "next" }) end)

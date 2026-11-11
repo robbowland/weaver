@@ -119,8 +119,7 @@ ok "...and not once it has" "$(FZF_SOCK=$AT/hb.sock foot | grep -c 'HOLDING')|$(
 golden empty-card.txt "$(wvr _preview '' | strip)"
 
 # A thread whose agent has not reported yet: starting, then not reporting.
-NP=$(Z new-pane --name starting -- bash --noprofile --norc)
-NP=${NP#terminal_}
+NP=$(new_pane bash --noprofile --norc)
 thread() {
 	jq -nc --argjson p "$NP" --argjson c $(($(date +%s) - $1)) --arg a "$2" --arg w "$T/dash-flag" \
 		'{name: "flaky", task: "Fix the flaky test", repo: "", branch: "flaky", worktree: $w, here: false,
@@ -140,7 +139,7 @@ ok "a Codex thread that never reports: its hooks need trusting" \
 w300=$(working)
 ok "...counted as nothing, by the status line as by the board, and its card says so" \
 	"$((${w70:-0} - ${w300:-0}))|$(wvr _preview "$NP" | strip | sed -n '1p' | cut -d ' ' -f 1-2)" "1|not reporting"
-Z close-pane --pane-id "terminal_$NP"
+close_pane "$NP"
 sleep 0.3
 ok "...and gone with its pane" "$(LS_MODE=plain wvr _rows | grep -c 'flaky')" "0"
 rm -f "$SD/${SK}_$NP.thread"

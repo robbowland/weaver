@@ -36,12 +36,9 @@ func UsageHelp() string {
 
 // Usage is `wvr help`.
 const Usage = `usage: wvr [command]
-  (none)                       outside tmux: attach to, or start, the session "weaver"
-                               ($WEAVER_SESSION) on weaver's own tmux server; inside
-                               tmux: the dashboard
+  (none)                       outside it: start, or show, weaver's Rex session "weaver"
+                               ($WEAVER_SESSION); inside it: the dashboard
   start [session]              the same, for another session
-  --rex [session]              start (or show) the session on Rex instead of tmux
-                               (as WEAVER_MUX=rex; --tmux: on tmux, whatever it says)
   new [task...]                start a thread: a new window with nvim and an agent, in a new
                                worktree whose branch starts from the remote's default
                                branch, fetched; with no task, a form. Options: --name NAME
@@ -69,7 +66,7 @@ const Usage = `usage: wvr [command]
                                and brought back as threads are: the agent in this pane
                                (or pane-id) where it runs, or conversation session-id
                                resumed in a new window; alone, pick one of Claude Code's
-                               recent conversations. Outside tmux, into the weaver session
+                               recent conversations. Outside it, into the weaver session
   rename [pane-id] [name]      call a thread name on the board and its window, in place of
                                its agent's title; with no name, ask; an empty one gives the
                                agent's title back
@@ -90,11 +87,10 @@ const Usage = `usage: wvr [command]
   next                         jump to the next agent that needs you; repeat to cycle
   view [github|linear]         go to a view beside home: GITHUB or LINEAR (one
                                not set up shows how; one you hid shows again)
-  status [--tmux SESSION]      agent counts (--tmux: for tmux's status line)
+  status                       agent counts
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
-  gc [--dry-run]               forget agents that are gone; end the nvims, and what
-                               agents left running, and remove the worktrees weaver
-                               left behind; --dry-run lists what agents left running
+  gc                           forget agents that are gone; end the nvims, and remove
+                               the worktrees weaver left behind
   setup [--dry-run] [--no-codex] [--bin PATH]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file

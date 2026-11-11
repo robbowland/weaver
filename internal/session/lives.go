@@ -1,7 +1,6 @@
 package session
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -12,20 +11,15 @@ import (
 	"github.com/robbowland/weaver/internal/store"
 )
 
-// lives is what weaver's multiplexers say of the sessions weaver's files
-// name, and what weaver makes of it: each multiplexer is asked a thing at
-// most once while it is kept, so every file one pass looks at (a gc run,
-// the board's rows) is judged by the same answers. A file is keyed by its
-// session (tmux-<name>, rex-<name>); a key of neither (zellij's, from
-// before weaver ran on tmux) is judged as tmux's, but never lost.
+// lives is what Rex says of the sessions weaver's files name, and what
+// weaver makes of it: Rex is asked a thing at most once while it is kept,
+// so every file one pass looks at (a gc run, the board's rows) is judged
+// by the same answers. A file is keyed by its session (rex-<name>); a key
+// of another (tmux's or zellij's, from before weaver ran on Rex only)
+// names a session that no longer runs, and is never lost.
 type lives struct {
 	e    *Env
 	boot int64 // when the machine started (epoch s); 0 when not known
-
-	tmuxAsked    bool
-	tmux         []tmuxSession
-	tmuxAnswered bool
-	shown        map[paneLife]bool // tmux's panes; nil until asked
 
 	rex   rex.Answer
 	rexes map[string]*rexLife
@@ -46,16 +40,6 @@ func (e *Env) newLives() *lives { return &lives{e: e, boot: process.BootTime()} 
 // beforeBoot: is ts from before the machine started? No session outlives
 // that.
 func (l *lives) beforeBoot(ts int64) bool { return l.boot > 0 && ts < l.boot }
-
-// tmuxSessions are tmux's running sessions, on weaver's server and the
-// one weaver runs in; false when neither answered.
-func (l *lives) tmuxSessions() ([]tmuxSession, bool) {
-	if !l.tmuxAsked {
-		l.tmux, l.tmuxAnswered = l.e.tmuxSessions()
-		l.tmuxAsked = true
-	}
-	return l.tmux, l.tmuxAnswered
-}
 
 // onRex is the Rex session skey names, when it is a Rex key.
 func (l *lives) onRex(skey string) (*rexLife, bool) {
@@ -78,100 +62,60 @@ func (l *lives) onRex(skey string) (*rexLife, bool) {
 // All but one from before the machine started.
 func (l *lives) held(a *rexLife, ts int64) bool { return !a.answered && !l.beforeBoot(ts) }
 
-// running: does skey's session run, for a file of ts? While its
-// multiplexer does not answer, it does (but for a Rex file from before the
-// machine started).
+// running: does skey's session run, for a file of ts? While Rex does not
+// answer, it does (but for a file from before the machine started).
 func (l *lives) running(skey string, ts int64) bool {
-	if a, ok := l.onRex(skey); ok {
-		return a.running || l.held(a, ts)
-	}
-	ss, answered := l.tmuxSessions()
-	return !answered || slices.ContainsFunc(ss, func(s tmuxSession) bool { return s.key == skey })
+	a, ok := l.onRex(skey)
+	return ok && (a.running || l.held(a, ts))
 }
 
 // madeAfter: is skey's session one made after ts, another life of it, the
 // one a file of ts knew having gone? (A name on two servers: the earlier.)
 func (l *lives) madeAfter(skey string, ts int64) bool {
-	if a, ok := l.onRex(skey); ok {
-		made, known := a.s.Made()
-		return a.running && known && ts > 0 && made > ts
+	a, ok := l.onRex(skey)
+	if !ok {
+		return false
 	}
-	ss, _ := l.tmuxSessions()
-	made := int64(0)
-	for _, s := range ss {
-		if s.key == skey && (made == 0 || s.created < made) {
-			made = s.created
-		}
-	}
-	return made > 0 && ts > 0 && made > ts
+	made, known := a.s.Made()
+	return a.running && known && ts > 0 && made > ts
 }
 
 // kept: is the pane of st, the state of an agent that has died, kept (its
 // agent exited, its thread to be started again or closed: the board's to
 // show, not to retire), or can that not be told?
 func (l *lives) kept(skey string, st agent.Record) bool {
-	p := paneOfNum(st.Pane)
-	if a, ok := l.onRex(skey); ok {
-		if l.held(a, st.TS) {
-			return true
-		}
-		if !a.running || a.s.ID != st.Session {
-			return false
-		}
-		if !a.listed {
-			a.panes, a.listErr = a.s.Panes()
-			a.listed = true
-		}
-		_, shown := PaneIn(a.panes, p)
-		return a.listErr != nil || shown
+	a, ok := l.onRex(skey)
+	switch {
+	case !ok:
+		return false
+	case l.held(a, st.TS):
+		return true
+	case !a.running || a.s.ID != st.Session:
+		return false
 	}
-	if l.shown == nil {
-		l.shown = l.e.panesShown()
+	if !a.listed {
+		a.panes, a.listErr = a.s.Panes()
+		a.listed = true
 	}
-	return l.shown[paneLife{skey, p, st.Where}]
+	_, shown := PaneIn(a.panes, paneOfNum(st.Pane))
+	return a.listErr != nil || shown
 }
 
 // lost: did skey's session go since ts (epoch s), its agent having run in
 // life w of it (when its state says)? When the machine has started since
 // ts (no server outlives that, and one started since may have the old
-// one's pid). Else a tmux session, when no server has that life of it any
-// more: no session of its name, or one on another server, or one made
-// again on the same server (another id; older states, without one: a
-// session made after ts). A Rex session, as Rex says (rex.Answer.Lost),
-// known false while Rex does not answer, when it is neither (a thread
-// taken for lost while it runs would be resumed twice, and one taken for
-// not lost forgotten). Any other key never is.
+// one's pid); else as Rex says (rex.Answer.Lost), known false while Rex
+// does not answer (a thread taken for lost while it runs would be resumed
+// twice, and one taken for not lost forgotten). A key of another
+// multiplexer's never is.
 func (l *lives) lost(skey string, ts int64, w agent.Where) (lost, known bool) {
-	rexKey := strings.HasPrefix(skey, "rex-")
-	if !strings.HasPrefix(skey, "tmux-") && !rexKey {
+	switch {
+	case !strings.HasPrefix(skey, "rex-"):
 		return false, true
-	}
-	if l.beforeBoot(ts) {
+	case l.beforeBoot(ts):
 		return true, true
 	}
-	if rexKey {
-		return l.rex.Lost(w)
-	}
-	ss, _ := l.tmuxSessions()
-	for _, s := range ss {
-		if s.key != skey {
-			continue
-		}
-		switch {
-		case w.Server == 0:
-			if s.created <= ts {
-				return false, true
-			}
-		case s.where.Server != w.Server:
-		case w.Session != "":
-			if s.where.Session == w.Session {
-				return false, true
-			}
-		case s.created <= ts:
-			return false, true
-		}
-	}
-	return true, true
+	return l.rex.Lost(w)
 }
 
 // lostCheck: is the dead agent of state file f a thread lost with its

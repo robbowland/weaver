@@ -29,7 +29,6 @@ while [ $# -gt 0 ]; do
 	--configure) configure=1 ;;
 	--dry-run) dry=1 ;;
 	--no-codex) codex=0 ;;
-	--zellij-config) die "weaver runs on tmux only now: --zellij-config is gone (remove weaver's keybindings from your zellij config)" ;;
 	-h | --help)
 		sed -n '2,11p' "$0"
 		exit 0
@@ -80,7 +79,7 @@ install_files() {
 	say "installed $BIN/wvr"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
-	*) warn "$BIN is not on your PATH; weaver's tmux runs 'wvr' from PATH" ;;
+	*) warn "$BIN is not on your PATH; the agents' hooks run 'wvr' from PATH" ;;
 	esac
 }
 

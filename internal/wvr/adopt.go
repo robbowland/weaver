@@ -19,7 +19,6 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // Adopting: a conversation weaver did not start becomes a thread, kept as
@@ -32,13 +31,13 @@ const adoptUsage = "usage: wvr adopt [pane-id | session-id]"
 // Adopt is `wvr adopt [PANE | SESSION-ID]`: the agent in PANE, else the
 // one in this pane, made a thread where it runs; conversation SESSION-ID
 // (or its first 4+ characters) resumed as a thread; with neither, a picker
-// of Claude Code's recent conversations. Outside tmux, into the weaver
+// of Claude Code's recent conversations. Outside it, into the weaver
 // session.
 func (e *Env) Adopt(args []string) error {
 	if len(args) > 1 || len(args) == 1 && strings.HasPrefix(args[0], "-") {
 		return errors.New(adoptUsage)
 	}
-	// From a terminal outside tmux, into the weaver session.
+	// From a terminal outside it, into the weaver session.
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
@@ -72,14 +71,13 @@ func (e *Env) Adopt(args []string) error {
 	return nil
 }
 
-// paneArg is which as a pane: %N, or a number. Pane numbers have no
-// length (tmux's grow with each pane its server opens, Rex's with each
-// block weaver meets), but a number of sidPrefix digits or more could be
+// paneArg is which as a pane: a number. Pane numbers have no length
+// (they grow with each Rex block weaver meets), but a number of sidPrefix digits or more could be
 // the start of a session id (adopt's) or a name (rename's): it is a pane
 // only when weaver follows an agent there.
 func (e *Env) paneArg(which string) (mux.PaneID, bool) {
-	p, ok := tmux.ParsePane(which)
-	if !ok || strings.HasPrefix(which, "%") || len(p) < sidPrefix {
+	p, ok := mux.ParsePane(which)
+	if !ok || len(p) < sidPrefix {
 		return p, ok
 	}
 	return p, e.agentOf(p) == p
@@ -96,7 +94,7 @@ const sidPrefix = 4
 func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 	st, err := store.ReadState(e.StateFile(p))
 	if err != nil {
-		return "", fmt.Errorf("weaver follows no agent in pane %%%s", p)
+		return "", fmt.Errorf("weaver follows no agent in pane %s", p)
 	}
 	sid := oneline.Line(st.SessionID)
 	if st.State == agent.StateEnded || st.Pid != "" && !process.StillRuns(string(st.Pid), st.ProcStart, nil) {

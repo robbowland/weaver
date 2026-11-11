@@ -22,17 +22,17 @@ func TestSweepSockets(t *testing.T) {
 		return l
 	}
 	old := time.Now().Add(-48 * time.Hour)
-	dead := listen("tmux-s_1.sock")
+	dead := listen("rex-s_1.sock")
 	_ = dead.Close()
-	_ = os.Chtimes(dir+"/tmux-s_1.sock", old, old)
-	live := listen("tmux-s_2.sock")
+	_ = os.Chtimes(dir+"/rex-s_1.sock", old, old)
+	live := listen("rex-s_2.sock")
 	defer func() { _ = live.Close() }()
-	_ = os.Chtimes(dir+"/tmux-s_2.sock", old, old)
-	young := listen("tmux-s_3.sock")
+	_ = os.Chtimes(dir+"/rex-s_2.sock", old, old)
+	young := listen("rex-s_3.sock")
 	_ = young.Close()
 
 	e.sweepSockets(24 * time.Hour)
-	for name, want := range map[string]bool{"tmux-s_1.sock": false, "tmux-s_2.sock": true, "tmux-s_3.sock": true} {
+	for name, want := range map[string]bool{"rex-s_1.sock": false, "rex-s_2.sock": true, "rex-s_3.sock": true} {
 		if _, err := os.Lstat(dir + "/" + name); (err == nil) != want {
 			t.Errorf("%s there: %v, want %v", name, err == nil, want)
 		}

@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +31,6 @@ import (
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 	"golang.org/x/sys/unix"
 )
 
@@ -487,15 +485,15 @@ func threadItem(it items.Item) *store.ThreadItem {
 	return &store.ThreadItem{Kind: it.Kind(), Ref: it.Ref(), URL: it.Content().URL, Title: it.Content().Title}
 }
 
-// errCodexOnRex: Codex runs its hooks in a daemon its sessions share, and
-// weaver finds the pane of a hook's event among tmux's (engine.codexPane),
-// so a Codex thread on Rex would never report.
-var errCodexOnRex = errors.New("weaver does not follow Codex on Rex yet: its thread would never report (start it with Claude Code, or run weaver on tmux)")
+// errCodexOnRex: Codex runs its hooks in a daemon its sessions share, with
+// whichever session's environment, and weaver cannot place them in a Rex
+// block (engine.Event drops them), so a Codex thread would never report.
+var errCodexOnRex = errors.New("weaver does not follow Codex on Rex yet: its thread would never report (start it with Claude Code)")
 
 // followable is why weaver cannot keep a kind agent as a thread in this
 // session; nil when it can.
 func (e *Env) followable(kind agent.Kind) error {
-	if kind == agent.Codex && e.OnRex() {
+	if kind == agent.Codex {
 		return errCodexOnRex
 	}
 	return nil
@@ -627,9 +625,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("%s could not open the window for %s (its new worktree stays: %s)", e.MuxName(), name, dir)
+			return fmt.Errorf("Rex could not open the window for %s (its new worktree stays: %s)", name, dir)
 		}
-		return fmt.Errorf("%s could not open the window for %s", e.MuxName(), name)
+		return fmt.Errorf("Rex could not open the window for %s", name)
 	}
 	e.threadPlace(tab, n)
 	e.rememberRepo(fm.Repo)
@@ -875,7 +873,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	}
 	tab, ok := e.threadTab(tok, kind, dir, wname, nofocus)
 	if !ok {
-		return "", fmt.Errorf("%s: %s could not open its window", nm, e.MuxName())
+		return "", fmt.Errorf("%s: Rex could not open its window", nm)
 	}
 	e.threadPlace(tab, n)
 	return fmt.Sprintf("weaver: resumed %s in %s (window %s)", nm, tildify(dir), tab), nil
@@ -895,10 +893,8 @@ func (e *Env) writeResume(d string, th store.Thread, st agent.Record, sid string
 }
 
 // ResumeSession brings every thread this session lost back, in their
-// numbers' order, leaving you where you are (a tmux session also takes
-// those of the zellij session of its name).
+// numbers' order, leaving you where you are.
 func (e *Env) ResumeSession() {
-	also := strings.TrimPrefix(e.SKey, "tmux-")
 	type l struct {
 		n int
 		f string
@@ -906,7 +902,7 @@ func (e *Env) ResumeSession() {
 	var ls []l
 	for _, r := range e.LostRows() {
 		// A thread you put on hold waits for you.
-		if r.Held == "" && (r.Skey == e.SKey || r.Skey == also) {
+		if r.Held == "" && r.Skey == e.SKey {
 			n := 999
 			if v, ok := atoi(r.Num); ok {
 				n = v
@@ -1024,7 +1020,7 @@ func (e *Env) Resume(args []string) error {
 		}
 		return nil
 	}
-	// From a terminal outside tmux, into the weaver session.
+	// From a terminal outside it, into the weaver session.
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
@@ -1194,12 +1190,12 @@ func (e *Env) Close(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr close [--yes] [--remove-worktree] [pane-id]")
 		default:
-			target, _ = tmux.ParsePane(a)
+			target, _ = mux.ParsePane(a)
 		}
 	}
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New(e.MuxName() + " would not list the panes")
+		return errors.New("Rex would not list the panes")
 	}
 	byID := map[mux.PaneID]mux.Pane{}
 	for _, p := range panes {
@@ -1407,22 +1403,15 @@ func (e *Env) CloseTail(a []string) error {
 	for len(a) < 8 {
 		a = append(a, "")
 	}
-	agent, _ := tmux.ParsePane(a[0])
-	nv, _ := tmux.ParsePane(a[1])
+	agent, _ := mux.ParsePane(a[0])
+	nv, _ := mux.ParsePane(a[1])
 	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
 	// Closing the thread you are looking at: home, where the rest are, not
-	// whichever window tmux would show next.
+	// whichever window Rex would show next.
 	ps, _ := e.Mux().Panes()
 	if ap, ok := session.PaneIn(ps, agent); ok {
 		if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window {
 			e.selectHome(home)
-		}
-	}
-	// Their shells, so that what they left running is launchd's (below).
-	var shells []int
-	for _, p := range []mux.PaneID{agent, nv} {
-		if n, ok := e.Mux().PID(p); p != "" && ok && n > 1 {
-			shells = append(shells, n)
 		}
 	}
 	e.Mux().Close(agent)
@@ -1447,9 +1436,6 @@ func (e *Env) CloseTail(a []string) error {
 		os.Remove(b + ".nvim")
 		os.Remove(b + ".thread")
 	}
-	// What its agent left running from its worktree (a server put in the
-	// background) ends with it, behind: closing does not wait.
-	e.sweepLeftoversAfter(shells)
 	var rc error
 	if remove == "1" {
 		t := tildify(dir)
@@ -1471,38 +1457,6 @@ func (e *Env) CloseTail(a []string) error {
 	return rc
 }
 
-// sweepLeftoversAfter has `wvr _leftovers PID...` end what the panes
-// whose shells are pids left running, once those shells have gone, in a
-// process of its own.
-func (e *Env) sweepLeftoversAfter(pids []int) {
-	args := []string{"_leftovers"}
-	for _, p := range pids {
-		args = append(args, strconv.Itoa(p))
-	}
-	c := exec.Command(e.Self, args...)
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	bestEffort(c.Start())
-}
-
-// EndLeftovers is `wvr _leftovers [PID...]`: once processes pids (the shells
-// of panes just closed) have gone, or after 3 s, the leftovers of panes that
-// have gone end, said on the status line.
-func (e *Env) EndLeftovers(args []string) error {
-	var pids []int
-	for _, a := range args {
-		if n, err := strconv.Atoi(a); err == nil && n > 1 {
-			pids = append(pids, n)
-		}
-	}
-	for i := 0; i < 30 && slices.ContainsFunc(pids, process.Alive); i++ {
-		time.Sleep(100 * time.Millisecond)
-	}
-	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
-		e.Mux().SayToSession(4000, "weaver: ended "+session.Processes(n)+" the thread left running (gc.log)")
-	}
-	return nil
-}
-
 // Send is `wvr send [--force] PANE < TEXT`: the text to agent PANE's
 // prompt, as if you typed it (a bracketed paste, then enter), only while it
 // waits for you to say more (idle, done, interrupted) unless forced.
@@ -1516,7 +1470,7 @@ func (e *Env) Send(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New(usage)
 		default:
-			want, _ = tmux.ParsePane(a)
+			want, _ = mux.ParsePane(a)
 		}
 	}
 	if !digits(string(want)) || cli.IsTTY(0) {
@@ -1549,24 +1503,20 @@ func (e *Env) Send(args []string) error {
 }
 
 // toWeaverSession makes the session acted on, outside one, weaver's
-// ($WEAVER_SESSION, else weaver): on Rex with $WEAVER_MUX=rex, else on
-// weaver's own tmux server; inside one it is the one you are in. An error
-// when it is not running.
+// ($WEAVER_SESSION, else weaver); inside one it is the one you are in. An
+// error when it is not running.
 func (e *Env) toWeaverSession() error {
 	if e.Session == "" {
 		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
-		if e.OnRex() {
-			s, running, err := rex.Named(e.RexDir(), name)
-			if err != nil {
-				return fmt.Errorf("weaver cannot tell whether its Rex session %s runs (Rex does not answer): %w", name, err)
-			}
-			if !running {
-				return errors.New("no Rex session " + name + " of weaver's is running (start it with `wvr`)")
-			}
-			e.Session, e.SKey, e.RexID = name, rex.Key(name), s.ID
-			return nil
+		s, running, err := rex.Named(e.RexDir(), name)
+		if err != nil {
+			return fmt.Errorf("weaver cannot tell whether its Rex session %s runs (Rex does not answer): %w", name, err)
 		}
-		e.Session, e.SKey = name, session.KeyOf(name)
+		if !running {
+			return errors.New("no Rex session " + name + " of weaver's is running (start it with `wvr`)")
+		}
+		e.Session, e.SKey, e.RexID = name, rex.Key(name), s.ID
+		return nil
 	}
 	if !e.Mux().Running() {
 		return errors.New("no session " + e.Session + " is running (start it with `wvr`)")
@@ -1638,7 +1588,7 @@ func (e *Env) Quit(args []string) error {
 		}
 	}
 	if err := e.Mux().Quit(); err != nil {
-		return errors.New(e.MuxName() + " could not quit " + name)
+		return errors.New("Rex could not quit " + name)
 	}
 	return nil
 }

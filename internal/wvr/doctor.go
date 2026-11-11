@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/setup"
 )
 
@@ -115,10 +116,20 @@ func tool(name, cmd, formula string, w weight, versionArg string, least ...int) 
 	return c
 }
 
+// rexCheck is Rex, which weaver runs on: its rex, where the Rex app keeps
+// it or on PATH (rex.Bin).
+func rexCheck() check {
+	if d := rex.BinDir(); d != "" {
+		return check{name: "Rex", weight: needed, ok: true, found: tildify(filepath.Join(d, "rex"))}
+	}
+	return check{name: "Rex", weight: needed, found: "not installed",
+		remedy: byHand{"install Rex (superlogical.com/rex), weaver's terminal"}}
+}
+
 // checks are what weaver works with, each checked.
 func (e *Env) checks() []check {
 	cs := []check{
-		tool("tmux", "tmux", "tmux", needed, "-V", 3, 3),
+		rexCheck(),
 		tool("git", "git", "git", needed, "--version"),
 		tool("Neovim", "nvim", "neovim", needed, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
@@ -172,11 +183,11 @@ func (e *Env) checks() []check {
 		plug.found, plug.remedy = "not fetched, for reviews", selfFix{"wvr _plugins", setup.Plugins}
 	}
 	cs = append(cs, plug)
-	// weaver itself: its tmux and the hooks run wvr from PATH.
+	// weaver itself: the hooks run wvr from PATH.
 	self := check{name: "wvr", weight: needed, ok: true, found: tildify(bin)}
 	switch {
 	case !onPath("wvr"):
-		self.ok, self.found = false, "not on your PATH, which weaver's tmux runs it from"
+		self.ok, self.found = false, "not on your PATH, which the agents' hooks run it from"
 		self.remedy = byHand{"add " + tildify(filepath.Dir(e.Self)) + " to PATH"}
 	case !e.installed():
 		self.found += " (another build than this one)"

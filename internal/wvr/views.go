@@ -227,21 +227,9 @@ func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 		Label: v.label, View: name, At: idx, Background: !show,
 	})
 	if err != nil {
-		return "", fmt.Errorf("%s could not open the %s view", e.MuxName(), v.label)
+		return "", fmt.Errorf("Rex could not open the %s view", v.label)
 	}
-	// A session started before its views (or an older weaver) has no strip.
-	e.SetStrip()
 	return id, nil
-}
-
-// SetStrip sets the session's view strip: THREADS and each view, marked
-// when it is not set up yet.
-func (e *Env) SetStrip() {
-	items := []mux.StripItem{{Label: "THREADS", Ready: true}}
-	for _, n := range e.viewNames() {
-		items = append(items, mux.StripItem{View: n, Label: strings.ToUpper(n), Ready: e.viewNeeds(n).state == viewReady})
-	}
-	e.Mux().Strip(items)
 }
 
 // StartViews starts the session's views in the background, so the first
@@ -269,7 +257,6 @@ func (e *Env) View(args []string) error {
 	if name == "" {
 		return errors.New("no views (WEAVER_VIEWS names none)")
 	}
-	e.SetStrip()
 	if _, err := e.OpenView(name); err != nil {
 		return err
 	}

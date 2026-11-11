@@ -23,7 +23,7 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 	for _, c := range []struct{ pid, want string }{{"1", ""}, {"0", ""}, {me, me}} {
 		dir := t.TempDir()
 		e := &session.Env{StateDir: dir + "/state", ClaudeDir: dir + "/claude", SockDir: dir + "/sock",
-			Session: "s", SKey: "tmux-s", TSock: []string{"-S", dir + "/no-tmux.sock"}, Self: "/usr/bin/true"}
+			Session: "s", SKey: "rex-s", Self: "/usr/bin/true"}
 		hook(e, hooks.Input{Event: "SessionStart", SessionID: "conv", Cwd: dir, Source: "startup"}, "sync", "5", "claude", c.pid)
 		st, err := store.ReadState(e.StateFile("5"))
 		if err != nil {

@@ -13,7 +13,7 @@ import (
 )
 
 // Int is a number that older files may hold as a string ("12"), or
-// not at all; anything else (a zellij pane's "terminal_3") reads as 0.
+// not at all; anything else ("terminal_3") reads as 0.
 type Int int
 
 func (n *Int) UnmarshalJSON(b []byte) error {

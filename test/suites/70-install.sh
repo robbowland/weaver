@@ -20,14 +20,14 @@ echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
 export GOMODCACHE GOCACHE
 GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)
 inst() {
-	env -u ZELLIJ_CONFIG_FILE HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
+	env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
 		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:$PATH" "$ROOT/install.sh" "$@" 2>&1
 }
 
 out=$(inst)
 ok "install builds weaver, one binary, into ~/.local/bin" \
 	"$([ -f "$H/.local/bin/wvr" ] && [ ! -L "$H/.local/bin/wvr" ] && go version -m "$H/.local/bin/wvr" | grep -c 'path	github.com/robbowland/weaver/cmd/wvr')" "1"
-ok "...unpacks its files" "$(ls "$H/.local/share/weaver/runtime"/*/config/tmux.conf 2>/dev/null | wc -l | tr -d ' ')" "1"
+ok "...unpacks its files" "$(ls "$H/.local/share/weaver/runtime"/*/config/rex.lua 2>/dev/null | wc -l | tr -d ' ')" "1"
 ok "...keeps its Neovim plugin where Neovim configs load it" \
 	"$(cd "$ROOT/nvim" && find . -type f | sort | tr '\n' ' ')" \
 	"$(cd "$H/.local/share/weaver/nvim" && find . -type f ! -name .weaver-runtime | sort | tr '\n' ' ')"
@@ -92,14 +92,8 @@ before=$(cat "$C")
 rm -f "$H/.codex/hooks.json"
 out=$(inst --configure --no-codex)
 ok "--no-codex leaves Codex alone" "$([ -e "$C" ] && echo touched || echo alone)" "alone"
-mkdir -p "$H/.config/zellij"
-printf 'keybinds {\n    // weaver: its keys\n    bind "Alt y" { Run "weaver" "ls"; }\n}\n' >"$H/.config/zellij/config.kdl"
-out=$(inst --configure --no-codex 2>&1)
-ok "a zellij config with weaver's old keybindings: said, left alone" \
-	"$(printf '%s\n' "$out" | grep -c "still has weaver's keybindings")|$(grep -c 'Run "weaver"' "$H/.config/zellij/config.kdl")" "1|1"
 # The command's old name: a weaver binary there is kept the same build (its
 # sessions' hooks run it), never made where there was none.
-rm -f "$H/.config/zellij/config.kdl"
 printf 'old' >"$H/.local/bin/old" && cp "$H/.local/bin/wvr" "$H/.local/bin/weaver" && cat "$H/.local/bin/old" >>"$H/.local/bin/weaver"
 out=$(inst)
 ok "the old name, weaver: kept as this build, and said" \
@@ -118,13 +112,13 @@ FB
 chmod +x "$BREW/brew"
 ln -s "$(command -v git)" "$BREW/git"
 rm -f "$AT/brew.log"
-fixed=$(env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
+fixed=$(env -u REX_BIN_DIR HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
 	PATH="$BREW:/usr/bin:/bin" "$H/.local/bin/wvr" doctor --fix 2>&1 </dev/null)
 rc=$?
 ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \
 	"$(cat "$AT/brew.log" 2>/dev/null | tr '\n' ' ')" \
-	"install tmux neovim fzf worktrunk gh "
+	"install neovim fzf worktrunk gh "
 ok "...and still fails, saying what is left, while weaver cannot work" \
-	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] tmux')" "1|1"
+	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] Rex')" "1|1"
 unset BREW
 done_suite

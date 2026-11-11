@@ -20,7 +20,6 @@ import (
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The agent's nvim: `wvr edit` (Alt v, e on the board) opens it beside the
@@ -38,7 +37,7 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 // can tell: Rex, whose app evens a split out, and weaver sets it back):
 // then it is yours.
 func (e *Env) ThreadWidth(agent string) {
-	p, ok := tmux.ParsePane(agent)
+	p, ok := mux.ParsePane(agent)
 	if !ok {
 		return
 	}
@@ -68,12 +67,8 @@ func (e *Env) threadWidth(agent mux.PaneID) {
 // once the Rex app has evened out its panes: it does that, within a second
 // or so and with nothing to say when, to the window it shows whenever its
 // panes change (a pane split in, or put in another's place). Detached, so
-// what asked goes on at once; twice, for an app slow to it. Nothing on
-// tmux, which keeps a pane's width.
+// what asked goes on at once; twice, for an app slow to it.
 func (e *Env) settleWidths(agent mux.PaneID) {
-	if !e.OnRex() {
-		return
-	}
 	c := exec.Command("/bin/sh", "-c", `sleep 1; "$0" _width "$1"; sleep 1.5; exec "$0" _width "$1"`, e.Self, string(agent))
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	bestEffort(c.Start())
@@ -157,14 +152,14 @@ func (e *Env) Edit(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr edit [--full] [pane-id]")
 		default:
-			target, _ = tmux.ParsePane(a)
+			target, _ = mux.ParsePane(a)
 		}
 	}
 	release := e.uiLock()
 	defer release()
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New(e.MuxName() + " would not list the panes")
+		return errors.New("Rex would not list the panes")
 	}
 	if target == "" {
 		if target = e.focusedPane(); target == "" {
@@ -264,7 +259,7 @@ func (e *Env) Nvim(args []string) error {
 	if len(args) < 1 {
 		return errors.New("usage: wvr nvim <agent-pane-id> [file]")
 	}
-	agentPane, _ := tmux.ParsePane(args[0])
+	agentPane, _ := mux.ParsePane(args[0])
 	file, fresh := "", false
 	if len(args) > 1 {
 		file = args[1]
@@ -273,7 +268,7 @@ func (e *Env) Nvim(args []string) error {
 		if len(args) < 2 {
 			return errors.New("usage: wvr nvim [--fresh] <agent-pane-id> [file]")
 		}
-		agentPane, _ = tmux.ParsePane(args[1])
+		agentPane, _ = mux.ParsePane(args[1])
 		file, fresh = "", true
 		if len(args) > 2 {
 			file = args[2]

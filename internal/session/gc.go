@@ -12,10 +12,8 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
-	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 var (
@@ -32,87 +30,14 @@ func sub1(re *regexp.Regexp, l string) string {
 	return ""
 }
 
-// tmuxSession is a running tmux session: its key (tmux-<name>), when it
-// was made (epoch s), and the life it is (its server, its id there).
-type tmuxSession struct {
-	key     string
-	created int64
-	where   agent.Where
-}
-
-// tmuxSessions are the running tmux sessions on weaver's server and the one
-// we run in; ok false when neither answers.
-func (e *Env) tmuxSessions() (ss []tmuxSession, ok bool) {
-	add := func(args ...string) {
-		out, err := RunTmux(args...)
-		if err != nil {
-			return
-		}
-		ok = true
-		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			// The name last: it may have spaces.
-			f := strings.SplitN(l, " ", 4)
-			if len(f) != 4 || f[3] == "" {
-				continue
-			}
-			made, _ := strconv.ParseInt(f[0], 10, 64)
-			srv, _ := strconv.Atoi(f[1])
-			ss = append(ss, tmuxSession{key: "tmux-" + strings.ReplaceAll(f[3], "/", "_"), created: made,
-				where: agent.Where{Server: srv, Session: f[2]}})
-		}
-	}
-	const format = "#{session_created} #{pid} #{session_id} #S"
-	add(append(append([]string{}, e.TSock...), "list-sessions", "-F", format)...)
-	if e.InTmux {
-		add("list-sessions", "-F", format)
-	}
-	return ss, ok
-}
-
-// paneLife is a pane of a life of a session: its key, its id, and which
-// life (server, session id).
-type paneLife struct {
-	skey  string
-	pane  mux.PaneID
-	where agent.Where
-}
-
-// panesShown are the panes of the running sessions, on weaver's server and
-// the one we run in.
-func (e *Env) panesShown() map[paneLife]bool {
-	m := map[paneLife]bool{}
-	add := func(args ...string) {
-		out, err := RunTmux(args...)
-		if err != nil {
-			return
-		}
-		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			f := strings.SplitN(l, " ", 4)
-			if len(f) != 4 {
-				continue
-			}
-			srv, _ := strconv.Atoi(f[1])
-			if p, ok := tmux.ParsePane(f[0]); ok {
-				m[paneLife{KeyOf(f[3]), p, agent.Where{Server: srv, Session: f[2]}}] = true
-			}
-		}
-	}
-	const format = "#{pane_id} #{pid} #{session_id} #S"
-	add(append(append([]string{}, e.TSock...), "list-panes", "-a", "-F", format)...)
-	if e.InTmux {
-		add("list-panes", "-a", "-F", format)
-	}
-	return m
-}
-
 // GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid is retired an
 // hour after its session went, or at once when its session was made since
 // (an earlier server's, whose pane number a new pane takes), an ended one
 // forgotten an hour after it ended; then old files, the nvims a server that
 // went left running, and dead sockets.
-// States of other keys (zellij's, from before weaver ran on tmux only) go
-// the same way as their agents do.
+// States of other keys (tmux's and zellij's, from before weaver ran on
+// Rex only) go the same way as their agents do.
 func (e *Env) GC() {
 	e.gcAgents()
 	e.gcFiles()
@@ -178,7 +103,7 @@ func (e *Env) gcAgents() {
 }
 
 // gcFiles is GC's old files, the nvims a server that went left running,
-// leftovers and dead sockets.
+// and dead sockets.
 func (e *Env) gcFiles() {
 	old := func(dir, pat string, age time.Duration, all bool) {
 		ms, _ := filepath.Glob(filepath.Join(dir, pat))
@@ -210,13 +135,10 @@ func (e *Env) gcFiles() {
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)
 	e.sweepOrphans()
-	if n := e.SweepLeftovers(); n > 0 && e.Session != "" {
-		e.Mux().SayToSession(4000, "weaver: ended "+Processes(n)+" left running by threads that have gone (gc.log)")
-	}
 	e.sweepSockets(day)
 }
 
-// sweepOrphans ends weaver's nvims that their tmux server left behind: one
+// sweepOrphans ends weaver's nvims that their server left behind: one
 // listening in the socket dir whose parent has gone (launchd, or a
 // subreaper, has it now). A thread's nvim is its pane's process, and its
 // --embed server that nvim's child; a server that crashes, or is killed,

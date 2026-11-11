@@ -50,7 +50,6 @@ func Run(args []string, self string, out io.Writer) error {
 			return err
 		}
 	}
-	warnZellij(os.Getenv("HOME"))
 	ts := Timestamp()
 	// Each configuration's problem is said as it comes; the others go on.
 	var failed error
@@ -90,8 +89,6 @@ func Run(args []string, self string, out io.Writer) error {
 	}
 	fmt.Fprint(out, `
 Done. To pick it up:
-  - a running weaver tmux session reads weaver's tmux config again the next time
-    `+"`wvr`"+` attaches to it
   - restart any Claude Code sessions that are already running: they read hooks at start
 `)
 	if codexDone {
@@ -100,22 +97,6 @@ Done. To pick it up:
 `)
 	}
 	return nil
-}
-
-// warnZellij: weaver ran on zellij too, once; a zellij config that still has
-// its keybindings runs weaver commands it no longer has.
-func warnZellij(home string) {
-	f := os.Getenv("ZELLIJ_CONFIG_FILE")
-	if f == "" {
-		c := os.Getenv("XDG_CONFIG_HOME")
-		if c == "" {
-			c = home + "/.config"
-		}
-		f = c + "/zellij/config.kdl"
-	}
-	if b, err := os.ReadFile(f); err == nil && regexp.MustCompile(`Run "(weaver|agentnav)"`).Match(b) {
-		fmt.Fprintf(os.Stderr, "warning: zellij: %s still has weaver's keybindings; weaver runs on tmux only now, so remove its '// weaver:' block\n", f)
-	}
 }
 
 // Change is what weaver's hooks make of an agent's hooks file: the

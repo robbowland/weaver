@@ -3,7 +3,6 @@ package agent
 import (
 	"encoding/json"
 	"strconv"
-	"strings"
 
 	"github.com/robbowland/weaver/internal/jsonx"
 )
@@ -65,31 +64,17 @@ type Subagent struct {
 	Since json.Number `json:"since"`
 }
 
-// Where is the life of the tmux session an agent runs in: its server's pid
-// and the session's id on that server ("$3", as tmux writes it; from
-// $TMUX's last two fields). A session made again, on another server or on
-// the same one, is another life.
+// Where is the life of the Rex session an agent runs in: its server's pid
+// and the session's id. A session made again, on another server or on the
+// same one, is another life. (Session's JSON name is from when weaver ran
+// on tmux.)
 type Where struct {
 	Server  int    `json:"server,omitempty"`
 	Session string `json:"tmux_session,omitempty"`
 }
 
-// ParseWhere is $TMUX ("socket,pid,session") as a Where: zero outside tmux.
-func ParseWhere(env string) Where {
-	f := strings.Split(env, ",")
-	if len(f) != 3 {
-		return Where{}
-	}
-	srv, err1 := strconv.Atoi(f[1])
-	ses, err2 := strconv.Atoi(f[2])
-	if err1 != nil || err2 != nil || srv <= 0 || ses < 0 {
-		return Where{}
-	}
-	return Where{Server: srv, Session: "$" + f[2]}
-}
-
 // Resumed is r as its conversation carries on in another process, in the
-// tmux session life w, from now: what is the conversation's (its session,
+// session life w, from now: what is the conversation's (its session,
 // turns, title, where it works, its tasks and files) kept, what was its
 // process's and pane's gone; idle, and seen.
 func (r Record) Resumed(now int64, w Where) Record {

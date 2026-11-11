@@ -14,7 +14,6 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"github.com/robbowland/weaver/internal/tmux"
 )
 
 // The worktrees weaver made for threads, kept in $STATE_DIR/worktrees (a
@@ -210,45 +209,7 @@ func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 			us = append(us, fmt.Sprintf("lost thread %02d", l.Thread.Num))
 		}
 	}
-	// A pane number names a pane of one multiplexer, and on tmux of one
-	// server: those closing are skipped only on the session's own. On Rex
-	// that is no tmux server; in tmux, $TMUX's (by its pid, when $TMUX
-	// says it); outside, weaver's own, the only one listed.
-	ownServer := func(pid string) bool {
-		switch {
-		case e.RexID != "":
-			return false
-		case e.InTmux && e.Where.Server > 0:
-			return pid == strconv.Itoa(e.Where.Server)
-		}
-		return true
-	}
-	seen := map[string]bool{}
-	panes := func(args ...string) {
-		out, err := session.RunTmux(append(args, "list-panes", "-a", "-F", "#{pid} #{pane_id} #{pane_dead} #{pane_current_path}")...)
-		if err != nil {
-			return
-		}
-		for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-			f := strings.SplitN(l, " ", 4)
-			// The same server may be listed twice (weaver's is the one we
-			// run in); another's pane of the same number is another pane.
-			if len(f) != 4 || f[2] == "1" || seen[f[0]+" "+f[1]] {
-				continue
-			}
-			seen[f[0]+" "+f[1]] = true
-			p, ok := tmux.ParsePane(f[1])
-			closing := ok && skip[p] && ownServer(f[0])
-			if ok && !closing && (f[3] == dir || strings.HasPrefix(f[3], dir+"/")) {
-				us = append(us, "pane "+string(p))
-			}
-		}
-	}
-	panes(e.TSock...)
-	if e.InTmux {
-		panes()
-	}
-	// On Rex, the session's own panes (its numbers are not tmux's).
+	// The session's own panes in it (the others' numbers are theirs).
 	if e.RexID != "" {
 		ps, _ := e.Mux().Panes()
 		for _, p := range ps {

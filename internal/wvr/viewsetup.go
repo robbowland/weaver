@@ -80,10 +80,8 @@ func (e *Env) ViewSetup(name string) error {
 			}
 			// Asked again now, not in a minute.
 			os.Remove(e.authFile(name))
-			e.SetStrip()
 		case k == 'h' || k == 'H':
 			e.setHidden(name, true)
-			e.SetStrip()
 			e.showHome()
 			return nil
 		case k == 0x1b || k == 'q':
@@ -98,7 +96,6 @@ func (e *Env) becomeView(name string) error {
 	if err != nil {
 		return err
 	}
-	e.SetStrip()
 	bestEffort(os.Chdir(v.dir))
 	p, err := exec.LookPath(v.argv[0])
 	if err != nil {

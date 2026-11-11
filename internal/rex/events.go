@@ -9,7 +9,7 @@ import (
 // WatchActive follows the session's events (`rex events --session ID
 // --json`) and calls changed each time its active window changes: the app's
 // own tab changes too, as the app writes what it shows back to the server.
-// Rex has no hook like tmux's pane-focus-in; this is what stands for it. It
+// Rex has no focus hook; this is what stands for one. It
 // returns when the stream ends (the session or the server gone), with what
 // ended it.
 func (s Session) WatchActive(changed func()) error {

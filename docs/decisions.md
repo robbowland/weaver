@@ -659,6 +659,23 @@ can supersede an earlier one, and says so.
   moving between them is the server's (focus a window), where switching
   Rex sessions is the app's, which Rex lets a command ask for only with
   Remote Control on.
+- 2026-11-11: weaver runs on Rex alone, superseding the 2026-10-15 entry
+  (weaver runs on tmux) and the 2026-10-29 one (Rex as an option): Rob
+  works in Rex now, and backwards compatibility does not matter. tmux, its
+  config, its suites and every path that only tmux had went: its status
+  line and counts file, the right-click menus (`display-menu`), the
+  `_seen` and `_fit` hooks, `wvr --rex` and `--tmux`, and the last zellij
+  remnants (the setup warning, `--zellij-config`, the resume of a zellij
+  session's threads). So did what weaver did only on tmux: following Codex
+  (its daemon's hooks were placed among tmux's panes; on Rex they are
+  dropped and Codex threads refused, as before) and sweeping what a gone
+  thread left running (told by tmux's environment). `mux.Mux` stays, with
+  Rex behind it, minus the methods Rex never did (`MarkUnseen`, `Publish`,
+  `Strip`, `Looking`); home's board shows the counts the status line used
+  to. `WEAVER_MUX=rex` still makes weaver act on a Rex session it did not
+  make, and state files keep `tmux_session` as the name of the session's
+  id. The hook suites (`test/hooks.sh`) run on a throwaway Rex server, so CI,
+  which has no Rex, runs only Go's tests and the Neovim specs.
 
 ## Performance and packaging
 
