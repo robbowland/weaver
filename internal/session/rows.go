@@ -525,12 +525,11 @@ func (e *Env) Forget(f, pid string) {
 
 // removePaneFiles removes the files weaver keeps for the agent in a pane,
 // b their path without extension (<skey>_<pane>): its state, thread record,
-// review panel binding, last Bash command and opening marker.
+// review panel binding, last Bash command and opening lock.
 func removePaneFiles(b string) {
-	for _, x := range []string{".json", ".panel", ".bash", ".thread"} {
+	for _, x := range []string{".json", ".panel", ".bash", ".thread", ".opening.lock"} {
 		os.Remove(b + x)
 	}
-	os.RemoveAll(b + ".opening")
 }
 
 // KeyOfFile is the session key of per-pane file f (<skey>_<pane>.<ext>).

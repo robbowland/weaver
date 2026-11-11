@@ -73,30 +73,11 @@ func uuid() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// numLock serialises numbering threads; a lock older than 10s was left by a
-// killed process.
+// numLock serialises numbering threads (store.Lock: one whose holder has
+// gone is taken over).
 func (e *Env) numLock() func() {
-	d := e.StateDir + "/" + e.SKey + ".num.lock"
-	os.MkdirAll(e.StateDir, 0o755)
-	for i := 0; i < 50; i++ {
-		if os.Mkdir(d, 0o755) == nil {
-			break
-		}
-		now := time.Now().Unix()
-		t := now
-		if l, err := files.FirstLine(d + "/at"); err == nil {
-			if n, ok := cli.Atoi(l); ok {
-				t = int64(n)
-			}
-		}
-		if now-t > 10 {
-			os.RemoveAll(d)
-			continue
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	os.WriteFile(d+"/at", []byte(strconv.FormatInt(time.Now().Unix(), 10)+"\n"), 0o644)
-	return func() { os.RemoveAll(d) }
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	return store.Lock(e.StateDir + "/" + e.SKey + ".num")
 }
 
 // threadNum is the lowest number none of this session's threads has (those

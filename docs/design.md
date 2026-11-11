@@ -147,7 +147,7 @@ the second (two when it failed), and the panel ends with its pane.
 `ctrl+e`) goes to the agent's panel, or opens one on its left in the
 worktree it is in (`agentWhere`) and puts the thread's widths back; in a
 pane that is no agent's, a panel beside it in its directory. `--full` zooms
-it. One press per agent at a time (`<skey>_<pane>.opening`), under the
+it. One press per agent at a time (`<skey>_<pane>.opening.lock`, `store.Lock`), under the
 session's UI lock.
 
 Review notes are tuicr's own: a comment is saved as it is written, readable

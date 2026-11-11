@@ -74,30 +74,11 @@ func (e *Env) settleWidths(agent mux.PaneID) {
 }
 
 // panelLock is one `wvr review` per agent at a time, so a second alt+v
-// finds the panel the first is opening. A lock older than 5s was left by a
-// killed process.
+// finds the panel the first is opening (store.Lock: one whose holder has
+// gone is taken over).
 func (e *Env) panelLock(agent mux.PaneID) func() {
-	d := e.PaneFile(agent, "opening")
-	os.MkdirAll(e.StateDir, 0o755)
-	for i := 0; i < 60; i++ {
-		if os.Mkdir(d, 0o755) == nil {
-			break
-		}
-		now := time.Now().Unix()
-		t := now
-		if l, err := files.FirstLine(d + "/at"); err == nil {
-			if n, ok := cli.Atoi(l); ok {
-				t = int64(n)
-			}
-		}
-		if now-t > 5 {
-			os.RemoveAll(d)
-			continue
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	os.WriteFile(d+"/at", []byte(strconv.FormatInt(time.Now().Unix(), 10)+"\n"), 0o644)
-	return func() { os.RemoveAll(d) }
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	return store.Lock(e.PaneFile(agent, "opening"))
 }
 
 // focusedPane is the pane you are on (a popup or a key's wvr is not a
