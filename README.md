@@ -4,8 +4,9 @@
 needs you.**
 
 weaver gives each task its own Rex window, called a *thread*: the agent
-(Claude Code or Codex) on the right and a Neovim that reviews its work on the
-left, in a git worktree of its own. One board shows every thread and what it
+(Claude Code or Codex) on the right and a review of its work
+([tuicr](https://github.com/agavra/tuicr)) on the left, in a git worktree of
+its own. One board shows every thread and what it
 is doing. One key jumps to the agent that has waited on you longest. And your
 threads come back after Rex restarts or the machine does.
 
@@ -27,7 +28,7 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 │                                                                      │
 │   IDLE · 1                                                           │
 │   05 [x]  Audit yabai float rules Removed two dead rules; th…  47m  │
-│   ⏎ OPEN  n NEW  x CLOSE  h HOLD  / SEARCH  v NVIM  ? HELP           │
+│   ⏎ OPEN  n NEW  x CLOSE  h HOLD  / SEARCH  v REVIEW  ? HELP         │
 │ ─────────────────────────────────────────────────────────────────────│
 │ Add a CLI flag · try/add-a-cli-flag · turn 3                         │
 │ needs you · 11m                                                      │
@@ -43,8 +44,9 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
   from you, with what each is waiting on or doing.
 - **Go straight to the one that's waiting.** `alt+1` jumps to the agent that
   has needed you longest; press it again for the next.
-- **Review as it works.** The Neovim beside each agent reloads its edits,
-  shows each turn's diff, and sends your line notes back to the agent.
+- **Review as it works.** The review beside each agent shows its branch as
+  it changes, commit by commit or all at once, opens Neovim on a line, and
+  keeps your line comments for the agent to read.
 - **Start from a pull request or an issue.** Views of your GitHub pull
   requests and issues, and your Linear issues, start a thread on the right
   branch with the item as context.
@@ -92,7 +94,7 @@ The command is `wvr`. `brew upgrade` keeps it current.
 
 2. **Start a thread.** Press `alt+N`, type what the agent should do, and press
    `enter`. weaver creates a worktree on a new branch named after the task,
-   opens a window with Neovim on the left and the agent on the right, and
+   opens a window with its review on the left and the agent on the right, and
    gives the agent your task as its first prompt.
 
 3. **Check on your threads.** Press `alt+y`: the board opens over the thread
@@ -105,7 +107,7 @@ The command is `wvr`. `brew upgrade` keeps it current.
    to it.
 
 5. **Close it when you're done.** On the board, `x` closes a thread: its
-   agent, its Neovim and its window. If weaver created the worktree and
+   agent, its review and its window. If weaver created the worktree and
    nothing in it would be lost, weaver offers to remove it. The branch always
    stays.
 
@@ -116,7 +118,7 @@ come back the next time you run `wvr`.
 ## How it works
 
 **Threads.** A thread is one task for one agent, in a window of its own:
-Neovim on the left, the agent on the right, in a new worktree or a checkout
+its review on the left, the agent on the right, in a new worktree or a checkout
 you choose. Each thread has a number, shown in its window's name (`01 Add a
 CLI flag · repo/add-a-cli-flag`), and that number means the same thread on the
 board and in `Alt` keys.
@@ -158,14 +160,14 @@ Shift and V.
 | `alt+1` | The agent that has needed you longest; press again for the next |
 | `alt+j` / `alt+k` | The next / previous window, in thread order |
 | `alt+h` / `alt+l` | The pane to the left / right |
-| `alt+v` / `alt+V` | The focused agent's Neovim / the same, full screen |
+| `alt+v` / `alt+V` | The focused agent's review / the same, full screen |
 | `alt+m` | In a view: a read-only review of the selected item |
 | `tab` / `shift+tab` | On home or in a view: the next / previous view |
 | `ctrl+q` | Quit the session, after asking |
 
 On the board, `enter` or `1`–`9` jumps to a thread, `n` starts one, `x`
 closes one, `r` renames one, `R` restarts its agent after an update, `a`
-adopts one (below), `v` opens its Neovim, `s` swaps the card
+adopts one (below), `v` opens its review, `s` swaps the card
 for the agent's screen, `/` searches, and `?` lists every key. Everything can
 be clicked too: the hints under a list are buttons.
 
@@ -184,25 +186,20 @@ isn't running (one you ran outside weaver before a reboot, say), press `a`
 anywhere else on the board and pick it from your recent Claude Code
 conversations.
 
-## Neovim
+## Review
 
-The Neovim beside each agent loads your own config, then reloads the files
-the agent changes, never over your unsaved changes.
+Each thread's review is [tuicr](https://github.com/agavra/tuicr), in its
+worktree: the branch since it left its base, commits and uncommitted edits
+together, following the agent's edits as it makes them.
 
-weaver snapshots the worktree at the start and end of every turn, so you can
-review exactly what each turn changed:
+- `(` and `)` step through the branch commit by commit.
+- `e` on a line opens Neovim there, with your own config; quitting it brings
+  the review back where you were.
+- `c` comments a line and `v` a range. When you're done, tell the agent to
+  read your review: it reads the comments with `tuicr review comments`.
+- `:q` starts the review again, with any commits made since it opened.
 
-- `<leader>at` reviews the agent's last turn, and `<leader>ab` the whole
-  branch.
-- `<leader>aa` picks one agent, the main thread or a subagent, and reviews
-  only its own changes, in whichever worktree it made them, as it works.
-- `<leader>ai` shows the whole branch in your own buffers (signs, and every
-  change in quickfix), and `<leader>aI` steps through it commit by commit.
-- `<leader>an` notes a line for the agent, and `<leader>as` sends your notes
-  as its next prompt.
-
-The [guide](docs/guide.md#neovim) lists every review key, and shows how to use
-the plugin in your own Neovim.
+The [guide](docs/guide.md#review) says what it is compared against.
 
 ## Configuration
 
@@ -216,7 +213,7 @@ missing; `wvr doctor --fix` fixes what it can.
 ## Documentation
 
 - [Guide](docs/guide.md): weaver in detail, including the session, threads,
-  views, the board, Neovim reviews, setup and settings.
+  views, the board, reviews, setup and settings.
 - `wvr help`: every command.
 - [Design](docs/design.md): the contracts between weaver's parts, its files
   and their formats.
@@ -252,7 +249,8 @@ The GITHUB view's searches, and the pull request fields they read, come from
 [gh-dash](https://github.com/dlvhdr/gh-dash) by Dolev Hadar (MIT). The LINEAR
 view's queries, and the issue fields they read, come from
 [linear-tui](https://github.com/k1-c/linear-tui) by k1-c (MIT). Reviews are
-built on [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
+[tuicr](https://github.com/agavra/tuicr)'s. weaver's Neovim plugin builds on
+[diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
 (GPL-3.0), which weaver fetches rather than bundles.
 
 ## Licence

@@ -142,10 +142,10 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 }
 
 // adoptWindow gives an adopted agent, pane p, its thread's window: the one
-// it is in when it has it to itself (but for its nvim), else one of its own
-// broken out of the window it shares (home, a view, another thread's);
-// at its number, named label, with an nvim on its left in dir when it has
-// none. You go with it when it is the pane you are in. Its window.
+// it is in when it has it to itself (but for its review panel), else one of
+// its own broken out of the window it shares (home, a view, another
+// thread's); at its number, named label, with a review panel on its left
+// in dir when it has none. You go with it when it is the pane you are in. Its window.
 func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 	ps, _ := e.Mux().Panes()
 	ap, ok := session.PaneIn(ps, p)
@@ -153,7 +153,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 		return ""
 	}
 	tab := ap.Window
-	nv := e.NvimPane(p)
+	nv := e.PanelPane(p)
 	ws, _ := e.Mux().Windows()
 	win, _ := windowIn(ws, tab)
 	own := win.View == "" && !isHome(win)
@@ -184,7 +184,7 @@ func (e *Env) adoptWindow(p mux.PaneID, n int, label, dir string) mux.WindowID {
 		if total <= 0 {
 			total = 200
 		}
-		e.splitNvim(p, dir, total)
+		e.splitPanel(p, dir, total)
 		e.settleWidths(p)
 	}
 	return tab

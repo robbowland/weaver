@@ -106,3 +106,22 @@ func TestEnd(t *testing.T) {
 		}
 	}
 }
+
+// A process runs under another when it is that one, its child, or further
+// down; one beside it does not.
+func TestRuns(t *testing.T) {
+	c := exec.Command("/bin/sh", "-c", "/bin/sleep 30 & wait")
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Process.Kill(); _ = c.Wait() })
+	for i := 0; i < 50 && !Runs(c.Process.Pid, "sleep"); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !Runs(c.Process.Pid, "sleep") {
+		t.Error("the sleep under the shell: not found")
+	}
+	if Runs(c.Process.Pid, "nvim") || Runs(os.Getpid(), "sleepy") {
+		t.Error("a process that does not run there: found")
+	}
+}

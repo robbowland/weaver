@@ -11,36 +11,30 @@ import (
 	"github.com/robbowland/weaver/internal/session"
 )
 
-// A thread closed before its nvim is recorded as bound: its nvim is the
-// pane in the agent's window started for that agent (or, as before, for
-// the agent's token).
-func TestThreadNvimByToken(t *testing.T) {
+// A thread closed before its review panel is recorded as bound: its panel
+// is the pane in the agent's window started for that agent.
+func TestThreadPanelByToken(t *testing.T) {
 	panes := []mux.Pane{
-		{ID: "4", Window: "2", Cmd: "/bin/weaver nvim --thread 123"},
-		{ID: "5", Window: "3", Cmd: "/bin/weaver nvim --thread 456"},
+		{ID: "4", Window: "2", Cmd: "/bin/weaver _panel 6"},
+		{ID: "5", Window: "3", Cmd: "/bin/weaver _panel 6"},
 		{ID: "6", Window: "3", Cmd: "/bin/weaver _agent 456 claude"},
 		{ID: "7", Window: "3", Cmd: "fish"},
-		{ID: "10", Window: "4", Cmd: "/bin/weaver nvim --fresh 11"},
-		{ID: "11", Window: "4", Cmd: "/bin/weaver _agent 789 claude"},
 	}
-	if nv, tok := threadNvim(panes, panes[2]); nv != "5" || tok != "456" {
-		t.Errorf("got %q %q, want 5 456", nv, tok)
+	if rp, tok := threadPanel(panes, panes[2]); rp != "5" || tok != "456" {
+		t.Errorf("got %q %q, want 5 456", rp, tok)
 	}
-	if nv, tok := threadNvim(panes, panes[5]); nv != "10" || tok != "789" {
-		t.Errorf("--fresh: got %q %q, want 10 789", nv, tok)
-	}
-	// Another window's nvim is not its own, nor is any pane of an agent
+	// Another agent's panel is not its own, nor is any pane of an agent
 	// weaver did not start.
-	if nv, _ := threadNvim(panes, mux.Pane{ID: "8", Window: "3", Cmd: "/bin/weaver _agent 123 claude"}); nv != "" {
-		t.Errorf("another window's nvim: got %q", nv)
+	if rp, _ := threadPanel(panes, mux.Pane{ID: "8", Window: "3", Cmd: "/bin/weaver _agent 123 claude"}); rp != "" {
+		t.Errorf("another agent's panel: got %q", rp)
 	}
-	if nv, _ := threadNvim(panes, mux.Pane{ID: "9", Window: "3", Cmd: "claude"}); nv != "" {
-		t.Errorf("not a thread's agent: got %q", nv)
+	if rp, _ := threadPanel(panes, mux.Pane{ID: "9", Window: "3", Cmd: "claude"}); rp != "" {
+		t.Errorf("not a thread's agent: got %q", rp)
 	}
 }
 
 // A thread still being opened holds its number; one left behind (older
-// than its nvim ever waits) does not.
+// than its agent ever waits) does not.
 func TestThreadNumSkipsLeftovers(t *testing.T) {
 	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-s"}}
 	put := func(tok, rec string, age time.Duration) {
@@ -96,12 +90,12 @@ func TestThreadNum(t *testing.T) {
 	}
 }
 
-// A thread's nvim bound with a pid the multiplexer did not say (0, as Rex
-// may give) is recorded by its pane alone, and never over the record that
-// nvim made of itself as it started; a known pid is recorded.
-func TestBindNvimUnknownPid(t *testing.T) {
+// A thread's review panel bound with a pid Rex did not say (0) is recorded
+// by its pane alone, and never over the record that the panel made of
+// itself as it started (it may start first); a known pid is recorded.
+func TestBindPanelUnknownPid(t *testing.T) {
 	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-w"}}
-	nf := e.PaneFile("5", "nvim")
+	nf := e.PaneFile("5", "panel")
 	read := func() string {
 		t.Helper()
 		b, err := os.ReadFile(nf)
@@ -110,7 +104,7 @@ func TestBindNvimUnknownPid(t *testing.T) {
 		}
 		return string(b)
 	}
-	e.bindNvim("5", "6", 0)
+	e.bindPanel("5", "6", 0)
 	if got := read(); got != "6\n\n" {
 		t.Errorf("unknown pid, no record: %q, want the pane alone", got)
 	}
@@ -118,18 +112,18 @@ func TestBindNvimUnknownPid(t *testing.T) {
 	if err := os.WriteFile(nf, []byte(own), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	e.bindNvim("5", "6", 0)
+	e.bindPanel("5", "6", 0)
 	if got := read(); got != own {
-		t.Errorf("unknown pid over nvim's own record: %q, want %q", got, own)
+		t.Errorf("unknown pid over the panel's own record: %q, want %q", got, own)
 	}
 	if err := os.WriteFile(nf, []byte("3\n4242\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	e.bindNvim("5", "6", 1)
+	e.bindPanel("5", "6", 1)
 	if got := read(); got != "6\n\n" {
 		t.Errorf("unknown pid over another pane's record: %q, want the pane alone", got)
 	}
-	e.bindNvim("5", "6", 4321)
+	e.bindPanel("5", "6", 4321)
 	if got := read(); got != "6\n4321\n" {
 		t.Errorf("known pid: %q", got)
 	}

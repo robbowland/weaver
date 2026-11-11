@@ -19,10 +19,10 @@ func deadPid(t *testing.T) int {
 	return c.Process.Pid
 }
 
-// An nvim recorded with a pid of 0 (one the multiplexer did not say) has
-// not been seen to run: never its agent's nvim. One recorded without a pid
+// A panel recorded with a pid of 0 (one the multiplexer did not say) has
+// not been seen to run: never its agent's panel. One recorded without a pid
 // is its pane until it records itself.
-func TestNvimPaneUnknownPid(t *testing.T) {
+func TestPanelPaneUnknownPid(t *testing.T) {
 	dir := t.TempDir()
 	e := &Env{StateDir: dir, SKey: "rex-w"}
 	for rec, want := range map[string]mux.PaneID{
@@ -32,11 +32,11 @@ func TestNvimPaneUnknownPid(t *testing.T) {
 		"6\n" + strconv.Itoa(os.Getpid()) + "\n": "6",
 		"6\n\n":                                  "6",
 	} {
-		if err := os.WriteFile(e.PaneFile("5", "nvim"), []byte(rec), 0o644); err != nil {
+		if err := os.WriteFile(e.PaneFile("5", "panel"), []byte(rec), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if got := e.NvimPane("5"); got != want {
-			t.Errorf("record %q: NvimPane = %q, want %q", rec, got, want)
+		if got := e.PanelPane("5"); got != want {
+			t.Errorf("record %q: PanelPane = %q, want %q", rec, got, want)
 		}
 	}
 }

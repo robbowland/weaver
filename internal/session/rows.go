@@ -472,9 +472,10 @@ func (e *Env) Forget(f, pid string) {
 
 // removePaneFiles removes the files weaver keeps for the agent in a pane,
 // b their path without extension (<skey>_<pane>): its state, thread record,
-// nvim binding, turn prompt, last Bash command and opening marker.
+// review panel's and nvim's bindings, turn prompt, last Bash command and
+// opening marker.
 func removePaneFiles(b string) {
-	for _, x := range []string{".json", ".nvim", ".bash", ".prompt", ".thread"} {
+	for _, x := range []string{".json", ".panel", ".nvim", ".bash", ".prompt", ".thread"} {
 		os.Remove(b + x)
 	}
 	os.RemoveAll(b + ".opening")

@@ -88,7 +88,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 	var jumpAct, editAct, newAct, quitAct, resumeAct string
 	if home {
 		jumpAct = "execute-silent(" + q + " _goto {2} {3})"
-		editAct = "execute-silent(" + q + " _goto {2} {3}; " + q + " edit {2})"
+		editAct = "execute-silent(" + q + " _goto {2} {3}; " + q + " review {2})"
 		// The form in the popup Alt N opens, over the board (which the new
 		// thread's status push reloads). fzf skips any action whose
 		// template names a field, such as {2}, on an empty board: this one
@@ -334,7 +334,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		}
 		exec.Command(e.Self, "_goto", pane, tab).Run()
 		if key == "ctrl-e" {
-			syscall.Exec(e.Self, []string{e.Self, "edit", pane}, os.Environ())
+			syscall.Exec(e.Self, []string{e.Self, "review", pane}, os.Environ())
 		}
 		return "", nil
 	}
@@ -396,7 +396,7 @@ func peekChoice(key, sel string) (string, [][]string) {
 		}
 	case "ctrl-e":
 		if agentRow {
-			return "", [][]string{{"_goto", id, tab}, {"edit", id}}
+			return "", [][]string{{"_goto", id, tab}, {"review", id}}
 		}
 	case "jump", "resume":
 		switch {

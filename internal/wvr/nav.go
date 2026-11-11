@@ -323,7 +323,7 @@ func (e *Env) goBack(ws []mux.Window, cur mux.Window, home mux.WindowID) {
 	}
 }
 
-// uiLock is one `wvr edit`, `wvr next` or `wvr go window` per session at a
+// uiLock is one `wvr review`, `wvr next` or `wvr go window` per session at a
 // time: it waits for the one at work (at most 10 s), looking every 20 ms so
 // a queue of key presses keeps up. A lock older than 10 s was left by a
 // killed process. Its release.
@@ -459,12 +459,12 @@ func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 	if !digits(string(p)) {
 		return ""
 	}
-	for _, x := range []string{"json", "thread", "nvim"} {
+	for _, x := range []string{"json", "thread", "panel", "nvim"} {
 		if files.Exists(e.PaneFile(p, x)) {
 			return p
 		}
 	}
-	for _, f := range e.SessionFiles("nvim") {
+	for _, f := range append(e.SessionFiles("panel"), e.SessionFiles("nvim")...) {
 		if q, _ := files.FirstLine(f); q == string(p) {
 			return session.PaneOfFile(f)
 		}

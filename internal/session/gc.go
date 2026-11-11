@@ -70,8 +70,8 @@ func (e *Env) gcAgents() {
 			e.Forget(f, pid)
 		}
 	}
-	for _, f := range paneFiles(e.StateDir, "nvim") {
-		if files.Exists(strings.TrimSuffix(f, ".nvim") + ".json") {
+	for _, f := range append(paneFiles(e.StateDir, "panel"), paneFiles(e.StateDir, "nvim")...) {
+		if files.Exists(strings.TrimSuffix(f, filepath.Ext(f)) + ".json") {
 			continue
 		}
 		b, _ := os.ReadFile(f)

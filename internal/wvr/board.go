@@ -806,8 +806,8 @@ func (e *Env) turnFiles(sid, turn string, roots []string) string {
 // fit the list's width, ? always last; the rest are in its help. ⏎ opens a
 // row's thread: its window, or a lost or held one in a new window.
 func (e *Env) boardHints() []choice {
-	browse := "⏎ OPEN|n NEW|x CLOSE|h HOLD|/ SEARCH|v NVIM|tab VIEWS|ctrl+q QUIT"
-	search := "⏎ OPEN|esc BACK|ctrl+e NVIM|tab VIEWS"
+	browse := "⏎ OPEN|n NEW|x CLOSE|h HOLD|/ SEARCH|v REVIEW|tab VIEWS|ctrl+q QUIT"
+	search := "⏎ OPEN|esc BACK|ctrl+e REVIEW|tab VIEWS"
 	// A toggle says where it goes next: ? from the help back to the card.
 	showing, base := "", sockBase()
 	if base != "" {
@@ -884,7 +884,7 @@ func welcome(cols, lines int, views bool, q string) (string, []string) {
 	if views {
 		rows = append(rows, row{"alt+y", "your pull requests and issues", "execute-silent(" + q + " go home)"})
 	}
-	about := "a thread is a task, its worktree, and an agent beside its nvim"
+	about := "a thread is a task, its worktree, and an agent beside its review"
 	note := "or start claude or codex in any pane: weaver follows it"
 	text := []string{CBold + CInk + "No threads yet" + COff, CGrey + about + COff, ""}
 	acts := []string{"", "", ""}

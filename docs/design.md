@@ -10,7 +10,8 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | --- | --- |
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
-| `$STATE_DIR/<skey>_<pane>.nvim` | line 1: the pane id of the agent's nvim; line 2: that nvim's pid, empty while not known (the nvim writes its own as it starts); a pid of 1 or less is no process, never a live nvim |
+| `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
+| `$STATE_DIR/<skey>_<pane>.nvim` | the same for an nvim `wvr nvim` started for the agent, which the hooks tell what it does (below) |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
 | `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
@@ -85,7 +86,6 @@ Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
 | `checktime` | | Bash or an MCP edit tool finished and no file was identified |
 | `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
 | `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed; point `agent`: an agent chain's tip moved |
-| `focus` | `root` | `wvr edit` (alt+v, alt+V, dashboard ctrl-e): where the agent is, for the review keys, when weaver knows it |
 
 nvim debounces review refreshes itself (250 ms); there is no separate poke.
 
@@ -270,12 +270,12 @@ states, turns, snapshots, log and nvim events.
 `wvr new` makes the worktree (Worktrunk's `wt switch [--create] <branch>
 --no-cd --format json`, whose `path` and `action` say where and whether it was
 made; else `git worktree add` at `<repo>/../<repo>.<branch with / as ->`), then
-one window: `new-window -n <label> -c <dir> 'weaver _agent <token> <agent>'`,
-then `split-window -d -h -b -l <nvim's columns> 'weaver nvim --fresh <agent
-pane>'` (argv, no shell): nvim on the left, told its agent's pane and
-recorded as bound to it (`.nvim`) before `wvr new` returns, the agent on
-the right at `$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while
-nvim keeps 60) with the focus. In the weaver session the window moves to the index of its
+one window: its agent's pane, `wvr _agent <token> <agent>` in `<dir>`,
+labelled `<label>`, then a split on its left running `wvr _panel <agent
+pane>` (argv, no shell): its review panel, recorded as bound to it
+(`.panel`) before `wvr new` returns, the agent on the right at
+`$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while the panel
+keeps 60) with the focus. In the weaver session the window moves to the index of its
 number and is named with its label from the start.
 
 A new branch starts from the remote's default branch
@@ -300,16 +300,63 @@ task as its prompt (`claude "<task>"`, `codex "<task>"`). A thread restored
 after its session went leaves `resume` (the session id) there instead of
 `task`, and its agent's pane resumes: `claude --resume <session_id>`
 (the agent afresh when unknown), `codex resume <id>`. A thread closed
-before its nvim is recorded as bound is closed whole all the same: `close`
-finds that nvim as the pane started for its agent. The pane is made to
+before its panel is recorded as bound is closed whole all the same: `close`
+finds that panel as the pane started for its agent. The pane is made to
 stay when its program exits (`Spawn.Keep`, naming the agent, and R and x),
 so an agent that
 exits, cleanly or not (a broken install, a bad flag in `WEAVER_CLAUDE`), or
 a `wvr _agent` that fails before it, leaves what it said on its pane and
 its thread on the board, exited: `R` (`wvr restart`) starts its agent again in that pane on
 its conversation (afresh when none is known), `x` closes the thread. A
-thread lasts until you close it, so its window never stays with nvim
+thread lasts until you close it, so its window never stays with its panel
 alone in it.
+
+### Review panel
+
+A thread's left pane is its review: `wvr _panel AGENT`, in the worktree,
+records itself as the agent's (`.panel`: its pane and pid), then runs tuicr
+(`$WEAVER_TUICR`, else `tuicr`) there, and again each time tuicr ends
+(`:q`; tuicr 0.28's `q` no longer quits), so it reads the branch afresh:
+tuicr takes its range once, as it starts. Each round it picks what to show
+(`reviewArgs`):
+
+- the branch's commits since its fork point, with what is not committed:
+  `-r <fork>..HEAD -w`, the fork point as a SHA (`git.ForkPoint`: the merge
+  base of HEAD and the review base, never the base's name, since tuicr
+  diffs a range's two ends and with `main..HEAD` a file main gained after
+  the fork showed as deleted);
+- with no commits of its own, what is not committed (`-w`);
+- with no review base, tuicr's own choice of commit;
+- with nothing at all, `no changes on this branch yet`, looked at again
+  every 2 s: tuicr refuses an empty range, `-w` or not.
+
+The review base (`git.ReviewBase`) is `$WEAVER_BASE`, else `git config
+branch.<branch>.weaverbase` (a pull request's thread sets it to what the
+pull request merges into), else the upstream remote's default branch (its
+`HEAD`, else `main` or `master`: a fork's base), else origin's, else a local
+`main` or `master`; each only when it names a commit. Every run has
+`--theme micrographics --no-update-check` and `EDITOR=nvim`, so tuicr's `e`
+(on a diff line) opens `nvim +N file` in the panel, with your own Neovim
+config, and tuicr comes back on the same hunk when it quits. tuicr shows a
+change as it is made (`diff_watch_interval_ms`, which weaver brings: see
+[Setting itself up](#setting-itself-up)); a commit made while it is open
+joins its commit list at the next round. The panel ignores `ctrl+c` while
+tuicr runs (tuicr's own key), a tuicr that ends within a second waits out
+the second (two when it failed), and the panel ends with its pane.
+
+`wvr review [--full] [PANE]` (alt+v, alt+V, the board's `v`, `e` and
+`ctrl+e`) goes to the agent's panel, or opens one on its left in the
+worktree it is in (`agentWhere`) and puts the thread's widths back; in a
+pane that is no agent's, a panel beside it in its directory. `--full` zooms
+it. One press per agent at a time (`<skey>_<pane>.opening`), under the
+session's UI lock.
+
+Review notes are tuicr's own: a comment is saved as it is written, readable
+while tuicr is open, with `tuicr review list --repo .` (the checkout's
+sessions, newest by `updated_at`) and `tuicr review comments --session
+<slug>` (each comment as JSON with its `location`, `path:line`). A session's
+slug includes its range, so after the panel's next round on a new commit
+earlier comments sit in the previous session.
 
 ### Thread record
 
@@ -346,7 +393,7 @@ other run of characters one `-`, at most 48 characters, cut at a `-`.
 
 `wvr adopt [PANE | SESSION-ID]` makes a conversation weaver did not start a
 thread. PANE is a number (pane numbers have no length: they only grow); one of 4+ digits is a pane only when weaver follows an agent
-there (its state, thread or nvim file). Anything else is a session id or
+there (its state, thread or panel file). Anything else is a session id or
 its first 4+ characters.
 Alone, it adopts the agent in its own pane when it has one (so `! wvr
 adopt` inside an agent), else opens the picker. Outside
@@ -362,12 +409,12 @@ weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
   `root`, `worktree` its `root`, `here` true, `worktree_created` false (so
   close never offers to remove it), `cmd` the agent's command, `pane`,
   `session_id`. In the weaver session its window becomes the thread's: kept
-  when the agent has it to itself (with its bound nvim at most) and it is
+  when the agent has it to itself (with its bound panel at most) and it is
   neither home nor a view, else `BreakOut` takes the agent (its process
   untouched) to a window of its own at its number (the next free place when
   that is taken), named with its label, in the background unless the
-  agent's is the pane adopt runs in. An agent with no bound nvim gets one on its left
-  (`splitNvim`, as a new thread's).
+  agent's is the pane adopt runs in. An agent with no bound panel gets one
+  on its left (`splitPanel`, as a new thread's).
 - **By session id:** a lost thread's is resumed (`threadRestore`); an agent
   of this session running it is adopted in place; else its transcript,
   `<claude dir>/projects/*/<id>.jsonl`, must be the only match, and no live
@@ -386,7 +433,7 @@ weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
 ### Renaming
 
 `wvr rename [PANE] [NAME...]` sets the thread record's `title` (PANE: as for
-adopt; else the agent this pane belongs to, its own or its nvim's), under
+adopt; else the agent this pane belongs to, its own or its panel's), under
 the numbering lock its other writers take, then relabels the windows and
 reloads the boards. Without NAME it asks on the terminal (fzf, the query the
 current name); an empty NAME clears it. The board's `r` on a thread's row
@@ -413,7 +460,7 @@ fields) and `resume` (its session id) go to `new/<skey>_<token>/`, then
 `Respawn` starts `wvr _agent TOKEN KIND` in DIR in the pane's place, ending
 the agent, which takes them as a restored thread's pane
 does and resumes (`claude --resume`, `codex resume`). DIR is where a lost
-thread would resume (`Lost.Dir`). The pane id, its window, nvim and number
+thread would resume (`Lost.Dir`). The pane id, its window, panel and number
 stay. It says what it did (restarted, left mid-turn, failed) on stdout and
 in a message, since the board's `R` and the popover run it out of
 sight.
@@ -471,9 +518,8 @@ Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
 silence (the item's `review_unread`). `--review` makes the thread's `mode`
 `review`: its agent runs Claude Code in plan mode, Codex in a read-only
-sandbox, each time it starts; a pull request's review starts its nvim with
-`WEAVER_OPEN_REVIEW=branch`, which `weaver.lua` takes (once, then unsets) to
-open `:AgentReview branch` after VimEnter.
+sandbox, each time it starts; a pull request's review panel shows the
+branch against what the pull request merges into (its `weaverbase`).
 
 ### Commands for the dashboard
 
@@ -482,7 +528,7 @@ open `:AgentReview branch` after VimEnter.
   made), 1 error (one line on stderr). `--from` starts in that agent's
   repository.
 - `wvr close [--yes] [--remove-worktree] [PANE]`: PANE is an agent or its
-  nvim (default: the focused one). It says what goes and asks `close it?
+  review panel (default: the focused one). It says what goes and asks `close it?
   [y/N]` (`--yes` skips only that); then, for a worktree it may remove, `remove
   its worktree … too? [y/N]` (or `--remove-worktree`). Exit 0 closed, 130
   declined, 1 error. When the tab would close with the pane it runs in, the
@@ -552,7 +598,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 - **Held:** a thread you put on hold (`wvr hold [PANE] [NOTE]`, the
   board's `h`) is a lost record of the same name with `held` (epoch s) and
   `note` (what is next, one line), written under its state file's lock
-  before its agent and nvim are closed as `wvr close --hold` closes them:
+  before its agent and panel are closed as `wvr close --hold` closes them:
   unasked, its worktree never offered for removal. The board lists it under
   HELD, last, newest first, its note as its fact, its cell `[=]`, and its age
   a shade brighter after a week. Past three, HELD shows the three newest and
@@ -575,10 +621,10 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   session's life) and `resume` (the session id) in place of `task`. The
   agent's pane takes the record and the state for its pane id (first
   retiring files under that pane id of another life of the session; its own
-  life's, as when it restarts in its pane, stay, its nvim still bound),
+  life's, as when it restarts in its pane, stay, its panel still bound),
   then execs `claude --resume <id>` (`codex resume <id>`; no conversation
   known: the agent afresh, never `--continue` or `resume --last`, which
-  would guess another's); the nvim pane binds as for a new thread. A
+  would guess another's); the panel binds as for a new thread. A
   conversation Claude Code runs elsewhere is refused, not resumed beside it. The state
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
   title and last reply, and its snapshot chain and activity log continue.
@@ -609,9 +655,11 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   shows its card (`wvr _preview <session id>`).
 - **Quit:** `ctrl+q` kills the session, and the threads come back as above.
   `wvr quit [--yes]` kills the session you are in (outside it,
-  `$WEAVER_SESSION`) after a card (ctrl+q's, in a popup): the threads kept, the turns under way, and
-  the agents' nvims' unsaved buffers (each nvim asked over its socket, as
-  `wvr close` does). The footer shows `^q QUIT`.
+  `$WEAVER_SESSION`) after a card (ctrl+q's, in a popup): the threads kept,
+  the turns under way, and the reviews where nvim is open (`editing`: an
+  nvim among the panel's processes, which tuicr's `e` started, whose
+  unsaved edits would go; no nvim weaver could ask has a socket), as `wvr
+  close` says of its thread. The footer shows `^q QUIT`.
 
 ## Dashboard
 
@@ -702,7 +750,7 @@ Browsing hides fzf's input (`--no-input`), so letters are keys: `enter` and
 adopt (`wvr _popup adopt <pane>`: an agent row that is no thread is adopted
 where it runs, said in a message; anything else, the empty board
 included, opens the picker of conversations in the form's popup), `e`
-(`ctrl-e`) jump and open nvim, `s` card or screen, `tab` / `shift-tab` the
+(`ctrl-e`) jump and open its review, `s` card or screen, `tab` / `shift-tab` the
 next / previous view (`wvr go next|prev`, round home and the views as a
 tab bar; a view's the same), `?` keys,
 `ctrl-r` reload, `q` and `esc` close. `/` shows the input and unbinds the
@@ -722,7 +770,7 @@ whose agent went away) in one place, for one `/bin/dash` spawn per move
 (about 1 ms).
 
 Outside home, `n` and `e` end fzf with a key (`print`), and `Ls` acts: `e`
-jumps and runs `wvr edit`; `n` runs `wvr new --from <pane>` on the
+jumps and runs `wvr review`; `n` runs `wvr new --from <pane>` on the
 pane's terminal and reopens the dashboard when it is cancelled (130) or
 fails. Home keeps running: `e` and enter act in the background
 (`execute-silent`), as does enter on a lost thread (`wvr resume`, its
@@ -838,7 +886,7 @@ and numbered placement act only there.
   dialog or go elsewhere ends the popover with its choice (`peekChoice`,
   `peekItemChoice`) written to FILE, one wvr command a line, its words
   tab-separated; `go home`, which waits for the popover to close, then runs
-  them: a jump (`_goto`), `edit`, `resume`, `_popup new|close|
+  them: a jump (`_goto`), `review`, `resume`, `_popup new|close|
   forget|adopt`, `_items NAME from REF [--review]`, or `next` (alt+1).
   `esc`, `q` and alt+y close it with nothing to run. Without an app attached
   to show it in, alt+y goes home as from anywhere else. From home, on to
@@ -847,10 +895,10 @@ and numbered placement act only there.
   anywhere else home, made again if it was closed.
 - **Views:** see [Views](#views).
 - **Threads:** a window labelled LABEL in DIR running `wvr _agent TOK
-  KIND`, then a split on its left running `wvr nvim --fresh AGENT` (argv,
-  no shell), the nvim pane titled `nvim: <dir>`, then the agent focused:
-  whole before it is shown, as Rex needs. `alt+v`'s nvim is a split on the
-  agent's left, 80% of the window.
+  KIND`, then a split on its left running `wvr _panel AGENT` (argv, no
+  shell), titled `review: <dir>`, then the agent focused: whole before it
+  is shown, as Rex needs. alt+v's panel, opened again, is a split on the
+  agent's left.
 - **Seen as you look:** Rex has no focus hook: home's board follows the
   session's events (`rex events --session`, `rex.Session.WatchActive`) and,
   1.5 s after the last change of active window (weaver's moves, the app's
@@ -871,7 +919,7 @@ and numbered placement act only there.
   repository's main checkout (`.thread.repo`), from which Claude Code finds
   the session in any of its worktrees (and since 2.1.223, in any project).
 - **Resizing:** Rex's splits are ratios, so the app's window resizing keeps
-  them, and below 104 columns nvim keeps 60 and the agent gets the rest. But
+  them, and below 104 columns the panel keeps 60 and the agent gets the rest. But
   the app evens out a window it shows when its panes change (a split made,
   a block swapped in), so after such a change weaver puts the thread's
   widths back twice, late (`settleWidths`: `wvr _width`, 1 and 2.5 s on),
@@ -962,7 +1010,7 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
   is its zoomed block's while one is zoomed (`zoomed_block_id`), whatever
   that block's share of the layout. `SplitLeft` gives pid 0, not known yet
   (Rex runs a command through the login shell, whose pid it would be): `wvr
-  nvim` records its own pid as it starts.
+  _panel` records its own pid as it starts.
 - **Messages:** Rex has no message line: `Say` and `SayToSession` show
   their text as one line in a small floating layer at the foot of the
   active window that takes no focus (`focus: false`) and closes on its own
@@ -996,7 +1044,7 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
   layer (weaver's popups: the form, a card, alt+y's board) the keys are the
   popup's program's. Rex starts a key's wvr at once, not after the last
   one's: `wvr go window` (alt+j/k) takes the session's UI lock (`uiLock`,
-  which `wvr edit` holds and `wvr next` tries), so each press moves on from
+  which `wvr review` holds and `wvr next` tries), so each press moves on from
   where the last left you.
 
 ## Setting itself up

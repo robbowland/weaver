@@ -9,7 +9,7 @@ a first thread, start with the [README](../README.md).
 - [The board](#the-board)
 - [Keeping threads](#keeping-threads)
 - [What weaver tracks](#what-weaver-tracks)
-- [Neovim](#neovim)
+- [Review](#review)
 - [Mouse](#mouse)
 - [Setup](#setup)
 - [Settings](#settings)
@@ -30,7 +30,7 @@ The session's windows are:
 
 - **home**, the first window: the board of every thread, full size;
 - **one window per thread**, in the order of the threads' numbers: the
-  thread's Neovim on the left, the agent on the right;
+  thread's review on the left, the agent on the right;
 - **the views**, GITHUB and LINEAR, beside home
   ([Pull requests and issues](#pull-requests-and-issues)).
 
@@ -75,8 +75,8 @@ resume, adopt or restart a Codex thread.
 
 ## Threads
 
-A thread is one task for one agent, in a window of its own: the agent's
-Neovim on the left and the agent on the right, taking a fifth of the width.
+A thread is one task for one agent, in a window of its own: its review
+(tuicr) on the left and the agent on the right, taking a fifth of the width.
 It works in a worktree of its own, or in a checkout you choose. The window is
 named after the thread (`01 Add a CLI flag · repo/add-a-cli-flag`), and
 opening a thread puts you on its agent.
@@ -125,17 +125,17 @@ says so.
 
 ### Working in a thread
 
-The Neovim on the left belongs to the thread's agent: it reloads the agent's
-edits, shows its state and reviews its turns ([Neovim](#neovim)). If you quit
-it, `alt+v` brings it back on the left, with the agent at its usual width,
-as long as nothing else is in the window.
+The review on the left shows what the thread's branch has changed, as the
+agent changes it ([Review](#review)). If you close it, `alt+v` brings it
+back on the left, with the agent at its usual width, as long as nothing else
+is in the window.
 
 ### Restarting an agent
 
 After you update Claude Code or Codex, running agents carry on with the old
 version. `R` on the board, or `wvr restart`, starts a thread's agent again in
 its own pane, resuming the same conversation (`claude --resume`, `codex
-resume`): its window, Neovim and number stay, and the task is never sent
+resume`): its window, review and number stay, and the task is never sent
 twice. `wvr restart --all` restarts every thread's agent, from any shell. An
 agent that is working, or waiting on you, is left alone, since restarting it
 would stop its turn; `--force` restarts it all the same.
@@ -157,8 +157,9 @@ The name stays with the thread when it is lost and resumed.
 
 ### Closing a thread
 
-`x` on the board, or `wvr close`, closes a thread's agent, its Neovim and its
-window, after asking. Panes you added to the window stay.
+`x` on the board, or `wvr close`, closes a thread's agent, its review and its
+window, after asking (and says so when nvim is open in the review, whose
+unsaved edits would go). Panes you added to the window stay.
 
 If weaver created the thread's worktree, and nothing in it would be lost (no
 uncommitted changes, and its commits merged into the default branch or
@@ -230,8 +231,8 @@ With `WEAVER_ITEM_TASK=1`, weaver writes a task in for you (`Address the
 review on #45`, `Implement #12`).
 
 `alt+m` is the read-only version. On a pull request, it starts a thread on the
-pull request's branch whose Neovim opens on a review against the branch it
-merges into, and whose agent reviews without changing files (Claude Code in
+pull request's branch whose review shows it against the branch it merges
+into, and whose agent reviews without changing files (Claude Code in
 plan mode, Codex in a read-only sandbox). On an issue, it starts an
 investigation that ends in a plan for you to approve. The form's `alt+m`
 switches between work and read-only.
@@ -291,7 +292,7 @@ its agent again on its conversation, `x` closes the thread.
 | `r` | Rename the thread ([Renaming a thread](#renaming-a-thread)) |
 | `R` | Restart its agent, resuming its conversation ([Restarting an agent](#restarting-an-agent)) |
 | `a` | Adopt the agent, if you started it by hand; elsewhere, pick a conversation to resume as a thread ([Adopting](#adopting-a-conversation)) |
-| `v`, `e`, `ctrl+e` | Jump to the thread and open its Neovim |
+| `v`, `e`, `ctrl+e` | Jump to the thread and open its review |
 | `s` | Swap the card for the agent's screen, and back |
 | `tab`, `shift+tab` | The next, previous view |
 | `ctrl+r` | Reload |
@@ -315,7 +316,7 @@ the machine restarts while a thread's agent runs, weaver keeps the thread as
 *lost* rather than forgetting it:
 
 - `wvr` brings the `weaver` session back with its threads, each in its window
-  with its number, its agent resuming its conversation beside its Neovim.
+  with its number, its agent resuming its conversation beside its review.
   With `WEAVER_RESTORE=0`, it lists them on home instead.
 - Lost threads it doesn't bring back by itself (from another session, or
   with `WEAVER_RESTORE=0`) are listed last on the board, under LOST: `enter`
@@ -332,7 +333,7 @@ session ran on, is not lost.
 A thread you are not working on but would lose something by closing (a
 conversation with the context you'll want back) can wait under HELD
 instead. `h` on its row asks, in the board's search line, what is next for
-when you come back; `enter` holds it: its agent and Neovim close, its
+when you come back; `enter` holds it: its agent and review close, its
 worktree and branch stay as they are, and its row moves to HELD with your
 note. Nothing brings it back on its own, not even `wvr` starting the
 session again: `enter` on it resumes it in a new window, on its
@@ -356,7 +357,7 @@ like any other:
 - **An agent you started by hand**, in a pane weaver follows: `a` on its row,
   or `! wvr adopt` typed into the agent, makes it a thread where it runs. In
   the weaver session it moves to a window of its own at its number, with a
-  Neovim on its left. It is not restarted, so a turn in progress carries on.
+  review on its left. It is not restarted, so a turn in progress carries on.
 - **A conversation that isn't running**, such as one you ran outside weaver
   before a restart: `a` anywhere else on the board lists your recent Claude
   Code conversations, and `enter` resumes one as a thread, in the directory
@@ -371,12 +372,12 @@ there before adopting it, so that two processes don't share one conversation.
 ### Quitting
 
 Because threads come back, quitting everything is safe. `ctrl+q`, from any
-pane, quits the session with every agent and Neovim in it, and `wvr` brings
-the threads back next time. While an agent is mid-turn (working, or waiting
-on you), quitting would stop that turn, so `ctrl+q` asks first.
+pane, quits the session with every agent and review in it, and `wvr` brings
+the threads back next time. It asks first, saying what would stop: a turn
+under way (an agent working, or waiting on you) stops with it.
 
 `wvr quit` quits after asking, and says what would stop: turns in progress,
-and unsaved buffers in the agents' Neovims. From outside the session it quits
+and the reviews with Neovim open in them. From outside the session it quits
 a `weaver` session left running behind a closed terminal.
 
 ### What weaver cleans up
@@ -438,17 +439,40 @@ command away. Edits you make between turns are their own commit.
 `~/.local/state/weaver/log/<session>.jsonl`. The formats are in
 [design.md](design.md).
 
-## Neovim
+## Review
 
-The Neovim weaver opens for an agent loads your own config, then:
+A thread's review is [tuicr](https://github.com/agavra/tuicr), in its
+worktree, on the left of the agent. It shows what the branch has changed
+since it left its base, commits and what is not committed yet together, and
+follows the agent's edits as it makes them:
 
-- **reloads files** as soon as they change on disk, never over unsaved
-  changes.
-- **shows the agent at the top of each file window**: its state, turn, task
-  progress, and what it was asked or is waiting on. Once a turn is over, it shows how many files changed and the
-  key to review them (`2 files ␣at`).
+- **The branch at once**, and **commit by commit**: `(` and `)` step through
+  its commits.
+- **Neovim and back:** `e` on a diff line opens Neovim there, with your own
+  config, in the same pane; quitting it brings the review back on the same
+  hunk. (In the file list, `e` is tuicr's exclude filter.)
+- **Notes for the agent:** `c` comments a line and `v` a range, saved as you
+  write them. When you have reviewed, tell the agent: it reads them with
+  `tuicr review list --repo .` and `tuicr review comments --session
+  <slug>`, which give each comment's `path:line`.
+- **A fresh range:** `:q` starts the review again, so commits made since it
+  opened join its list (tuicr reads its range once, as it starts).
 
-### Reviewing
+A branch with nothing of its own yet says `no changes on this branch yet`,
+and the review starts as soon as there is an edit. A branch is compared
+from where it left `$WEAVER_BASE`, else `git config
+branch.<branch>.weaverbase` (a pull request's thread sets it), else the
+default branch of the `upstream` or `origin` remote, else `main` or
+`master`. weaver brings tuicr's Micrographics theme, and a tuicr config
+that follows edits as they are made when you have none
+([Setup](#what-wvr-sets-up)).
+
+### weaver's Neovim plugin
+
+weaver no longer opens a Neovim beside the agent; its plugin still loads in
+a Neovim of yours that loads it ([In your own Neovim](#in-your-own-neovim)).
+
+#### Reviewing
 
 Reviews open in one
 [diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) view. A
@@ -521,18 +545,14 @@ Untracked files the agent created are listed like any other, without touching
 your index. In diffview-plus's file panel, `w` marks a file reviewed and `H`
 hides the reviewed ones.
 
-A branch is compared against `$WEAVER_BASE`, else `git config
-branch.<branch>.weaverbase`, else the default branch of the `upstream` or
-`origin` remote, else `main` or `master`.
-
 `:checkhealth weaver` says whether diffview-plus, the snacks picker,
 gitsigns and the agent binding are in place.
 
-### In your own Neovim
+#### In your own Neovim
 
-wvr keeps a copy of its Neovim plugin at `~/.local/share/weaver/nvim`. The
-Neovims weaver opens load it themselves. To use its reviews or statusline in
-your other Neovims, add it to your config; with lazy.nvim:
+wvr keeps a copy of its Neovim plugin at `~/.local/share/weaver/nvim`. To
+use its reviews or statusline in your Neovim, add it to your config; with
+lazy.nvim:
 
 ```lua
 { dir = (vim.env.XDG_DATA_HOME or vim.env.HOME .. '/.local/share') .. '/weaver/nvim', name = 'weaver', lazy = false }
@@ -632,12 +652,13 @@ Environment variables change weaver's defaults.
 | Variable | Default | Does |
 | --- | --- | --- |
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
+| `WEAVER_TUICR` | `tuicr` | The tuicr a review runs |
 | `WEAVER_SESSION` | `weaver` | The session `wvr` shows or starts |
 | `WEAVER_MUX` | | `rex`: act on the Rex session you are in, whether weaver made it or not (its blocks and keys set it) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
 | `WEAVER_WIP` | `5` | How many threads you mean to have open at once: past it, the board's count shows it (`7/5`) and the new-thread form says how to hold or close one; `0`: no limit |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |
-| `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as Neovim keeps 60 columns |
+| `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as the review keeps 60 columns |
 | `WEAVER_BELL` | `1` | `needs-you`: ring only when an agent needs you; `0`: never |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
 | `WEAVER_WORKTRUNK` | `1` | `0`: create worktrees with plain git even when Worktrunk is installed |

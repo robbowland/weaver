@@ -25,7 +25,6 @@ import (
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
-	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex"
@@ -132,7 +131,7 @@ func (e *Env) threadNum() (int, map[int]bool) {
 // nofocus), nvim with nvimEnv too. Its window id. The window is made
 // whole behind you, then shown: the Rex app evens out a split made in the
 // window it shows (its balancing on creation), not one it is shown made.
-func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool, nvimEnv ...string) (mux.WindowID, bool) {
+func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus bool) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenWindow(mux.NewWindow{
 		Spawn: e.agentSpawn(tok, kind, dir),
 		Label: name, At: mux.NextFree, Background: true,
@@ -143,7 +142,7 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	if total <= 0 {
 		total = 200
 	}
-	if !e.splitNvim(agentPane, dir, total, nvimEnv...) {
+	if !e.splitPanel(agentPane, dir, total) {
 		e.Mux().CloseWindow(tab)
 		return "", false
 	}
@@ -156,39 +155,19 @@ func (e *Env) threadTab(tok string, kind agent.Kind, dir, name string, nofocus b
 	return tab, true
 }
 
-// splitNvim opens the agent's nvim (`wvr nvim --fresh AGENT`) on the left
-// of agentPane, in dir, nvimEnv in its environment, the agent keeping its
-// width of the total columns; bound to the agent before this returns.
-func (e *Env) splitNvim(agentPane mux.PaneID, dir string, total int, nvimEnv ...string) bool {
-	nv, pid, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
-		Spawn: mux.Spawn{Argv: []string{e.Self, "nvim", "--fresh", string(agentPane)}, Dir: dir, Env: nvimEnv},
-		Cols:  max(total-agentCols(total)-1, 1), Title: "nvim: " + filepath.Base(dir), Background: true,
+// splitPanel opens the agent's review panel (`wvr _panel AGENT`) on the
+// left of agentPane, in dir, the agent keeping its width of the total
+// columns; bound to the agent before this returns.
+func (e *Env) splitPanel(agentPane mux.PaneID, dir string, total int) bool {
+	rp, pid, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
+		Spawn: mux.Spawn{Argv: []string{e.Self, "_panel", string(agentPane)}, Dir: dir},
+		Cols:  max(total-agentCols(total)-1, 1), Title: panelTitle(dir), Background: true,
 	})
 	if err != nil {
 		return false
 	}
-	e.bindNvim(agentPane, nv, pid)
+	e.bindPanel(agentPane, rp, pid)
 	return true
-}
-
-// bindNvim records nvim pane nv (process pid) as agent's:
-// <skey>_<agent>.nvim. (`wvr nvim` keeps this pid when it becomes nvim,
-// and records itself as it starts.) A pid of 1 or less is the
-// multiplexer not saying (Rex may not): the pane alone, never a pid, and
-// never over the record nvim made of itself in that pane.
-func (e *Env) bindNvim(agent, nv mux.PaneID, pid int) {
-	os.MkdirAll(e.StateDir, 0o755)
-	nf := e.PaneFile(agent, "nvim")
-	p := ""
-	if pid > 1 {
-		p = strconv.Itoa(pid)
-	} else if l, err := files.FirstLine(nf); err == nil && l == string(nv) {
-		return
-	}
-	tmp := nf + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(string(nv)+"\n"+p+"\n"), 0o644) == nil {
-		os.Rename(tmp, nf)
-	}
 }
 
 // threadPlace: in the weaver session a thread's window index is its number
@@ -573,7 +552,8 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 		name = branch
 	}
-	// A pull request's thread reviews against what it merges into.
+	// A pull request's thread reviews against what it merges into (its
+	// panel's base: git.ReviewBase).
 	prBase := ""
 	if isPR && pr.Base != "" {
 		prBase = pr.Base
@@ -587,7 +567,6 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	// The agent's first prompt: the task, with the item it is on; with no
 	// task, nothing (it waits for you).
 	prompt := task
-	review := fm.Mode == items.ModeReview
 	if it != nil && strings.TrimSpace(task) != "" {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
 	}
@@ -616,12 +595,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if e.WeaverSession() {
 		wname = session.ThreadLabel(n, label, dir)
 	}
-	// A review of a pull request opens its nvim on the review.
-	var nvimEnv []string
-	if review && isPR {
-		nvimEnv = append(nvimEnv, "WEAVER_OPEN_REVIEW=branch")
-	}
-	tab, ok := e.threadTab(tok, fm.Agent, dir, wname, nofocus, nvimEnv...)
+	tab, ok := e.threadTab(tok, fm.Agent, dir, wname, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -1088,17 +1062,17 @@ func plural(n int) string {
 	return "s"
 }
 
-// unsaved is how many listed buffers are modified in the nvim at sock (-1:
-// no answer).
-func unsaved(sock string) int {
-	if st, err := os.Stat(sock); err != nil || st.Mode()&os.ModeSocket == 0 {
-		return -1
+// editing: does nvim run in agent's review panel (tuicr's e opened a file
+// there), whose unsaved edits closing it would lose? Its process, under
+// the panel's: no nvim weaver could ask has a socket.
+func (e *Env) editing(agent mux.PaneID) bool {
+	l, _ := os.ReadFile(e.PaneFile(agent, "panel"))
+	f := strings.Fields(string(l))
+	if len(f) < 2 {
+		return false
 	}
-	n, ok := nvim.EvalInt(sock, `len(filter(getbufinfo({"bufmodified": 1}), "v:val.listed"))`, 2*time.Second)
-	if !ok {
-		return -1
-	}
-	return n
+	pid, _ := strconv.Atoi(f[1])
+	return process.Runs(pid, "nvim")
 }
 
 // worktreeRemovable: may worktree dir be removed? Only a linked worktree,
@@ -1147,12 +1121,12 @@ func worktreeRemovable(dir string) string {
 	return "its commits are neither merged nor pushed"
 }
 
-// threadNvim is the nvim pane of a thread's agent before it is recorded
-// as bound: the pane in the agent's window started as `wvr nvim --fresh
-// AGENT` (or, before that, `wvr nvim --thread TOK`); and TOK, from the
+// threadPanel is the review panel of a thread's agent before it is
+// recorded as bound: the pane in the agent's window started as `wvr _panel
+// AGENT`; and TOK, from the
 // agent's own start command (`wvr _agent TOK`), whose record of the
 // thread being opened goes with it. "" when there is none.
-func threadNvim(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
+func threadPanel(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 	f := strings.Fields(agent.Cmd)
 	tok := ""
 	for i := 0; i+1 < len(f); i++ {
@@ -1166,7 +1140,7 @@ func threadNvim(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 	}
 	for _, p := range panes {
 		if p.Window == agent.Window && p.ID != agent.ID &&
-			(strings.HasSuffix(p.Cmd, " nvim --fresh "+string(agent.ID)) || strings.HasSuffix(p.Cmd, " nvim --thread "+tok)) {
+			strings.HasSuffix(p.Cmd, " _panel "+string(agent.ID)) {
 			return p.ID, tok
 		}
 	}
@@ -1174,7 +1148,7 @@ func threadNvim(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 }
 
 // Close is `wvr close [--yes] [--remove-worktree] [PANE]`: close an
-// agent (the focused one) with its nvim, and its thread's window; offers to
+// agent (the focused one) with its review panel, and its thread's window; offers to
 // remove a thread's worktree when it is clean and merged or pushed.
 func (e *Env) Close(args []string) error {
 	yes, rmwt, hold, target := false, false, false, mux.PaneID("")
@@ -1232,9 +1206,9 @@ func (e *Env) Close(args []string) error {
 		}
 		return errors.New("no agent in pane " + t)
 	}
-	nv, pending := e.NvimPane(agentPane), ""
+	nv, pending := e.PanelPane(agentPane), ""
 	if nv == "" {
-		nv, pending = threadNvim(panes, byID[agentPane])
+		nv, pending = threadPanel(panes, byID[agentPane])
 	}
 	th, _ := store.ReadThread(e.ThreadFile(agentPane))
 	var st agent.State
@@ -1281,10 +1255,7 @@ func (e *Env) Close(args []string) error {
 	case st == agent.StateWorking:
 		what = string(agent.StateWorking)
 	}
-	n := 0
-	if nv != "" {
-		n = max(unsaved(e.NvimSock(agentPane)), 0)
-	}
+	editing := nv != "" && e.editing(agentPane)
 	// Its worktree may go only if weaver made it and nothing would be lost.
 	keep, removable, tilde := "", false, ""
 	if th.WorktreeCreated && !th.Here && th.Worktree != "" {
@@ -1313,12 +1284,12 @@ func (e *Env) Close(args []string) error {
 	}
 	goes := "the agent"
 	if nv != "" {
-		goes = "the agent and its nvim"
+		goes = "the agent and its review"
 	}
 	if !others && th.Name != "" {
 		goes = "the agent"
 		if nv != "" {
-			goes += ", its nvim"
+			goes += ", its review"
 		}
 		goes += " and its window"
 	}
@@ -1344,8 +1315,8 @@ func (e *Env) Close(args []string) error {
 	fmt.Fprint(out, cardRow(pad, "close", head))
 	fmt.Fprint(out, cardRow(pad, "", what+" "+CDim+"·"+COff+" "+CGrey+k+COff+sub))
 	fmt.Fprint(out, cardRow(pad, "goes", goes))
-	if n > 0 {
-		fmt.Fprint(out, cardRow(pad, "", CRed+"its nvim has "+strconv.Itoa(n)+" unsaved buffer"+plural(n)+COff))
+	if editing {
+		fmt.Fprint(out, cardRow(pad, "", CRed+"nvim is open in its review: unsaved edits go"+COff))
 	}
 	if keep != "" {
 		fmt.Fprint(out, cardRow(pad, "stays", CGrey+keep+COff))
@@ -1394,11 +1365,11 @@ func (e *Env) Close(args []string) error {
 	return e.CloseTail(tail)
 }
 
-// CloseTail is the closing itself (`wvr _close AGENT NVIM PID START
-// REMOVE DIR REPO [TOK]`): close the agent's pane and its nvim's, wait for
-// the agent to exit, forget it, and remove its worktree if asked, checking
-// again first. TOK: the thread was still being opened (its nvim had not
-// bound itself), and its record of that goes too.
+// CloseTail is the closing itself (`wvr _close AGENT PANEL PID START
+// REMOVE DIR REPO [TOK]`): close the agent's pane and its review panel's,
+// wait for the agent to exit, forget it, and remove its worktree if asked,
+// checking again first. TOK: the thread was still being opened (its panel
+// had not been bound), and its record of that goes too.
 func (e *Env) CloseTail(a []string) error {
 	for len(a) < 8 {
 		a = append(a, "")
@@ -1433,6 +1404,7 @@ func (e *Env) CloseTail(a []string) error {
 		e.Forget(sf, pid)
 	} else {
 		b := strings.TrimSuffix(sf, ".json")
+		os.Remove(b + ".panel")
 		os.Remove(b + ".nvim")
 		os.Remove(b + ".thread")
 	}
@@ -1525,7 +1497,7 @@ func (e *Env) toWeaverSession() error {
 }
 
 // Quit is `wvr quit [--yes]`: quit the session (outside one, the weaver
-// session) with every agent and nvim in it, after asking. Its threads are
+// session) with every agent and review in it, after asking. Its threads are
 // kept: they come back as the weaver session starts again.
 func (e *Env) Quit(args []string) error {
 	yes := false
@@ -1547,8 +1519,8 @@ func (e *Env) Quit(args []string) error {
 			return errors.New("quit needs a terminal to ask, or --yes")
 		}
 		// What comes back (its threads) and what stops: turns under way,
-		// and edits not yet saved in the agents' nvims.
-		threads, work, bufs := 0, 0, 0
+		// and the nvims open in the agents' reviews.
+		threads, work, editing := 0, 0, 0
 		rows, now := e.AgentRows()
 		for _, r := range rows {
 			if r.Tnum > 0 {
@@ -1557,8 +1529,8 @@ func (e *Env) Quit(args []string) error {
 			if r.MidTurn(now) {
 				work++
 			}
-			if n := unsaved(e.NvimSock(r.Pane)); n > 0 {
-				bufs += n
+			if e.editing(r.Pane) {
+				editing++
 			}
 		}
 		back := "wvr resume brings them back"
@@ -1566,7 +1538,7 @@ func (e *Env) Quit(args []string) error {
 			back = "back when you start weaver"
 		}
 		pad := cardPlace(t, 7)
-		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and nvim in it"+COff))
+		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and review in it"+COff))
 		if threads > 0 {
 			fmt.Fprint(t, cardRow(pad, "kept", strconv.Itoa(threads)+" thread"+plural(threads)+" "+CDim+"·"+COff+" "+CGrey+back+COff))
 		}
@@ -1577,8 +1549,8 @@ func (e *Env) Quit(args []string) error {
 			}
 			fmt.Fprint(t, cardRow(pad, "", CGrey+strconv.Itoa(work)+" working: the turn"+plural(work)+" stop"+s+COff))
 		}
-		if bufs > 0 {
-			fmt.Fprint(t, cardRow(pad, "", CRed+"nvim has "+strconv.Itoa(bufs)+" unsaved buffer"+plural(bufs)+COff))
+		if editing > 0 {
+			fmt.Fprint(t, cardRow(pad, "", CRed+"nvim is open in "+strconv.Itoa(editing)+" review"+plural(editing)+": unsaved edits go"+COff))
 		}
 		fmt.Fprint(t, "\n")
 		c := choose(t, pad, []choice{{"y", "quit"}, {"n", "keep"}}, 1)

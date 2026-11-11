@@ -1,7 +1,7 @@
 #!/bin/bash
 # weaver on Rex, end to end, smoke: `wvr` starts its session on a
-# throwaway Rex server of its own, a thread opens with its nvim and its
-# agent, the agent's hooks reach its state under the session's Rex key, and
+# throwaway Rex server of its own, a thread opens with its review panel
+# (a fake tuicr) and its agent, the agent's hooks reach its state under the session's Rex key, and
 # quitting ends the session. Its own server, state, config, Claude Code dir
 # and PATH, with a fake agent: never your Rex, agents or keys. Skipped
 # without rex.
@@ -36,9 +36,21 @@ echo \$\$ >"$AT/pid.\$b"
 exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
+# A fake tuicr: notes how the review panel ran it, and what its e would
+# edit with, then ends, as q does.
+cat >"$AT/bin/tuicr" <<EOF
+#!/bin/bash
+printf '%s\n' "\$*" >>"$AT/tuicr.runs"
+printf '%s\n' "\$EDITOR" >"$AT/tuicr.editor"
+sleep 1
+EOF
+chmod +x "$AT/bin/tuicr"
 (cd "$ROOT" && go build -o "$AT/bin/wvr" ./cmd/wvr) || exit 1
-export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude"
+export PATH="$AT/bin:$PATH" WEAVER_CLAUDE="$AT/bin/claude" WEAVER_TUICR="$AT/bin/tuicr"
 git init -q -b main "$AT/repo" && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m init
+# Its review base: origin's main, where main left it.
+git -C "$AT/repo" update-ref refs/remotes/origin/main HEAD
+FORK=$(git -C "$AT/repo" rev-parse HEAD)
 # The server's terminals take its environment: PATH has this build's wvr
 # first, else home starts again as the wvr installed (installs.go).
 # Rex's server runs weaver's keys' commands with its own environment: the
@@ -117,17 +129,41 @@ R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
 # --- a thread (wvr new, here), as Alt N's form makes it
 (cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'say hello' >"$AT/new.out" 2>&1)
 waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/2" ]' 100
-ok "new: window 2, its label, nvim on the left and the agent on the right" "$(windows)" "home/1 01 say hello · repo/main/2"
-NVB=$(block_at 2 0) AGB=$(block_at 2 1)
+ok "new: window 2, its label, its review panel on the left and the agent on the right" "$(windows)" "home/1 01 say hello · repo/main/2"
+PB=$(block_at 2 0) AGB=$(block_at 2 1)
 waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
-AG=$(num "$AGB") NV=$(num "$NVB")
-waitfor '[ -f "$SD/rex-${S}_$AG.nvim" ]' 100
-ok "new: the agent took the task, and its nvim is bound to it" \
-	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.nvim" 2>/dev/null)" "say hello|$NV"
+AG=$(num "$AGB") PN=$(num "$PB")
+waitfor '[ -f "$SD/rex-${S}_$AG.panel" ]' 100
+ok "new: the agent took the task, and its review panel is bound to it" \
+	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "say hello|$PN"
+# --- the panel: tuicr on the branch, again each time it ends, as the
+# branch is then: nothing while the branch has nothing of its own (tuicr
+# refuses an empty range), the work tree once there is an edit, then the
+# commits since the fork point, by SHA, and nvim for its e.
+waitfor 'R capture -s "$SID" -b "$PB" | grep -q "no changes on this branch yet"' 50
+ok "panel: a branch with nothing of its own says so, and runs no tuicr" \
+	"$(R capture -s "$SID" -b "$PB" | grep -c 'no changes on this branch yet')|$([ -f "$AT/tuicr.runs" ] && echo ran || echo none)" "1|none"
+printf 'hello\n' >"$AT/repo/hello.txt"
+waitfor 'grep -q -- "^-w " "$AT/tuicr.runs" 2>/dev/null' 60
+ok "...an edit not yet committed: tuicr on the work tree, with nvim for its e" \
+	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)|$(cat "$AT/tuicr.editor" 2>/dev/null)" "-w --theme micrographics --no-update-check|nvim"
+git -C "$AT/repo" add hello.txt && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q -m hello
+waitfor 'grep -q -- "^-r " "$AT/tuicr.runs" 2>/dev/null' 60
+ok "...a commit: its commits since the fork point, by SHA, with the work tree" \
+	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)" "-r $FORK..HEAD -w --theme micrographics --no-update-check"
+# alt+v on the agent with its panel closed: a panel again, on its left.
+R api call block.close "{\"session_id\":\"$SID\",\"block_id\":\"$PB\"}" >/dev/null
+waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/1" ]' 50
+R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$AGB\"}" >/dev/null
+k=$(R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_v\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":118}}" | jq -r .handled)
+waitfor '[ "$(windows)" = "home/1 01 say hello · repo/main/2" ]' 50
+PB=$(block_at 2 0) PN=$(num "$PB")
+ok "alt+v: a closed review panel opens again on the agent's left, bound to it" \
+	"$k|$(windows)|$(block_at 2 1)|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "true|home/1 01 say hello · repo/main/2|$AGB|$PN"
 # The width passes after a change (settleWidths' `wvr _width`) put back a
 # split the Rex app evened out, and leave one you moved since.
 ratio() { view | jq -r '.windows[1].layers[] | select(.kind == "tiled") | .layout.split.ratio'; }
-split_at() { R api call session.resize_pane "{\"session_id\":\"$SID\",\"before_block_id\":\"$NVB\",\"after_block_id\":\"$AGB\",\"direction\":\"horizontal\",\"ratio\":$1}" >/dev/null; }
+split_at() { R api call session.resize_pane "{\"session_id\":\"$SID\",\"before_block_id\":\"$PB\",\"after_block_id\":\"$AGB\",\"direction\":\"horizontal\",\"ratio\":$1}" >/dev/null; }
 split_at 0.5
 REX_SESSION=$SID wvr _width "$AG"
 k=$(ratio)
@@ -174,7 +210,7 @@ hookj() {
 ev() { printf '{"session_id":"sid-1","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"%s"%s}' "$AT/repo" "$1" "${2:-}"; }
 hookj "$(ev SessionStart ',"source":"startup"')"
 hookj "$(ev UserPromptSubmit ',"prompt":"say hello"')"
-ok "hook: working, turn 1, its nvim" "$(jq -r '"\(.state) \(.turn) \(.nvim_pane)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1 $NV"
+ok "hook: working, turn 1" "$(jq -r '"\(.state) \(.turn)"' "$SD/rex-${S}_$AG.json" 2>/dev/null)" "working 1"
 ok "status: one working" "$(REX_SESSION=$SID wvr status)" "[/] 1"
 
 # --- seen when you look: Rex has no pane-focus-in hook; home's board follows

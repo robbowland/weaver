@@ -1,7 +1,7 @@
 No agents in this session yet.
 
 n       start a thread: a task, its worktree, and a window with
-        nvim and the agent (wvr new)
+        its review and the agent (wvr new)
 alt+N   the same from anywhere in the session
 alt+y   the views beside home: GITHUB, LINEAR (one with a
         dot is not set up yet: going there sets it up)

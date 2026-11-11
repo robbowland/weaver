@@ -149,7 +149,7 @@ func (e *Env) checks() []check {
 	cs := []check{
 		rexCheck(),
 		tool("git", "git", "git", needed, "--version"),
-		tool("Neovim", "nvim", "neovim", needed, "--version"),
+		tool("Neovim", "nvim", "neovim", optional, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
 		tool("tuicr", "tuicr", "tuicr", needed, "--version", 0, 28),
 		tool("Worktrunk", "wt", "worktrunk", optional, ""),

@@ -1,11 +1,13 @@
 package wvr
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,8 +15,9 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
-	"github.com/robbowland/weaver/internal/engine"
+	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/session"
@@ -22,8 +25,9 @@ import (
 	"github.com/robbowland/weaver/internal/store"
 )
 
-// The agent's nvim: `wvr edit` (Alt v, e on the board) opens it beside the
-// agent, or goes to it; `wvr nvim` is what runs in its pane.
+// The agent's review panel: `wvr review` (alt+v, v on the board) opens it
+// beside the agent, or goes to it; `wvr _panel` is what runs in it, tuicr
+// on the branch. `wvr nvim` is what ran in a thread's nvim pane before.
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
@@ -47,9 +51,9 @@ func (e *Env) ThreadWidth(agent string) {
 	e.threadWidth(p)
 }
 
-// threadWidth: back to a thread's split once its nvim reopens beside the
-// agent: the agent at $WEAVER_AGENT_WIDTH on the right, while nvim and the
-// agent are the window's only panes.
+// threadWidth: back to a thread's split once its panel reopens beside the
+// agent: the agent at $WEAVER_AGENT_WIDTH on the right, while the panel
+// and the agent are the window's only panes.
 func (e *Env) threadWidth(agent mux.PaneID) {
 	ps, _ := e.Mux().Panes()
 	ap, ok := session.PaneIn(ps, agent)
@@ -74,10 +78,10 @@ func (e *Env) settleWidths(agent mux.PaneID) {
 	bestEffort(c.Start())
 }
 
-// editLock is one `wvr edit` per agent at a time, so a second Alt v finds
-// the nvim the first is opening. A lock older than 5s was left by a killed
-// process.
-func (e *Env) editLock(agent mux.PaneID) func() {
+// panelLock is one `wvr review` per agent at a time, so a second alt+v
+// finds the panel the first is opening. A lock older than 5s was left by a
+// killed process.
+func (e *Env) panelLock(agent mux.PaneID) func() {
 	d := e.PaneFile(agent, "opening")
 	os.MkdirAll(e.StateDir, 0o755)
 	for i := 0; i < 60; i++ {
@@ -115,7 +119,7 @@ func (e *Env) focusedPane() mux.PaneID {
 // its kind from its thread), the worktree it is in (its state's root, else
 // its directory, else its thread's worktree) and the file under it it was
 // last at, if any; false when weaver knows of no worktree it is in that is
-// there. Its nvim's reviews follow that worktree, so it is never a guess.
+// there. Its review panel opens in that worktree, so it is never a guess.
 func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, known bool) {
 	if s, err := store.ReadState(e.StateFile(p)); err == nil {
 		rec, root, file = s, s.Root, s.File
@@ -141,16 +145,18 @@ func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, kno
 	return rec, root, file, true
 }
 
-// Edit is `wvr edit [--full] [PANE]`: open or go to the nvim of the
-// focused agent (or PANE's); in a pane that is no agent's, an nvim beside it.
-func (e *Env) Edit(args []string) error {
+// Review is `wvr review [--full] [PANE]` (alt+v, v on the board): go to the
+// review panel of the focused agent (or PANE's), or open one on its left in
+// the worktree it is in; in a pane that is no agent's, a panel beside it in
+// its directory. --full: the panel fills the window.
+func (e *Env) Review(args []string) error {
 	full, target := false, mux.PaneID("")
 	for _, a := range args {
 		switch {
 		case a == "--full":
 			full = true
 		case strings.HasPrefix(a, "-"):
-			return errors.New("usage: wvr edit [--full] [pane-id]")
+			return errors.New("usage: wvr review [--full] [pane-id]")
 		default:
 			target, _ = mux.ParsePane(a)
 		}
@@ -167,88 +173,145 @@ func (e *Env) Edit(args []string) error {
 		}
 	}
 	agentPane := e.agentOf(target)
-	var newPane, nv mux.PaneID
+	cwd := ""
+	if p, ok := session.PaneIn(panes, target); ok {
+		cwd = p.Cwd
+	}
+	if st, err := os.Stat(cwd); cwd == "" || err != nil || !st.IsDir() {
+		cwd, _ = os.Getwd()
+	}
 	if agentPane == "" {
-		cwd := ""
-		if p, ok := session.PaneIn(panes, target); ok {
-			cwd = p.Cwd
+		rp, err := e.openLeftOf(target, cwd, panelTitle(cwd), e.Self, "_panel")
+		if err == nil && full {
+			e.Mux().Zoom(rp)
 		}
-		if st, err := os.Stat(cwd); cwd == "" || err != nil || !st.IsDir() {
-			cwd, _ = os.Getwd()
-		}
+		return err
+	}
+	e.MarkSeen(agentPane)
+	_, root, _, known := e.agentWhere(agentPane)
+	if !known {
+		root = cwd
+	}
+	unlock := e.panelLock(agentPane)
+	defer unlock()
+	// Fresh, now that no other press is opening a panel for this agent.
+	panes, _ = e.Panes()
+	rp := e.PanelPane(agentPane)
+	if p, ok := session.PaneIn(panes, rp); rp == "" || !ok || p.Exited {
 		var err error
-		if newPane, err = e.openLeftOf(target, cwd, "nvim: "+filepath.Base(cwd), "nvim"); err != nil {
+		if rp, err = e.openLeftOf(agentPane, root, panelTitle(root), e.Self, "_panel", string(agentPane)); err != nil {
 			return err
 		}
+		e.bindPanel(agentPane, rp, 0)
+		// A thread's window gets its split back.
+		if files.Exists(e.ThreadFile(agentPane)) {
+			e.threadWidth(agentPane)
+			e.settleWidths(agentPane)
+		}
 	} else {
-		e.MarkSeen(agentPane)
-		rec, root, file, known := e.agentWhere(agentPane)
-		if !known {
-			// nvim opens here, and an nvim open keeps the worktree it knew.
-			root, _ = os.Getwd()
-		}
-		unlock := e.editLock(agentPane)
-		// Fresh, now that no other press is opening an nvim for this agent.
-		panes, _ = e.Panes()
-		nv = e.NvimPane(agentPane)
-		// Reuse the agent's nvim while its pane is alive, even when nvim does
-		// not answer: never a second one.
-		if p, ok := session.PaneIn(panes, nv); nv != "" && ok && !p.Exited {
-			unlock()
-			if known {
-				engine.Focus(e.Env, agentPane, rec, root)
-			}
-			e.focus(nv)
-		} else {
-			argv := []string{e.Self, "nvim", string(agentPane)}
-			if file != "" {
-				argv = append(argv, file)
-			}
-			var err error
-			if newPane, err = e.openLeftOf(agentPane, root, "nvim: "+filepath.Base(root), argv...); err != nil {
-				unlock()
-				return err
-			}
-			// A thread's window gets its split back.
-			if files.Exists(e.PaneFile(agentPane, "thread")) {
-				e.threadWidth(agentPane)
-				e.settleWidths(agentPane)
-			}
-			// The new nvim records itself (pane and pid) as it starts; give it
-			// a moment, still holding the lock, so a second press finds it.
-			// Only if it is slow, record its pane ourselves, without the pid
-			// (never over its own record).
-			for i := 0; i < 15; i++ {
-				if e.NvimPane(agentPane) == newPane {
-					break
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-			if e.NvimPane(agentPane) != newPane {
-				nf := e.PaneFile(agentPane, "nvim")
-				if f, err := os.OpenFile(nf, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644); err == nil {
-					_, err := f.WriteString(string(newPane) + "\n\n")
-					bestEffort(err)
-					f.Close()
-				}
-			}
-			unlock()
-		}
+		e.focus(rp)
 	}
 	if full {
-		p := target
-		if agentPane != "" {
-			if v := e.NvimPane(agentPane); v != "" {
-				p = v
-			} else if newPane != "" {
-				p = newPane
-			}
-		} else if newPane != "" {
-			p = newPane
-		}
-		e.Mux().Zoom(p)
+		e.Mux().Zoom(rp)
 	}
 	return nil
+}
+
+// panelTitle is the title of a review panel in dir.
+func panelTitle(dir string) string { return "review: " + filepath.Base(dir) }
+
+// Panel is `wvr _panel [AGENT]`, what runs in a review panel, in the
+// worktree it reviews: bound to the agent (its pane and pid, as it starts),
+// then tuicr ($WEAVER_TUICR, else tuicr) on the branch, started again
+// whenever it ends (q), so it reads the branch afresh: tuicr takes its range
+// once, as it starts, and a commit made while it is open joins its commit
+// list only then. It ends with its pane.
+func (e *Env) Panel(args []string) error {
+	if a, ok := mux.ParsePane(firstArg(args)); ok && e.MyPane != "" {
+		e.bindPanel(a, e.MyPane, os.Getpid())
+	}
+	tuicr, err := exec.LookPath(cmp.Or(os.Getenv("WEAVER_TUICR"), "tuicr"))
+	if err != nil {
+		fmt.Println("weaver: tuicr is not installed (wvr doctor --fix installs it)")
+		_, _ = os.Stdin.Read(make([]byte, 1))
+		return &cli.Exit{Code: 1}
+	}
+	dir, _ := os.Getwd()
+	// tuicr's e opens $EDITOR: nvim, whatever the pane's environment says
+	// (Rex runs a key's command without your shell's).
+	env := append(os.Environ(), "EDITOR=nvim")
+	// ctrl+c is tuicr's while it runs, never the loop's.
+	sig := make(chan os.Signal, 1)
+	for {
+		args := reviewArgs(dir)
+		if args == nil {
+			fmt.Print("\033[2J\033[H" + CGrey + "no changes on this branch yet" + COff + "\n")
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		c := exec.Command(tuicr, args...)
+		c.Dir, c.Env, c.Stdin, c.Stdout, c.Stderr = dir, env, os.Stdin, os.Stdout, os.Stderr
+		signal.Notify(sig, os.Interrupt, syscall.SIGQUIT)
+		start := time.Now()
+		err := c.Run()
+		signal.Stop(sig)
+		// One that ends at once (failing, or a q at once) waits out a
+		// second, or two when it failed: never a spin.
+		wait := time.Second
+		if err != nil {
+			wait = 2 * time.Second
+		}
+		time.Sleep(wait - time.Since(start))
+	}
+}
+
+// reviewArgs are tuicr's arguments for the branch in dir as it is now: its
+// commits since it left its base, with what is not committed yet (`-r
+// FORK..HEAD -w`, FORK the fork point's SHA: git.ForkPoint); with no
+// commits of its own, what is not committed (`-w`); with no base, tuicr's
+// own choice of commit. nil with nothing to review: tuicr refuses an empty
+// range ("No changes to review"), `-w` or not.
+func reviewArgs(dir string) []string {
+	look := []string{"--theme", "micrographics", "--no-update-check"}
+	head, hasHead := git.Line(dir, "rev-parse", "--verify", "--quiet", "HEAD")
+	fork, hasBase := git.ForkPoint(dir)
+	switch {
+	case hasHead && hasBase && head != fork:
+		return append([]string{"-r", fork + "..HEAD", "-w"}, look...)
+	case dirty(dir):
+		return append([]string{"-w"}, look...)
+	case hasHead && !hasBase:
+		return look
+	}
+	return nil
+}
+
+// dirty: has the work tree at dir changes not committed, or files git does
+// not track (and does not ignore)?
+func dirty(dir string) bool {
+	out, err := git.Output(dir, nil, "", "status", "--porcelain")
+	return err == nil && out != ""
+}
+
+// bindPanel records review panel rp (its process pid) as agent's:
+// <skey>_<agent>.panel. A pid of 1 or less is Rex not saying: the pane
+// alone, never over the record the panel made of itself in that pane.
+func (e *Env) bindPanel(agent, rp mux.PaneID, pid int) { e.bind(agent, "panel", rp, pid) }
+
+// bind records pane p (process pid) as agent's in its file of kind ext.
+func (e *Env) bind(agent mux.PaneID, ext string, p mux.PaneID, pid int) {
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	f := e.PaneFile(agent, ext)
+	n := ""
+	if pid > 1 {
+		n = strconv.Itoa(pid)
+	} else if l, err := files.FirstLine(f); err == nil && l == string(p) {
+		return
+	}
+	tmp := f + "." + strconv.Itoa(os.Getpid())
+	if os.WriteFile(tmp, []byte(string(p)+"\n"+n+"\n"), 0o644) == nil {
+		bestEffort(os.Rename(tmp, f))
+	}
 }
 
 // Nvim is `wvr nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,

@@ -125,7 +125,8 @@ var commands = map[string]command{
 	"home": {session: true, run: func(e *wvr.Env, _ []string) error { return e.Home() }},
 
 	"new":     {run: (*wvr.Env).New},
-	"edit":    {session: true, run: (*wvr.Env).Edit},
+	"review":  {session: true, run: (*wvr.Env).Review},
+	"_panel":  {run: (*wvr.Env).Panel},
 	"nvim":    {session: true, run: (*wvr.Env).Nvim},
 	"close":   {session: true, run: (*wvr.Env).Close},
 	"send":    {session: true, run: (*wvr.Env).Send},

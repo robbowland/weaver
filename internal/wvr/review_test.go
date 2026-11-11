@@ -2,7 +2,9 @@ package wvr
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -10,7 +12,7 @@ import (
 	"github.com/robbowland/weaver/internal/store"
 )
 
-// Where Alt v says the agent is (its nvim's reviews follow it): its
+// Where alt+v says the agent is (its review panel opens there): its
 // state's root, else its directory, else its thread's worktree, and the
 // file it was at under it; never a guess (weaver's own directory) when none
 // of those is there.
@@ -97,5 +99,50 @@ func TestLuaSettings(t *testing.T) {
 	want := `XDG_STATE_HOME = "</a "b"\c>", WEAVER_VIEWS = "<>"`
 	if got := luaSettings(lua); got != want {
 		t.Errorf("luaSettings = %s, want %s", got, want)
+	}
+}
+
+// What the panel runs tuicr on, round after round: nothing on a branch
+// with nothing of its own (tuicr refuses an empty range), what is not
+// committed once there is some (an edit, or a file git does not track
+// yet), then the branch's commits since its fork point, by SHA, with what
+// is not committed, also once the base has moved on.
+func TestReviewArgs(t *testing.T) {
+	t.Setenv("WEAVER_BASE", "")
+	d := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	look := " --theme micrographics --no-update-check"
+	got := func() string { return strings.Join(reviewArgs(d), " ") }
+	git("init", "-q", "-b", "main")
+	if err := os.WriteFile(d+"/a.txt", []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "base")
+	fork := git("rev-parse", "HEAD")
+	git("switch", "-q", "-c", "feat")
+	if a := got(); a != "" {
+		t.Errorf("a new branch: %q, want nothing", a)
+	}
+	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a := got(); a != "-w"+look {
+		t.Errorf("an untracked file: %q", a)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "mine")
+	git("switch", "-q", "main")
+	git("commit", "-q", "--allow-empty", "-m", "moved on")
+	git("switch", "-q", "feat")
+	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
+		t.Errorf("a commit of its own: %q", a)
 	}
 }

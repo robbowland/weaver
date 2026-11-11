@@ -3,22 +3,22 @@ KEYS
   j k  g G        move; first, last
   /               search (esc: back)
   n               new thread (wvr new)
-  x               close the thread, its nvim and its window
+  x               close the thread, its review and its window
                   (and offers to remove a merged worktree)
-  h               hold it: say what's next; its agent and nvim close,
+  h               hold it: say what's next; its agent and review close,
                   its worktree stays, and it waits under HELD
   a               adopt: an agent you started by hand becomes a thread;
                   elsewhere, pick a conversation to resume as one
   r               rename the thread (empty: its agent's title)
   R               restart its agent, resuming its conversation (after an update)
-  v  e  ctrl+e    jump and open its nvim (alt+v anywhere)
+  v  e  ctrl+e    jump and open its review (alt+v anywhere)
   s               the card ↔ the agent's screen
   tab  shift+tab  the next, previous view (THREADS, GITHUB, LINEAR)
   ctrl+r          reload
   ?               this help (? again: back)
   q  esc          back to your thread
-  ctrl+q          quit the session, every agent and nvim (the threads
-                  come back as wvr starts; mid-turn, it asks first)
+  ctrl+q          quit the session, every agent and review (the threads
+                  come back as wvr starts; it asks first)
 
 THREADS
   [!]  needs you    [x]  done, not yet seen    [/]  working
@@ -35,13 +35,11 @@ ANYWHERE
                   on home: each view, then back where you were
   alt+N           new thread (in a view: from the item)
   alt+1           the thread that has waited on you longest (row 1)
-  alt+v  alt+V    the thread's nvim; full screen
+  alt+v  alt+V    the thread's review; full screen
   alt+j  alt+k    next, previous window (past the views)
   alt+h  alt+l    the pane left, right
 
 MOUSE
   click           a row; a key shown, as if pressed
   click twice     the row, as ⏎
-  right click     a menu of what can be done there
   wheel           scroll (a pane: back through it)
-  status line     THREADS, a view or a count: go there

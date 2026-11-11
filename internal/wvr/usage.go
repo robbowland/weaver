@@ -39,7 +39,7 @@ const Usage = `usage: wvr [command]
   (none)                       outside it: start, or show, weaver's Rex session "weaver"
                                ($WEAVER_SESSION); inside it: the dashboard
   start [session]              the same, for another session
-  new [task...]                start a thread: a new window with nvim and an agent, in a new
+  new [task...]                start a thread: a new window with its review and an agent, in a new
                                worktree whose branch starts from the remote's default
                                branch, fetched; with no task, a form. Options: --name NAME
                                (else an item's, or its agent's title), --repo DIR,
@@ -51,11 +51,11 @@ const Usage = `usage: wvr [command]
                                (a number, owner/name#N, its URL, or a Linear ENG-42),
                                --review: read-only
   close [--yes] [--remove-worktree] [pane-id]
-                               close an agent (the focused one) with its nvim, and its
+                               close an agent (the focused one) with its review, and its
                                thread's window; offers to remove a thread's worktree when it
                                is clean and merged or pushed
   hold [pane-id] [note]        put a thread on hold (the focused one): note what's next;
-                               its agent and nvim close, its worktree stays, and it waits
+                               its agent and review close, its worktree stays, and it waits
                                under HELD until you resume it
   resume [--all] [which]       threads lost when their session went (a crash, or quit), or
                                held: alone, list them; with a name, number or session id,
@@ -77,12 +77,12 @@ const Usage = `usage: wvr [command]
   send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
                                it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with
-                               every agent and nvim in it, after asking; its threads are
+                               every agent and review in it, after asking; its threads are
                                kept and come back as the weaver session starts again
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
   adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
-  edit [--full] [pane-id]      open or jump to the nvim for the focused agent
+  review [--full] [pane-id]    open or jump to the review panel (tuicr) of the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
   view [github|linear]         go to a view beside home: GITHUB or LINEAR (one

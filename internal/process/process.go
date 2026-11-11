@@ -6,6 +6,7 @@ package process
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -140,4 +141,30 @@ func End(pids []int) int {
 		_ = syscall.Kill(p, syscall.SIGKILL)
 	}
 	return n
+}
+
+// Runs: does a process named name (its command, as the kernel keeps it, at
+// most 16 bytes) run as pid, or under it?
+func Runs(pid int, name string) bool {
+	if pid <= 1 {
+		return false
+	}
+	ks, err := unix.SysctlKinfoProcSlice("kern.proc.uid", os.Getuid())
+	if err != nil {
+		return false
+	}
+	kids := map[int][]int{}
+	comm := map[int]string{}
+	for _, k := range ks {
+		p := int(k.Proc.P_pid)
+		kids[int(k.Eproc.Ppid)] = append(kids[int(k.Eproc.Ppid)], p)
+		comm[p] = unix.ByteSliceToString(k.Proc.P_comm[:])
+	}
+	for q := []int{pid}; len(q) > 0; q = q[1:] {
+		if comm[q[0]] == name {
+			return true
+		}
+		q = append(q, kids[q[0]]...)
+	}
+	return false
 }

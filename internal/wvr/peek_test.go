@@ -21,7 +21,7 @@ func TestPeekChoice(t *testing.T) {
 		{"jump", agent, "", [][]string{{"_goto", "7", "3"}}},
 		{"resume", lost, "", [][]string{{"resume", "sid-1"}}},
 		{"jump", lost, "", [][]string{{"resume", "sid-1"}}},
-		{"ctrl-e", agent, "", [][]string{{"_goto", "7", "3"}, {"edit", "7"}}},
+		{"ctrl-e", agent, "", [][]string{{"_goto", "7", "3"}, {"review", "7"}}},
 		{"new", agent, "", [][]string{{"_popup", "new", "--from", "7"}}},
 		{"new", "", "", [][]string{{"_popup", "new"}}},
 		{"close", agent, "", [][]string{{"_popup", "close", "7"}}},

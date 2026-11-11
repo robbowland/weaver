@@ -238,6 +238,23 @@ can supersede an earlier one, and says so.
   sight. What Rob wanted from it was a review of the worktree the agent is
   in, which reviews now find without tabs. Files still reload as the agent
   edits; 'autoread' stays off so that one handler decides every reload.
+- 2026-11-11: tuicr takes the thread's Neovim's place beside the agent,
+  superseding the per-thread Neovim of the entries above (its plugin goes
+  later). Rob narrowed review to four needs, calling the rest bloat: the
+  branch at once, commit by commit, notes for the agent, and Neovim on a
+  file from the diff and back. tuicr 0.28 has each with no glue but a key
+  that starts it, and the agent beside it makes the bar redundant. The
+  panel runs tuicr in a loop rather than once: tuicr reads its range only
+  as it starts, so `:q` (0.28's `q` no longer quits) starts it again on the
+  branch as it is then, the cheapest fix while tuicr cannot re-read a range;
+  the empty branch it refuses ("No changes to review", `-w` or not) is the
+  loop's to wait out. It is given the fork point as a SHA, never the base's
+  name: with `-r main..HEAD`, files main gained after the fork showed as
+  deleted. The nvim its `e` opens is Rob's own, so weaver sets nothing that
+  nvim would inherit, and close, hold and quit warn by finding nvim among
+  the panel's processes, since no nvim weaver could ask over a socket runs
+  there. Review notes are tuicr's saved comments, which the agent reads with
+  tuicr's CLI.
 
 ## Dashboard
 

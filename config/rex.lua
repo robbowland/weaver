@@ -137,10 +137,10 @@ key("alt+shift+n", function(ctx)
   if inView(ctx) then return false end
   return run(ctx, { "_popup", "new" }, pwd(ctx))
 end)
-key("alt+v", function(ctx) return run(ctx, { "edit" }) end)
-key("alt+shift+v", function(ctx) return run(ctx, { "edit", "--full" }) end)
+key("alt+v", function(ctx) return run(ctx, { "review" }) end)
+key("alt+shift+v", function(ctx) return run(ctx, { "review", "--full" }) end)
 key("alt+1", function(ctx) return run(ctx, { "next" }) end)
--- Quit the session, every agent and nvim in it, after asking.
+-- Quit the session, every agent and review in it, after asking.
 key("ctrl+q", function(ctx) return run(ctx, { "_popup", "quit" }) end)
 -- The next and previous window that shows no view: through wvr,
 -- since the app shows only a window it is asked to (the server's active
