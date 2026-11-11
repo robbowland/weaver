@@ -252,7 +252,7 @@ func (e *Env) Doctor(out io.Writer) error {
 
 // Fix is `wvr doctor --fix`: what can be fixed, fixed. Homebrew installs
 // and upgrades what is missing or too old, weaver sets up its hooks and
-// fetches its plugin, and, at a terminal, each sign-in is offered. Then
+// brings its files, and, at a terminal, each sign-in is offered. Then
 // what is left.
 func (e *Env) Fix(out io.Writer) error {
 	cs := e.checks()

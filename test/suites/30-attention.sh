@@ -182,7 +182,6 @@ next
 wait
 sleep 4.5
 ok "Alt 1 twice at once: one step, cleanly" "$(client)|$(floating)" "2|0"
-cp "$SD"/next.trace.* "$AT/" 2>/dev/null
 
 # --- the counts
 hook 0 Stop "$T/repo" >/dev/null

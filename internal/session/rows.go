@@ -510,8 +510,8 @@ func (e *Env) Hold(f, note string) bool {
 	return e.writeLost(KeyOfFile(f), st, th, time.Now().Unix(), note)
 }
 
-// Forget removes the files of the agent whose state file is f (its activity
-// log stays); only if its pid is still pid when we hold its lock.
+// Forget removes the files of the agent whose state file is f; only if
+// its pid is still pid when we hold its lock.
 func (e *Env) Forget(f, pid string) {
 	if !files.Exists(f) {
 		return

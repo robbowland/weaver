@@ -11,7 +11,7 @@ import (
 
 // Dialogs open as popups over where you are, each kind one size, so one
 // looks and lands the same however it was asked for (a key, a click, a
-// menu, a view), and what you were looking at stays behind it.
+// view), and what you were looking at stays behind it.
 
 // popupSize is how big a kind of dialog is on a terminal: a share of it,
 // within bounds (the least it needs, the most worth reading).
@@ -73,8 +73,7 @@ func (e *Env) popup(what string, z popupSize, dir string, args []string) error {
 }
 
 // Popup is `wvr _popup new|close|forget ...`: the board's n, x on a thread,
-// x on a lost one, as the dialogs Alt N and the menus open, and Rex's
-// Ctrl q.
+// x on a lost one, as Alt N opens its dialog, and Rex's Ctrl q.
 func (e *Env) Popup(args []string) error {
 	switch arg(args, 0) {
 	case "new":

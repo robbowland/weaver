@@ -19,7 +19,7 @@ import (
 
 // Views: the weaver session's windows beside home that show work from
 // elsewhere: GITHUB (internal/github) and LINEAR (internal/linear), each
-// through itemsview.go. Out of the thread numbering, at viewBase and on; one
+// through itemsview.go. Placed after home, at viewBase and on; one
 // not signed in yet shows how to set it up. Alt y steps from a
 // thread to home, on through the views, and back to the thread; in a view,
 // Alt N starts a thread from the item under the cursor and Alt R a

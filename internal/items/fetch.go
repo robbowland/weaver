@@ -14,7 +14,7 @@ import (
 	"github.com/robbowland/weaver/internal/linear"
 )
 
-// Reading work items (workitem.go): finding a repository's checkout, and
+// Reading work items (item.go): finding a repository's checkout, and
 // fetching an item through gh or Linear's API.
 
 var (

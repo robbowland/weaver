@@ -144,8 +144,8 @@ func loadsWeaver(init string) bool {
 
 // Boot is `wvr _boot SOCKET`: what the weaver session needs as it starts,
 // behind its home board (whose fzf listens on SOCKET): old states swept, the
-// threads it lost back (unless WEAVER_RESTORE=0), the status line's counts
-// and the windows' labels, whose push reloads the board, and the worktrees
+// threads it lost back (unless WEAVER_RESTORE=0), the counts and the
+// threads' labels, whose push reloads the board, and the worktrees
 // weaver made that are done with (said on the status line).
 func (e *Env) Boot(sock string) {
 	e.GC()

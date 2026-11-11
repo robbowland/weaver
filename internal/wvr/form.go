@@ -34,8 +34,7 @@ import (
 // form is the thread the form would start: its name as you edited it
 // (empty: formName's), the repository (its main checkout; empty: not in
 // one), Here (the checkout "this checkout" means), the branch as you edited
-// it (empty: from the task), Where (worktree | here), the agent (claude),
-// the base (empty: the default), Mode (review: read-only; empty: work) and
+// it (empty: from the task), Where (worktree | here), the base (empty: the default), Mode (review: read-only; empty: work) and
 // the work item it starts from.
 type form struct {
 	Name   string     `json:"name,omitempty"`
@@ -546,7 +545,7 @@ func checkThread(task string, fm form) string {
 }
 
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
-// one, the form's), its worktree and its window. ok false for --help.
+// one, the form's), its worktree and its session.
 func (e *Env) New(args []string) error {
 	var nameArg, repoArg, branch, base, itemArg string
 	var from mux.PaneID

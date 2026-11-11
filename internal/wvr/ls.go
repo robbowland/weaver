@@ -37,7 +37,7 @@ const lsKeys = "j,k,g,G,n,x,h,a,r,R,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 
 // Home is the home tab's board (`wvr home`): the dashboard, full-size and
 // for good. What the session needs as it starts (old states swept, lost
-// threads back, the status line's counts and the tabs' labels) runs behind
+// threads back, the counts and the threads' labels) runs behind
 // it (`wvr _boot`), and reloads it when done.
 func (e *Env) Home() error {
 	if e.Session != "" {
@@ -213,7 +213,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		}
 		args = append(args,
 			"--bind", "n:"+newAct,
-			// Its card in a popup over the board, as the menus open it.
+			// Its card in a popup over the board.
 			"--bind", "x:"+closeAct,
 			"--bind", "a:"+adoptAct,
 			"--bind", "r:"+renameAct,

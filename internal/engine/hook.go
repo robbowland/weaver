@@ -24,9 +24,9 @@ import (
 	"github.com/robbowland/weaver/internal/store"
 )
 
-// The hook: one agent event (Claude Code's hook input on stdin, or another
-// agent's, made one by Event) folded into its state file. What it needs besides the state (Rex, Worktrunk,
-// snapshots, the status) runs after it in a detached `wvr hook --bg`.
+// The hook: one of Claude Code's events (its hook input on stdin) folded
+// into the agent's state file. What it needs besides the state (Worktrunk,
+// the counts) runs after it in a detached `wvr hook --bg`.
 
 // bellJSON rings the bell: Claude Code writes terminalSequence to the agent's
 // terminal.

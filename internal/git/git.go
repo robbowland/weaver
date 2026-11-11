@@ -241,7 +241,6 @@ func Output(dir string, env []string, stdin string, args ...string) (string, err
 	return strings.TrimRight(out.String(), "\n"), err
 }
 
-// where is the repository and branch checked out at a root: read from its .git files without running git.
 // Where is a work tree as weaver names it: its repository's name, its
 // branch (or short commit), and its git directory.
 type Where struct{ Repo, Branch, GitDir string }

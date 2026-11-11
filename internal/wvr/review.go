@@ -32,8 +32,8 @@ func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (m
 }
 
 // ThreadWidth is `wvr _width AGENT` (settleWidths' passes): threadWidth,
-// of a pane as given, unless you moved its split since (a multiplexer that
-// can tell: Rex, whose app evens a split out, and weaver sets it back):
+// of a pane as given, unless you moved its split since (Rex's app evens a
+// split out, and weaver sets it back):
 // then it is yours.
 func (e *Env) ThreadWidth(agent string) {
 	p, ok := mux.ParsePane(agent)

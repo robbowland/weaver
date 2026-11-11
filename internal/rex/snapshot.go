@@ -284,8 +284,8 @@ func (sn snapshot) border(b string, cols int) (before, after string, ratio float
 	return "", "", 0, false
 }
 
-// place is where weaver put window number n (home 0, a thread its number,
-// a view 900 and on); -1 when weaver put it nowhere.
+// place is where weaver put window number n of home's (home 0, a view 900
+// and on); -1 when weaver put it nowhere.
 func (s Session) place(n string) int {
 	if v, err := strconv.Atoi(s.ids().noted("want", n)); err == nil {
 		return v
