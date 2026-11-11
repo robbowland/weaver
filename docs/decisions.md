@@ -139,6 +139,15 @@ can supersede an earlier one, and says so.
   view's adapter re-reads them at each refresh (`refresh_revs`, which
   diffview-plus calls and the git adapter leaves empty), so the view follows
   the agent's tip as it moves.
+- 2026-11-11: Per-agent change chains are gone, superseding the entries
+  above on them: they fed only `:AgentDiffs`, which went with the Neovim
+  plugin. A helper is an agent with its own commits now (the weaver skill),
+  so `git log` tells agents apart. What a tool call says it changed is still
+  read, as paths, for following a Bash edit (`hooks.Changes`), and git's
+  ignore list still filters what is followed; the before-content of an
+  edit (`originalFile`, `structuredPatch`, bashEditDiff's hunks) is no
+  longer read. A repository's existing `refs/worktree/weaver/agents/` refs
+  are left as they are.
 
 ## Holding threads
 

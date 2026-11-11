@@ -75,9 +75,8 @@ type hk struct {
 	// last tools that finished (an async PreToolUse may land after them).
 	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
 	// FollowBash: the background run follows a Bash call's edits (a sync
-	// hook's, which must not wait on git). AgentSnap: it takes an edit
-	// tool's file into the agent's chain.
-	FollowBash, AgentSnap string
+	// hook's, which must not wait on git).
+	FollowBash string
 	// The files the call says it changed, and whether it says: handed on
 	// to the background run, which follows them (FollowBash).
 	Changed      []string
@@ -85,7 +84,6 @@ type hk struct {
 	// What the call changed, what each file held before with it (the
 	// foreground's alone: too big to hand on), and the subagent an Agent
 	// call started.
-	changes                        []hooks.Change
 	launchID, launchType, launchAs string
 	rc                             int
 }
@@ -232,10 +230,7 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	}
 	h.OTurnRoots = strings.Join(tr, rs)
 	h.Paths = in.CommandPaths()
-	h.changes, h.ChangedKnown = in.Changes()
-	for _, c := range h.changes {
-		h.Changed = append(h.Changed, c.Path)
-	}
+	h.Changed, h.ChangedKnown = in.Changes()
 	h.launchID, h.launchType, h.launchAs = in.Launched()
 	h.launchID = oneline.Ctl(h.launchID)
 	h.launchType = oneline.Ctl(oneline.Squash(h.launchType, 40))
@@ -537,10 +532,9 @@ func afterWrite(e *session.Env, h *hk) {
 		bestEffort(os.WriteFile(pf, []byte(h.PromptLong+"\n"), 0o644))
 	}
 	h.hookLog(e)
-	// Following a Bash or MCP edit, and the agent chains, need git: here
-	// when this process runs in the background anyway (Claude Code's async
-	// hook), else in the background run, never while the agent waits on its
-	// hook.
+	// Following a Bash or MCP edit needs git: here when this process runs in
+	// the background anyway (Claude Code's async hook), else in the
+	// background run, never while the agent waits on its hook.
 	async := h.Mode == "async"
 	if h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
 		if async {
@@ -549,20 +543,12 @@ func afterWrite(e *session.Env, h *hk) {
 			h.FollowBash = "1"
 		}
 	}
-	// An agent's chains take only what a call says it changed: what git
-	// sees changed since may be another agent's, or yours.
-	if h.Event == "PostToolUse" && h.EvFile != "" && !async {
-		h.AgentSnap = "1"
-	}
 	// The background work, only when there is some.
 	if h.State != h.Old.State || h.Root != h.Old.Root || h.EvFile+h.SnapPrev+h.SnapStart+h.SnapEnd+h.FirstTouch+h.FollowBash != "" ||
 		h.Waiting != h.Old.Waiting ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		spawnBg(e, h)
-	}
-	if h.Event == "PostToolUse" && async && h.ChangedKnown {
-		agentChanges(e, h, h.changes)
 	}
 }
 

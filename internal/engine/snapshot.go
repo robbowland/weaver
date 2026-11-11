@@ -229,13 +229,13 @@ func firstRunes(s string, n int) string { return oneline.Cut(s, n) }
 // as weaver keeps its activity logs and turns.
 const snapKeep = 31 * 24 * time.Hour
 
-// pruneSnapshots drops this worktree's session and agent chains whose last
+// pruneSnapshots drops this worktree's session chains whose last
 // snapshot is older than before, and the private indexes (gd/index-*) no
 // snapshot has used since: without it a main checkout would keep every
 // session's chains, and a copy of its index for each, for good. Run as a
-// chain starts, which is once per session (or agent) in each worktree.
+// chain starts, which is once per session in each worktree.
 func pruneSnapshots(top, gd string, before time.Time) {
-	out, err := git.Output(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/", agentRefs)
+	out, err := git.Output(top, nil, "", "for-each-ref", "--format=%(refname) %(objectname) %(committerdate:unix)", "refs/worktree/weaver/sessions/")
 	if err == nil {
 		for _, l := range strings.Split(out, "\n") {
 			f := strings.Fields(l)

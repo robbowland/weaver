@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -14,7 +15,6 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
-	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -53,9 +53,6 @@ func hookBg(e *session.Env) {
 		e.GC()
 	}
 	hookSnapshots(e, h)
-	if h.AgentSnap != "" {
-		agentChanges(e, h, []hooks.Change{{Path: h.EvFile}})
-	}
 }
 
 // actOn has e act on the session the hook acted on, not the one its
@@ -258,4 +255,39 @@ func changedSince(h *hk, t time.Time) []string {
 		}
 	}
 	return ps
+}
+
+// ignored are the paths (relative to the worktree at top) that git ignores.
+func ignored(top string, rels []string) map[string]bool {
+	set := map[string]bool{}
+	// Exit status 1 when none is.
+	out, _ := git.Output(top, nil, strings.Join(rels, "\x00")+"\x00", "check-ignore", "--stdin", "-z")
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			set[p] = true
+		}
+	}
+	return set
+}
+
+// relTo is path p relative to the worktree at top (a physical path), or ""
+// when it is not in it. p may name a file that no longer exists, through
+// symlinked directories (macOS's /tmp).
+func relTo(top, p string) string {
+	d, rest := filepath.Dir(p), filepath.Base(p)
+	for {
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			p = filepath.Join(r, rest)
+			break
+		}
+		if d == "/" || d == "." {
+			break
+		}
+		rest = filepath.Join(filepath.Base(d), rest)
+		d = filepath.Dir(d)
+	}
+	if !strings.HasPrefix(p, top+"/") {
+		return ""
+	}
+	return p[len(top)+1:]
 }
