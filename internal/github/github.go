@@ -105,22 +105,19 @@ type Item struct {
 	Assignees []string  `json:"assignees,omitempty"`
 	Comments  int       `json:"comments"`
 	// A pull request's.
-	Draft          bool     `json:"draft,omitempty"`
-	Head           string   `json:"head,omitempty"`
-	Base           string   `json:"base,omitempty"`
-	Review         string   `json:"review,omitempty"` // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED
-	Requested      []string `json:"requested,omitempty"`
-	Additions      int      `json:"additions,omitempty"`
-	Deletions      int      `json:"deletions,omitempty"`
-	Files          int      `json:"files,omitempty"`
-	Commits        int      `json:"commits,omitempty"`
-	Checks         string   `json:"checks,omitempty"` // SUCCESS, FAILURE, PENDING, ERROR, EXPECTED; "" for none
-	FailingChecks  []string `json:"failingChecks,omitempty"`
-	PassingChecks  int      `json:"passingChecks,omitempty"`
-	RunningChecks  int      `json:"runningChecks,omitempty"`
-	Mergeable      string   `json:"mergeable,omitempty"`
-	HeadInFork     bool     `json:"headInFork,omitempty"`
-	ReviewDecision string   `json:"-"`
+	Draft         bool     `json:"draft,omitempty"`
+	Head          string   `json:"head,omitempty"`
+	Base          string   `json:"base,omitempty"`
+	Review        string   `json:"review,omitempty"` // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED
+	Requested     []string `json:"requested,omitempty"`
+	Additions     int      `json:"additions,omitempty"`
+	Deletions     int      `json:"deletions,omitempty"`
+	Files         int      `json:"files,omitempty"`
+	Commits       int      `json:"commits,omitempty"`
+	FailingChecks []string `json:"failingChecks,omitempty"`
+	PassingChecks int      `json:"passingChecks,omitempty"`
+	RunningChecks int      `json:"runningChecks,omitempty"`
+	HeadInFork    bool     `json:"headInFork,omitempty"`
 }
 
 // Ref is the item as weaver names it: owner/name#N.
@@ -143,14 +140,14 @@ fragment pr on PullRequest {
   updatedAt
   repository { nameWithOwner }
   headRefName baseRefName isCrossRepository
-  reviewDecision mergeable
+  reviewDecision
   additions deletions changedFiles
   commits { totalCount }
   comments { totalCount }
   labels(first: 6) { nodes { name } }
   assignees(first: 3) { nodes { login } }
   reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug } ... on Bot { login } ... on Mannequin { login } } } }
-  last: commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(last: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
+  last: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(last: 100) { nodes { __typename ... on CheckRun { name status conclusion } ... on StatusContext { context state } } } } } } }
 }`
 
 const issueFields = `
@@ -299,7 +296,6 @@ type node struct {
 	BaseRefName       string `json:"baseRefName"`
 	IsCrossRepository bool   `json:"isCrossRepository"`
 	ReviewDecision    string `json:"reviewDecision"`
-	Mergeable         string `json:"mergeable"`
 	Additions         int    `json:"additions"`
 	Deletions         int    `json:"deletions"`
 	ChangedFiles      int    `json:"changedFiles"`
@@ -319,7 +315,6 @@ type node struct {
 		Nodes []struct {
 			Commit struct {
 				StatusCheckRollup *struct {
-					State    string
 					Contexts struct {
 						Nodes []struct {
 							Typename   string `json:"__typename"`
@@ -352,7 +347,7 @@ func (n node) item(k Kind) Item {
 		return it
 	}
 	it.Draft, it.Head, it.Base, it.HeadInFork = n.IsDraft, n.HeadRefName, n.BaseRefName, n.IsCrossRepository
-	it.Review, it.Mergeable = n.ReviewDecision, n.Mergeable
+	it.Review = n.ReviewDecision
 	it.Additions, it.Deletions, it.Files, it.Commits = n.Additions, n.Deletions, n.ChangedFiles, n.Commits.TotalCount
 	for _, r := range n.ReviewRequests.Nodes {
 		if who := r.RequestedReviewer.Login; who != "" {
@@ -363,7 +358,6 @@ func (n node) item(k Kind) Item {
 	}
 	if len(n.Last.Nodes) > 0 {
 		if r := n.Last.Nodes[0].Commit.StatusCheckRollup; r != nil {
-			it.Checks = r.State
 			for _, c := range r.Contexts.Nodes {
 				name, outcome := c.Name, c.Conclusion
 				if c.Typename == "StatusContext" {
@@ -385,7 +379,7 @@ func (n node) item(k Kind) Item {
 
 // Parse reads the response to Query(k, s, after): that page of the
 // section.
-func Parse(k Kind, s Section, _ string, b []byte) (Result, error) {
+func Parse(k Kind, s Section, b []byte) (Result, error) {
 	r := Result{Section: s}
 	type search struct {
 		IssueCount int `json:"issueCount"`
@@ -580,7 +574,7 @@ func ask(k Kind, s Section, after string, n int) Result {
 		// the rest: the answer says.
 		r, err = parseRefs(k, s, b)
 	case err == nil:
-		r, err = Parse(k, s, after, b)
+		r, err = Parse(k, s, b)
 	}
 	if err != nil {
 		return Result{Section: s, List: page.Failed[Item](err)}

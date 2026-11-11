@@ -119,21 +119,20 @@ func Viewer(key string) (string, string, error) {
 // Issue is a Linear issue, as the view, its card and a thread's prompt
 // read it.
 type Issue struct {
-	Identifier    string    `json:"identifier"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	URL           string    `json:"url"`
-	BranchName    string    `json:"branchName"`
-	Priority      int       `json:"priority"` // 0 none, 1 urgent, 2 high, 3 medium, 4 low
-	PriorityLabel string    `json:"priorityLabel"`
-	State         State     `json:"state"`
-	Team          Team      `json:"team"`
-	Assignee      *Person   `json:"assignee"`
-	Creator       *Person   `json:"creator"`
-	Labels        []string  `json:"labels"`
-	Project       string    `json:"project"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-	Comments      []Comment `json:"comments,omitempty"`
+	Identifier  string    `json:"identifier"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	URL         string    `json:"url"`
+	BranchName  string    `json:"branchName"`
+	Priority    int       `json:"priority"` // 0 none, 1 urgent, 2 high, 3 medium, 4 low
+	State       State     `json:"state"`
+	Team        Team      `json:"team"`
+	Assignee    *Person   `json:"assignee"`
+	Creator     *Person   `json:"creator"`
+	Labels      []string  `json:"labels"`
+	Project     string    `json:"project"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Comments    []Comment `json:"comments,omitempty"`
 }
 
 // State is an issue's workflow state: its name, and its type (triage,
@@ -165,7 +164,7 @@ type Comment struct {
 // show.
 const issueFields = `
   identifier title description url branchName
-  priority priorityLabel
+  priority
   state { name type }
   team { key name }
   assignee { name displayName }

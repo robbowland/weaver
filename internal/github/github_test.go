@@ -33,7 +33,7 @@ func TestParseMerges(t *testing.T) {
 	}
 	answer := `{"data":{"s":{"issueCount":2,"nodes":[` + pr(1, "2026-10-16T10:00:00Z") + `,` + pr(2, "2026-10-16T09:00:00Z") +
 		`]},"t":{"issueCount":2,"nodes":[` + pr(2, "2026-10-16T09:00:00Z") + `,` + pr(3, "2026-10-16T11:00:00Z") + `]}}}`
-	r, err := Parse(PRs, Sections[PRs][0], "", []byte(answer))
+	r, err := Parse(PRs, Sections[PRs][0], []byte(answer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestParse(t *testing.T) {
 	     {"__typename":"StatusContext","context":"ci/legacy","state":"SUCCESS"}]}}}}]}},
 	  {}
 	]}}}`
-	r, err := Parse(PRs, Sections[PRs][0], "", []byte(answer))
+	r, err := Parse(PRs, Sections[PRs][0], []byte(answer))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,10 +75,10 @@ func TestParse(t *testing.T) {
 	if strings.Join(it.Requested, " ") != "back-end @bob" {
 		t.Errorf("requested %v", it.Requested)
 	}
-	if it.Checks != "FAILURE" || strings.Join(it.FailingChecks, " ") != "lint" || it.PassingChecks != 2 || it.RunningChecks != 1 {
-		t.Errorf("checks %s %v %d %d", it.Checks, it.FailingChecks, it.PassingChecks, it.RunningChecks)
+	if strings.Join(it.FailingChecks, " ") != "lint" || it.PassingChecks != 2 || it.RunningChecks != 1 {
+		t.Errorf("checks %v %d %d", it.FailingChecks, it.PassingChecks, it.RunningChecks)
 	}
-	if _, err := Parse(PRs, Sections[PRs][0], "", []byte(`{"errors":[{"message":"Bad credentials"}]}`)); err == nil || !strings.Contains(err.Error(), "Bad credentials") {
+	if _, err := Parse(PRs, Sections[PRs][0], []byte(`{"errors":[{"message":"Bad credentials"}]}`)); err == nil || !strings.Contains(err.Error(), "Bad credentials") {
 		t.Errorf("an error: %v", err)
 	}
 }
@@ -156,12 +156,12 @@ func TestParseNext(t *testing.T) {
 		{Sections[PRs][2], "", `{"s":` + search(true, "m1") + `}`, "m1"},
 		{Sections[PRs][2], "m1", `{"s":` + search(false, "m2") + `}`, ""},
 	} {
-		r, err := Parse(PRs, c.s, c.after, []byte(`{"data":`+c.data+`}`))
+		r, err := Parse(PRs, c.s, []byte(`{"data":`+c.data+`}`))
 		if err != nil || r.Next != c.next {
 			t.Errorf("%s after %q: next %q, %v; want %q", c.s.Title, c.after, r.Next, err, c.next)
 		}
 	}
-	if _, err := Parse(PRs, queue, "c1 c2", []byte(`{"data":{}}`)); err == nil {
+	if _, err := Parse(PRs, queue, []byte(`{"data":{}}`)); err == nil {
 		t.Error("no search answered")
 	}
 }
