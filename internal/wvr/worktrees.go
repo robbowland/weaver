@@ -183,8 +183,8 @@ func copyFile(from, to string) error {
 // worktreeUsers is what uses worktree dir, as close's card says it:
 // threads (open in any session, or lost) working there, and panes (on
 // weaver's server, the one we run in, and on Rex the session's) in it, but
-// panes except (a thread being closed: its agent, nvim and the pane
-// closing it, all this session's) and their threads. Close's offer, its
+// panes except (a thread being closed: its agent, its review panel and the
+// pane closing it, all this session's) and their threads. Close's offer, its
 // last check, and the sweep all ask it.
 func (e *Env) worktreeUsers(dir string, except ...mux.PaneID) []string {
 	skip := map[mux.PaneID]bool{}

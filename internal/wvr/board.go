@@ -556,7 +556,7 @@ func (e *Env) rows(plain bool) string {
 	}
 	width = pre + cn + cf + cw + ageW
 
-	// The title: the thread count, and the status bar's counts at the right.
+	// The title: the thread count, and the counts (wvr status's) at the right.
 	titleL := "[ WEAVER :: THREADS ]"
 	// Past the limit you set yourself: the count against it, a shade
 	// brighter.

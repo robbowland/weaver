@@ -171,8 +171,7 @@ func (e *Env) Boot(sock string) {
 }
 
 // Sweep is `wvr gc`: what is gone or left behind (agents' states, old
-// files, orphaned nvims, dead sockets), then the worktrees weaver made that
-// are done with.
+// files, dead sockets), then the worktrees weaver made that are done with.
 func (e *Env) Sweep() {
 	e.GC()
 	e.SweepWorktrees(os.Stdout)

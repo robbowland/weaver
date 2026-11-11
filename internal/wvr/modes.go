@@ -122,7 +122,7 @@ func (e *Env) EditDone(args []string) error {
 
 // Hold is `wvr hold [PANE] [NOTE...]`: the thread of the agent in PANE
 // (else this pane's) on hold, with NOTE, what is next: kept as a held
-// thread (docs/design.md, Lost threads), its agent and nvim closed, its
+// thread (docs/design.md, Lost threads), its session closed, its
 // worktree and branch left as they are. enter on its row under HELD (or
 // `wvr resume`) brings it back on its conversation; nothing else does.
 func (e *Env) Hold(args []string) error {

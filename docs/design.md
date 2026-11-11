@@ -416,8 +416,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 - **Sweeping:** `GC` (also on every SessionStart hook) removes sockets in
   the socket dir nothing accepts on (a board's or a view's that was
   killed), a day after they were made. What an agent left running in a
-  pane that has gone (a server put in the background) is not swept: weaver
-  told such panes by tmux's environment, and has not learnt Rex's yet.
+  pane that has gone (a server put in the background) is not swept: Rex
+  does not say which processes were a block's.
 - **Worktrees:** `$STATE_DIR/worktrees` lists the worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
   before the list join it as they are seen); `SweepWorktrees` (at `_boot`,
   and `wvr gc`) removes one an hour or more old that nothing uses

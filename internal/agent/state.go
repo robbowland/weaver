@@ -36,8 +36,8 @@ var States = []State{StateWorking, StateNeedsYou, StateDone, StateIdle, StateInt
 // Claude is the agent weaver runs and follows, as its state names it.
 const Claude = "claude"
 
-// Cell is the state's cell: a mark between brackets, as the board, the
-// status line, Neovim and Worktrunk's branch markers show it.
+// Cell is the state's cell: a mark between brackets, as the board, its
+// counts and Worktrunk's branch markers show it.
 func (s State) Cell() string {
 	switch s {
 	case StateNeedsYou:

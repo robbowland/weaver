@@ -101,8 +101,8 @@ func (e *Env) panelLock(agent mux.PaneID) func() {
 	return func() { os.RemoveAll(d) }
 }
 
-// focusedPane is the pane you are on (a popup or run-shell is not a pane:
-// the session's active one).
+// focusedPane is the pane you are on (a popup or a key's wvr is not a
+// pane: the session's active one).
 func (e *Env) focusedPane() mux.PaneID {
 	p, _ := e.Mux().Active()
 	if p == e.MyPane {

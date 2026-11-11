@@ -130,9 +130,8 @@ func (e *Env) gcFiles() {
 	e.sweepSockets(day)
 }
 
-// sweepSockets removes sockets nothing listens on any more (a board, a
-// view or an nvim that was killed leaves its own) once they are older
-// than age.
+// sweepSockets removes sockets nothing listens on any more (a board or a
+// view that was killed leaves its own) once they are older than age.
 func (e *Env) sweepSockets(age time.Duration) {
 	ms, _ := filepath.Glob(e.SockDir + "/*.sock")
 	for _, m := range ms {

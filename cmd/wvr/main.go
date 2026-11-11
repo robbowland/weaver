@@ -1,5 +1,5 @@
-// weaver keeps track of the coding agents running in your Rex session and
-// opens Neovim in the worktree each is really editing.
+// weaver keeps track of the coding agents in its Rex sessions, a thread
+// each, with each thread's review beside its agent.
 package main
 
 import (
@@ -109,8 +109,8 @@ func helped(f func(e *wvr.Env, args []string) error) func(*wvr.Env, []string) er
 	}
 }
 
-// The commands (wvr help, and the ones Rex's keys, fzf, nvim and the hooks
-// run, named with a leading _).
+// The commands (wvr help, and the ones Rex's keys, fzf and the hooks run,
+// named with a leading _).
 var commands = map[string]command{
 	// Outside a session it starts (or attaches to) one; inside, the board.
 	"": {run: start}, "start": {run: start},

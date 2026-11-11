@@ -15,7 +15,7 @@ import (
 
 // Restarting: a thread's agent started again where it is, resuming its
 // conversation, so an updated harness (a new Claude Code) takes
-// over without closing the session. Its window, nvim and number stay.
+// over without closing the session. Its window, review panel and number stay.
 
 const restartUsage = "usage: wvr restart [--all] [--force] [pane-id]"
 

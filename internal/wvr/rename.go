@@ -12,8 +12,8 @@ import (
 )
 
 // Rename is `wvr rename [PANE] [NAME...]`: the thread of the agent in PANE
-// (else the one this pane belongs to: the agent's, or its nvim's) called
-// NAME on the board, on its window and on the status line, in place of the
+// (else the one this pane belongs to: the agent's, or its review panel's)
+// called NAME on the board and on its window, in place of the
 // title its agent gives it; asked for when not given. An empty name gives
 // the agent's title back.
 func (e *Env) Rename(args []string) error {

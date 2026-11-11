@@ -159,7 +159,7 @@ func (s Session) Made() (int64, bool) {
 
 // Restored: did Rex bring the session back after its server restarted?
 // Rex restores a session as it was, its ids and all, with a fresh shell in
-// each terminal: every program weaver ran in it (home, agents, nvims)
+// each terminal: every program weaver ran in it (home, agents, panels)
 // ended with the server weaver made it on. Known when the machine has
 // started since weaver made it (no program outlives that, and a server
 // started since may have the old one's pid), or when the server running is

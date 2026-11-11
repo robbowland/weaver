@@ -101,8 +101,8 @@ func (e *Env) numLock() func() {
 
 // threadNum is the lowest number none of this session's threads has (those
 // being opened included), and the numbers taken. A thread being opened
-// waits there at most 10 s (its nvim gives up on its agent then): one older
-// than 30 s was left by panes closed before they met, and holds no number.
+// holds its number for 30 s at most: one older was left by a pane closed
+// before its agent took its record, and holds no number.
 func (e *Env) threadNum() (int, map[int]bool) {
 	used := map[int]bool{}
 	fs := e.SessionFiles("thread")
@@ -584,15 +584,15 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 // kept when its agent exits, as its thread lasts until you close it: what
 // the agent said last (a broken install, a bad flag, a goodbye) stays to be
 // read, and the board shows it exited, R to start it again, x to close the
-// thread, rather than its pane going and leaving nvim alone in the window.
+// thread, rather than its pane going and leaving its review panel alone.
 func (e *Env) agentSpawn(tok, dir string) mux.Spawn {
 	return mux.Spawn{Argv: []string{e.Self, "_agent", tok}, Dir: dir,
 		Keep: &mux.Exit{What: "weaver: " + agent.Claude + " exited", Hint: "on the board, R starts it again, x closes the thread"}}
 }
 
 // AgentPane is `wvr _agent TOKEN`, the agent's pane of a new
-// thread. First run: record the thread for this pane, tell the nvim beside
-// it where the agent is, and start the agent with the task. A lost thread
+// thread. First run: record the thread for this pane, and start the agent
+// with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
 func (e *Env) AgentPane(tok string) error {
@@ -662,7 +662,7 @@ func (e *Env) AgentPane(tok string) error {
 		// Files under this pane id from another life of the session (an
 		// earlier server's, its pane numbers taken again) go first: kept as
 		// lost when they are, else forgotten. This life's are the thread's
-		// own, restarted in its pane: they stay (its nvim stays bound).
+		// own, restarted in its pane: they stay (its review panel stays bound).
 		sf := e.StateFile(pane)
 		if old, err := store.ReadState(sf); err == nil && !sameLife(old.Where, e.Where) {
 			e.Retire(sf, string(old.Pid))
@@ -1160,7 +1160,7 @@ func (e *Env) Close(args []string) error {
 	ownSession := th.Name != "" && in != "" && in != e.RexID
 	others, rest := false, 0
 	for _, p := range panes {
-		if p.ID == agentPane || p.ID == nv || strings.HasSuffix(p.Cmd, " sidebar") {
+		if p.ID == agentPane || p.ID == nv {
 			continue
 		}
 		if p.Window == tab {

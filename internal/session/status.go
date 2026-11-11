@@ -143,9 +143,8 @@ func (e *Env) MarkSeen(p mux.PaneID) {
 	store.UpdateState(sf, func(st *agent.Record) { st.Seen = true })
 }
 
-// threadTabLabels: in the weaver session a thread's window is its line on
-// the status bar, "<num> <name> · <repo>/<branch>"; renamed only when that
-// is not its name already.
+// threadTabLabels: a thread's first window is labelled "<num> <name> ·
+// <repo>/<branch>"; renamed only when that is not its label already.
 func (e *Env) threadTabLabels(rows []Row) {
 	panes, _ := e.Panes()
 	names := map[string]bool{}

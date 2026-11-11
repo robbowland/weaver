@@ -432,7 +432,7 @@ func (e *Env) Next() {
 		return cs[i].since < cs[j].since
 	})
 	// Where you are now, to go on from there: the session's active pane (a
-	// popup or run-shell is not a pane).
+	// popup or a key's wvr is not a pane).
 	focused := e.focusedPane()
 	at := -1
 	for i, x := range cs {
@@ -448,7 +448,8 @@ func (e *Env) Next() {
 }
 
 // agentOf is the agent of pane p: the pane itself when it is an agent (it
-// has state, a thread record or an nvim), or the agent whose nvim it is.
+// has state, a thread record or a review panel), or the agent whose review
+// panel it is.
 func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 	if !digits(string(p)) {
 		return ""
@@ -468,7 +469,7 @@ func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 
 // agentCols is the agent's columns in a thread window total columns wide:
 // $WEAVER_AGENT_WIDTH of it (20%), at least $WEAVER_AGENT_MIN_COLS (44) as
-// long as nvim keeps 60; columns given outright as they are.
+// long as the review panel keeps 60; columns given outright as they are.
 func agentCols(total int) int {
 	w := os.Getenv("WEAVER_AGENT_WIDTH")
 	pct := 20
