@@ -147,22 +147,14 @@ func (m Refs) LocalDefault(remote string) string {
 	return ""
 }
 
-// RemoteDefault is remote's default branch (origin/main): its HEAD, else
-// its main or master.
-func RemoteDefault(repo, remote string) string {
-	if r, ok := Line(repo, "symbolic-ref", "--quiet", "--short", remoteRef(remote, "HEAD")); ok {
-		return r
-	}
-	for _, b := range []string{"main", "master"} {
-		if HasRemoteBranch(repo, remote, b) {
-			return remote + "/" + b
-		}
-	}
-	return ""
-}
+// RemoteDefault is remote's default branch in repo (origin/main), as
+// Refs.RemoteDefault says it.
+func RemoteDefault(repo, remote string) string { return RefFacts(repo, "").RemoteDefault(remote) }
 
 // LocalDefault is the local default branch: the one the remote's HEAD
-// names, else main or master; "" when there is none.
+// names, else main or master; "" when there is none. (Not RefFacts': it
+// reads main and master alone, and the branch the HEAD names may be
+// another.)
 func LocalDefault(repo string) string {
 	r := ""
 	if rm := PreferredRemote(repo); rm != "" {
