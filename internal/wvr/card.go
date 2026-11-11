@@ -173,11 +173,11 @@ func mouseHelp() string {
 func Intro() string {
 	d, g, o := CDim, CGrey, COff
 	return "No agents in this session yet.\n\n" +
-		g + "n" + o + "       start a thread: a task, its worktree, and a window with\n" +
+		g + "n" + o + "       start a thread: a task, its worktree, and a session with\n" +
 		"        its review and the agent " + d + "(wvr new)" + o + "\n" +
 		g + "alt+N" + o + "   the same from anywhere in the session\n" +
-		g + "alt+y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +
-		"        dot is not set up yet: going there sets it up)" + o + "\n\n" +
+		g + "alt+y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one not\n" +
+		"        set up yet says what it needs)" + o + "\n\n" +
 		d + "Or start claude in any pane: weaver follows it\n" +
 		"through its hooks." + o + "\n"
 }

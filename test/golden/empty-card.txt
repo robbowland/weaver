@@ -1,10 +1,10 @@
 No agents in this session yet.
 
-n       start a thread: a task, its worktree, and a window with
+n       start a thread: a task, its worktree, and a session with
         its review and the agent (wvr new)
 alt+N   the same from anywhere in the session
-alt+y   the views beside home: GITHUB, LINEAR (one with a
-        dot is not set up yet: going there sets it up)
+alt+y   the views beside home: GITHUB, LINEAR (one not
+        set up yet says what it needs)
 
 Or start claude in any pane: weaver follows it
 through its hooks.
