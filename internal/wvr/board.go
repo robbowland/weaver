@@ -926,4 +926,3 @@ func (e *Env) Chrome() string {
 	label, _ := files.FirstLine(base + ".label")
 	return out + "change-border-label:" + label + "\n"
 }
-
