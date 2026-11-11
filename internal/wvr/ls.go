@@ -299,7 +299,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		}
 		switch key {
 		case "resume":
-			// A lost thread: back in a new window (where you land).
+			// A lost thread: back in a session of its own (where you land).
 			if pane != "" {
 				exec.Command(e.Self, "resume", pane).Run()
 			}

@@ -441,7 +441,7 @@ func (e *Env) rows(plain bool) string {
 		}
 	}
 	// Threads lost with their session (a crash, or quit), then those you
-	// held, last: enter resumes one in a new window (wvr resume).
+	// held, last: enter resumes one in a session of its own (wvr resume).
 	for _, l := range e.LostRows() {
 		// Held a moment ago: its agent is still closing.
 		if l.Sid != "" && running[l.Sid] {
@@ -771,7 +771,7 @@ func (e *Env) rows(plain bool) string {
 
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last; the rest are in its help. ⏎ opens a
-// row's thread: its window, or a lost or held one in a new window.
+// row's thread: its window, or a lost or held one in a session of its own.
 func (e *Env) boardHints() []choice {
 	browse := "⏎ OPEN|n NEW|x CLOSE|h HOLD|/ SEARCH|v REVIEW|tab VIEWS|ctrl+q QUIT"
 	search := "⏎ OPEN|esc BACK|ctrl+e REVIEW|tab VIEWS"

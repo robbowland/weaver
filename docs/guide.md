@@ -78,11 +78,11 @@ Code.
 
 ## Threads
 
-A thread is one task for one agent, in a window of its own: its review
+A thread is one task for one agent, in a Rex session of its own: its review
 (tuicr) on the left and the agent on the right, taking a fifth of the width.
-It works in a worktree of its own, or in a checkout you choose. The window is
-named after the thread (`01 Add a CLI flag · repo/add-a-cli-flag`), and
-opening a thread puts you on its agent.
+It works in a worktree of its own, or in a checkout you choose. Its session
+is labelled with its name, its first window after the thread (`01 Add a CLI
+flag · repo/add-a-cli-flag`), and opening a thread puts you on its agent.
 
 ### Starting a thread
 
@@ -329,7 +329,7 @@ the machine restarts while a thread's agent runs, weaver keeps the thread as
   With `WEAVER_RESTORE=0`, it lists them on home instead.
 - Lost threads it doesn't bring back by itself (from another session, or
   with `WEAVER_RESTORE=0`) are listed last on the board, under LOST: `enter`
-  resumes one in a new window, and `x` forgets it.
+  resumes one in a session of its own, and `x` forgets it.
 - `wvr resume` lists lost threads. `wvr resume NAME` (a number, a name or a
   session id) brings one back, `--all` brings back every one, and `--forget
   NAME` drops one.
@@ -345,7 +345,7 @@ instead. `h` on its row asks, in the board's search line, what is next for
 when you come back; `enter` holds it: its agent and review close, its
 worktree and branch stay as they are, and its row moves to HELD with your
 note. Nothing brings it back on its own, not even `wvr` starting the
-session again: `enter` on it resumes it in a new window, on its
+session again: `enter` on it resumes it in a session of its own, on its
 conversation, and `x` forgets it. A hold past a week shows its age a shade
 brighter, a nudge to take it up or let it go. Past three held threads, the
 board shows the newest three and one row for the rest (`… 2 more held`):

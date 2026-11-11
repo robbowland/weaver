@@ -39,7 +39,7 @@ import (
 
 func (e *Env) threadsNew() string { return e.StateDir + "/new" }
 
-// opening is the meeting place of a thread window being opened, token
+// opening is the meeting place of a thread being opened, token
 // tok's: new/<skey>_<tok>/, where its agent's pane finds what to start
 // (task, or resume) and its record (docs/design.md, Threads).
 func (e *Env) opening(tok string) string { return e.threadsNew() + "/" + e.SKey + "_" + tok }

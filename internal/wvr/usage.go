@@ -39,7 +39,7 @@ const Usage = `usage: wvr [command]
   (none)                       outside it: start, or show, weaver's Rex session "weaver"
                                ($WEAVER_SESSION); inside it: the dashboard
   start [session]              the same, for another session
-  new [task...]                start a thread: a new window with its review and an agent, in a new
+  new [task...]                start a thread: a session with its review and an agent, in a new
                                worktree whose branch starts from the remote's default
                                branch, fetched; with no task, a form. Options: --name NAME
                                (else an item's, or its agent's title), --repo DIR,
@@ -52,7 +52,7 @@ const Usage = `usage: wvr [command]
                                --review: read-only
   close [--yes] [--remove-worktree] [pane-id]
                                close an agent (the focused one) with its review, and its
-                               thread's window; offers to remove a thread's worktree when it
+                               thread's session; offers to remove a thread's worktree when it
                                is clean and merged or pushed
   hold [pane-id] [note]        put a thread on hold (the focused one): note what's next;
                                its agent and review close, its worktree stays, and it waits

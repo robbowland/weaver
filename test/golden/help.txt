@@ -27,7 +27,7 @@ THREADS
   ×2  two agents work in the worktree
 
 LOST (its session went: a crash, or quit)  HELD (you held it)
-  ⏎               resume it in a new window (wvr resume)
+  ⏎               resume it in a session of its own (wvr resume)
   x               forget it (its worktree goes once nothing in it is unsaved)
 
 ANYWHERE

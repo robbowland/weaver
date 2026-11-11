@@ -132,7 +132,7 @@ func Help() string {
 		"  " + d + "×2" + o + "  " + d + "two agents work in the worktree" + o + "\n" +
 		"\n" +
 		g + "LOST" + o + " " + d + "(its session went: a crash, or quit)" + o + "  " + g + "HELD" + o + " " + d + "(you held it)" + o + "\n" +
-		helpRow("⏎", "resume it in a new window", "(wvr resume)") +
+		helpRow("⏎", "resume it in a session of its own", "(wvr resume)") +
 		helpRow("x", "forget it", "(its worktree goes once nothing in it is unsaved)") +
 		"\n" +
 		g + "ANYWHERE" + o + "\n" +
@@ -508,7 +508,7 @@ func (e *Env) lostCard(sid, title string) string {
 	}
 	ls = append(ls, field(w, "in", dir, CGrey, 1)...)
 	ls = append(ls, field(w, "session", lo.Key()+" · "+st.SessionID, CDim, 2)...)
-	ls = append(ls, "", CDim+"⏎ resume it in a new window   x forget it"+COff)
+	ls = append(ls, "", CDim+"⏎ resume it in a session of its own   x forget it"+COff)
 	return out + strings.Join(ls, "\n") + "\n"
 }
 

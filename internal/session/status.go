@@ -171,7 +171,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 	}
 }
 
-// ThreadLabel is a thread window's name in the weaver session: its number,
+// ThreadLabel is the label of a thread's first window: its number,
 // what it is about (the first line of text, fitted), and where it works.
 func ThreadLabel(n int, text, root string) string {
 	if i := strings.IndexByte(text, '\n'); i >= 0 {
