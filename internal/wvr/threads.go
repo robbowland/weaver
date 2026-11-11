@@ -1325,7 +1325,11 @@ func (e *Env) Close(args []string) error {
 			_ = t.Close()
 		}
 	}
-	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending}
+	ends := ""
+	if ownSession {
+		ends = in
+	}
+	tail := []string{string(agentPane), string(nv), pid, start, remove, th.Worktree, th.Repo, pending, ends}
 	// Closing a thread's session, or the last panes of a window, closes
 	// any popup in it: when this runs in one, finish from outside it.
 	me, ok := byID[e.MyPane]
@@ -1353,31 +1357,33 @@ func (e *Env) outside(args ...string) {
 }
 
 // CloseTail is the closing itself (`wvr _close AGENT PANEL PID START
-// REMOVE DIR REPO [TOK]`): close a thread's session, or another agent's
-// pane and its review panel's, wait for the agent to exit, forget it, and
-// remove its worktree if asked, checking again first. TOK: the thread was
-// still being opened (its panel had not been bound), and its record of
-// that goes too.
+// REMOVE DIR REPO [TOK [SESSION]]`): end a thread's session (SESSION, as
+// Close decided: never worked out again here, where a snapshot can fail),
+// or close another agent's pane and its review panel's, wait for the agent
+// to exit, forget it, and remove its worktree if asked, checking again
+// first. TOK: the thread was still being opened (its panel had not been
+// bound), and its record of that goes too.
 func (e *Env) CloseTail(a []string) error {
-	for len(a) < 8 {
+	for len(a) < 9 {
 		a = append(a, "")
 	}
 	agent, _ := mux.ParsePane(a[0])
 	nv, _ := mux.ParsePane(a[1])
-	pid, start, remove, dir, repo, tok := a[2], a[3], a[4], a[5], a[6], a[7]
-	// Closing the thread you are looking at: home, where the rest are, not
+	pid, start, remove, dir, repo, tok, ends := a[2], a[3], a[4], a[5], a[6], a[7], a[8]
+	// Closing what you are looking at: home, where the rest are, not
 	// whichever window or session Rex would show next.
-	ps, _ := e.Mux().Panes()
-	ap, shown := session.PaneIn(ps, agent)
-	ownSession := shown && ap.Session != e.RexID && files.Exists(e.ThreadFile(agent))
-	if shown {
-		if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window || ownSession && ap.Session == e.RexHere {
-			e.selectHome(home)
+	if ends != "" {
+		if ends == e.RexHere {
+			e.showHome()
 		}
-	}
-	if ownSession {
 		e.Mux().CloseSession(agent)
 	} else {
+		ps, _ := e.Mux().Panes()
+		if ap, ok := session.PaneIn(ps, agent); ok {
+			if _, cur, home := e.where(); cur.ID == ap.Window && home != ap.Window {
+				e.selectHome(home)
+			}
+		}
 		e.Mux().Close(agent)
 		if nv != "" {
 			e.Mux().Close(nv)
