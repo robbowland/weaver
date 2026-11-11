@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"github.com/robbowland/weaver/internal/agent"
-	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/rex"
 )
@@ -139,12 +138,6 @@ func (e *Env) SessionFiles(ext string) []string {
 		out = append(out, e.StateDir+"/"+n)
 	}
 	return out
-}
-
-// WeaverSession: was this session started from weaver's layout?
-func (e *Env) WeaverSession() bool {
-	l, _ := files.FirstLine(e.StateDir + "/" + e.SKey + ".layout")
-	return l == "weaver"
 }
 
 func digits(s string) bool {

@@ -562,13 +562,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		return errors.New("cannot write the thread record")
 	}
 	unlock()
-	// In the weaver session its window has its label from the start, not
-	// once its agent first reports.
-	wname := name
-	if e.WeaverSession() {
-		wname = session.ThreadLabel(n, label, dir)
-	}
-	tab, ok := e.threadTab(tok, dir, name, wname, nofocus)
+	// Its window has its label from the start, not once its agent first
+	// reports.
+	tab, ok := e.threadTab(tok, dir, name, session.ThreadLabel(n, label, dir), nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -784,18 +780,8 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		return "", fmt.Errorf("%s: %v", nm, err)
 	}
 	unlock()
-	wname := nm
-	if e.WeaverSession() {
-		t := oneline.Line(cmp.Or(th.Title, st.Title))
-		if t == "" {
-			t = oneline.Line(th.About())
-		}
-		if t == "" {
-			t = nm
-		}
-		wname = session.ThreadLabel(n, t, dir)
-	}
-	tab, ok := e.threadTab(tok, dir, nm, wname, nofocus)
+	t := cmp.Or(oneline.Line(cmp.Or(th.Title, st.Title)), oneline.Line(th.About()), nm)
+	tab, ok := e.threadTab(tok, dir, nm, session.ThreadLabel(n, t, dir), nofocus)
 	if !ok {
 		return "", fmt.Errorf("%s: Rex could not open its session", nm)
 	}
@@ -1441,7 +1427,7 @@ func (e *Env) Quit(args []string) error {
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
-	name, skey := e.Session, e.SKey
+	name := e.Session
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
@@ -1462,10 +1448,7 @@ func (e *Env) Quit(args []string) error {
 				editing++
 			}
 		}
-		back := "wvr resume brings them back"
-		if l, _ := files.FirstLine(e.StateDir + "/" + skey + ".layout"); l == "weaver" {
-			back = "back when you start weaver"
-		}
+		back := "back when you start weaver"
 		pad := cardPlace(t, 7)
 		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and review in it"+COff))
 		if threads > 0 {

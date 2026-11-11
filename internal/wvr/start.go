@@ -46,14 +46,10 @@ func (e *Env) Start(name string) error {
 	}
 	here, _ := os.Getwd()
 	s, husk, err := rex.Ensure(e.RexDir(), name, here, []string{e.Self, "home"}, func() error {
-		skey := rex.Key(name)
 		if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(e.StateDir+"/"+skey+".layout", []byte("weaver\n"), 0o644); err != nil {
-			return err
-		}
-		os.Remove(e.StateDir + "/" + skey + ".last")
+		os.Remove(e.StateDir + "/" + rex.Key(name) + ".last")
 		return nil
 	})
 	if err != nil {
@@ -168,9 +164,7 @@ func (e *Env) Boot(sock string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	e.PushStatusAndLabels()
-	if e.WeaverSession() {
-		e.StartViews()
-	}
+	e.StartViews()
 	if n := len(e.SweepWorktrees(io.Discard)); n > 0 {
 		e.Mux().SayToSession(4000, fmt.Sprintf("weaver: removed %d old worktree%s, nothing in them lost (their branches stay)", n, plural(n)))
 	}

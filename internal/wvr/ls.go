@@ -40,7 +40,7 @@ const lsKeys = "j,k,g,G,n,x,h,a,r,R,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 // threads back, the status line's counts and the tabs' labels) runs behind
 // it (`wvr _boot`), and reloads it when done.
 func (e *Env) Home() error {
-	if e.WeaverSession() {
+	if e.Session != "" {
 		os.MkdirAll(e.StateDir, 0o755)
 		sock := e.SockDir + "/" + e.SKey + ".fzf." + strconv.Itoa(os.Getpid()) + ".sock"
 		c := exec.Command(e.Self, "_boot", sock)

@@ -234,10 +234,10 @@ var commands = map[string]command{
 // brought back after a restart, its programs gone, is started again.
 func start(e *wvr.Env, args []string) error {
 	name := arg(args, 0)
-	if e.Session != "" && e.WeaverSession() && e.RexRestored() {
+	if e.Session != "" && e.RexRestored() {
 		return e.Start(cmp.Or(name, e.Session))
 	}
-	if e.Session != "" && e.WeaverSession() {
+	if e.Session != "" {
 		return e.Ls()
 	}
 	return e.Start(name)

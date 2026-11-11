@@ -618,10 +618,9 @@ thread whose agent has not reported shows its record (task, worktree).
 
 weaver runs on Rex alone. `wvr` outside weaver's session (`Start`) makes
 its Rex session, `$WEAVER_SESSION` else `weaver`, with home in its first
-window (see Start, under [Rex](#rex)), or shows the one running. A session
-made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; thread labels
-act only there. Each thread is a Rex session of its own beside it, made by
-weaver as a thread of that one (home's).
+window (see Start, under [Rex](#rex)), or shows the one running. Each
+thread is a Rex session of its own beside it, made by weaver as a thread of
+that one (home's).
 
 - **Identity:** weaver acts on the Rex session it runs in (`rex.Chosen`)
   when weaver made it (`$STATE_DIR/rex/sessions/<id>`), home's or a

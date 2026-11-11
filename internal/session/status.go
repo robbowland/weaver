@@ -84,7 +84,7 @@ func (e *Env) pushStatus(labels bool) {
 			os.Remove(s + ".rows")
 		}
 	}
-	if labels && e.WeaverSession() {
+	if labels && e.Session != "" {
 		rows, _ := e.AgentRows()
 		e.threadTabLabels(rows)
 	}
