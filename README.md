@@ -10,9 +10,6 @@ its own. One board shows every thread and what it
 is doing. One key jumps to the agent that has waited on you longest. And your
 threads come back after Rex restarts or the machine does.
 
-![A thread started from the form and named, a pull request reviewed from the
-GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver.gif)
-
 ```
 ┌─ [ WEAVER :: THREADS ] 5 ─────────────────── [!] 2  [x] 1  [/] 1 ─┐
 │                                                                      │
