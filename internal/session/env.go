@@ -112,13 +112,8 @@ func (e *Env) SockDirReady() error {
 // StateFile is the state file of the agent in pane p of this session.
 func (e *Env) StateFile(p mux.PaneID) string { return e.PaneFile(p, "json") }
 
-// NvimSock is the socket of the nvim of the agent in pane p.
-func (e *Env) NvimSock(p mux.PaneID) string {
-	return e.SockDir + "/" + e.SKey + "_" + string(p) + ".sock"
-}
-
 // PaneFile is the file of kind ext weaver keeps for the agent in pane p:
-// json its state, thread its thread, nvim its nvim, ...
+// json its state, thread its thread, panel its review panel, ...
 func (e *Env) PaneFile(p mux.PaneID, ext string) string {
 	return e.StateDir + "/" + e.SKey + "_" + string(p) + "." + ext
 }

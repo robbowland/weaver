@@ -89,8 +89,8 @@ const Usage = `usage: wvr [command]
                                not set up shows how; one you hid shows again)
   status                       agent counts
   snapshot --reviewed [dir]    mark the worktree holding dir reviewed
-  gc                           forget agents that are gone; end the nvims, and remove
-                               the worktrees weaver left behind
+  gc                           forget agents that are gone, and remove the worktrees
+                               weaver left behind
   setup [--dry-run] [--no-codex] [--bin PATH]
                                add weaver's hooks to Claude Code (and Codex, when ~/.codex
                                exists), run by this binary (or PATH), backing up each file
@@ -101,5 +101,4 @@ const Usage = `usage: wvr [command]
   linear login                 sign in to Linear with a personal API key (kept in the
                                macOS Keychain), for the LINEAR view and Linear issues
   version                      weaver's version
-  nvim <agent-pane> [file]     internal: start the nvim bound to an agent
 `

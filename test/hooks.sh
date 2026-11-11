@@ -50,10 +50,7 @@ mkdir -p "$AT/bin" "$AT/state" "$AT/claude/sessions"
 export XDG_STATE_HOME=$AT/state CLAUDE_CONFIG_DIR=$AT/claude
 export WORKTRUNK_CONFIG_PATH=$AT/worktrunk.toml WORKTRUNK_APPROVALS_PATH=$AT/worktrunk-approvals.toml
 : >"$WORKTRUNK_CONFIG_PATH"
-export WEAVER_SELF_SETUP=0 WEAVER_VIEWS= _ZO_DATA_DIR=$AT/zoxide EDITOR=nvim VISUAL=nvim
-if [ -f "$HERE/nvim/init.lua" ] && [ "${WEAVER_TEST_USER_NVIM:-0}" != 1 ]; then
-	export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
-fi
+export WEAVER_SELF_SETUP=0 WEAVER_VIEWS= _ZO_DATA_DIR=$AT/zoxide
 # weaver: the binary built from this checkout, its files unpacked here.
 (cd "$ROOT" && go build -o "$AT/bin/wvr" ./cmd/wvr) || exit 1
 export XDG_DATA_HOME=$AT/data
@@ -101,13 +98,12 @@ number 11 "$W1"
 echo "$SESSION" >"$AT/session"
 echo "$SID" >"$AT/sid"
 
-# The server and the nvims of its threads go; the scratch dir too, unless a
-# suite failed (it is printed, to look into).
+# The server goes; the scratch dir too, unless a suite failed (it is
+# printed, to look into).
 keep=0
 cleanup() {
 	trap - EXIT INT TERM HUP
 	kill "$server" 2>/dev/null && wait "$server" 2>/dev/null
-	pkill -f -- "--listen /tmp/weaver-$(id -u)/[^ ]*${SESSION}_" 2>/dev/null
 	[ "$keep" = 1 ] || { chmod -R u+w "$AT" 2>/dev/null; rm -rf "$AT"; }
 }
 trap cleanup EXIT

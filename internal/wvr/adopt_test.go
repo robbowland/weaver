@@ -58,7 +58,7 @@ func TestCodexRefusedOnRex(t *testing.T) {
 func TestPaneArg(t *testing.T) {
 	dir := t.TempDir()
 	e := &Env{&session.Env{StateDir: dir, SKey: "rex-w"}}
-	for _, f := range []string{"rex-w_1234.json", "rex-w_20250.thread", "rex-w_31337.nvim"} {
+	for _, f := range []string{"rex-w_1234.json", "rex-w_20250.thread", "rex-w_31337.panel"} {
 		if err := os.WriteFile(filepath.Join(dir, f), []byte("{}\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}

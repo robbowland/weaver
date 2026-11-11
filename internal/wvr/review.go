@@ -2,7 +2,6 @@ package wvr
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -19,15 +18,13 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
-	"github.com/robbowland/weaver/internal/nvim"
 	"github.com/robbowland/weaver/internal/session"
-	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/store"
 )
 
 // The agent's review panel: `wvr review` (alt+v, v on the board) opens it
 // beside the agent, or goes to it; `wvr _panel` is what runs in it, tuicr
-// on the branch. `wvr nvim` is what ran in a thread's nvim pane before.
+// on the branch.
 
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
@@ -312,81 +309,4 @@ func (e *Env) bind(agent mux.PaneID, ext string, p mux.PaneID, pid int) {
 	if os.WriteFile(tmp, []byte(string(p)+"\n"+n+"\n"), 0o644) == nil {
 		bestEffort(os.Rename(tmp, f))
 	}
-}
-
-// Nvim is `wvr nvim [--fresh] AGENT [FILE]`: nvim, bound to the agent,
-// on the agent's socket. --fresh: the agent was just made (a thread's), so
-// an nvim on its socket belongs to a session of the same name that went
-// (pane ids start again with each server).
-func (e *Env) Nvim(args []string) error {
-	if len(args) < 1 {
-		return errors.New("usage: wvr nvim <agent-pane-id> [file]")
-	}
-	agentPane, _ := mux.ParsePane(args[0])
-	file, fresh := "", false
-	if len(args) > 1 {
-		file = args[1]
-	}
-	if args[0] == "--fresh" {
-		if len(args) < 2 {
-			return errors.New("usage: wvr nvim [--fresh] <agent-pane-id> [file]")
-		}
-		agentPane, _ = mux.ParsePane(args[1])
-		file, fresh = "", true
-		if len(args) > 2 {
-			file = args[2]
-		}
-	}
-	if err := e.SockDirReady(); err != nil {
-		return err
-	}
-	sock := e.NvimSock(agentPane)
-	// Never take the socket of an nvim still serving this agent (answering,
-	// or alive but busy): go to it instead, and let this pane close.
-	if st, err := os.Stat(sock); !fresh && err == nil && st.Mode()&os.ModeSocket != 0 {
-		if nvim.Eval(sock, "1", 2*time.Second) != nvim.Absent {
-			if nv := e.NvimPane(agentPane); nv != "" && nv != e.MyPane {
-				e.focus(nv)
-			}
-			return nil
-		}
-	}
-	os.Remove(sock)
-	os.Remove(sock + ".stalled")
-	sf := e.StateFile(agentPane)
-	if e.MyPane != "" {
-		os.MkdirAll(e.StateDir, 0o755)
-		nf := e.PaneFile(agentPane, "nvim")
-		tmp := nf + "." + strconv.Itoa(os.Getpid())
-		// exec keeps this pid for nvim.
-		if os.WriteFile(tmp, []byte(string(e.MyPane)+"\n"+strconv.Itoa(os.Getpid())+"\n"), 0o644) == nil {
-			os.Rename(tmp, nf)
-		}
-		if files.Exists(sf) && digits(string(e.MyPane)) {
-			store.UpdateState(sf, func(st *agent.Record) {
-				nv := json.Number(e.MyPane)
-				st.NvimPane = &nv
-			})
-		}
-	}
-	dir, err := setup.Runtime()
-	if err != nil {
-		return err
-	}
-	nvim, err := exec.LookPath("nvim")
-	if err != nil {
-		return errors.New("nvim is not installed")
-	}
-	env := append(os.Environ(), "WEAVER_PANE="+string(agentPane), "WEAVER_STATE="+sf, "WEAVER_BIN="+e.Self, "WEAVER_PLUGINS="+setup.PluginsDir())
-	lua := strings.ReplaceAll(dir+"/nvim/weaver.lua", " ", `\ `)
-	// The ATTENTION dialog for a stale swap file would block this nvim and
-	// every remote call: open the startup file read-only instead (weaver.lua
-	// reports it and removes this autocmd).
-	argv := []string{"nvim", "--listen", sock,
-		"--cmd", "augroup weaver_start | autocmd SwapExists * let v:swapchoice = 'o' | let g:weaver_swap = expand('<afile>') | augroup END",
-		"-c", "luafile " + lua, "--"}
-	if file != "" {
-		argv = append(argv, file)
-	}
-	return fmt.Errorf("nvim: %w", syscall.Exec(nvim, argv, env))
 }

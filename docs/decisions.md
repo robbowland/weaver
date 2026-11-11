@@ -255,6 +255,12 @@ can supersede an earlier one, and says so.
   the panel's processes, since no nvim weaver could ask over a socket runs
   there. Review notes are tuicr's saved comments, which the agent reads with
   tuicr's CLI.
+- 2026-11-11: The hooks no longer talk to Neovim, superseding the
+  msgpack-RPC of 2026-10-15 (Performance and packaging) and every entry
+  above on what nvim is told: with tuicr beside the agent, no nvim weaver
+  starts listens on a socket, so `wvr nvim`, the `WeaverEvent` calls, the
+  `.nvim` binding, the socket and the sweep of nvims a server left behind
+  went, and with them neovim/go-client.
 
 ## Dashboard
 

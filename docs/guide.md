@@ -391,11 +391,9 @@ needs:
   ignored files (an `.env`, local settings) are kept a month in
   `trash/` in weaver's state directory first. Its branch stays. A worktree you chose to keep when you closed its thread is yours, and
   stays.
-- **Processes.** A Neovim that a crashed or killed server left running,
-  with its language servers, is ended, and sockets nothing listens on are
-  removed. What an agent left running in the background from its worktree
-  (a dev server, a watcher) is not: end it yourself once its thread has
-  gone.
+- **Processes.** Sockets nothing listens on are removed. What an agent
+  left running in the background from its worktree (a dev server, a
+  watcher) is not: end it yourself once its thread has gone.
 - **Files.** Agents that are gone are forgotten. Activity logs, per-turn
   snapshots and lost threads go after a month.
 
@@ -563,8 +561,7 @@ Then:
 - `require('weaver.diffview').show({ key = ..., label = ..., root = ..., compare = { kind = 'branch', base = 'origin/main' } })`
   opens the same one-view review (see `nvim/lua/weaver/diffview.lua`);
 - `require('weaver.status').statusline()` is the agent's state for a
-  statusline, empty where the bar already shows it;
-- `User WeaverEvent` autocmds receive every event from the agent.
+  statusline, empty where the bar already shows it.
 
 ## Mouse
 

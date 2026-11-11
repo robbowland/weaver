@@ -1,20 +1,11 @@
 #!/bin/bash
-# Hook latency: what each event costs the agent. A fake agent (pane 90) is bound
-# to a headless nvim and to a real pane, so following and renaming cost what
-# they cost in real use. Independent of the other suites.
+# Hook latency: what each event costs the agent. Independent of the other
+# suites.
 . "$(dirname "$0")/../lib.sh"
 
 P=90
 N=${WEAVER_BENCH_N:-15}
-mkdir -p "/tmp/weaver-$(id -u)" "$SD" && chmod 700 "/tmp/weaver-$(id -u)"
-NVP=$(new_pane bash --noprofile --norc)
-rm -f "$(sock $P)"
-nvim --clean --headless --listen "$(sock $P)" \
-	-c 'lua function WeaverEvent() return 0 end' \
-	</dev/null >/dev/null 2>&1 &
-nvpid=$!
-printf '%s\n%s\n' "$NVP" "$nvpid" >"$SD/${SK}_$P.nvim"
-for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$(sock $P)" ] && break; sleep 0.2; done
+mkdir -p "$SD"
 
 J=$AT/lat
 mkdir -p "$J"
@@ -92,16 +83,14 @@ L_BASE=$LOW
 sleep 1
 
 # Generous budgets, so a loaded machine passes; what they catch is a
-# synchronous nvim or Rex call (10-25 ms each, 2 s when stuck) creeping
+# synchronous Rex call (10-25 ms each, 2 s when stuck) creeping
 # back in, or the async hook parsing events it has no use for.
 ok "latency: a prompt costs the agent under 25 ms" "$([ "$L_PROMPT" -lt 25 ] && echo y)" y
-ok "latency: an edit in the async hook waits on neither nvim nor Rex (under 40 ms)" \
+ok "latency: an edit in the async hook does not wait on Rex (under 40 ms)" \
 	"$([ "$L_EDIT" -lt 40 ] && echo y)" y
 ok "latency: the async hook with nothing to do costs next to nothing over wvr starting (under 3 ms more)" \
 	"$([ "$L_ASYNC" -lt $((L_BASE + 3)) ] && echo y)" y ||
 	echo "  (async nothing ${L_ASYNC} ms, floor ${L_BASE} ms, lower quartiles)"
 
-kill "$nvpid" 2>/dev/null
-close_pane "$NVP" >/dev/null 2>&1
-rm -f "$SD/${SK}_$P".* "$(sock $P)"
+rm -f "$SD/${SK}_$P".*
 done_suite

@@ -11,10 +11,8 @@ sides agreeing, and record why in [decisions.md](decisions.md).
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
-| `$STATE_DIR/<skey>_<pane>.nvim` | the same for an nvim `wvr nvim` started for the agent, which the hooks tell what it does (below) |
 | `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
 | `$STATE_DIR/<skey>_<pane>.prompt` | the current turn's prompt, for its snapshots |
-| `/tmp/weaver-<uid>/<skey>_<pane>.sock` | the agent's nvim `--listen` socket |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below) |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread window being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
@@ -61,36 +59,9 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 | `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `log` | string | absolute path of the activity log |
-| `nvim_pane` | int or null | the agent's nvim pane |
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
 | `tmux_session` | string | the id of its Rex session (the name is from when weaver ran on tmux); a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
-
-## Hook to Neovim
-
-The engine calls, off the hook's synchronous path, bounded at 2 s:
-
-    nvim --server $SOCK --remote-expr "v:lua.WeaverEvent('<json>')"
-
-The JSON is one line, inside a Vim single-quoted string (`'` doubled).
-`WeaverEvent` returns 0 at once and schedules its work, then fires
-`User WeaverEvent` with the event as data. Calls can arrive out of order:
-nvim drops an `edit` or `root` older (`seq`) than the last one it applied.
-
-Every event: `ev`, `seq` (epoch ms), `pane`, `agent`, `sid`, `turn`, `state`.
-
-| `ev` | Extra fields | Sent when |
-| --- | --- | --- |
-| `edit` | `root`, `file` (absolute), `tool`, `agent_id`? | Edit, Write, MultiEdit, NotebookEdit, an MCP edit tool, or a Bash command whose changed file was identified |
-| `root` | `root` | the agent moved to another repo or worktree without a file |
-| `checktime` | | Bash or an MCP edit tool finished and no file was identified |
-| `state` | `prompt`?, `waiting`?, `title`?, `doing`? | any change of state, turn, prompt, title or the command it runs (`doing`, `""` for none) |
-| `snapshot` | `root`, `ref`, `commit`, `point`, `turn` | a snapshot commit landed; point `agent`: an agent chain's tip moved |
-
-nvim debounces review refreshes itself (250 ms); there is no separate poke.
-
-`wvr nvim <pane>` sets `WEAVER_PANE`, `WEAVER_STATE` (state file) and
-`WEAVER_BIN` (the weaver binary) in nvim's environment.
 
 ## Snapshots
 
@@ -191,7 +162,7 @@ Claude Code gives `bashEditDiff` in auto and bypass-permissions modes, or
 with the `bashEditDiffEnabled` setting.
 
 The chains are taken in the async hook process, after the background run
-has started (nvim follows first); a hook that is not async hands an edit
+has started; a hook that is not async hands an edit
 tool's file to the background run, before content unknown. One write per
 chain at a time (the private index's lock); the tip moves compare-and-swap.
 A chain whose tip could not be committed after its start is removed, so the
@@ -203,9 +174,8 @@ next call starts it again. Commits are by `weaver <weaver@localhost>`:
     Weaver-Agent: <agent>
     Weaver-Point: start|tip
 
-A chain that starts is logged once (`snapshot`, point `agent`), and every
-move of a tip is a `snapshot` event to nvim (point `agent`, `ref` the
-chain). `WEAVER_SNAPSHOTS=0` turns these off too.
+A chain that starts is logged once (`snapshot`, point `agent`).
+`WEAVER_SNAPSHOTS=0` turns these off too.
 
 ## Activity log
 
@@ -263,7 +233,7 @@ call's edits) goes to the background run.
 `tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
 `session_end`, `subagent_start`, `subagent_stop`. Each maps onto the Claude
 Code event the state machine already handles, so every agent gets the same
-states, turns, snapshots, log and nvim events.
+states, turns, snapshots and log.
 
 ## Threads
 
@@ -633,11 +603,9 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   board as `wvr _boot`) runs `GC`, then resumes every thread lost by a
   session of its name, in number order, without leaving home
   (`WEAVER_RESTORE=0`: listed instead), then sweeps worktrees (below).
-- **Sweeping:** `GC` (also on every SessionStart hook) ends weaver's nvims
-  whose parent has gone (`--listen` in the socket dir, parent pid 1 or a
-  systemd subreaper: a server that crashed or was killed left them, with
-  their language servers), and removes sockets in the socket dir nothing
-  accepts on, a day after they were made. What an agent left running in a
+- **Sweeping:** `GC` (also on every SessionStart hook) removes sockets in
+  the socket dir nothing accepts on (a board's or a view's that was
+  killed), a day after they were made. What an agent left running in a
   pane that has gone (a server put in the background) is not swept: weaver
   told such panes by tmux's environment, and has not learnt Rex's yet.
 - **Worktrees:** `$STATE_DIR/worktrees` lists the worktrees weaver made (`<dir> TAB <repo> TAB <unix time>`; threads' from
@@ -1068,8 +1036,8 @@ alone (`Brought.Fate`). Nothing is set for tuicr to find them
 (`tuicr's theme`) and tuicr itself (needed, 0.28 or newer). When
 `$XDG_DATA_HOME/weaver/plugins/diffview-plus.nvim/.weaver-rev` is not
 `diffviewRev`, a detached `wvr _plugins` fetches that commit (`git fetch
---depth 1`) beside it and swaps it in. `wvr nvim` passes
-`WEAVER_PLUGINS=$XDG_DATA_HOME/weaver/plugins`; `weaver.lua` appends
+--depth 1`) beside it and swaps it in. Given
+`WEAVER_PLUGINS=$XDG_DATA_HOME/weaver/plugins`, `weaver.lua` appends
 diffview-plus there to the runtimepath (and sources its `plugin/`) when no
 `lua/diffview/init.lua` is on it and lazy.nvim knows no `diffview*` plugin.
 diffview-plus is GPL-3.0, so weaver fetches it rather than carry it.

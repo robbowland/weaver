@@ -1405,7 +1405,6 @@ func (e *Env) CloseTail(a []string) error {
 	} else {
 		b := strings.TrimSuffix(sf, ".json")
 		os.Remove(b + ".panel")
-		os.Remove(b + ".nvim")
 		os.Remove(b + ".thread")
 	}
 	var rc error

@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -17,13 +16,12 @@ func TestResumed(t *testing.T) {
 	renewed := map[string]bool{"State": true, "TS": true, "Since": true, "Seen": true, "Where": true, "Subagents": true}
 	gone := map[string]bool{"Pane": true, "Pid": true, "ProcStart": true, "Waiting": true, "Pending": true,
 		"MarkedRoot": true, "Marker": true, "Background": true, "BackgroundTasks": true, "Doing": true,
-		"DoingID": true, "DoneIDs": true, "NvimPane": true, "EndReason": true}
-	nv := json.Number("4")
+		"DoingID": true, "DoneIDs": true, "EndReason": true}
 	full := Record{Pane: 3, Agent: "claude", State: StateWorking, TS: 1, Since: "1", Seen: false, SessionID: "s",
 		Pid: "9", ProcStart: "p", Title: "t", Turn: 4, TurnEnded: 3, PromptID: "q", Transcript: "tr", Cwd: "c",
 		Root: "r", StartCwd: "sc", ProjectRoot: "pr", File: "f", Prompt: "pp", Waiting: "w", Pending: "pe",
 		LastMessage: "lm", MarkedRoot: "mr", Marker: "m", Background: 2, BackgroundTasks: "b", Doing: "d",
-		DoingID: "di", DoneIDs: "dd", NvimPane: &nv, Where: Where{Server: 1, Session: "$1"}, EndReason: "e", Log: "l",
+		DoingID: "di", DoneIDs: "dd", Where: Where{Server: 1, Session: "$1"}, EndReason: "e", Log: "l",
 		Subagents: []Subagent{{ID: "a"}}, Tasks: []Task{{ID: "t"}}, TurnRoots: []string{"r"}, Files: []string{"f"}}
 	w := Where{Server: 7, Session: "$2"}
 	got := full.Resumed(100, w)

@@ -1,8 +1,7 @@
 #!/bin/bash
 # Subagents and other ways an agent works: subagent edits and their live list,
 # the main agent looking around its own checkout, Bash and MCP edits, cwd
-# changes, background work, and its task list. What nvim shows of it all is
-# tested in the 5x suites; here the engine's state and what it tells nvim.
+# changes, background work, and its task list: the engine's state.
 . "$(dirname "$0")/../lib.sh"
 fresh
 
@@ -12,7 +11,6 @@ ev() { hooka 0 "$(printf '{"hook_event_name":"%s","cwd":"%s","session_id":"sid-s
 edit_by() { printf ',"agent_id":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"},"tool_response":{}' "$1" "$2"; }
 bash_by() { printf ',"agent_id":"%s","tool_name":"Bash","tool_input":{"command":%s},"tool_response":{}' "$1" "$(jq -Rn --arg c "$2" '$c')"; }
 
-fake_nvim 0
 ev SessionStart "$T/repo" ',"source":"startup"'
 ev UserPromptSubmit "$T/repo" ',"prompt":"implement both features"'
 
@@ -22,16 +20,14 @@ ev SubagentStart "$T/repo" ',"agent_id":"sub-b","agent_type":"Explore"'
 ok "subagents starting are listed" "$(st 0 'subagents | map(.id + ":" + .type) | join(",")')" "sub-a:general-purpose,sub-b:Explore"
 ev PostToolUse "$T/repo" "$(edit_by sub-a "$T/repo-wt-a/src/app.txt")"
 ok "a subagent's edit in a worktree: the root follows" "$(st 0 root)|$(st 0 file)" "$T/repo-wt-a|$T/repo-wt-a/src/app.txt"
-# Each edit reaches nvim from its own fork; let the first land before the next.
 settle
 ev PostToolUse "$T/repo" "$(edit_by sub-b "$T/repo-wt-b/README.md")"
 ok "another subagent in another worktree" "$(st 0 root)" "$T/repo-wt-b"
 ev SubagentStop "$T/repo" ',"agent_id":"sub-b","agent_type":"Explore","agent_transcript_path":"/dev/null"'
 ok "a subagent stopping leaves the list" "$(st 0 'subagents | map(.id) | join(",")')" "sub-a"
 settle
-ok "nvim is told of each edit, with the subagent" "$(nvim_events 0 agent_id | tr ',' '\n' | grep '^edit' | tr '\n' ' ')" "edit:sub-a edit:sub-b "
-ok "...and each edit's file" "$(nvim_events 0 file | tr ',' '\n' | grep '^edit' | sed 's|.*/||' | tr '\n' ' ')" "app.txt README.md "
-ok "...and its root" "$(nvim_events 0 root | tr ',' '\n' | grep '^edit' | sed 's|.*/||' | tr '\n' ' ')" "repo-wt-a repo-wt-b "
+ok "each subagent's edit joins the agent's files" \
+	"$(st 0 'files | map(sub(".*/repo-wt-"; "")) | join(" ")')" "a/src/app.txt b/README.md"
 
 # --- the main agent looking around its own checkout keeps the worktree
 ev UserPromptSubmit "$T/repo/src" ',"prompt":"<agent-message from=\"sub-b\"> [Subagent hand-back] done"'
@@ -54,7 +50,6 @@ ok "...and the file joins the agent's files" "$(st 0 'files | map(select(endswit
 ev PostToolUse "$T/repo" "$(bash_by sub-a "cd $T/repo-wt-a && git log -1")"
 ok "Bash that changes nothing: root stays" "$(st 0 root)" "$T/repo-wt-b"
 settle
-ok "nvim told to re-check files after a Bash command that changed nothing" "$(nvim_events 0 | tr ',' '\n' | tail -n 1)" "checktime"
 ok "the log has the Bash commands" "$(jq -r 'select(.ev == "bash") | .cmd' "$(st 0 log)" | grep -c 'git')" "2"
 
 # --- MCP edit tools are followed (defect 11); MCP reads are not looked at
@@ -86,18 +81,14 @@ ev UserPromptSubmit "$T/repo" ',"prompt":"<agent-message from=\"x1\"> [Subagent 
 ev Stop "$T/repo" ',"background_tasks":[]'
 ok "last report handled: done" "$(st 0 state)|$(st 0 background)" "done|0"
 ok "...and no subagent is listed any more" "$(st 0 'subagents | length')" "0"
-# --- a prompt typed while the agent works still reaches the bar
+# --- a prompt typed while the agent works is its prompt, a new turn
+turn=$(st 0 turn)
 ev UserPromptSubmit "$T/repo" ',"prompt":"and add tests","session_title":"Both features"'
-settle
-ok "a prompt while working: nvim is told the new prompt, turn and title" \
-	"$(nvq 0 "luaeval('(function() for i = #_G.ev, 1, -1 do local e = _G.ev[i]; if e.ev == \"state\" then return e.prompt .. \"|\" .. e.turn .. \"|\" .. e.title end end end)()')")" \
-	"and add tests|$(st 0 turn)|Both features"
+ok "a prompt while working: the new prompt, turn and title" \
+	"$(st 0 prompt)|$(st 0 turn)|$(st 0 title)" "and add tests|$((turn + 1))|Both features"
 
-# --- a prompt with control characters (pasted escapes) still reaches nvim
+# --- a prompt with control characters (pasted escapes): valid state, the
+# escapes as spaces
 hooka 0 "$(jq -nc --arg c "$T/repo" '{hook_event_name:"UserPromptSubmit", cwd:$c, session_id:"sid-sub", prompt:"paste\r\u001b[31mred\u001b[0m"}')"
-settle
-ok "a pasted prompt with escapes: nvim gets valid JSON, the escapes as spaces" \
-	"$(nvq 0 "luaeval('(function() for i = #_G.ev, 1, -1 do if _G.ev[i].ev == \"state\" then return _G.ev[i].prompt end end end)()')")" \
-	"paste [31mred [0m"
-kill "$FAKE_NVIM_PID" 2>/dev/null
+ok "a pasted prompt with escapes: the escapes as spaces" "$(st 0 prompt)" "paste [31mred [0m"
 done_suite

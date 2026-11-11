@@ -1,7 +1,7 @@
 #!/bin/bash
 # Failure modes: other sessions' files, corrupt state, stale and held locks,
-# racing hooks, nested sessions, agents that die without a word, stale nvim
-# files, odd paths, and a partial pane list.
+# racing hooks, nested sessions, agents that die without a word, odd paths,
+# and a partial pane list.
 . "$(dirname "$0")/../lib.sh"
 fresh
 
@@ -90,16 +90,6 @@ printf '{"hook_event_name":"UserPromptSubmit","prompt":"reused","cwd":"%s","sess
 jq '.proc_start = "Thu Jan  1 00:00:00 1970"' "$SD/${SK}_2.json" >"$AT/r.json" && mv "$AT/r.json" "$SD/${SK}_2.json"
 ok "a pid now running something else: forgotten" "$(wvr ls | grep -c 'reused')" "0"
 kill "$LIVE_PID"
-
-# --- a stale nvim file (that nvim has exited) never renames a pane
-hook 2 UserPromptSubmit "$T/repo" "" "renaming"
-title=$(title 1)
-printf '1\n424242\n' >"$SD/${SK}_2.nvim"
-hook 2 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
-settle
-ok "a stale nvim file: the pane it names keeps its title" \
-	"$(title 1)" "$title"
-rm -f "$SD/${SK}_2.nvim"
 
 # --- state of a session that no longer exists (a tmux one from before
 # weaver ran on Rex only, or one whose name was reused) is cleaned up

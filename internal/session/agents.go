@@ -43,16 +43,8 @@ func Peek(sf string) Peeked {
 
 // PanelPane is the agent's review panel, while it runs (its record
 // without a pid, when it has not recorded itself yet: its pane).
-func (e *Env) PanelPane(pane mux.PaneID) mux.PaneID { return e.boundPane(pane, "panel") }
-
-// NvimPane is the agent's nvim pane, when that nvim still runs, as
-// `wvr nvim` binds one; the hooks tell it what the agent does.
-func (e *Env) NvimPane(pane mux.PaneID) mux.PaneID { return e.boundPane(pane, "nvim") }
-
-// boundPane is the pane bound to the agent in pane in its file of kind
-// ext (the pane, then its process's pid), while that process runs.
-func (e *Env) boundPane(pane mux.PaneID, ext string) mux.PaneID {
-	b, err := os.ReadFile(e.PaneFile(pane, ext))
+func (e *Env) PanelPane(pane mux.PaneID) mux.PaneID {
+	b, err := os.ReadFile(e.PaneFile(pane, "panel"))
 	if err != nil {
 		return ""
 	}

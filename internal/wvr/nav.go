@@ -459,12 +459,12 @@ func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 	if !digits(string(p)) {
 		return ""
 	}
-	for _, x := range []string{"json", "thread", "panel", "nvim"} {
+	for _, x := range []string{"json", "thread", "panel"} {
 		if files.Exists(e.PaneFile(p, x)) {
 			return p
 		}
 	}
-	for _, f := range append(e.SessionFiles("panel"), e.SessionFiles("nvim")...) {
+	for _, f := range e.SessionFiles("panel") {
 		if q, _ := files.FirstLine(f); q == string(p) {
 			return session.PaneOfFile(f)
 		}

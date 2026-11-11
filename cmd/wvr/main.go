@@ -127,7 +127,6 @@ var commands = map[string]command{
 	"new":     {run: (*wvr.Env).New},
 	"review":  {session: true, run: (*wvr.Env).Review},
 	"_panel":  {run: (*wvr.Env).Panel},
-	"nvim":    {session: true, run: (*wvr.Env).Nvim},
 	"close":   {session: true, run: (*wvr.Env).Close},
 	"send":    {session: true, run: (*wvr.Env).Send},
 	"view":    {session: true, run: (*wvr.Env).View},

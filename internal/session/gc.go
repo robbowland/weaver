@@ -3,7 +3,6 @@ package session
 import (
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -34,8 +33,7 @@ func sub1(re *regexp.Regexp, l string) string {
 // kept as lost when its session went), a state without a pid is retired an
 // hour after its session went, or at once when its session was made since
 // (an earlier server's, whose pane number a new pane takes), an ended one
-// forgotten an hour after it ended; then old files, the nvims a server that
-// went left running, and dead sockets.
+// forgotten an hour after it ended; then old files and dead sockets.
 // States of other keys (tmux's and zellij's, from before weaver ran on
 // Rex only) go the same way as their agents do.
 func (e *Env) GC() {
@@ -43,7 +41,7 @@ func (e *Env) GC() {
 	e.gcFiles()
 }
 
-// gcAgents is GC's agents, their nvims' bindings and their threads: of
+// gcAgents is GC's agents, their panels' bindings and their threads: of
 // every session, each multiplexer asked once a run (lives).
 func (e *Env) gcAgents() {
 	now := time.Now().Unix()
@@ -70,8 +68,8 @@ func (e *Env) gcAgents() {
 			e.Forget(f, pid)
 		}
 	}
-	for _, f := range append(paneFiles(e.StateDir, "panel"), paneFiles(e.StateDir, "nvim")...) {
-		if files.Exists(strings.TrimSuffix(f, filepath.Ext(f)) + ".json") {
+	for _, f := range paneFiles(e.StateDir, "panel") {
+		if files.Exists(strings.TrimSuffix(f, ".panel") + ".json") {
 			continue
 		}
 		b, _ := os.ReadFile(f)
@@ -102,8 +100,7 @@ func (e *Env) gcAgents() {
 	}
 }
 
-// gcFiles is GC's old files, the nvims a server that went left running,
-// and dead sockets.
+// gcFiles is GC's old files and dead sockets.
 func (e *Env) gcFiles() {
 	old := func(dir, pat string, age time.Duration, all bool) {
 		ms, _ := filepath.Glob(filepath.Join(dir, pat))
@@ -134,46 +131,7 @@ func (e *Env) gcFiles() {
 	old(e.StateDir+"/turns", "*", month, false)
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)
-	e.sweepOrphans()
 	e.sweepSockets(day)
-}
-
-// sweepOrphans ends weaver's nvims that their server left behind: one
-// listening in the socket dir whose parent has gone (launchd, or a
-// subreaper, has it now). A thread's nvim is its pane's process, and its
-// --embed server that nvim's child; a server that crashes, or is killed,
-// can leave either running, a language server or two under it.
-func (e *Env) sweepOrphans() {
-	out, err := exec.Command("ps", "-Aww", "-o", "pid=,ppid=,command=").Output()
-	if err != nil {
-		return
-	}
-	type proc struct{ ppid, argv0 string }
-	ps := map[string]proc{}
-	var lines [][]string
-	for _, l := range strings.Split(string(out), "\n") {
-		f := strings.Fields(l)
-		if len(f) < 3 {
-			continue
-		}
-		ps[f[0]] = proc{f[1], filepath.Base(f[2])}
-		if filepath.Base(f[2]) == "nvim" && strings.Contains(l, " --listen "+e.SockDir+"/") {
-			lines = append(lines, f)
-		}
-	}
-	var pids []int
-	for _, f := range lines {
-		parent, ok := ps[f[1]]
-		if f[1] != "1" && ok && parent.argv0 != "systemd" {
-			continue
-		}
-		if pid, err := strconv.Atoi(f[0]); err == nil {
-			pids = append(pids, pid)
-		}
-	}
-	// An --embed server whose UI went may not hear TERM: what is left after
-	// two seconds is killed (its swap file stays, to recover from).
-	process.End(pids)
 }
 
 // sweepSockets removes sockets nothing listens on any more (a board, a

@@ -25,7 +25,7 @@ import (
 )
 
 // The hook: one agent event (Claude Code's hook input on stdin, or another
-// agent's, made one by Event) folded into its state file. What it needs besides the state (nvim, Rex, Worktrunk,
+// agent's, made one by Event) folded into its state file. What it needs besides the state (Rex, Worktrunk,
 // snapshots, the status) runs after it in a detached `wvr hook --bg`.
 
 const rs = "\x1e" // separates the members of the hook's lists
@@ -70,7 +70,6 @@ type hk struct {
 	TurnRoots                                                             string
 	Moved                                                                 bool
 	SnapPrev, SnapStart, SnapEnd, FirstTouch, PrevPrompt, TurnPrompt      string
-	NV                                                                    mux.PaneID
 	// What it is running now (a Bash command, from the async PreToolUse
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
@@ -413,7 +412,6 @@ func (h *hk) run(e *session.Env, me string) {
 		h.MarkDir = h.Root
 	}
 	h.Marked = h.MarkDir
-	h.NV = e.NvimPane(h.Pane)
 }
 
 func (h *hk) oPid() string { return string(h.Old.Pid) }
@@ -449,10 +447,6 @@ func writeState(e *session.Env, h *hk) {
 	if h.Doing != "" {
 		st.Doing, st.DoingID = h.Doing, h.DoingID
 	}
-	if h.NV != "" {
-		nv := json.Number(h.NV)
-		st.NvimPane = &nv
-	}
 	// The life of the Rex session it runs in: a server or session made
 	// again is another, however soon (session's lives.lost).
 	st.Where = e.Where
@@ -468,14 +462,11 @@ func writeState(e *session.Env, h *hk) {
 }
 
 // followBash follows what a Bash or MCP call changed: the files it edited,
-// else (none found) its command in the log and a checktime for nvim.
+// else (none found) its command in the log.
 func followBash(e *session.Env, h *hk) {
 	if !followBashEdits(e, h) {
 		if h.Tool == "Bash" {
 			h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
-		}
-		if h.NV != "" {
-			nvimEvent(e, h, h.nvimHead("checktime"))
 		}
 	}
 }
@@ -570,7 +561,6 @@ func afterWrite(e *session.Env, h *hk) {
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		spawnBg(e, h)
 	}
-	// After the background run is on its way: nvim follows first.
 	if h.Event == "PostToolUse" && async && h.ChangedKnown {
 		agentChanges(e, h, h.changes)
 	}
@@ -591,7 +581,7 @@ func spawnBg(e *session.Env, h *hk) {
 		}
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	// Not started, nvim, Rex and the snapshots catch up at the next event.
+	// Not started, Rex and the snapshots catch up at the next event.
 	bestEffort(c.Start())
 }
 

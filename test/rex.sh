@@ -20,8 +20,7 @@ unset WEAVER_MUX WEAVER_RESTORE LINEAR_API_KEY
 for v in $(compgen -e | grep '^REX_' | grep -v '^REX_BIN_DIR$'); do unset "$v"; done
 export REX_RUNTIME_DIR=$AT/run REX_SERVER=unix://$AT/r.sock REX_CONFIG=$AT/init.lua WEAVER_SESSION=$S
 export XDG_STATE_HOME=$AT/state XDG_CONFIG_HOME=$AT/config XDG_DATA_HOME=$AT/data CLAUDE_CONFIG_DIR=$AT/claude
-export WEAVER_VIEWS= WEAVER_SELF_SETUP=0 EDITOR=nvim VISUAL=nvim TERM=xterm-256color
-[ -f "$HERE/nvim/init.lua" ] && export VIMINIT="lua dofile('$HERE/nvim/init.lua')"
+export WEAVER_VIEWS= WEAVER_SELF_SETUP=0 TERM=xterm-256color
 SD=$XDG_STATE_HOME/weaver
 mkdir -p "$AT/bin" "$SD" "$AT/claude/sessions" "$XDG_CONFIG_HOME"
 # Rex's configuration loads weaver's keys, as the guide says, from before
@@ -68,7 +67,6 @@ serve
 cleanup() {
 	kill "$server" 2>/dev/null
 	wait "$server" 2>/dev/null
-	pkill -f -- "--listen /tmp/weaver-$(id -u)/rex-${S}_" 2>/dev/null
 	rm -f /tmp/weaver-$(id -u)/rex-${S}[._]*
 	rm -rf "$AT"
 }

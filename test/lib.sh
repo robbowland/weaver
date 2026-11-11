@@ -130,14 +130,6 @@ settle() {
 }
 st() { jq -r ".$2" "$SD/${SK}_$1.json"; }
 
-sock() { printf '/tmp/weaver-%s/%s_%s.sock' "$(id -u)" "$SK" "$1"; }
-# nvq AGENT EXPR: evaluate EXPR in the agent's nvim (3s timeout).
-nvq() {
-	perl -e 'alarm 3; exec @ARGV' nvim --server "$(sock "$1")" --remote-expr "$2" </dev/null || printf 'TIMEOUT'
-	echo
-}
-nvim_pane() { sed -n 1p "$SD/${SK}_$1.nvim"; }
-
 # The standard scene: A started in the main checkout but edits worktree a;
 # B waits for permission in worktree b; C (tab two) writes a new file in b.
 feed() {
@@ -153,44 +145,15 @@ feed() {
 	hook 2 PostToolUse "$T/repo" "$T/repo-wt-b/newdir/sub/new.txt"
 }
 
-# Start a suite from a clean slate: no agent state, no agent nvims, no logs,
-# whatever the suites before it did. The three agent panes stay, and
-# weaver's record of the session and its numbers.
+# Start a suite from a clean slate: no agent state, no logs, whatever the
+# suites before it did. The three agent panes stay, and weaver's record of
+# the session and its numbers.
 fresh() {
-	local f p
-	for f in "$SD/${SK}"_*.nvim; do
-		[ -f "$f" ] || continue
-		read -r p <"$f"
-		case $p in '' | *[!0-9]*) ;; *) close_pane "$p" >/dev/null 2>&1 ;; esac
-	done
 	settle
 	find "$SD" -mindepth 1 -maxdepth 1 ! -name rex -exec rm -rf {} +
 	mkdir -p "$SD"
-	rm -f "/tmp/weaver-$(id -u)/${SK}"_*.sock*
 	rm -f "$AT/claude/sessions/"*.json
 	sleep 0.3
-}
-
-# fake_nvim PANE: a headless nvim bound to agent PANE (socket and .nvim file,
-# as `weaver nvim` would make), whose WeaverEvent only records what it gets.
-# Its pane is the first agent pane that isn't PANE (only renamed, never used).
-fake_nvim() {
-	local s p
-	s=$(sock "$1")
-	mkdir -p "${s%/*}" && chmod 700 "${s%/*}"
-	rm -f "$s"
-	nvim --clean --headless --listen "$s" \
-		-c 'lua _G.ev = {}; function WeaverEvent(j) table.insert(_G.ev, vim.json.decode(j)); return 0 end' \
-		</dev/null >/dev/null 2>&1 &
-	p=$!
-	for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$s" ] && break; sleep 0.2; done
-	printf '%s\n%s\n' "${2:-99}" "$p" >"$SD/${SK}_$1.nvim"
-	FAKE_NVIM_PID=$p
-}
-# nvim_events PANE [FIELD]: what the agent's fake nvim was told, one event per
-# line: "ev" or "ev:FIELD-value".
-nvim_events() {
-	nvq "$1" "luaeval('table.concat(vim.tbl_map(function(e) return e.ev .. (\"${2:-}\" ~= \"\" and (\":\" .. tostring(e[\"${2:-}\"] or \"\")) or \"\") end, _G.ev), \",\")')"
 }
 
 # A process that stays alive, as a fake agent's pid; LIVE_PID.
