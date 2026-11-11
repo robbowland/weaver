@@ -245,6 +245,47 @@ type boardRow struct {
 	lost, stale                              bool
 }
 
+// onBoard are the agents a board lists, of agents: a thread's own board
+// (local, its Rex session) has the agents in that session, its agent and
+// its helpers, each helper by its window's label when it has one; the
+// board of every thread has the rest but the helpers, a helper that needs
+// you making its thread need you, its row saying whose wait it is. A
+// helper is an agent with no thread whose events come from a thread's
+// session (the one its agent's come from).
+func onBoard(agents []session.Row, local string) []session.Row {
+	threads := map[string]bool{}
+	for _, a := range agents {
+		if a.Tnum > 0 && a.Session != "" {
+			threads[a.Session] = true
+		}
+	}
+	var out []session.Row
+	for _, a := range agents {
+		switch {
+		case local != "":
+			if a.Session != local {
+				continue
+			}
+			if a.Tnum == 0 && a.WindowName != "" {
+				a.Title = a.WindowName
+			}
+		case a.Tnum == 0 && threads[a.Session]:
+			continue
+		case a.Tnum == 0:
+		case a.State != agent.StateNeedsYou && !a.Exited:
+			for _, h := range agents {
+				if h.Tnum == 0 && h.Session != "" && h.Session == a.Session && h.State == agent.StateNeedsYou && !h.Exited {
+					a.State, a.Since = agent.StateNeedsYou, h.Since
+					a.Waiting = cmp.Or(h.WindowName, h.Called()) + ": " + cmp.Or(h.Waiting, "input")
+					break
+				}
+			}
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // Rows is the dashboard's lines for fzf: one TAB-separated item per line,
 // id pane tab prev next label display, with the border's label, the header
 // and the 1-9 keys next to $FZF_SOCK.
@@ -288,6 +329,7 @@ func (e *Env) rows(plain bool) string {
 		jump = "print(jump)+accept"
 	}
 	agents, now := e.AgentRows()
+	agents = onBoard(agents, os.Getenv("LS_SESSION"))
 	var rs []boardRow
 	counts := [len(heads)]int{}
 	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts

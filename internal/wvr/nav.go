@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -103,25 +104,39 @@ func (e *Env) GoHome() {
 		}
 		back()
 		return
-	case cur.ID != "" && cur.View == "" && e.peek(cur):
+	case cur.ID != "" && cur.View == "" && e.peek(cur, ""):
 		return
 	}
 	e.toHome(cur, home)
 }
 
+// GoLocal is `wvr go local` (Alt Y): in a thread's session, the thread's
+// own board in a popover over it, its agent and its helpers (peek); from
+// anywhere else, or with no terminal to show a popover on, the board of
+// every thread (GoHome).
+func (e *Env) GoLocal() {
+	if e.RexHere != "" && e.RexHere != e.RexID {
+		if _, cur, _ := e.where(); cur.ID != "" && e.peek(cur, e.RexHere) {
+			return
+		}
+	}
+	e.GoHome()
+}
+
 // peek shows Alt y's popover over thread window cur (`wvr _peek`): the
-// board, most of the terminal, its cursor on cur's thread, and on tab the
-// views. It waits for the popover to close, then runs what was chosen there
-// that the popover would have been in the way of: a jump, or a dialog (one
+// board, most of the terminal, its cursor on cur's agent, and on tab the
+// views; with local, the board of the agents in Rex session local alone.
+// It waits for the popover to close, then runs what was chosen there that
+// the popover would have been in the way of: a jump, or a dialog (one
 // popup at a time). False when no terminal looks at the session.
-func (e *Env) peek(cur mux.Window) bool {
+func (e *Env) peek(cur mux.Window, local string) bool {
 	if e.SockDirReady() != nil {
 		return false
 	}
 	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())
 	os.Remove(f)
 	defer os.Remove(f)
-	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.ID))})
+	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.ID)), local})
 	if !ok || c.Run() != nil {
 		return false
 	}
@@ -134,19 +149,24 @@ func (e *Env) peek(cur mux.Window) bool {
 	return true
 }
 
-// Peek is `wvr _peek FILE [PANE]`, Alt y's popover over a thread: the
-// board, its cursor on PANE's row, and on tab and shift-tab the views set
-// up beside it, round as a tab bar goes. What is chosen there that needs
-// the popover gone is written to FILE (writePeek), for `wvr go home` to run
+// Peek is `wvr _peek FILE [PANE [SESSION]]`, Alt y's popover over a
+// thread: the board, its cursor on PANE's row, and on tab and shift-tab the
+// views set up beside it, round as a tab bar goes; with SESSION (Alt Y's),
+// the board of the agents in that Rex session alone (LS_SESSION, which
+// its reloads inherit), no views. What is chosen there that needs the
+// popover gone is written to FILE (writePeek), for `wvr go home` to run
 // once it has closed.
 func (e *Env) Peek(args []string) error {
-	file, at := arg(args, 0), arg(args, 1)
+	file, at, local := arg(args, 0), arg(args, 1), arg(args, 2)
 	if file == "" {
-		return errors.New("usage: wvr _peek FILE [PANE]")
+		return errors.New("usage: wvr _peek FILE [PANE [SESSION]]")
 	}
 	pages := []string{"home"}
+	if local != "" {
+		os.Setenv("LS_SESSION", local)
+	}
 	for _, n := range e.viewNames() {
-		if e.viewNeeds(n).state == viewReady {
+		if e.viewNeeds(n).state == viewReady && local == "" {
 			pages = append(pages, n)
 		}
 	}
@@ -356,6 +376,13 @@ func (e *Env) Next() {
 		tab   mux.WindowID
 		label string
 	}
+	// A helper's thread, by the session its events come from.
+	threadOf := map[string]int{}
+	for _, r := range rows {
+		if r.Tnum > 0 && r.Session != "" {
+			threadOf[r.Session] = r.Tnum
+		}
+	}
 	var cs []c
 	for _, r := range rows {
 		if r.Pane == "" {
@@ -378,8 +405,11 @@ func (e *Env) Next() {
 		if rlen(l) > 40 {
 			l = oneline.Cut(l, 39) + "…"
 		}
-		if r.Tnum > 0 {
+		switch n := threadOf[r.Session]; {
+		case r.Tnum > 0:
 			l = fmt.Sprintf("%02d %s", r.Tnum, l)
+		case n > 0:
+			l = fmt.Sprintf("%02d › %s", n, cmp.Or(r.WindowName, l))
 		}
 		if r.State == agent.StateNeedsYou {
 			l += " · needs you"

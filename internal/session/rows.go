@@ -48,6 +48,7 @@ type Row struct {
 	State                                                             agent.State
 	Pane                                                              mux.PaneID
 	Window                                                            mux.WindowID
+	Session                                                           string // the Rex session its agent runs in, as its events say (REX_SESSION)
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
 	WindowName, Agent, Bgtasks, Ttask, Tname                          string
 	Since                                                             int64 // epoch s
@@ -144,7 +145,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		case st0 == agent.StateWorking && cst == "idle" && s.Background == 0 && cu > float64(s.TS) && float64(now)-cu > 3:
 			st, changed = agent.StateInterrupted, true
 		}
-		r := Row{Pane: paneOfNum(s.Pane), Window: p.Window, State: agent.State(oneline.Line(string(st)))}
+		r := Row{Pane: paneOfNum(s.Pane), Window: p.Window, Session: s.Session, State: agent.State(oneline.Line(string(st)))}
 		// Where it is: as its agent said, else its thread's worktree (an
 		// agent restarted, or brought back, before it has said).
 		r.Root = oneline.Line(cmp.Or(s.Root, s.Cwd, t.Worktree))
@@ -220,7 +221,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		if since == 0 {
 			since = now
 		}
-		rows = append(rows, Row{Pane: pane, Window: p.Window, State: agent.StateStarting,
+		rows = append(rows, Row{Pane: pane, Window: p.Window, Session: p.Session, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			WindowName: oneline.Line(p.WindowName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
 			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,

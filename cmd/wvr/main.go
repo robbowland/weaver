@@ -136,6 +136,8 @@ var commands = map[string]command{
 		switch arg(args, 0) {
 		case "home":
 			e.GoHome()
+		case "local":
+			e.GoLocal()
 		case "back":
 			e.GoBack()
 		case "next":
@@ -143,7 +145,7 @@ var commands = map[string]command{
 		case "prev":
 			e.GoView(-1)
 		default:
-			return errors.New("usage: wvr go home|back|next|prev")
+			return errors.New("usage: wvr go home|local|back|next|prev")
 		}
 		return nil
 	}},

@@ -501,6 +501,17 @@ can supersede an earlier one, and says so.
   else's (a helper's window in a thread's session, a pane of home's). Its
   agent ends with its pane first, and only between turns, so no turn is
   cut off and no two processes share the conversation.
+- 2026-11-11: Helpers are off the board (Rob), and a thread's own
+  board, alt+Y (alt+shift+y), lists its agent and its helpers: one board,
+  scoped to the thread's Rex session, not a second one. An agent in a pane
+  of home's session, no thread's helper, stays on the board, to be adopted
+  (`a`). A helper is linked
+  to its thread by the Rex session its events come from, matched against
+  the session the thread's agent reports from, never by a label. Defaults
+  Rob may veto: a helper waiting on you makes its thread need you on the
+  board; alt+1 goes to the helper's own window; the thread's board names a
+  helper by its window's label (the name it was started with); alt+Y
+  outside a thread is alt+y.
 
 ## Work items and views
 

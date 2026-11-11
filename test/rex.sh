@@ -127,7 +127,7 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 		R capture -s "$SID" -b "$(view | jq -r '.windows[0].layers[0].blocks[0].block_id')" --trim | sed 's/^/  | /'
 	}
 ok "start: weaver's keys written beside Rex's init.lua, and Rex told to read them" \
-	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|10"
+	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|11"
 
 # --- wvr in a Rex session weaver did not make (any Rex terminal's):
 # weaver's session, shown, never a board of that one
@@ -253,6 +253,20 @@ helperj "$(hev Stop ',"prompt_id":"h1","last_assistant_message":"tests pass"')"
 HP=$(num "$HB")
 ok "helper: a window of the thread's session, weaver following its agent" \
 	"$(windows "$T")|$(jq -r '"\(.state) \(.rex_session)"' "$SD/rex-${S}_$HP.json" 2>/dev/null)" "01 Greeting · repo/main/2 helper/1|done $T"
+# The board of every thread lists threads: the helper waiting on a
+# permission makes its thread need you. The thread's own board (alt+Y's)
+# lists its agent and the helper, by its window's label; alt+1 goes to the
+# helper's window.
+helperj "$(hev UserPromptSubmit ',"prompt":"run them"')"
+helperj "$(hev PermissionRequest ',"tool_name":"Bash","tool_input":{"command":"go test ./..."}')"
+board() { REX_SESSION=$SID COLUMNS=160 wvr ls 2>/dev/null; }
+ok "boards: every thread's has the thread, needing you for its helper; the thread's own has both" \
+	"$(board | grep -c 'helper: ')|$(board | grep -c 'check the tests')|$(LS_SESSION=$T board | grep -c 'Greeting')|$(LS_SESSION=$T board | grep -c 'helper')" "1|0|1|1"
+REX_SESSION=$SID wvr next >/dev/null 2>&1
+focused() { view "$T" | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .focused_block_id'; }
+waitfor '[ "$(focused)" = "$HB" ]' 50
+ok "alt+1: to the helper that needs you, in its window" "$(focused)" "$HB"
+helperj "$(hev Stop ',"prompt_id":"h2","last_assistant_message":"tests pass"')"
 # Adopted: its agent ends with its window, its conversation resumes as a
 # thread in a session of its own.
 REX_SESSION=$SID wvr adopt "$HP" >"$AT/adopt.out" 2>&1

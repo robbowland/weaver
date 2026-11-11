@@ -133,6 +133,8 @@ local function key(k, fn)
 end
 
 key("alt+y", function(ctx) return run(ctx, { "go", "home" }, pwd(ctx)) end)
+-- In a thread's session, its own board: its agent and its helpers.
+key("alt+shift+y", function(ctx) return run(ctx, { "go", "local" }, pwd(ctx)) end)
 key("alt+shift+n", function(ctx)
   if inView(ctx) then return false end
   return run(ctx, { "_popup", "new" }, pwd(ctx))

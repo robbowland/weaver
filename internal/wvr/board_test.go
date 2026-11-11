@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/session"
 )
 
 func TestCardRoom(t *testing.T) {
@@ -107,5 +109,32 @@ func TestWhereOf(t *testing.T) {
 	}
 	if w := git.WhereOf(filepath.Join(d, "plain")); w.Repo != "plain" || w.Branch != "" || w.GitDir != "" {
 		t.Errorf("no repository: %+v", w)
+	}
+}
+
+// The board of every thread leaves helpers out, a helper that needs you
+// making its thread need you; a thread's own board lists the agents in its
+// session, helpers by their windows' labels.
+func TestOnBoard(t *testing.T) {
+	thread := session.Row{Pane: "1", Session: "session:t", Tnum: 1, State: agent.StateDone, Title: "greet"}
+	other := session.Row{Pane: "2", Session: "session:u", Tnum: 2, State: agent.StateWorking}
+	helper := session.Row{Pane: "3", Session: "session:t", WindowName: "tests", State: agent.StateNeedsYou, Waiting: "Bash: go test", Since: 7}
+	elsewhere := session.Row{Pane: "4", Session: "session:home", State: agent.StateNeedsYou}
+	all := []session.Row{thread, other, helper, elsewhere}
+
+	got := onBoard(all, "")
+	if len(got) != 3 || got[0].Pane != "1" || got[1].Pane != "2" || got[2].Pane != "4" {
+		t.Fatalf("every thread's board: %+v, want threads 1 and 2 and the agent in home", got)
+	}
+	if r := got[0]; r.State != agent.StateNeedsYou || r.Waiting != "tests: Bash: go test" || r.Since != 7 {
+		t.Errorf("a thread whose helper needs you: %+v", r)
+	}
+	if got[1].State != agent.StateWorking {
+		t.Errorf("a thread with no helper: %+v", got[1])
+	}
+
+	got = onBoard(all, "session:t")
+	if len(got) != 2 || got[0].Pane != "1" || got[1].Pane != "3" || got[0].State != agent.StateDone || got[1].Called() != "tests" {
+		t.Errorf("thread 1's own board: %+v, want its agent as it is and its helper by name", got)
 	}
 }

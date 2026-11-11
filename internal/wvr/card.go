@@ -138,6 +138,7 @@ func Help() string {
 		g + "ANYWHERE" + o + "\n" +
 		helpRow("alt+y", "in a thread: the board over it", "(tab: the views);") +
 		more + "on home: each view, then back where you were\n" +
+		helpRow("alt+Y", "in a thread: its own board", "(its agent, its helpers)") +
 		helpRow("alt+N", "new thread", "(in a view: from the item)") +
 		helpRow("alt+1", "the thread that has waited on you longest", "(row 1)") +
 		helpRow("alt+v  alt+V", "the thread's review; full screen", "") +

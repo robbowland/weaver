@@ -713,7 +713,16 @@ weaver as a thread of that one (home's).
   say which session an app shows, so reaching it any other way (the
   sidebar, alt+j/k) leaves it new.
 - **alt+1** says where it landed in a message (`Say`): `[2/3] 02 name ·
-  needs you · what it waits on`.
+  needs you · what it waits on`; a helper's, `02 › <its window's label>`.
+  It goes to every agent that needs you, helpers included.
+- **Boards:** home's and alt+y's leave helpers out (`onBoard`): a helper
+  is an agent with no thread whose events come from a thread's session (the
+  `rex_session` its state keeps, matched against the thread agent's). One
+  that needs you makes its thread's row need you, saying whose wait it is. alt+Y (`wvr go
+  local`) in a thread's session opens the same board over it scoped to
+  that session (`_peek FILE PANE SESSION`, `LS_SESSION` for its reloads),
+  no views: its agent and helpers, a helper by its window's label; from
+  anywhere else, alt+y's.
 - **Notes to the agent:** tuicr's comments, which the agent reads (see
   [Review panel](#review-panel)); weaver types nothing into an agent.
 - **Resume:** a lost thread whose directory has gone resumes in its

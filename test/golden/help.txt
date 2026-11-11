@@ -33,6 +33,7 @@ LOST (its session went: a crash, or quit)  HELD (you held it)
 ANYWHERE
   alt+y           in a thread: the board over it (tab: the views);
                   on home: each view, then back where you were
+  alt+Y           in a thread: its own board (its agent, its helpers)
   alt+N           new thread (in a view: from the item)
   alt+1           the thread that has waited on you longest (row 1)
   alt+v  alt+V    the thread's review; full screen

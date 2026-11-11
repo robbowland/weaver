@@ -43,7 +43,7 @@ Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
 Rex read it when it is new to Rex, and says to load it by adding
 `require("weaver")` to `init.lua` when that does not. It binds `alt+y`,
-`alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k`, `alt+h`/`alt+l` and
+`alt+Y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k`, `alt+h`/`alt+l` and
 `ctrl+q`, which asks every time before it quits. Rex's configuration is one
 for every session, so the keys are weaver's only in the Rex sessions weaver
 made; in any other they are the terminal's. In weaver's popups (a new
@@ -249,7 +249,13 @@ The board is home's main content. The [README](../README.md) shows what it looks
 In a thread, `alt+y` opens the board in a popover over the thread, covering
 most of the screen, with its cursor on the thread you are in. Its keys work
 as they do on home; `tab` and `shift+tab` step to the views inside it, and
-`esc`, `q` or `alt+y` close it, leaving you where you were. Choosing
+`esc`, `q` or `alt+y` close it, leaving you where you were. The board
+leaves helpers out; a thread whose helper (an agent its agent started in a
+window of the thread's session) waits on a permission or a question needs
+you, and its row says which helper. `alt+Y` (`alt+shift+y`) opens the
+thread's own board instead: its agent and its helpers, each helper by its
+window's name, with the same keys; outside a thread it is `alt+y`. `alt+1`
+goes to a waiting helper's window itself. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
 home's session itself, use `alt+j` and `alt+k`, which step through Rex's
