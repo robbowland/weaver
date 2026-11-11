@@ -198,7 +198,7 @@ func Query(k Kind, s Section, after string, n int) string {
 func refsQuery(refs string) string {
 	body := ""
 	for i, ref := range strings.Fields(refs) {
-		m := reRef.FindStringSubmatch(ref)
+		m := RefPattern.FindStringSubmatch(ref)
 		if m == nil {
 			continue
 		}
@@ -504,9 +504,12 @@ func RepoFilter(repo string) Filter {
 	return Filter{Title: "repository " + repo, Filters: "is:open repo:" + repo + " sort:updated-desc"}
 }
 
+// RefPattern is a pull request's or issue's reference, owner/name#N: its
+// repository and its number.
+var RefPattern = regexp.MustCompile(`^([\w.-]+/[\w.-]+)#(\d+)$`)
+
 var (
 	reQualifier = regexp.MustCompile(`(^|\s)-?[a-z][a-z-]*:\S`)
-	reRef       = regexp.MustCompile(`^([\w.-]+/[\w.-]+)#(\d+)$`)
 	reNumber    = regexp.MustCompile(`^#(\d+)$`)
 )
 
@@ -523,7 +526,7 @@ func Words(words string, repos []string) Filter {
 	w := strings.Join(strings.Fields(words), " ")
 	f := Filter{Title: w, Filters: w}
 	switch {
-	case reRef.MatchString(w):
+	case RefPattern.MatchString(w):
 		return Filter{Title: w, Refs: w}
 	case reNumber.MatchString(w) && len(repos) > 0:
 		var refs []string
@@ -582,12 +585,18 @@ func ask(k Kind, s Section, after string, n int) Result {
 	return r
 }
 
-// gh runs a GraphQL query through gh, within 30 s: its answer, and, when
-// it failed, why (with what it answered all the same).
-func gh(query string) ([]byte, error) {
+// gh runs a GraphQL query through gh (Gh).
+func gh(query string) ([]byte, error) { return Gh("api", "graphql", "-f", "query="+query) }
+
+// Gh runs gh with args, within 30 s: what it printed, and, when it failed,
+// why, in gh's first line of complaint (with what it printed all the same).
+func Gh(args ...string) ([]byte, error) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return nil, errors.New("gh is not installed")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c := exec.CommandContext(ctx, "gh", "api", "graphql", "-f", "query="+query)
+	c := exec.CommandContext(ctx, "gh", args...)
 	c.WaitDelay = time.Second
 	var stderr strings.Builder
 	c.Stderr = &stderr

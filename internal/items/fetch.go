@@ -1,26 +1,26 @@
 package items
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/linear"
 )
 
 // Reading work items (item.go): finding a repository's checkout, and
 // fetching an item through gh or Linear's API.
 
+// LinearID is a Linear issue's whole id: ENG-42 (its team's key, its number).
+var LinearID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-\d+$`)
+
 var (
 	reGHURL     = regexp.MustCompile(`^https?://github\.com/([\w.-]+/[\w.-]+)/(pull|issues)/(\d+)`)
-	reGHRef     = regexp.MustCompile(`^([\w.-]+/[\w.-]+)#(\d+)$`)
-	reLinearID  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*-\d+$`)
 	reLinearURL = regexp.MustCompile(`^https?://linear\.app/[^/]+/issue/([A-Za-z][A-Za-z0-9]*-\d+)`)
 	reGHRemote  = regexp.MustCompile(`github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$`)
 )
@@ -74,33 +74,6 @@ func Fetch(ref Ref, dir string) (Item, error) {
 	return nil, fmt.Errorf("no such work item: %v", ref)
 }
 
-// runJSON runs a command for its JSON output, at most 30 s; its error says
-// what the command said.
-func runJSON(name string, args ...string) ([]byte, error) {
-	if _, err := exec.LookPath(name); err != nil {
-		return nil, fmt.Errorf("%s is not installed", name)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	c := exec.CommandContext(ctx, name, args...)
-	c.WaitDelay = time.Second
-	var stderr strings.Builder
-	c.Stderr = &stderr
-	out, err := c.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if i := strings.IndexByte(msg, '\n'); i >= 0 {
-			msg = msg[:i]
-		}
-		if msg == "" {
-			msg = err.Error()
-		}
-		// gh says its own name first.
-		return nil, fmt.Errorf("%s: %s", name, strings.TrimPrefix(msg, name+": "))
-	}
-	return out, nil
-}
-
 type ghComment struct {
 	Author struct {
 		Login string `json:"login"`
@@ -119,7 +92,7 @@ func ghNotes(cs []ghComment) []Note {
 }
 
 func fetchPR(r GitHubRef) (Item, error) {
-	out, err := runJSON("gh", "pr", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
+	out, err := github.Gh("pr", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
 		"number,title,body,url,author,state,headRefName,baseRefName,isCrossRepository,comments")
 	if err != nil {
 		return nil, err
@@ -149,7 +122,7 @@ func fetchPR(r GitHubRef) (Item, error) {
 // threads, each where it is (path:line, outdated or not).
 func reviewThreads(owner, name string, n int) ([]Note, error) {
 	q := `query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:30){nodes{author{login} body}}}}}}}`
-	out, err := runJSON("gh", "api", "graphql", "-f", "query="+q, "-F", "o="+owner, "-F", "r="+name, "-F", "n="+strconv.Itoa(n))
+	out, err := github.Gh("api", "graphql", "-f", "query="+q, "-F", "o="+owner, "-F", "r="+name, "-F", "n="+strconv.Itoa(n))
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +170,7 @@ func reviewThreads(owner, name string, n int) ([]Note, error) {
 }
 
 func fetchIssue(r GitHubRef) (Item, error) {
-	out, err := runJSON("gh", "issue", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
+	out, err := github.Gh("issue", "view", strconv.Itoa(r.Num), "-R", r.Repo, "--json",
 		"number,title,body,url,author,state,comments")
 	if err != nil {
 		return nil, err

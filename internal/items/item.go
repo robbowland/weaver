@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/github"
 )
 
 // Mode is what a thread does with its work item: ModeWork works on it,
@@ -93,14 +94,14 @@ func ParseRef(kind GitHubKind, s string) (Ref, error) {
 	if m := reLinearURL.FindStringSubmatch(s); m != nil {
 		return LinearRef{strings.ToUpper(m[1])}, nil
 	}
-	if m := reGHRef.FindStringSubmatch(s); m != nil {
+	if m := github.RefPattern.FindStringSubmatch(s); m != nil {
 		n, _ := strconv.Atoi(m[2])
 		return GitHubRef{kind, m[1], n}, nil
 	}
 	if n, err := strconv.Atoi(strings.TrimPrefix(s, "#")); err == nil && n > 0 {
 		return GitHubRef{kind, "", n}, nil
 	}
-	if kind == KindIssue && reLinearID.MatchString(s) {
+	if kind == KindIssue && LinearID.MatchString(s) {
 		return LinearRef{strings.ToUpper(s)}, nil
 	}
 	what := "a pull request"
