@@ -64,28 +64,40 @@ func (f Brought) Write() error {
 // BroughtFiles are what weaver brings: tuicr's settings for its review
 // panel (where you have none: diff_watch_interval_ms, which no flag sets)
 // and its Micrographics theme (the colours, and the syntax theme beside
-// them), in tuicr's configuration directory. Neither $XDG_CONFIG_HOME nor
-// anything else is set for tuicr to find them: the nvim its `e` opens would
-// inherit it.
+// them), in tuicr's configuration directory; and the weaver skill, its
+// workflow for the agents, where Claude Code and Codex read skills, for
+// each you have (its configuration directory is there). Neither
+// $XDG_CONFIG_HOME nor anything else is set for tuicr to find its files:
+// the nvim its `e` opens would inherit it.
 func BroughtFiles() []Brought {
-	dir := os.Getenv("XDG_CONFIG_HOME")
-	if dir == "" {
-		dir = os.Getenv("HOME") + "/.config"
+	home := os.Getenv("HOME")
+	tuicr := cmp.Or(os.Getenv("XDG_CONFIG_HOME"), home+"/.config") + "/tuicr"
+	type place struct{ label, src, dst string }
+	fs := []place{
+		{"tuicr's settings", "config/tuicr/config.toml", tuicr + "/config.toml"},
+		{"tuicr's Micrographics theme", "config/tuicr/themes/micrographics.toml", tuicr + "/themes/micrographics.toml"},
+		{"tuicr's Micrographics syntax theme", "config/tuicr/themes/Micrographics.tmTheme", tuicr + "/themes/Micrographics.tmTheme"},
 	}
-	dir += "/tuicr"
+	if claude := cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), home+"/.claude"); isDir(claude) {
+		fs = append(fs, place{"the weaver skill for Claude Code", "config/skills/weaver/SKILL.md", claude + "/skills/weaver/SKILL.md"})
+	}
+	if isDir(cmp.Or(os.Getenv("CODEX_HOME"), home+"/.codex")) {
+		fs = append(fs, place{"the weaver skill for Codex", "config/skills/weaver/SKILL.md", home + "/.agents/skills/weaver/SKILL.md"})
+	}
 	var out []Brought
-	for _, f := range []struct{ label, src, dst string }{
-		{"tuicr's settings", "config/tuicr/config.toml", "config.toml"},
-		{"tuicr's Micrographics theme", "config/tuicr/themes/micrographics.toml", "themes/micrographics.toml"},
-		{"tuicr's Micrographics syntax theme", "config/tuicr/themes/Micrographics.tmTheme", "themes/Micrographics.tmTheme"},
-	} {
+	for _, f := range fs {
 		b, err := weaver.Files.ReadFile(f.src)
 		if err != nil {
 			continue
 		}
-		out = append(out, Brought{Label: f.label, Path: filepath.Join(dir, f.dst), Text: b})
+		out = append(out, Brought{Label: f.label, Path: f.dst, Text: b})
 	}
 	return out
+}
+
+func isDir(d string) bool {
+	st, err := os.Stat(d)
+	return err == nil && st.IsDir()
 }
 
 // Bring writes each of bs that is to be written: those it wrote, and the

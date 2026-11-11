@@ -494,6 +494,13 @@ Dragging in a pane selects and copies, as Rex does.
   says it is weaver's in its first lines, and weaver keeps it up to date
   while that line stays; a file of yours, or one whose line you removed, is
   left alone.
+- **The weaver skill.** It writes the `weaver` skill where Claude Code
+  reads skills (`~/.claude/skills/weaver/`) and, when you have Codex, where
+  Codex does (`~/.agents/skills/weaver/`): how an agent works in a thread
+  (helpers as agents of their own beside it, small commits of only its own
+  paths, done as `git log --oneline <base>..HEAD`, and your review read
+  from tuicr). Like tuicr's files, it is rewritten while its first lines
+  say it is weaver's, and left alone once you remove that line.
 - **Old copies.** The first time, it removes what an older weaver kept
   for its Neovim plugin: its copy at `~/.local/share/weaver/nvim` and the
   plugins it fetched, `~/.local/share/weaver/plugins`. A Neovim config of

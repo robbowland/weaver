@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -83,7 +84,10 @@ func TestMergeHooks(t *testing.T) {
 // by removing the line) is left as it is.
 func TestBring(t *testing.T) {
 	conf := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", conf)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
 	bs := BroughtFiles()
 	if len(bs) != 3 {
 		t.Fatalf("%d files brought, want tuicr's settings, theme and syntax theme", len(bs))
@@ -118,5 +122,53 @@ func TestBring(t *testing.T) {
 	}
 	if !bytes.Contains(bs[1].Text, []byte(`syntax_theme = "Micrographics.tmTheme"`)) {
 		t.Error("the theme does not take its syntax theme from beside it")
+	}
+}
+
+// The weaver skill goes where each agent you have reads skills (Claude
+// Code's config directory, and for Codex ~/.agents/skills), and none where
+// you have neither; one you made yours (no mark) stays.
+func TestBringSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	skills := func() []string {
+		var out []string
+		for _, f := range BroughtFiles() {
+			if strings.HasSuffix(f.Path, "/SKILL.md") {
+				out = append(out, strings.TrimPrefix(f.Path, home))
+			}
+		}
+		return out
+	}
+	if got := skills(); len(got) != 0 {
+		t.Errorf("no agent here: skills %q", got)
+	}
+	for _, d := range []string{"/.claude", "/.codex"} {
+		if err := os.MkdirAll(home+d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Join(skills(), " "); got != "/.claude/skills/weaver/SKILL.md /.agents/skills/weaver/SKILL.md" {
+		t.Errorf("skills %q", got)
+	}
+	mine := home + "/.agents/skills/weaver/SKILL.md"
+	if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mine, []byte("---\nname: weaver\n---\nmine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Bring(BroughtFiles()); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(home + "/.claude/skills/weaver/SKILL.md")
+	if err != nil || !bytes.HasPrefix(b, []byte("---\nname: weaver\n")) || !bytes.Contains(b, mark) {
+		t.Errorf("Claude Code's skill: %q (%v)", b, err)
+	}
+	if b, _ := os.ReadFile(mine); string(b) != "---\nname: weaver\n---\nmine\n" {
+		t.Errorf("your skill: %q, want it left alone", b)
 	}
 }

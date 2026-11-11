@@ -164,6 +164,19 @@ can supersede an earlier one, and says so.
   which now read the state. So did what only the log carried: a prompt's
   long text, and what an Agent call asked its subagent to do. A
   `~/.local/state/weaver/log/` from before is left as it is.
+- 2026-11-11: weaver's workflow is a skill, not machinery (Rob: policy
+  over machinery): the `weaver` skill, carried in the binary and written as
+  the hooks are, says how an agent works in a thread, which removable
+  machinery (chains, snapshots, `wvr send`) used to stand in for. Its
+  commit rule is Rob's decision 1: each agent commits only its own paths
+  (`git commit -- <paths>`, again on `index.lock`), a file two agents
+  changed going whole with the first. Review notes are tuicr's comments,
+  read with tuicr's CLI (decision 2), and a helper reports back with
+  Claude Code's cross-session `SendMessage` rather than by typing into the
+  agent's block, which could answer a dialog. Its first rule says one
+  worktree per thread where the scope's draft said one Rex session per
+  worktree: weaver's threads are still windows of one session until that
+  follow-up lands.
 
 ## Holding threads
 

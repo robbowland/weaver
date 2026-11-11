@@ -68,6 +68,8 @@ ok "someone else's hooks survive, even beside an old weaver one" \
 	"say done,my-linter|opus"
 ok "...and tuicr's settings and Micrographics theme brought, for the review panel" \
 	"$(cd "$H/.config/tuicr" 2>/dev/null && find . -type f | sort | tr '\n' ' ')" "./config.toml ./themes/Micrographics.tmTheme ./themes/micrographics.toml "
+ok "...and the weaver skill where Claude Code reads skills" \
+	"$(sed -n 2p "$H/.claude/skills/weaver/SKILL.md" 2>/dev/null)" "name: weaver"
 ok "a backup of the settings is kept" "$(ls "$H/.claude" | grep -c '^settings.json.bak\.')" "1"
 
 ok "no ~/.codex: nothing created for Codex" "$([ -e "$H/.codex" ] && echo made || echo none)" "none"

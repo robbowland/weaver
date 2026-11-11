@@ -876,13 +876,23 @@ merges them (`mergeHooks`, a backup first when the file was there), and one
 line on stderr says when a file changed. The files weaver brings to other
 programs (`setup.BroughtFiles`: tuicr's `config.toml`, and its theme's
 `themes/micrographics.toml` and `themes/Micrographics.tmTheme`, in
-`${XDG_CONFIG_HOME:-~/.config}/tuicr`) are written where there is none, or
+`${XDG_CONFIG_HOME:-~/.config}/tuicr`; and the weaver skill,
+`config/skills/weaver/SKILL.md`, as `skills/weaver/SKILL.md` in Claude
+Code's config directory when it is there and as
+`~/.agents/skills/weaver/SKILL.md`, where Codex reads skills, when
+`$CODEX_HOME` is) are written where there is none, or
 where the one there carries weaver's mark (`weaver: this file is weaver's`)
 and differs, each said on stderr; one without the mark is the user's, left
 alone (`Brought.Fate`). Nothing is set for tuicr to find them
 (`XDG_CONFIG_HOME`, `VIMINIT`): the nvim its `e` opens would inherit it.
 `wvr setup` says each file's fate and writes it; `wvr doctor` checks them
-(`tuicr's theme`) and tuicr itself (needed, 0.28 or newer). Unpacking its
+(`theme and skill`) and tuicr itself (needed, 0.28 or newer). The skill is
+weaver's workflow as policy, not machinery: one worktree per thread, helpers
+as agents in Rex blocks of their own that report back with Claude Code's
+cross-session `SendMessage`, small commits of only the paths an agent
+changed, done reported as `git log --oneline <base>..HEAD`, and review
+comments read with tuicr's CLI. It names the rex skill for Rex's commands
+rather than repeat them; a skill loads when its description matches. Unpacking its
 files also removes what weaver kept beside them until it dropped its Neovim
 plugin: the plugin's copy (`$XDG_DATA_HOME/weaver/nvim`, which Neovim
 configs loaded) and the plugins it fetched for it (`weaver/plugins`).

@@ -127,9 +127,10 @@ func rexCheck() check {
 }
 
 // broughtCheck is the files weaver brings to other programs (tuicr's
-// settings and theme): there as weaver writes them, or yours, left alone.
+// settings and theme, the weaver skill): there as weaver writes them, or
+// yours, left alone.
 func broughtCheck() check {
-	c := check{name: "tuicr's theme", weight: optional, ok: true, found: "as weaver writes it"}
+	c := check{name: "theme and skill", weight: optional, ok: true, found: "as weaver writes them"}
 	for _, f := range setup.BroughtFiles() {
 		switch f.Fate() {
 		case setup.ToWrite:
@@ -137,7 +138,7 @@ func broughtCheck() check {
 			c.remedy = selfFix{"wvr setup", func() error { _, err := setup.Bring(setup.BroughtFiles()); return err }}
 			return c
 		case setup.Yours:
-			c.found = "yours in " + tildify(filepath.Dir(f.Path))
+			c.found = "yours: " + tildify(f.Path)
 		case setup.Current:
 		}
 	}
