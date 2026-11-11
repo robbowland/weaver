@@ -26,7 +26,7 @@ func TestMergeHooks(t *testing.T) {
 }`
 	add := `{"hooks": {
     "Stop": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
-    "Notification": [{ "hooks": [{ "type": "command", "command": "wvr event --bell" }] }]
+    "Notification": [{ "hooks": [{ "type": "command", "command": "wvr hook --async" }] }]
   }}`
 	out, err := mergeHooks([]byte(settings), []byte(add), "/new/bin/wvr")
 	if err != nil {
@@ -38,7 +38,7 @@ func TestMergeHooks(t *testing.T) {
 			t.Errorf("%s left in:\n%s", gone, s)
 		}
 	}
-	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/wvr event --bell"`} {
+	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/wvr hook --async"`} {
 		if !strings.Contains(s, kept) {
 			t.Errorf("%s missing from:\n%s", kept, s)
 		}

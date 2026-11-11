@@ -167,9 +167,8 @@ var commands = map[string]command{
 		return errors.New("usage: wvr doctor [--fix]")
 	}},
 
-	// The agents' hooks, and other agents' events.
-	"hook":  {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
-	"event": {run: func(e *wvr.Env, args []string) error { return engine.Event(e.Env, slices.Contains(args, "--bell")) }},
+	// The agents' hooks.
+	"hook": {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
 
 	// The board's fzf, its preview and views.
 	"_rows": {session: true, run: prints(func(e *wvr.Env, _ []string) string {

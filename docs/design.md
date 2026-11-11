@@ -29,7 +29,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `pane` | int | the agent's pane: weaver's number for its Rex block |
-| `agent` | string | `claude`, or the agent `wvr event` names |
+| `agent` | string | `claude` |
 | `state` | string | `working`, `needs-you`, `done`, `idle`, `interrupted`, `ended` |
 | `since` | int | epoch s the state began; `ts` is the last event |
 | `seen` | bool | you have looked since it changed; unread = `done` and not `seen` |
@@ -51,38 +51,6 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
 | `rex_session` | string | the id of its Rex session; a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
-
-## Events from other agents
-
-`wvr event [--bell]` reads one event as JSON on stdin; the pane is
-`$REX_BLOCK`'s unless the event names one. `--bell` rings the terminal bell
-on `/dev/tty` when the agent starts needing you or finishes, for agents that
-cannot ring through their hook output. Its tool and subagent events are
-taken as Claude Code's async ones.
-
-| Field | For | Meaning |
-| --- | --- | --- |
-| `agent` | all, required | `gemini`, `pi`, ... (lowercase letters, digits, `_`, `-`; anything else is ignored): the state's `agent` |
-| `event` | all, required | below |
-| `session` | all | the agent's session id |
-| `pid` | all | the agent process (liveness); adapters find it at `session_start` |
-| `pane`, `cwd`, `transcript`, `prompt_id`, `title` | all | as in the state file; `pane` digits, a string or a number  |
-| `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
-| `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
-| `waiting` | `needs_you` | what it waits on |
-| `tool_key` | `needs_you`, `tool_done` | which tool call, any text the same for a call's dialog and its end: while a dialog waits, another call ending leaves it waiting, its own moves on |
-| `tool`, `file`, `command`, `paths` | `tool_done` | with `file`, an edit; without, its changes are found as for a Bash command (in `cwd`, the root and `paths`) |
-| `tool`, `error` | `tool_failed` | |
-| `message` | `stop` | its last reply |
-| `error` | `error` | ends the turn, needs you |
-| `subagent`, `subagent_type` | `subagent_start`, `subagent_stop` | |
-| `reason` | `session_end` | why it ended: the state's `end_reason` (an end on purpose is not lost) |
-
-`event` is one of `session_start`, `prompt`, `needs_you`, `answered`,
-`tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
-`session_end`, `subagent_start`, `subagent_stop`. Each maps onto the Claude
-Code event the state machine already handles, so every agent gets the same
-states and turns.
 
 ## Threads
 

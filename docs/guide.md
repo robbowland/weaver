@@ -591,7 +591,7 @@ python3 and Rex:
   the design doc (the states);
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
   state machine and its robustness, `alt+1`, the counts, subagents,
-  other agents' events, the installer and the board's
+  the installer and the board's
   renderings. They run on a throwaway Rex server with three fake agents;
   `test/hooks.sh SUITE` runs one;
 - `test/rex.sh`: weaver on Rex end to end, on a throwaway Rex server with

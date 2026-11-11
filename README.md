@@ -222,9 +222,7 @@ missing; `wvr doctor --fix` fixes what it can.
   and their formats.
 - [Decisions](docs/decisions.md): why weaver is the way it is.
 
-weaver follows Claude Code through its hooks. Any other agent can report to
-it with `wvr event`
-([design](docs/design.md#events-from-other-agents)).
+weaver follows Claude Code through its hooks.
 
 ## Development
 

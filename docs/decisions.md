@@ -190,6 +190,10 @@ can supersede an earlier one, and says so.
   note on it (Rob asked for a rename; it had no use left): weaver's blocks
   and keys run only in sessions weaver made, which it knows by its record
   of them, so nothing needs to tell it to act on another.
+- 2026-11-11: `wvr event` is gone, superseding the 2026-10-14 entry on
+  agents other than Claude Code: its normalized events had no reporter
+  left once Codex went, and weaver is Claude first (Rob). An agent that
+  needs one again brings it back with its adapter (this commit's revert).
 - 2026-11-11: Codex support is gone (Rob mainly uses Claude Code),
   superseding the 2026-10-14 entries on Codex and the Rex-alone entry's note
   that Codex threads were refused: on Rex they were, so its adapter (`wvr

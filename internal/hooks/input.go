@@ -1,6 +1,4 @@
-// Package hooks reads what the coding agents' hooks are given: Claude
-// Code's hook input, and other agents' events, normalized (wvr event), as
-// the same Input.
+// Package hooks reads what Claude Code's hooks are given: its hook input.
 package hooks
 
 import (
@@ -15,8 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 )
 
-// Claude Code's hook input (and what `wvr event` makes of another agent's
-// events, event.go), read once into the members weaver uses.
+// Claude Code's hook input, read once into the members weaver uses.
 
 // Input is one hook event's input.
 type Input struct {
@@ -28,8 +25,8 @@ type Input struct {
 	// A subagent's events: which, and what kind.
 	AgentID   string `json:"agent_id"`
 	AgentType string `json:"agent_type"`
-	// SessionStart's startup, resume, clear or compact; "user" or another
-	// for a prompt (`wvr event`).
+	// SessionStart's startup, resume, clear or compact; for a prompt, "user"
+	// or another (one not yours).
 	Source   string `json:"source"`
 	Prompt   string `json:"prompt"` // UserPromptSubmit
 	PromptID string `json:"prompt_id"`
@@ -39,10 +36,7 @@ type Input struct {
 	ToolInput    json.RawMessage `json:"tool_input"`
 	ToolResponse json.RawMessage `json:"tool_response"` // PostToolUse
 	ToolUseID    string          `json:"tool_use_id"`
-	// CallKey is which call, when an adapter says (its tool_key): in place
-	// of the tool's name and input.
-	CallKey   string `json:"-"`
-	Interrupt bool   `json:"is_interrupt"` // PostToolUseFailure
+	Interrupt    bool            `json:"is_interrupt"` // PostToolUseFailure
 	// PostToolBatch's calls.
 	ToolCalls []struct {
 		Response jsonx.Text `json:"tool_response"`

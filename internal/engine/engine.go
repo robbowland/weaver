@@ -1,7 +1,6 @@
-// Package engine is weaver's hook engine: what each event of a coding
-// agent's hooks (or another agent's, through wvr event) does to the agent's
-// state file and its activity log, in the hook and then in a background
-// run.
+// Package engine is weaver's hook engine: what each event of Claude Code's
+// hooks does to the agent's state file, in the hook and then in a
+// background run.
 package engine
 
 // digits is whether s is one or more ASCII digits.

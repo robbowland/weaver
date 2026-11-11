@@ -167,9 +167,7 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 		w = "error: " + string(in.Error)
 	}
 	h.WaitingNew = oneline.Ctl(oneline.Squash(w, 100))
-	if in.CallKey != "" {
-		h.Key = oneline.Ctl(oneline.Cut(in.CallKey, 300))
-	} else if in.ToolName != "" {
+	if in.ToolName != "" {
 		ti := "null"
 		if len(in.ToolInput) > 0 {
 			ti = jsonx.Canon(in.ToolInput)
