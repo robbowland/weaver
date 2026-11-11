@@ -81,32 +81,6 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
-// End ends what TERM ends, kills what ignores it, and never signals a pid
-// of 1 or less (kill(0) is this process's own group).
-func TestEnd(t *testing.T) {
-	polite := exec.Command("/bin/sleep", "600")
-	stubborn := exec.Command("/bin/sh", "-c", "trap '' TERM; while :; do sleep 1; done")
-	for _, c := range []*exec.Cmd{polite, stubborn} {
-		if err := c.Start(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	done := make(chan struct{}, 2)
-	for _, c := range []*exec.Cmd{polite, stubborn} {
-		go func() { _ = c.Wait(); done <- struct{}{} }()
-	}
-	if n := End([]int{0, 1, -1, polite.Process.Pid, stubborn.Process.Pid}); n != 2 {
-		t.Errorf("asked %d to end, want 2", n)
-	}
-	for range 2 {
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Fatal("a process End was given still runs")
-		}
-	}
-}
-
 // A process runs under another when it is that one, its child, or further
 // down; one beside it does not.
 func TestRuns(t *testing.T) {

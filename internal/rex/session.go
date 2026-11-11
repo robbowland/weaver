@@ -242,16 +242,6 @@ func (s Session) attached() bool {
 	return s.callS("session.list_clients", nil, &l) == nil && slices.ContainsFunc(l.Clients, client.app)
 }
 
-func (s Session) PID(p mux.PaneID) (int, bool) {
-	var pr struct {
-		Child *proc `json:"child"`
-	}
-	if s.blockMethod(p, "process", nil, &pr) != nil || pr.Child == nil {
-		return 0, false
-	}
-	return pr.Child.Pid, pr.Child.Pid > 0
-}
-
 func (s Session) Screen(p mux.PaneID) []byte {
 	var f struct {
 		Content string `json:"content"`
@@ -385,61 +375,6 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 	return mux.PaneID(pn), 0, nil
 }
 
-// BreakOut opens a window with a stand-in, moves p beside it and closes
-// the stand-in: Rex makes windows only of new blocks. p fills its new
-// window: its width is p's.
-func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (mux.WindowID, int, error) {
-	b, err := s.block(p)
-	if err != nil {
-		return "", 0, err
-	}
-	v, seen, err := s.placing(at)
-	if err != nil {
-		return "", 0, err
-	}
-	if background && !seen {
-		if x, err := s.view(); err == nil {
-			v = x
-		}
-	}
-	var out struct {
-		Window string   `json:"window_id"`
-		Blocks []string `json:"block_ids"`
-	}
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label), "focus": false,
-		"layout": layout(mux.Spawn{Argv: []string{"/bin/sleep", "60"}}, "")}, &out); err != nil {
-		return "", 0, err
-	}
-	if out.Window == "" || len(out.Blocks) == 0 {
-		return "", 0, errors.New("rex: no window made")
-	}
-	stand := out.Blocks[0]
-	if err := s.callS("session.move_block", map[string]any{"block_id": b, "anchor_block_id": stand}, nil); err != nil {
-		_ = s.callS("session.close_window", map[string]any{"window_id": out.Window}, nil)
-		return "", 0, err
-	}
-	_ = s.callS("block.close", map[string]any{"block_id": stand}, nil)
-	wn, err := s.num(out.Window)
-	if err != nil {
-		return "", 0, err
-	}
-	if at >= 0 {
-		s.placeIn(v, seen, out.Window, mux.WindowID(wn), at)
-	}
-	switch {
-	case !background:
-		s.show(out.Window)
-		_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
-	case v.Active != "" && v.Active != out.Window:
-		// A block with its window's focus takes it along, and Rex makes its
-		// new window the active one; the app goes on showing what it showed
-		// (it follows no server change). The active window goes back, so
-		// the two agree: Focus starts from it.
-		_ = s.callS("session.focus_window", map[string]any{"window_id": v.Active}, nil)
-	}
-	return mux.WindowID(wn), s.drawnCols(p), nil
-}
-
 // Respawn starts sp in a block beside p's, which it then closes, and has
 // p name the new block (before its program can learn otherwise): Rex
 // starts no program again in a block.
@@ -490,23 +425,6 @@ func (s Session) Close(p mux.PaneID) {
 	if b, err := s.block(p); err == nil {
 		_ = s.callS("block.close", map[string]any{"block_id": b}, nil)
 	}
-}
-
-func (s Session) CloseWindow(w mux.WindowID) {
-	if id, err := s.window(w); err == nil {
-		_ = s.callS("session.close_window", map[string]any{"window_id": id}, nil)
-	}
-}
-
-// Place keeps place at for window w and moves it among the session's
-// windows: before the first that weaver placed further on.
-func (s Session) Place(w mux.WindowID, at int) {
-	id, err := s.window(w)
-	if err != nil {
-		return
-	}
-	v, err := s.view()
-	s.placeIn(v, err == nil, id, w, at)
 }
 
 // placeIn is Place of window w (Rex's id) by view v of the session, when

@@ -156,9 +156,6 @@ func (f Fleet) Windows() ([]mux.Window, error) {
 // Active is the active pane where wvr runs.
 func (f Fleet) Active() (mux.PaneID, bool) { return f.here().Active() }
 
-// PID is the pid of the process pane p runs.
-func (f Fleet) PID(p mux.PaneID) (int, bool) { return f.of(string(p)).PID(p) }
-
 // Screen is what pane p shows, with its colours.
 func (f Fleet) Screen(p mux.PaneID) []byte { return f.of(string(p)).Screen(p) }
 
@@ -221,23 +218,11 @@ func (f Fleet) SplitLeft(of mux.PaneID, s mux.NewSplit) (mux.PaneID, int, error)
 	return f.of(string(of)).SplitLeft(of, s)
 }
 
-// BreakOut moves pane p to a window of its own in its session, named
-// label, at index at (mux.NextFree: its next free one; else an error when
-// that is taken): the window and its width. Background leaves the session
-// where it is; else the focus goes with the pane.
-func (f Fleet) BreakOut(p mux.PaneID, label string, at int, background bool) (mux.WindowID, int, error) {
-	return f.of(string(p)).BreakOut(p, label, at, background)
-}
-
 // Respawn starts s again in pane p, ending what runs there.
 func (f Fleet) Respawn(p mux.PaneID, s mux.Spawn) error { return f.of(string(p)).Respawn(p, s) }
 
-// Close ends pane p, and CloseWindow window w.
-func (f Fleet) Close(p mux.PaneID)         { f.of(string(p)).Close(p) }
-func (f Fleet) CloseWindow(w mux.WindowID) { f.of(string(w)).CloseWindow(w) }
-
-// Place moves window w to index at, when that is free.
-func (f Fleet) Place(w mux.WindowID, at int) { f.of(string(w)).Place(w, at) }
+// Close ends pane p.
+func (f Fleet) Close(p mux.PaneID) { f.of(string(p)).Close(p) }
 
 // Label names window w, and Title pane p.
 func (f Fleet) Label(w mux.WindowID, label string) { f.of(string(w)).Label(w, label) }

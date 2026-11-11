@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -120,27 +119,6 @@ func parseArgs(b []byte) ([]string, map[string]string, bool) {
 		}
 	}
 	return argv, env, len(argv) == argc
-}
-
-// End ends processes pids: TERM, then KILL for any still running two
-// seconds on. How many it asked to end: never a pid of 1 or less (kill(0)
-// signals this process's own group, kill(-1) every process it may).
-func End(pids []int) int {
-	var asked []int
-	for _, p := range pids {
-		if p > 1 && syscall.Kill(p, syscall.SIGTERM) == nil {
-			asked = append(asked, p)
-		}
-	}
-	n := len(asked)
-	for i := 0; i < 20 && len(asked) > 0; i++ {
-		time.Sleep(100 * time.Millisecond)
-		asked = slices.DeleteFunc(asked, func(p int) bool { return !Alive(p) })
-	}
-	for _, p := range asked {
-		_ = syscall.Kill(p, syscall.SIGKILL)
-	}
-	return n
 }
 
 // Runs: does a process named name (its command, as the kernel keeps it, at

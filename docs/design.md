@@ -742,8 +742,8 @@ best-effort and says nothing of failing.
   before weaver kept it: home's), `cmd/<num>` the argv weaver started a
   block with (Rex does not say; `Pane.Cmd`), `want/<num>` the place a
   window of home's was given (home 0, a view 900 and on: Rex orders
-  windows, it does not index them, so `Place` moves a window before the
-  first placed further on), `view/<num>` its view, and `sessions/<id>` the
+  windows, it does not index them, so a window is moved before the first
+  placed further on), `view/<num>` its view, and `sessions/<id>` the
   name weaver gave a session it made, when (epoch seconds to the
   millisecond), the pid of the server it made it on and, for a thread's,
   home's id (a thread's session has home's name, so its agents' files are
@@ -779,17 +779,13 @@ brought back with it, and `wvr` in one starts again.
   when its program exits: Rex is told as it is made. A popup is a floating
   layer, its command `rex wait` on it, made only when an app is attached to
   the session: otherwise `Popup` says false, makes nothing, and gives a
-  command whose `Start` fails with why. `BreakOut` opens a window with a
-  stand-in, moves the pane beside it and closes the stand-in. The app keeps
-  its own tab for each session: the server's active window
-  (`session.focus_window`) is not what it shows, and it sets it back to its
-  tab. So `Show`, `Focus`, and `OpenWindow` and `BreakOut` in the foreground
-  ask the app (`rex do session.select` with the window: Remote Control on;
-  with more than one app connected, which `rex do` cannot choose among, each
-  app attached to the session by name), else make it the server's active
-  window. A background `BreakOut` puts the server's active window back after
-  `session.move_block`, which makes the moved block's new window active when
-  it had its window's focus (the app shows what it showed). A window's width
+  command whose `Start` fails with why. The app keeps its own tab for each
+  session: the server's active window (`session.focus_window`) is not what
+  it shows, and it sets it back to its tab. So `Show`, `Focus`, and
+  `OpenWindow` and `OpenSession` in the foreground ask the app (`rex do
+  session.select` with the window: Remote Control on; with more than one
+  app connected, which `rex do` cannot choose among, each app attached to
+  the session by name), else make it the server's active window. A window's width
   is its zoomed block's while one is zoomed (`zoomed_block_id`), whatever
   that block's share of the layout. `SplitLeft` gives pid 0, not known yet
   (Rex runs a command through the login shell, whose pid it would be): `wvr

@@ -95,17 +95,12 @@ func TestSession(t *testing.T) {
 		t.Errorf("nvim pane: %+v %v", n, ok)
 	}
 
-	// Threads by number, views after them, wherever each was opened.
+	// Windows by their places, a view's after the rest.
 	v, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "GITHUB", View: "github", At: 900, Background: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w3, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "03 later", At: mux.NextFree, Background: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Place(w3, 3)
-	if _, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "taken", At: 3}); err == nil {
+	if _, _, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "taken", At: 900}); err == nil {
 		t.Error("a place another window has was given again")
 	}
 	ws, _ := s.Windows()
@@ -116,7 +111,7 @@ func TestSession(t *testing.T) {
 			t.Errorf("view window: %+v", x)
 		}
 	}
-	if want := []string{"home", "01 demo", "03 later", "GITHUB"}; !slices.Equal(order, want) {
+	if want := []string{"home", "01 demo", "GITHUB"}; !slices.Equal(order, want) {
 		t.Errorf("windows: %q, want %q", order, want)
 	}
 
@@ -148,7 +143,6 @@ func TestSession(t *testing.T) {
 	}
 
 	s.Close(nv)
-	s.CloseWindow(w3)
 	ps, _ = s.Panes()
 	if _, ok := paneIn(ps, nv); ok {
 		t.Error("closed pane still listed")
@@ -932,67 +926,6 @@ func TestEnsureNoAnswer(t *testing.T) {
 	t.Setenv("REX_RUNTIME_DIR", run)
 	if _, running, err := Named(dir, "demo"); err != nil || !running {
 		t.Errorf("Named once Rex answers: %v %v", running, err)
-	}
-}
-
-// BreakOut moves a pane to a window of its own, at the place asked and
-// with the width it says, leaving its old window the rest; a place another
-// window has is refused, and the pane stays where it was.
-func TestBreakOut(t *testing.T) {
-	server(t)
-	dir := t.TempDir()
-	sleep := []string{"/bin/sleep", "600"}
-	s, err := Start(dir, "demo", "/", sleep)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Quit() })
-	w, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "01 shared", At: 1, Background: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	q, _, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Background: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.BreakOut(q, "taken", 1, true); err == nil {
-		t.Error("broken out to a place another window has")
-	}
-	// The pane has its window's focus, and another window is the one shown
-	// (active): in the background, that stays the active one.
-	before, err := s.view()
-	if err != nil {
-		t.Fatal(err)
-	}
-	qb, _ := s.block(q)
-	if err := s.callS("session.focus_block", map[string]any{"block_id": qb}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.callS("session.focus_window", map[string]any{"window_id": before.Active}, nil); err != nil {
-		t.Fatal(err)
-	}
-	log := logRex(t)
-	out, width, err := s.BreakOut(q, "02 out", 2, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(log); strings.Count(string(b), "session.view") != 1 {
-		t.Errorf("the session's view asked for %d times, want once:\n%s", strings.Count(string(b), "session.view"), b)
-	}
-	ws, _ := s.Windows()
-	o, ok := windowOf(ws, out)
-	if !ok || o.Index != 2 || o.Name != "02 out" || width <= 0 || o.Width != width {
-		t.Errorf("its window: %+v %v, said %d wide", o, ok, width)
-	}
-	ps, _ := s.Panes()
-	if x, ok := paneIn(ps, q); !ok || x.Window != out {
-		t.Errorf("the pane broken out: %+v %v, want in %q", x, ok, out)
-	}
-	if x, ok := paneIn(ps, p); !ok || x.Window != w {
-		t.Errorf("the pane left: %+v %v, want in %q", x, ok, w)
-	}
-	if after, _ := s.view(); after.Active != before.Active {
-		t.Errorf("active window after a break-out in the background: %q, want %q as before", after.Active, before.Active)
 	}
 }
 
