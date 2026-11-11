@@ -151,20 +151,17 @@ waitfor '[ -f "$SD/rex-${S}_$AG.panel" ]' 100
 ok "new: the agent took the task, and its review panel is bound to it" \
 	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "say hello|$PN"
 # --- the panel: tuicr on the branch, again each time it ends, as the
-# branch is then: nothing while the branch has nothing of its own (tuicr
-# refuses an empty range), the work tree once there is an edit, then the
-# commits since the fork point, by SHA, and nvim for its e.
+# branch is then (what it is run on round by round: TestReviewArgs):
+# nothing while the branch has nothing of its own, then, once there is a
+# commit, its commits since the fork point, with nvim for its e.
 waitfor 'R capture -s "$T" -b "$PB" | grep -q "no changes on this branch yet"' 50
 ok "panel: a branch with nothing of its own says so, and runs no tuicr" \
 	"$(R capture -s "$T" -b "$PB" | grep -c 'no changes on this branch yet')|$([ -f "$AT/tuicr.runs" ] && echo ran || echo none)" "1|none"
 printf 'hello\n' >"$AT/repo/hello.txt"
-waitfor 'grep -q -- "^-w " "$AT/tuicr.runs" 2>/dev/null' 60
-ok "...an edit not yet committed: tuicr on the work tree, with nvim for its e" \
-	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)|$(cat "$AT/tuicr.editor" 2>/dev/null)" "-w --theme micrographics --no-update-check|nvim"
 git -C "$AT/repo" add hello.txt && git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q -m hello
 waitfor 'grep -q -- "^-r " "$AT/tuicr.runs" 2>/dev/null' 60
-ok "...a commit: its commits since the fork point, by SHA, with the work tree" \
-	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)" "-r $FORK..HEAD -w --theme micrographics --no-update-check"
+ok "...a commit: tuicr again, on its commits since the fork point, with nvim for its e" \
+	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)|$(cat "$AT/tuicr.editor" 2>/dev/null)" "-r $FORK..HEAD -w --theme micrographics --no-update-check|nvim"
 # alt+v on the agent with its panel closed: a panel again, on its left.
 R api call block.close "{\"session_id\":\"$T\",\"block_id\":\"$PB\"}" >/dev/null
 waitfor '[ "$(windows "$T")" = "01 say hello · repo/main/1" ]' 50
