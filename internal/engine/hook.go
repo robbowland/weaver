@@ -35,7 +35,7 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 // hk is one hook run: the event's fields, the stored state's (o*), and what
 // it makes of them. Exported fields go to the background run.
 type hk struct {
-	Pane            mux.PaneID
+	Pane mux.PaneID
 	SKey string
 	// The session it acts on (its name, its home's Rex id and the one it
 	// ran in), which the background run takes rather than its
