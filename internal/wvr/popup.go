@@ -49,23 +49,21 @@ func (z popupSize) of(cw, ch int) (int, int) {
 	return w, h
 }
 
-// formPopup opens `wvr ARGS` (the form) in a popup, in dir; the form draws
-// its own border.
+// formPopup opens `wvr ARGS` (the form) in a popup, in dir.
 func (e *Env) formPopup(dir string, args ...string) error {
-	return e.popup("the form", formSize, false, dir, args)
+	return e.popup("the form", formSize, dir, args)
 }
 
-// cardPopup opens `wvr ARGS` (a card) in a popup with the multiplexer's
-// border.
+// cardPopup opens `wvr ARGS` (a card) in a popup.
 func (e *Env) cardPopup(args ...string) error {
-	return e.popup("the card", cardSize, true, "", args)
+	return e.popup("the card", cardSize, "", args)
 }
 
-// popup opens wvr with args (what it shows) in a popup of size z, bordered
-// or not, in dir, over where you are, from a process of its own, so
-// whatever asked (a list, waiting on its command) goes on at once.
-func (e *Env) popup(what string, z popupSize, border bool, dir string, args []string) error {
-	c, _ := e.Mux().Popup(z.of, border, dir, append([]string{e.Self}, args...))
+// popup opens wvr with args (what it shows) in a popup of size z, in dir,
+// over where you are, from a process of its own, so whatever asked (a
+// list, waiting on its command) goes on at once.
+func (e *Env) popup(what string, z popupSize, dir string, args []string) error {
+	c, _ := e.Mux().Popup(z.of, dir, append([]string{e.Self}, args...))
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
 		e.Mux().Say(2500, "weaver: could not open "+what)
@@ -109,7 +107,7 @@ func (e *Env) Popup(args []string) error {
 			e.Mux().Say(3000, "weaver: only a thread can be renamed: adopt it first (a)")
 			return nil
 		}
-		return e.popup("the prompt", nameSize, false, "", []string{"rename", string(p)})
+		return e.popup("the prompt", nameSize, "", []string{"rename", string(p)})
 	}
 	return errors.New("usage: wvr _popup new [--from PANE] | close PANE | forget THREAD | adopt [PANE] | rename PANE | quit")
 }

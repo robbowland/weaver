@@ -166,8 +166,8 @@ func (f Fleet) OpenSession(label string, w mux.NewWindow) (mux.WindowID, mux.Pan
 			Blocks []string `json:"block_ids"`
 		} `json:"initial_windows"`
 	}
-	if err := call("session.create", map[string]any{"label": cut(label, 128), "initial_windows": []any{
-		map[string]any{"window_label": cut(w.Label, 128), "layout": layout(w.Spawn, "")},
+	if err := call("session.create", map[string]any{"label": cut(label), "initial_windows": []any{
+		map[string]any{"window_label": cut(w.Label), "layout": layout(w.Spawn, "")},
 	}}, &out); err != nil {
 		return "", "", 0, err
 	}
@@ -226,6 +226,6 @@ func (f Fleet) Say(ms int, text string)                 { f.here().Say(ms, text)
 // SayToSession says text in home, to everyone looking at it.
 func (f Fleet) SayToSession(ms int, text string) { f.Home.Say(ms, text) }
 
-func (f Fleet) Popup(size func(cols, lines int) (int, int), border bool, dir string, argv []string) (*exec.Cmd, bool) {
-	return f.here().Popup(size, border, dir, argv)
+func (f Fleet) Popup(size func(cols, lines int) (int, int), dir string, argv []string) (*exec.Cmd, bool) {
+	return f.here().Popup(size, dir, argv)
 }

@@ -38,7 +38,7 @@ func (e *Env) Rename(args []string) error {
 	}
 	name := strings.Join(args, " ")
 	if len(args) == 0 {
-		n, ok := askName(formLabel("WEAVER", "RENAME"), cur, "its agent's title", "its agent's title",
+		n, ok := askName(formLabel("RENAME"), cur, "its agent's title", "its agent's title",
 			CGrey+"⏎"+COff+" "+CDim+"RENAME"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"CANCEL"+COff)
 		if !ok {
 			return cli.ErrCancelled

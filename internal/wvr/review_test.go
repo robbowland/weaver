@@ -58,7 +58,7 @@ func TestAgentWhere(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		_, root, file, known := e.agentWhere("5")
+		root, file, known := e.agentWhere("5")
 		if root != c.root || file != c.file || known != c.known {
 			t.Errorf("%s: %q %q %v, want %q %q %v", c.name, root, file, known, c.root, c.file, c.known)
 		}

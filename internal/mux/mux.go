@@ -186,8 +186,8 @@ type Mux interface {
 	SayToSession(ms int, text string)
 
 	// Popup is the command that shows argv over where you are, sized by
-	// size from the terminal's columns and lines, bordered or not, in dir
-	// (empty: the multiplexer's choice); it returns when the popup closes.
-	// False when no terminal shows the session.
-	Popup(size func(cols, lines int) (int, int), border bool, dir string, argv []string) (*exec.Cmd, bool)
+	// size from the terminal's columns and lines, in dir (empty: the
+	// multiplexer's choice); it returns when the popup closes. False when
+	// no terminal shows the session.
+	Popup(size func(cols, lines int) (int, int), dir string, argv []string) (*exec.Cmd, bool)
 }

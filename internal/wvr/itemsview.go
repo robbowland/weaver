@@ -513,7 +513,7 @@ func (e *Env) itemLabel(src itemSource) string {
 			n += len(s.items)
 		}
 	}
-	return strings.TrimSuffix(formLabel("WEAVER", src.label(kind)), " ") + " " + CGrey + strconv.Itoa(n) + COff + " "
+	return strings.TrimSuffix(formLabel(src.label(kind)), " ") + " " + CGrey + strconv.Itoa(n) + COff + " "
 }
 
 // asking is the view's header while it asks again.
@@ -792,7 +792,7 @@ func (e *Env) itemFilter(src itemSource) {
 			at = strconv.Itoa(i)
 		}
 	}
-	out := e.pick(b.String(), formLabel("WEAVER", "FILTER"), formPrompt("filter"), "a search, or words to ask "+src.service()+" for", at)
+	out := e.pick(b.String(), formLabel("FILTER"), formPrompt("filter"), "a search, or words to ask "+src.service()+" for", at)
 	q, sel, _ := strings.Cut(out, "\n")
 	v, _, _ := strings.Cut(sel, "\t")
 	i, ok := atoi(v)

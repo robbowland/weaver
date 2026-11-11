@@ -491,15 +491,15 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, p, c string)) {
 // newFormLabel is the new-thread form's label: a review says so.
 func newFormLabel(fm form) string {
 	if fm.Mode == items.ModeReview {
-		return formLabel("WEAVER", "REVIEW")
+		return formLabel("REVIEW")
 	}
-	return formLabel("WEAVER", "NEW THREAD")
+	return formLabel("NEW THREAD")
 }
 
 // formLabel is a form's border label in the board's grammar:
-// [ WHERE :: WHAT ], the brackets and :: faint, where in ink, what grey.
-func formLabel(where, what string) string {
-	return " " + CDim + "[" + COff + " " + CBold + CInk + where + COff + " " + CDim + "::" + COff + " " + CGrey + what + COff +
+// [ WEAVER :: WHAT ], the brackets and :: faint, WEAVER in ink, what grey.
+func formLabel(what string) string {
+	return " " + CDim + "[" + COff + " " + CBold + CInk + "WEAVER" + COff + " " + CDim + "::" + COff + " " + CGrey + what + COff +
 		" " + CDim + "]" + COff + " "
 }
 
@@ -979,7 +979,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 			return
 		}
-		out := e.pick(e.formWheres(fm), formLabel("WEAVER", "NEW THREAD › WHERE"), formPrompt("where"), "a new worktree, or a checkout that is there", whereValue(fm))
+		out := e.pick(e.formWheres(fm), formLabel("NEW THREAD › WHERE"), formPrompt("where"), "a new worktree, or a checkout that is there", whereValue(fm))
 		d := pickValue(out)
 		switch d {
 		case "":
@@ -1018,7 +1018,7 @@ func (e *Env) Form(op, sf, q string) {
 		if fm.Repo == "" {
 			return
 		}
-		out := e.pick(e.formBases(fm), formLabel("WEAVER", "NEW THREAD › BASE"), formPrompt("base"), "where the new branch starts", baseValue(fm))
+		out := e.pick(e.formBases(fm), formLabel("NEW THREAD › BASE"), formPrompt("base"), "where the new branch starts", baseValue(fm))
 		if out == "" {
 			return
 		}
@@ -1041,7 +1041,7 @@ func (e *Env) Form(op, sf, q string) {
 		if def == "" {
 			empty = "its agent's title"
 		}
-		n, ok := askName(formLabel("WEAVER", "NEW THREAD › NAME"), formName(fm), cmp.Or(def, empty), empty,
+		n, ok := askName(formLabel("NEW THREAD › NAME"), formName(fm), cmp.Or(def, empty), empty,
 			CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff)
 		if !ok {
 			return
@@ -1061,7 +1061,7 @@ func (e *Env) Form(op, sf, q string) {
 			br = items.Slugify(q)
 		}
 		args := append([]string{"--disabled", "--reverse"}, formFzf...)
-		args = append(args, "--border-label", formLabel("WEAVER", "NEW THREAD › BRANCH"), "--prompt", formPrompt("branch"), "--query", br, "--ghost", "branch name",
+		args = append(args, "--border-label", formLabel("NEW THREAD › BRANCH"), "--prompt", formPrompt("branch"), "--query", br, "--ghost", "branch name",
 			"--color", FzfColors, "--header", "        "+CGrey+"names the branch and its worktree; an existing branch continues"+COff,
 			"--footer", CGrey+"⏎"+COff+" "+CDim+"KEEP"+COff+"   "+CGrey+"esc"+COff+" "+CDim+"BACK"+COff, "--bind", "enter:print-query")
 		args = append(args, roomy()...)
@@ -1080,7 +1080,7 @@ func (e *Env) Form(op, sf, q string) {
 			fm.save(sf)
 		}
 	case "repo":
-		out := e.pick(e.recentRepos(fm.Repo), formLabel("WEAVER", "NEW THREAD › REPOSITORY"), formPrompt("repo"), "a repository, or a path", fm.Repo)
+		out := e.pick(e.recentRepos(fm.Repo), formLabel("NEW THREAD › REPOSITORY"), formPrompt("repo"), "a repository, or a path", fm.Repo)
 		if out == "" {
 			return
 		}

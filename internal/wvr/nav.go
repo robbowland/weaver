@@ -136,7 +136,7 @@ func (e *Env) peek(cur mux.Window, local string) bool {
 	f := e.SockDir + "/" + e.SKey + ".peek." + strconv.Itoa(os.Getpid())
 	os.Remove(f)
 	defer os.Remove(f)
-	c, ok := e.Mux().Popup(peekSize.of, false, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.ID)), local})
+	c, ok := e.Mux().Popup(peekSize.of, "", []string{e.Self, "_peek", f, string(e.agentIn(cur.ID)), local})
 	if !ok || c.Run() != nil {
 		return false
 	}

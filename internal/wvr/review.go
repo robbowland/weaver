@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
@@ -112,14 +111,14 @@ func (e *Env) focusedPane() mux.PaneID {
 	return p
 }
 
-// agentWhere is the agent in pane p as weaver knows it (its state, else
-// its kind from its thread), the worktree it is in (its state's root, else
-// its directory, else its thread's worktree) and the file under it it was
-// last at, if any; false when weaver knows of no worktree it is in that is
-// there. Its review panel opens in that worktree, so it is never a guess.
-func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, known bool) {
+// agentWhere is the worktree the agent in pane p is in (its state's root,
+// else its directory, else its thread's worktree) and the file under it it
+// was last at, if any; false when weaver knows of no worktree it is in that
+// is there. Its review panel opens in that worktree, so it is never a
+// guess.
+func (e *Env) agentWhere(p mux.PaneID) (root, file string, known bool) {
 	if s, err := store.ReadState(e.StateFile(p)); err == nil {
-		rec, root, file = s, s.Root, s.File
+		root, file = s.Root, s.File
 		if root == "" {
 			root = s.Cwd
 		}
@@ -127,7 +126,7 @@ func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, kno
 		root = t.Worktree
 	}
 	if st, err := os.Stat(root); err != nil || !st.IsDir() {
-		return rec, "", "", false
+		return "", "", false
 	}
 	// git gives the root as a real path; the agent may have used a
 	// symlinked one (/tmp vs /private/tmp), so compare real paths.
@@ -139,7 +138,7 @@ func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, kno
 	if !strings.HasPrefix(file, root+"/") || !files.Exists(file) {
 		file = ""
 	}
-	return rec, root, file, true
+	return root, file, true
 }
 
 // Review is `wvr review [--full] [PANE]` (alt+v, v on the board): go to the
@@ -185,7 +184,7 @@ func (e *Env) Review(args []string) error {
 		return err
 	}
 	e.MarkSeen(agentPane)
-	_, root, _, known := e.agentWhere(agentPane)
+	root, _, known := e.agentWhere(agentPane)
 	if !known {
 		root = cwd
 	}

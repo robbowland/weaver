@@ -216,7 +216,7 @@ func (e *Env) pickConversation() string {
 		e.Mux().Say(3000, "weaver: no conversation to adopt")
 		return ""
 	}
-	out := e.pick(b.String(), formLabel("WEAVER", "ADOPT"), formPrompt("adopt"), "a conversation, or its session id", "")
+	out := e.pick(b.String(), formLabel("ADOPT"), formPrompt("adopt"), "a conversation, or its session id", "")
 	query, picked, _ := strings.Cut(out, "\n")
 	if v, _, _ := strings.Cut(picked, "\t"); v != "" {
 		return v

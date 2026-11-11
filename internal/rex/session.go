@@ -95,14 +95,15 @@ func layout(sp mux.Spawn, label string) map[string]any {
 	}
 	b := map[string]any{"flavor": terminal + ".shell", "options": opts}
 	if label != "" {
-		b["label"] = cut(label, 128)
+		b["label"] = cut(label)
 	}
 	return map[string]any{"block": b}
 }
 
-func cut(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n])
+// cut is s cut to the longest label Rex takes, 128 characters.
+func cut(s string) string {
+	if r := []rune(s); len(r) > 128 {
+		return string(r[:128])
 	}
 	return s
 }
@@ -294,7 +295,7 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	}
 	// Never the server's active window first: one the app does not show,
 	// where a message would go unseen (show).
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(w.Label, 128), "focus": false,
+	if err := s.callS("session.new_window", map[string]any{"window_label": cut(w.Label), "focus": false,
 		"layout": layout(w.Spawn, "")}, &out); err != nil {
 		return "", "", 0, err
 	}
@@ -405,7 +406,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		Window string   `json:"window_id"`
 		Blocks []string `json:"block_ids"`
 	}
-	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label, 128), "focus": false,
+	if err := s.callS("session.new_window", map[string]any{"window_label": cut(label), "focus": false,
 		"layout": layout(mux.Spawn{Argv: []string{"/bin/sleep", "60"}}, "")}, &out); err != nil {
 		return "", 0, err
 	}
@@ -531,13 +532,13 @@ func (s Session) placeIn(v view, seen bool, id string, w mux.WindowID, at int) {
 
 func (s Session) Label(w mux.WindowID, label string) {
 	if id, err := s.window(w); err == nil {
-		_ = s.callS("session.set_window_label", map[string]any{"window_id": id, "label": cut(label, 128)}, nil)
+		_ = s.callS("session.set_window_label", map[string]any{"window_id": id, "label": cut(label)}, nil)
 	}
 }
 
 func (s Session) Title(p mux.PaneID, title string) {
 	if b, err := s.block(p); err == nil {
-		_ = s.callS("session.set_block_label", map[string]any{"block_id": b, "label": cut(title, 128)}, nil)
+		_ = s.callS("session.set_block_label", map[string]any{"block_id": b, "label": cut(title)}, nil)
 	}
 }
 
@@ -734,7 +735,7 @@ func (s Session) Say(ms int, text string) {
 		Blocks []string `json:"block_ids"`
 	}
 	if s.callS("session.new_layer", map[string]any{"bounds": []float64{0, 1 - fh, fw, fh}, "focus": false,
-		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": cut(text, 128), "options": map[string]any{
+		"layout": map[string]any{"block": map[string]any{"flavor": terminal + ".shell", "label": cut(text), "options": map[string]any{
 			"shell": "none", "size": map[string]any{"columns": w, "rows": 1},
 			"exit":    map[string]any{"on_completion": true, "quick_exit_threshold_ms": 0},
 			"command": []string{"/bin/sh", "-c", sayScript, "sh", text, strconv.FormatFloat(float64(ms)/1000, 'f', 3, 64)},
@@ -811,7 +812,7 @@ var wide = [][2]rune{
 // size from the window's columns and lines; the command waits for it to
 // end. With no app attached to the session, or no layer made, nothing is
 // shown: false, and a command that fails to start.
-func (s Session) Popup(size func(cols, lines int) (int, int), _ bool, dir string, argv []string) (*exec.Cmd, bool) {
+func (s Session) Popup(size func(cols, lines int) (int, int), dir string, argv []string) (*exec.Cmd, bool) {
 	if !s.attached() {
 		return failed(errors.New("rex: no app is attached to the session")), false
 	}

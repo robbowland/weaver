@@ -592,7 +592,7 @@ func TestOnScreen(t *testing.T) {
 
 	// No app is attached: a popup cannot show, so none is made, and its
 	// command fails to start, as its caller learns.
-	c, ok := s.Popup(func(c, l int) (int, int) { return c / 2, l / 2 }, false, "", []string{"/bin/sleep", "600"})
+	c, ok := s.Popup(func(c, l int) (int, int) { return c / 2, l / 2 }, "", []string{"/bin/sleep", "600"})
 	if ok {
 		t.Error("a popup shows with no app attached")
 	}
