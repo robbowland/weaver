@@ -3,6 +3,7 @@ package rex
 import (
 	"errors"
 	"os"
+	"slices"
 	"os/exec"
 	"strings"
 	"sync"
@@ -112,13 +113,29 @@ func (f Fleet) Made() (int64, bool) { return f.Home.Made() }
 // Running: does home run?
 func (f Fleet) Running() bool { return f.Home.Running() }
 
-// Quit ends the threads' sessions, then home's.
+// Quit ends the threads' sessions, then home's, and last the one wvr runs
+// in (Here: ctrl+q's card runs in a thread's), whose end is wvr's. When
+// Rex will not list the threads, nothing: home's end would leave them
+// running with no home.
 func (f Fleet) Quit() error {
-	ts, _ := f.threads()
-	for _, t := range ts {
-		_ = t.Quit()
+	ts, err := f.threads()
+	if err != nil {
+		return err
 	}
-	return f.Home.Quit()
+	all := append(ts, f.Home)
+	here := func(s Session) int {
+		if s.ID == f.Here {
+			return 1
+		}
+		return 0
+	}
+	slices.SortStableFunc(all, func(a, b Session) int { return here(a) - here(b) })
+	for _, s := range all {
+		if e := s.Quit(); s.ID == f.Home.ID {
+			err = e
+		}
+	}
+	return err
 }
 
 // Panes are the panes of home and of every thread's session; an error

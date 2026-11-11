@@ -2,7 +2,9 @@ package rex
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/mux"
@@ -68,5 +70,65 @@ func TestFleet(t *testing.T) {
 	}
 	if !home.Running() {
 		t.Error("home went with the thread's session")
+	}
+}
+
+// Quit from a thread's session (ctrl+q's card runs there) ends that
+// session last, everything else first: ending it ends the quitting wvr.
+// When Rex will not list the threads, home stays and so does the error.
+func TestFleetQuit(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	var ids []string
+	for _, l := range []string{"a", "b", "c"} {
+		_, p, _, err := f.OpenSession(l, mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: l, Background: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, f.of(string(p)).ID)
+	}
+	// rex as weaver runs it, each call logged; session.list failing while
+	// a mark is there.
+	bin, err := exec.LookPath(Bin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd := t.TempDir()
+	log, mark := wd+"/rex.log", wd+"/no-list"
+	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\ncase \" $* \" in *\" session.list \"*) [ -e '" + mark + "' ] && exit 1;; esac\nexec '" + bin + "' \"$@\"\n"
+	if err := os.WriteFile(wd+"/rex", []byte(wrap), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", wd)
+
+	os.WriteFile(mark, nil, 0o644)
+	err = (Fleet{Home: home, Here: ids[0]}).Quit()
+	os.Remove(mark)
+	if err == nil || !home.Running() {
+		t.Errorf("quit with no threads listed: %v, home running %v", err, home.Running())
+	}
+	os.Remove(log)
+	if err := (Fleet{Home: home, Here: ids[0]}).Quit(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(log)
+	var ended []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, "session.destroy") {
+			for _, id := range append([]string{home.ID}, ids...) {
+				if strings.Contains(l, id) {
+					ended = append(ended, id)
+				}
+			}
+		}
+	}
+	if len(ended) != 4 || ended[3] != ids[0] {
+		t.Errorf("ended %q, want all four, %s (where it runs) last", ended, ids[0])
 	}
 }
