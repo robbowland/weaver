@@ -1,10 +1,8 @@
 package process
 
 import (
-	"encoding/binary"
 	"os"
 	"os/exec"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -66,18 +64,6 @@ func TestStartsMatchPs(t *testing.T) {
 		if p != 1 && !StillRuns(strconv.Itoa(p), string(out), got) {
 			t.Errorf("pid %d: not running with ps's start time", p)
 		}
-	}
-}
-
-func TestParseArgs(t *testing.T) {
-	b := binary.LittleEndian.AppendUint32(nil, 2)
-	b = append(b, "/usr/bin/uv\x00\x00\x00\x00uv\x00run\x00REX_BLOCK=b1\x00PWD=/w\x00\x00junk"...)
-	argv, env, ok := parseArgs(b)
-	if !ok || !reflect.DeepEqual(argv, []string{"uv", "run"}) || !reflect.DeepEqual(env, map[string]string{"REX_BLOCK": "b1", "PWD": "/w"}) {
-		t.Fatalf("got %q %q %v", argv, env, ok)
-	}
-	if _, _, ok := parseArgs(binary.LittleEndian.AppendUint32(nil, 3)); ok {
-		t.Fatal("a truncated block parsed")
 	}
 }
 

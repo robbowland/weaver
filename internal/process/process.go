@@ -1,11 +1,10 @@
 // Package process is what weaver asks the kernel of a process: whether one
 // it recorded still runs (by its pid, and its start time where weaver has
-// it), when it started, its arguments and environment, and ending it.
+// it), when it started, whether one runs under another, and when the
+// machine started.
 package process
 
 import (
-	"bytes"
-	"encoding/binary"
 	"os"
 	"strconv"
 	"strings"
@@ -77,48 +76,6 @@ func BootTime() int64 {
 		return 0
 	}
 	return tv.Sec
-}
-
-// Args are process pid's arguments and environment, as the kernel keeps
-// them (kern.procargs2); false when it will not say (another user's
-// process, or one macOS keeps them of).
-func Args(pid int) ([]string, map[string]string, bool) {
-	b, err := unix.SysctlRaw("kern.procargs2", pid)
-	if err != nil {
-		return nil, nil, false
-	}
-	return parseArgs(b)
-}
-
-// parseArgs reads kern.procargs2's layout: argc (int32), the program's
-// path, NUL padding, then argc arguments and the environment, each ended by
-// a NUL.
-func parseArgs(b []byte) ([]string, map[string]string, bool) {
-	if len(b) < 4 {
-		return nil, nil, false
-	}
-	argc := int(binary.LittleEndian.Uint32(b[:4]))
-	b = b[4:]
-	i := bytes.IndexByte(b, 0)
-	if i < 0 {
-		return nil, nil, false
-	}
-	b = bytes.TrimLeft(b[i:], "\x00")
-	var argv []string
-	env := map[string]string{}
-	for _, s := range strings.Split(string(b), "\x00") {
-		if len(argv) < argc {
-			argv = append(argv, s)
-			continue
-		}
-		if s == "" {
-			break
-		}
-		if k, v, ok := strings.Cut(s, "="); ok {
-			env[k] = v
-		}
-	}
-	return argv, env, len(argv) == argc
 }
 
 // Runs: does a process named name (its command, as the kernel keeps it, at
