@@ -55,7 +55,7 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 | `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
-| `tmux_session` | string | the id of its Rex session (the name is from when weaver ran on tmux); a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
+| `rex_session` | string | the id of its Rex session; a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Events from other agents
@@ -788,7 +788,7 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
   weaver ran on Rex alone) name a session that no longer runs, and go as
   their agents do.
 - **Where:** `agent.Where` is the Rex server's pid and the session's id
-  (stored as `server` and `tmux_session`, its name from before). `serverPID`
+  (stored as `server` and `rex_session`). `serverPID`
   reads the pid from Rex's runtime file for `$REX_SERVER`, `servers/<SHA-256
   of the endpoint, hex>/runtime.json` in `$REX_RUNTIME_DIR`, else
   `~/Library/Application Support/rex` (its endpoint and pid checked), so

@@ -62,11 +62,10 @@ type Subagent struct {
 
 // Where is the life of the Rex session an agent runs in: its server's pid
 // and the session's id. A session made again, on another server or on the
-// same one, is another life. (Session's JSON name is from when weaver ran
-// on tmux.)
+// same one, is another life.
 type Where struct {
 	Server  int    `json:"server,omitempty"`
-	Session string `json:"tmux_session,omitempty"`
+	Session string `json:"rex_session,omitempty"`
 }
 
 // Resumed is r as its conversation carries on in another process, in the

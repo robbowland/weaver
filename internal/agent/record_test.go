@@ -21,9 +21,9 @@ func TestResumed(t *testing.T) {
 		Pid: "9", ProcStart: "p", Title: "t", Turn: 4, PromptID: "q", Transcript: "tr", Cwd: "c",
 		Root: "r", StartCwd: "sc", ProjectRoot: "pr", File: "f", Prompt: "pp", Waiting: "w", Pending: "pe",
 		LastMessage: "lm", MarkedRoot: "mr", Marker: "m", Background: 2, BackgroundTasks: "b", Doing: "d",
-		DoingID: "di", DoneIDs: "dd", Where: Where{Server: 1, Session: "$1"}, EndReason: "e",
+		DoingID: "di", DoneIDs: "dd", Where: Where{Server: 1, Session: "session:a"}, EndReason: "e",
 		Subagents: []Subagent{{ID: "a"}}, Tasks: []Task{{ID: "t"}}, Files: []string{"f"}}
-	w := Where{Server: 7, Session: "$2"}
+	w := Where{Server: 7, Session: "session:b"}
 	got := full.Resumed(100, w)
 	rt, gv, fv := reflect.TypeOf(got), reflect.ValueOf(got), reflect.ValueOf(full)
 	for i := 0; i < rt.NumField(); i++ {

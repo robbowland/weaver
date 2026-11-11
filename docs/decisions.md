@@ -177,6 +177,15 @@ can supersede an earlier one, and says so.
   worktree per thread where the scope's draft said one Rex session per
   worktree: weaver's threads are still windows of one session until that
   follow-up lands.
+- 2026-11-11: The state's Rex session id is `rex_session`, no longer
+  `tmux_session`, superseding the Rex-alone entry's note on it (Rob: rename
+  it; backwards compatibility does not matter). A state written under the
+  old name reads as no session until the agent's next
+  event writes it again; if its session goes first, weaver cannot tell it
+  went (no session to ask Rex about), so the dead agent's thread is
+  forgotten rather than kept as lost, unless the machine restarted, which
+  still counts as lost. Quitting with the old weaver before upgrading keeps
+  every thread as lost, and those come back.
 
 ## Holding threads
 
