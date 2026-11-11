@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/items"
@@ -26,26 +25,10 @@ type githubSource struct{}
 // section's items, and how asking for them went; and those of the view's
 // own search, of each kind.
 type ghCache struct {
-	// Fetched is an older weaver's: when it asked for every section, which
-	// is when its sections were read (settle).
-	Fetched time.Time                       `json:"fetched,omitzero"`
 	Results map[github.Kind][]github.Result `json:"results"`
 	// Search is the view's own search (f), of each kind: none read yet just
 	// after it was asked for.
 	Search map[github.Kind]github.Result `json:"search,omitempty"`
-}
-
-// settle has an older weaver's cache say, section by section, when its
-// sections were read.
-func (c *ghCache) settle() {
-	for _, rs := range c.Results {
-		for i := range rs {
-			if rs[i].Fetched.IsZero() && rs[i].Err == "" {
-				rs[i].Fetched = c.Fetched
-			}
-		}
-	}
-	c.Fetched = time.Time{}
 }
 
 // refreshed is c with a refresh's answer: every section as asked, but one
@@ -152,17 +135,13 @@ func ghCacheFile(e *Env) string { return e.StateDir + "/github.json" }
 func readGitHub(e *Env) ghCache {
 	var c ghCache
 	bestEffort(store.Read(ghCacheFile(e), &c))
-	c.settle()
 	return c
 }
 
 // updateGitHub changes the cache as it is now, under its lock: a refresh
 // and a change at once each keep the other's.
 func updateGitHub(e *Env, change func(*ghCache)) {
-	bestEffort(store.Update(ghCacheFile(e), func(c *ghCache) {
-		c.settle()
-		change(c)
-	}))
+	bestEffort(store.Update(ghCacheFile(e), change))
 }
 
 func (g githubSource) read(e *Env) itemData {

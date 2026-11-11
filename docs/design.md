@@ -1050,8 +1050,7 @@ is then: a section that failed keeps what it had, found by its search
 (Linear: its filter) wherever it moved, as of when that was read, with the
 error. The header's age is the oldest section's, and it names the sections
 that failed and why (every one: just why); a failed section's heading says
-`failed, as of 1h ago`, and one with nothing from before shows too. A cache
-an older weaver wrote (one time, one error for all) reads as of that time.
+`failed, as of 1h ago`, and one with nothing from before shows too.
 
 A row shows the thread the item has: its item's
 ref, else its branch, as the item's thread would name it

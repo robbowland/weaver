@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/term"
 
@@ -29,24 +28,10 @@ type linearSource struct{}
 // section's issues, and how asking for them went; and those of the view's
 // own search.
 type linCache struct {
-	// Fetched is an older weaver's: when it asked for every section, which
-	// is when its sections were read (settle).
-	Fetched time.Time       `json:"fetched,omitzero"`
 	Results []linear.Result `json:"results"`
 	// Search is the view's own search (f): none read yet just after it was
 	// asked for.
 	Search *linear.Result `json:"search,omitempty"`
-}
-
-// settle has an older weaver's cache say, section by section, when its
-// sections were read.
-func (c *linCache) settle() {
-	for i := range c.Results {
-		if c.Results[i].Fetched.IsZero() && c.Results[i].Err == "" {
-			c.Results[i].Fetched = c.Fetched
-		}
-	}
-	c.Fetched = time.Time{}
 }
 
 // refreshed is c with a refresh's answer: every section as asked, but one
@@ -112,17 +97,13 @@ func linCacheFile(e *Env) string { return e.StateDir + "/linear.json" }
 func readLinear(e *Env) linCache {
 	var c linCache
 	bestEffort(store.Read(linCacheFile(e), &c))
-	c.settle()
 	return c
 }
 
 // updateLinear changes the cache as it is now, under its lock: a refresh
 // and a change at once each keep the other's.
 func updateLinear(e *Env, change func(*linCache)) {
-	bestEffort(store.Update(linCacheFile(e), func(c *linCache) {
-		c.settle()
-		change(c)
-	}))
+	bestEffort(store.Update(linCacheFile(e), change))
 }
 
 func (linearSource) read(e *Env) itemData {

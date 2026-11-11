@@ -82,35 +82,6 @@ func TestRefreshKeepsFailedSection(t *testing.T) {
 	}
 }
 
-// An older weaver's cache said when it asked for every section, and one
-// error for them all: each section reads as of then, and the error, of no
-// section, goes.
-func TestOldCache(t *testing.T) {
-	e := viewEnv(t)
-	at := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Second)
-	old := `{"fetched":"` + at.Format(time.RFC3339) + `","err":"gh: timeout","results":{"prs":[` +
-		`{"title":"Queue","filters":"q","total":1,"items":[{"kind":"prs","repo":"o/r","number":45,"title":"Add a flag"}]}]}}`
-	if err := os.WriteFile(ghCacheFile(e), []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := githubSource{}.read(e).sections["prs"]
-	if len(s) != 1 || len(s[0].items) != 1 || !s[0].fetched.Equal(at) || s[0].err != "" {
-		t.Fatalf("%+v", s)
-	}
-	if h := reAnsi.ReplaceAllString(e.itemFresh(githubSource{}), ""); h != "as of 3h ago" {
-		t.Errorf("header %q", h)
-	}
-	// Linear's, the same.
-	old = `{"fetched":"` + at.Format(time.RFC3339) + `","err":"no Linear API key (wvr linear login)","results":[` +
-		`{"title":"Queue","filter":"{}","items":[{"identifier":"ENG-42","title":"Fix it"}]}]}`
-	if err := os.WriteFile(linCacheFile(e), []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if s := (linearSource{}).read(e).sections["issues"]; len(s) != 1 || !s[0].fetched.Equal(at) || s[0].err != "" {
-		t.Errorf("%+v", s)
-	}
-}
-
 // A heading says how many it shows of how many, or, of a list the service
 // does not count (Linear's), that there are more.
 func TestHeadingCount(t *testing.T) {
