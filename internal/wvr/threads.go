@@ -443,15 +443,8 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 		}
 	}
 	// The branch's own worktree, when it has one.
-	out, _ := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").Output()
-	wtp := ""
-	for _, l := range strings.Split(string(out), "\n") {
-		switch {
-		case strings.HasPrefix(l, "worktree "):
-			wtp = strings.TrimPrefix(l, "worktree ")
-		case l == "branch refs/heads/"+branch:
-			return wtp, false, base, true
-		}
+	if wtp := checkedOut(repo, branch); wtp != "" {
+		return wtp, false, base, true
 	}
 	// Worktrunk's shortcuts, for git: @ is the checkout's HEAD, ^ the
 	// default branch.
