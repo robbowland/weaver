@@ -85,8 +85,8 @@ type Exit struct {
 	What, Hint string
 }
 
-// HomeName is the name of home's window, weaver's board: the window so
-// named that shows no view is home, wherever it is.
+// HomeName is the label weaver gives home's window, weaver's board (which
+// weaver knows by the place it gave it, 0, not by its label).
 const HomeName = "home"
 
 // NextFree is the index to open a window at, or break a pane out to, when

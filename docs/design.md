@@ -667,7 +667,9 @@ that one (home's).
   to show it in, alt+y goes home as from anywhere else. From home, on to
   each view in turn, and from the last back to the thread's window home was
   left from (`$STATE_DIR/<skey>.last`, or home when it has gone); from
-  anywhere else home, made again if it was closed.
+  anywhere else home, made again if it was closed. Home is the window
+  weaver placed at 0 that shows no view, by its registry, whatever its
+  label.
 - **Views:** see [Views](#views).
 - **Threads:** a session labelled with the thread's name, its first
   window labelled LABEL in DIR running `wvr _agent TOK`, then a split on its left running `wvr _panel AGENT` (argv, no
