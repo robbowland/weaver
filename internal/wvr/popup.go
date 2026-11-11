@@ -76,7 +76,7 @@ func (e *Env) popup(what string, z popupSize, dir string, args []string) error {
 // x on a lost one, as the dialogs Alt N and the menus open, and Rex's
 // Ctrl q.
 func (e *Env) Popup(args []string) error {
-	switch firstArg(args) {
+	switch arg(args, 0) {
 	case "new":
 		dir, _ := os.Getwd()
 		return e.formPopup(dir, args...)

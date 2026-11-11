@@ -558,7 +558,7 @@ func (e *Env) New(args []string) error {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch a {
-		case "--name", "--repo", "--from", "--branch", "-b", "--base", "--agent", "--pr", "--issue":
+		case "--name", "--repo", "--from", "--branch", "-b", "--base", "--pr", "--issue":
 			if i+1 >= len(args) {
 				return errors.New(a + " needs a value")
 			}

@@ -27,9 +27,6 @@ import (
 
 const nbsp = " "
 
-// cardAge is the card's age: 75 -> 1m, 2h ...
-func cardAge(s int64) string { return age(s) }
-
 // cardOne: runs of tabs, newlines and returns as one space.
 var reTNR = regexp.MustCompile(`[\t\n\r]+`)
 
@@ -353,7 +350,7 @@ func card(s agent.Record, r session.Row, from string, w int, head, ab string, ch
 	if r.Exited {
 		word += " · R starts it again"
 	}
-	first := word + CDim + " · " + COff + cardAge(now-r.Since)
+	first := word + CDim + " · " + COff + age(now-r.Since)
 	ls := []string{first, ""}
 	add := func(f []string) { ls = append(ls, f...) }
 	if from != "" {
@@ -397,7 +394,7 @@ func card(s agent.Record, r session.Row, from string, w int, head, ab string, ch
 			if x.Since != "" {
 				sn = int64(jsonx.NumberOr(x.Since, float64(now)))
 			}
-			ps = append(ps, x.Type+" "+cardAge(now-sn))
+			ps = append(ps, x.Type+" "+age(now-sn))
 		}
 		add(field(w, "subagents", strings.Join(ps, " · "), "", 2))
 	}
@@ -480,9 +477,9 @@ func (e *Env) lostCard(sid, title string) string {
 		r := []rune(dir)
 		dir = "…" + string(r[len(r)-n+1:])
 	}
-	ls := []string{"lost" + CDim + " · " + COff + cardAge(now-lost) + CDim + " · its session went" + COff, ""}
+	ls := []string{"lost" + CDim + " · " + COff + age(now-lost) + CDim + " · its session went" + COff, ""}
 	if lo.Held > 0 {
-		ls = []string{"held" + CDim + " · " + COff + cardAge(now-int64(lo.Held)) + CDim + " · you held it" + COff, ""}
+		ls = []string{"held" + CDim + " · " + COff + age(now-int64(lo.Held)) + CDim + " · you held it" + COff, ""}
 		if lo.Note != "" {
 			ls = append(ls, field(w, "next", lo.Note, CInk, 3)...)
 		}

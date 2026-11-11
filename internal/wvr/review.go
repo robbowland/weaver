@@ -111,33 +111,19 @@ func (e *Env) focusedPane() mux.PaneID {
 }
 
 // agentWhere is the worktree the agent in pane p is in (its state's root,
-// else its directory, else its thread's worktree) and the file under it it
-// was last at, if any; false when weaver knows of no worktree it is in that
-// is there. Its review panel opens in that worktree, so it is never a
+// else its directory, else its thread's worktree); false when weaver knows
+// of no worktree it is in that is there. Its review panel opens in that worktree, so it is never a
 // guess.
-func (e *Env) agentWhere(p mux.PaneID) (root, file string, known bool) {
+func (e *Env) agentWhere(p mux.PaneID) (root string, known bool) {
 	if s, err := store.ReadState(e.StateFile(p)); err == nil {
-		root, file = s.Root, s.File
-		if root == "" {
-			root = s.Cwd
-		}
+		root = cmp.Or(s.Root, s.Cwd)
 	} else if t, err := store.ReadThread(e.ThreadFile(p)); err == nil {
 		root = t.Worktree
 	}
 	if st, err := os.Stat(root); err != nil || !st.IsDir() {
-		return "", "", false
+		return "", false
 	}
-	// git gives the root as a real path; the agent may have used a
-	// symlinked one (/tmp vs /private/tmp), so compare real paths.
-	if file != "" && files.Exists(file) {
-		if d, err := filepath.EvalSymlinks(filepath.Dir(file)); err == nil {
-			file = d + "/" + filepath.Base(file)
-		}
-	}
-	if !strings.HasPrefix(file, root+"/") || !files.Exists(file) {
-		file = ""
-	}
-	return root, file, true
+	return root, true
 }
 
 // Review is `wvr review [--full] [PANE]` (alt+v, v on the board): go to the
@@ -183,7 +169,7 @@ func (e *Env) Review(args []string) error {
 		return err
 	}
 	e.MarkSeen(agentPane)
-	root, _, known := e.agentWhere(agentPane)
+	root, known := e.agentWhere(agentPane)
 	if !known {
 		root = cwd
 	}
@@ -222,7 +208,7 @@ func panelTitle(dir string) string { return "review: " + filepath.Base(dir) }
 // once, as it starts, and a commit made while it is open joins its commit
 // list only then. It ends with its pane.
 func (e *Env) Panel(args []string) error {
-	a, ok := mux.ParsePane(firstArg(args))
+	a, ok := mux.ParsePane(arg(args, 0))
 	if ok && e.MyPane != "" {
 		e.bindPanel(a, e.MyPane, os.Getpid())
 	}
@@ -372,20 +358,13 @@ func dirty(dir string) bool {
 // bindPanel records review panel rp (its process pid) as agent's:
 // <skey>_<agent>.panel. A pid of 1 or less is Rex not saying: the pane
 // alone, never over the record the panel made of itself in that pane.
-func (e *Env) bindPanel(agent, rp mux.PaneID, pid int) { e.bind(agent, "panel", rp, pid) }
-
-// bind records pane p (process pid) as agent's in its file of kind ext.
-func (e *Env) bind(agent mux.PaneID, ext string, p mux.PaneID, pid int) {
-	bestEffort(os.MkdirAll(e.StateDir, 0o755))
-	f := e.PaneFile(agent, ext)
+func (e *Env) bindPanel(agent, rp mux.PaneID, pid int) {
+	f := e.PaneFile(agent, "panel")
 	n := ""
 	if pid > 1 {
 		n = strconv.Itoa(pid)
-	} else if l, err := files.FirstLine(f); err == nil && l == string(p) {
+	} else if l, err := files.FirstLine(f); err == nil && l == string(rp) {
 		return
 	}
-	tmp := f + "." + strconv.Itoa(os.Getpid())
-	if os.WriteFile(tmp, []byte(string(p)+"\n"+n+"\n"), 0o644) == nil {
-		bestEffort(os.Rename(tmp, f))
-	}
+	bestEffort(store.WriteAtomic(f, []byte(string(rp)+"\n"+n+"\n")))
 }

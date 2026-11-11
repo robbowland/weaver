@@ -1181,10 +1181,10 @@ func (e *Env) Close(args []string) error {
 	}
 	th, _ := store.ReadThread(e.ThreadFile(agentPane))
 	var st agent.State
-	var pid, start, title, kind string
+	var pid, start, title string
 	if s, err := store.ReadState(e.StateFile(agentPane)); err == nil {
 		st, pid, start = s.State, oneline.Line(string(s.Pid)), oneline.Line(s.ProcStart)
-		title, kind = oneline.Line(s.Title), oneline.Line(s.Agent)
+		title = oneline.Line(s.Title)
 	}
 	tab, in := byID[agentPane].Window, byID[agentPane].Session
 	// A thread's session goes whole, the other panes in it (its helpers')
@@ -1208,11 +1208,7 @@ func (e *Env) Close(args []string) error {
 		name = title
 	}
 	if name == "" {
-		k := kind
-		if k == "" {
-			k = "agent"
-		}
-		name = k + " in pane " + string(agentPane)
+		name = "the agent in pane " + string(agentPane)
 	}
 	// Its state and name as its row on the board says them.
 	called, what := "", stateWord(session.Row{State: cmp.Or(st, agent.StateStarting)}, time.Now().Unix())
@@ -1264,10 +1260,6 @@ func (e *Env) Close(args []string) error {
 	if tty != nil {
 		pad = cardPlace(tty, 8)
 	}
-	k := kind
-	if k == "" {
-		k = "claude"
-	}
 	// Named as the board names it: its number and name, then its branch.
 	head, sub := CBold+name+COff, ""
 	if t := oneline.Line(called); t != "" {
@@ -1280,7 +1272,7 @@ func (e *Env) Close(args []string) error {
 		}
 	}
 	fmt.Fprint(out, cardRow(pad, "close", head))
-	fmt.Fprint(out, cardRow(pad, "", what+" "+CDim+"·"+COff+" "+CGrey+k+COff+sub))
+	fmt.Fprint(out, cardRow(pad, "", what+sub))
 	fmt.Fprint(out, cardRow(pad, "goes", goes))
 	if editing {
 		fmt.Fprint(out, cardRow(pad, "", CRed+"nvim is open in its review: unsaved edits go"+COff))

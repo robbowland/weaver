@@ -386,7 +386,7 @@ func readSecret(t *os.File) (string, bool) {
 
 // Linear is `wvr linear login`.
 func (e *Env) Linear(args []string) error {
-	if firstArg(args) == "login" {
+	if arg(args, 0) == "login" {
 		return e.LinearLogin(false)
 	}
 	return errors.New("usage: wvr linear login")

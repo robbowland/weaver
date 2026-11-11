@@ -40,7 +40,7 @@ func (e *Env) Adopt(args []string) error {
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
-	which := firstArg(args)
+	which := arg(args, 0)
 	var msg string
 	var err error
 	picked := false

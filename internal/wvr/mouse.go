@@ -74,7 +74,7 @@ func footClick(hs []choice, gap int, q string) string {
 // welcome (title), its key line's.
 func (e *Env) Click(args []string) {
 	q := session.Quote(e.Self)
-	switch firstArg(args) {
+	switch arg(args, 0) {
 	case "board":
 		fmt.Print(footClick(e.boardHints(), 2, q))
 	case "title":
@@ -96,8 +96,6 @@ func (e *Env) goTo(r string) {
 	case "home":
 		_, cur, home := e.where()
 		e.toHome(cur, home)
-	case "next":
-		e.Next()
 	default:
 		for _, n := range e.viewNames() {
 			if n == r {

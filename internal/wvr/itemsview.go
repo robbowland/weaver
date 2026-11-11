@@ -856,7 +856,7 @@ func (e *Env) itemLoaded(src itemSource) string {
 // runs. It shows what the service said last at once, and asks again behind
 // it when that is more than 2 minutes old, and every 5 minutes it is open.
 func (e *Env) Items(args []string) error {
-	src, ok := itemSourceOf(firstArg(args))
+	src, ok := itemSourceOf(arg(args, 0))
 	if !ok {
 		return fmt.Errorf("usage: wvr _items github|linear [...]")
 	}
@@ -865,7 +865,7 @@ func (e *Env) Items(args []string) error {
 	if len(args) > 1 {
 		ref = args[1]
 	}
-	switch sub := firstArg(args); sub {
+	switch sub := arg(args, 0); sub {
 	case "rows":
 		fmt.Print(keepRows(os.Getenv("WEAVER_VIEW_SOCK"), e.itemRows(src)))
 		return nil
@@ -1152,11 +1152,4 @@ func peekItemChoice(name, key, sel string) (string, [][]string) {
 		return "", [][]string{{"_items", name, "from", ref, "--review"}}
 	}
 	return "", nil
-}
-
-func firstArg(args []string) string {
-	if len(args) > 0 {
-		return args[0]
-	}
-	return ""
 }

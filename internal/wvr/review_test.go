@@ -33,18 +33,17 @@ func TestAgentWhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct {
-		name       string
-		state      *agent.Record
-		thread     *store.Thread
-		root, file string
-		known      bool
+		name   string
+		state  *agent.Record
+		thread *store.Thread
+		root   string
+		known  bool
 	}{
-		{"its state's root and file", &agent.Record{Root: wt, Cwd: "/", File: wt + "/src/a.go"}, nil, wt, wt + "/src/a.go", true},
-		{"its directory, while it has no root", &agent.Record{Cwd: wt}, nil, wt, "", true},
-		{"a file outside its root, dropped", &agent.Record{Root: wt + "/src", File: td + "/elsewhere.go"}, nil, wt + "/src", "", true},
-		{"its thread's worktree, before its first hook", nil, &store.Thread{Worktree: wt}, wt, "", true},
-		{"a root that has gone", &agent.Record{Root: td + "/gone"}, nil, "", "", false},
-		{"nothing known", nil, nil, "", "", false},
+		{"its state's root", &agent.Record{Root: wt, Cwd: "/"}, nil, wt, true},
+		{"its directory, while it has no root", &agent.Record{Cwd: wt}, nil, wt, true},
+		{"its thread's worktree, before its first hook", nil, &store.Thread{Worktree: wt}, wt, true},
+		{"a root that has gone", &agent.Record{Root: td + "/gone"}, nil, "", false},
+		{"nothing known", nil, nil, "", false},
 	} {
 		os.Remove(e.StateFile("5"))
 		os.Remove(e.ThreadFile("5"))
@@ -58,9 +57,9 @@ func TestAgentWhere(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		root, file, known := e.agentWhere("5")
-		if root != c.root || file != c.file || known != c.known {
-			t.Errorf("%s: %q %q %v, want %q %q %v", c.name, root, file, known, c.root, c.file, c.known)
+		root, known := e.agentWhere("5")
+		if root != c.root || known != c.known {
+			t.Errorf("%s: %q %v, want %q %v", c.name, root, known, c.root, c.known)
 		}
 	}
 }
