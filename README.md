@@ -3,7 +3,7 @@
 **Run several coding agents side by side in Rex, and always know which one
 needs you.**
 
-weaver gives each task its own Rex window, called a *thread*: the agent
+weaver gives each task its own Rex session, called a *thread*: the agent
 (Claude Code) on the right and a review of its work
 ([tuicr](https://github.com/agavra/tuicr)) on the left, in a git worktree of
 its own. One board shows every thread and what it
@@ -116,7 +116,7 @@ come back the next time you run `wvr`.
 own: its review on the left, the agent on the right, in a new worktree or a
 checkout you choose. Each thread has a number, shown in its window's name
 (`01 Add a CLI flag · repo/add-a-cli-flag`), and that number means the same
-thread on the board and in `Alt` keys.
+thread on the board, its views and its keys (`1`–`9` jump to it).
 
 **Home.** Window 0 is home: the board of every thread. A card beside the
 board shows the selected thread's last prompt, what it is waiting on, what it

@@ -694,7 +694,7 @@ func (e *Env) rows(plain bool) string {
 		} else if !plain {
 			a++
 			// Threads' stable numbers when they have them, else the rows'
-			// order; two digits, like the vault's numbered sections (01).
+			// order; two digits (01).
 			c, shown := "", ""
 			if nums {
 				c, shown = r.num, r.num

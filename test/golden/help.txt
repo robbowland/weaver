@@ -1,9 +1,9 @@
 KEYS
-  ⏎  1-9          jump to the thread (1-9: that row)
+  ⏎  1-9          jump to the thread (1-9: of that number)
   j k  g G        move; first, last
   /               search (esc: back)
   n               new thread (wvr new)
-  x               close the thread, its review and its window
+  x               close the thread, its review and its session
                   (and offers to remove a merged worktree)
   h               hold it: say what's next; its agent and review close,
                   its worktree stays, and it waits under HELD

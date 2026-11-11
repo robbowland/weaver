@@ -159,8 +159,8 @@ The name stays with the thread when it is lost and resumed.
 ### Closing a thread
 
 `x` on the board, or `wvr close`, closes a thread's agent, its review and its
-window, after asking (and says so when nvim is open in the review, whose
-unsaved edits would go). Panes you added to the window stay.
+session with every pane in it, its helpers' too, after asking (and says so
+when nvim is open in the review, whose unsaved edits would go).
 
 If weaver created the thread's worktree, and nothing in it would be lost (no
 uncommitted changes, and its commits merged into the default branch or
@@ -292,7 +292,7 @@ its agent again on its conversation, `x` closes the thread.
 
 | Key | Does |
 | --- | --- |
-| `enter`, `1`–`9` | Jump to the thread (`1`–`9`: that row) |
+| `enter`, `1`–`9` | Jump to the thread (`1`–`9`: the thread of that number) |
 | `j` `k`, `g` `G` | Move; first, last |
 | `/` | Search (`esc` to go back) |
 | `n` | Start a thread (`wvr new`) |
@@ -578,7 +578,7 @@ Environment variables change weaver's defaults.
 | `WEAVER_ITEM_TASK` | `0` | `1`: a thread from a pull request or issue starts with weaver's task written into the form (`Review #45`, `Implement ENG-42`); otherwise the task is empty, and an empty task starts the agent with no prompt |
 | `LINEAR_API_KEY` | unset | The Linear API key to use instead of the one `wvr linear login` keeps in the Keychain |
 | `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves its hooks, tuicr's files and its skill alone as it starts (`wvr setup` still sets them up) |
-| `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
+| `WEAVER_DEBUG` | unset | Set: write what the hooks' background runs say (their errors) to `~/.local/state/weaver/hook.log` |
 
 ## Development
 

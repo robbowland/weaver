@@ -19,7 +19,7 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
 | `$STATE_DIR/github.json`, `linear.json` | what GitHub and Linear said last for the views' sections, each section with when it was read and why asking for it last failed; changed under `.lock` beside it (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
-| `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 30 days |
+| `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 31 days |
 | `$STATE_DIR/rex/` | weaver's numbers for Rex's blocks and windows, and what Rex does not keep of them (see [Rex](#rex)) |
 
 ## State file
@@ -62,8 +62,8 @@ labelled `<label>`, then a split on its left running `wvr _panel <agent
 pane>` (argv, no shell): its review panel, recorded as bound to it
 (`.panel`) before `wvr new` returns, the agent on the right at
 `$WEAVER_AGENT_WIDTH` (default `20%`, at least 44 columns while the panel
-keeps 60) with the focus. In the weaver session the window moves to the index of its
-number and is named with its label from the start.
+keeps 60) with the focus. Its window is named with its label from the
+start.
 
 A new branch starts from the remote's default branch
 (`origin`, else the first remote; its `HEAD`, else its `main` or `master`)

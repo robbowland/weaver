@@ -101,11 +101,11 @@ func Help() string {
 	p := func(cell, c string) string { return paint(cell, c, CDim, COff) }
 	more := strings.Repeat(" ", 2+helpCol)
 	return g + "KEYS" + o + "\n" +
-		helpRow("⏎  1-9", "jump to the thread", "(1-9: that row)") +
+		helpRow("⏎  1-9", "jump to the thread", "(1-9: of that number)") +
 		helpRow("j k  g G", "move; first, last", "") +
 		helpRow("/", "search", "(esc: back)") +
 		helpRow("n", "new thread", "(wvr new)") +
-		helpRow("x", "close the thread, its review and its window", "") +
+		helpRow("x", "close the thread, its review and its session", "") +
 		more + d + "(and offers to remove a merged worktree)" + o + "\n" +
 		helpRow("h", "hold it: say what's next; its agent and review close,", "") +
 		more + d + "its worktree stays, and it waits under HELD" + o + "\n" +
