@@ -530,8 +530,8 @@ keeps it in the macOS Keychain.
 
 `wvr doctor` says what weaver works with, what is set up, and the command that
 fixes each problem. `wvr doctor --fix` does what it can: Homebrew installs
-what is missing or too old, weaver sets up its hooks and fetches its plugin,
-and each sign-in is offered.
+what is missing or too old, weaver sets up its hooks and brings tuicr's files
+and its skill, and each sign-in is offered.
 
 ### Upgrading
 
@@ -570,7 +570,7 @@ Environment variables change weaver's defaults.
 | `WEAVER_VIEWS` | both, except hidden ones | The views beside home: `github`, `linear`, both, or `none` |
 | `WEAVER_ITEM_TASK` | `0` | `1`: a thread from a pull request or issue starts with weaver's task written into the form (`Review #45`, `Implement ENG-42`); otherwise the task is empty, and an empty task starts the agent with no prompt |
 | `LINEAR_API_KEY` | unset | The Linear API key to use instead of the one `wvr linear login` keeps in the Keychain |
-| `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves the hooks and plugins alone as it starts (`wvr setup` still sets them up) |
+| `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves its hooks, tuicr's files and its skill alone as it starts (`wvr setup` still sets them up) |
 | `WEAVER_DEBUG` | unset | Write hook errors to `~/.local/state/weaver/hook.log`; `trace` traces every hook there |
 
 ## Development

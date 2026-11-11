@@ -59,14 +59,15 @@ const Usage = `usage: wvr [command]
                                under HELD until you resume it
   resume [--all] [which]       threads lost when their session went (a crash, or quit), or
                                held: alone, list them; with a name, number or session id,
-                               bring that one back in a new window resuming its
-                               conversation; --all, every lost one. --forget [--yes] which:
+                               bring that one back in a session of its own resuming
+                               its conversation; --all, every lost one. --forget [--yes] which:
                                drop one
   adopt [pane-id | session-id] make a conversation weaver did not start a thread, kept
                                and brought back as threads are: the agent in this pane
-                               (or pane-id) where it runs, or conversation session-id
-                               resumed in a new window; alone, pick one of Claude Code's
-                               recent conversations. Outside it, into the weaver session
+                               (or pane-id), ended between turns, or conversation
+                               session-id, resumed in a session of its own; alone, pick
+                               one of Claude Code's recent conversations. Outside it,
+                               into the weaver session
   rename [pane-id] [name]      call a thread name on the board and its window, in place of
                                its agent's title; with no name, ask; an empty one gives the
                                agent's title back
@@ -78,7 +79,6 @@ const Usage = `usage: wvr [command]
                                every agent and review in it, after asking; its threads are
                                kept and come back as the weaver session starts again
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
-  event [--bell]               an event of any agent, as normalized JSON on stdin
   review [--full] [pane-id]    open or jump to the review panel (tuicr) of the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
