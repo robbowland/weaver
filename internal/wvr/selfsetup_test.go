@@ -26,7 +26,6 @@ func TestSelfSetup(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
-	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("WEAVER_SELF_SETUP", "")
 	settings := filepath.Join(home, ".claude", "settings.json")
 
@@ -54,8 +53,5 @@ func TestSelfSetup(t *testing.T) {
 	}
 	if bk, _ := filepath.Glob(settings + ".bak.*"); len(bk) != 0 {
 		t.Errorf("backups of a file that was not there: %v", bk)
-	}
-	if files.Exists(filepath.Join(home, ".codex")) {
-		t.Error("Codex's hooks made without ~/.codex")
 	}
 }

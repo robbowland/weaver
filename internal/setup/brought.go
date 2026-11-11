@@ -65,8 +65,8 @@ func (f Brought) Write() error {
 // panel (where you have none: diff_watch_interval_ms, which no flag sets)
 // and its Micrographics theme (the colours, and the syntax theme beside
 // them), in tuicr's configuration directory; and the weaver skill, its
-// workflow for the agents, where Claude Code and Codex read skills, for
-// each you have (its configuration directory is there). Neither
+// workflow for the agents, where Claude Code reads skills, when you have
+// it (its configuration directory is there). Neither
 // $XDG_CONFIG_HOME nor anything else is set for tuicr to find its files:
 // the nvim its `e` opens would inherit it.
 func BroughtFiles() []Brought {
@@ -79,10 +79,7 @@ func BroughtFiles() []Brought {
 		{"tuicr's Micrographics syntax theme", "config/tuicr/themes/Micrographics.tmTheme", tuicr + "/themes/Micrographics.tmTheme"},
 	}
 	if claude := cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), home+"/.claude"); isDir(claude) {
-		fs = append(fs, place{"the weaver skill for Claude Code", "config/skills/weaver/SKILL.md", claude + "/skills/weaver/SKILL.md"})
-	}
-	if isDir(cmp.Or(os.Getenv("CODEX_HOME"), home+"/.codex")) {
-		fs = append(fs, place{"the weaver skill for Codex", "config/skills/weaver/SKILL.md", home + "/.agents/skills/weaver/SKILL.md"})
+		fs = append(fs, place{"the weaver skill", "config/skills/weaver/SKILL.md", claude + "/skills/weaver/SKILL.md"})
 	}
 	var out []Brought
 	for _, f := range fs {

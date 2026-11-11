@@ -1,6 +1,6 @@
 // Package hooks reads what the coding agents' hooks are given: Claude
-// Code's hook input, and other agents' events, normalized (wvr event) or
-// Codex's own (wvr adapt codex), as the same Input.
+// Code's hook input, and other agents' events, normalized (wvr event), as
+// the same Input.
 package hooks
 
 import (

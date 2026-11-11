@@ -2,7 +2,7 @@
 # install.sh in a sandbox home: a fresh install (one binary, its files
 # unpacked), the old install's copies removed (its Neovim plugin's among
 # them), Claude Code hooks upgraded from older weaver (and agentnav)
-# entries without leaving stale ones or touching anyone else's, Codex's, and
+# entries without leaving stale ones or touching anyone else's, and
 # idempotent reruns.
 . "$(dirname "$0")/../lib.sh"
 
@@ -24,7 +24,7 @@ printf 'return {}\n' >"$H/.local/share/weaver/nvim/lua/weaver/init.lua"
 export GOMODCACHE GOCACHE
 GOMODCACHE=$(go env GOMODCACHE) GOCACHE=$(go env GOCACHE)
 inst() {
-	env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
+	env HOME=$H XDG_DATA_HOME=$H/.local/share XDG_CONFIG_HOME=$H/.config CLAUDE_CONFIG_DIR=$H/.claude \
 		XDG_STATE_HOME=$H/.local/state PATH="$H/.local/bin:$PATH" "$ROOT/install.sh" "$@" 2>&1
 }
 
@@ -72,32 +72,12 @@ ok "...and the weaver skill where Claude Code reads skills" \
 	"$(sed -n 2p "$H/.claude/skills/weaver/SKILL.md" 2>/dev/null)" "name: weaver"
 ok "a backup of the settings is kept" "$(ls "$H/.claude" | grep -c '^settings.json.bak\.')" "1"
 
-ok "no ~/.codex: nothing created for Codex" "$([ -e "$H/.codex" ] && echo made || echo none)" "none"
-
-# Codex, set up with someone else's hooks.
-mkdir -p "$H/.codex"
-cat >"$H/.codex/hooks.json" <<'EOF'
-{ "hooks": { "SessionStart": [{ "matcher": "startup|resume", "hooks": [{ "type": "command", "command": "headroom init", "timeout": 15 }] }] } }
-EOF
-out=$(inst --configure)
-C=$H/.codex/hooks.json
-ok "codex: wvr adapts every Codex hook event" \
-	"$(jq -r '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | test("/wvr adapt codex"))) | .key] | sort | join(",")' "$C")" \
-	"Interrupt,PermissionRequest,PostToolUse,SessionEnd,SessionStart,Stop,SubagentStart,SubagentStop,UserPromptSubmit"
-ok "...by absolute path" "$(jq -r '.hooks.Stop[0].hooks[0].command' "$C")" "$H/.local/bin/wvr adapt codex --bell"
-ok "...leaving its other hooks" "$(jq -r '.hooks.SessionStart[] | .hooks[].command' "$C" | grep -c headroom)" "1"
-ok "...and says to trust them" "$(printf '%s\n' "$out" | grep -c 'trust weaver.s hooks in /hooks')" "1"
-
 sleep 1.1 # a new backup would get a new name
 before=$(cat "$S")
 out=$(inst --configure)
 ok "rerun: settings unchanged" "$(cat "$S")" "$before"
 ok "...no new backup" "$(ls "$H/.claude" | grep -c '^settings.json.bak\.')" "1"
-ok "...and says so" "$(printf '%s\n' "$out" | grep -c 'already runs weaver')" "2"
-before=$(cat "$C")
-rm -f "$H/.codex/hooks.json"
-out=$(inst --configure --no-codex)
-ok "--no-codex leaves Codex alone" "$([ -e "$C" ] && echo touched || echo alone)" "alone"
+ok "...and says so" "$(printf '%s\n' "$out" | grep -c 'already runs weaver')" "1"
 # The command's old name: a weaver binary there is kept the same build (its
 # sessions' hooks run it), never made where there was none.
 printf 'old' >"$H/.local/bin/old" && cp "$H/.local/bin/wvr" "$H/.local/bin/weaver" && cat "$H/.local/bin/old" >>"$H/.local/bin/weaver"
@@ -118,7 +98,7 @@ FB
 chmod +x "$BREW/brew"
 ln -s "$(command -v git)" "$BREW/git"
 rm -f "$AT/brew.log"
-fixed=$(env -u REX_BIN_DIR HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state CLAUDE_CONFIG_DIR=$H/.claude CODEX_HOME=$H/.codex \
+fixed=$(env -u REX_BIN_DIR HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=$H/.local/state CLAUDE_CONFIG_DIR=$H/.claude \
 	PATH="$BREW:/usr/bin:/bin" "$H/.local/bin/wvr" doctor --fix 2>&1 </dev/null)
 rc=$?
 ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \

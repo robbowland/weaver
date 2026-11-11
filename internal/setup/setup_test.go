@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,7 +26,7 @@ func TestMergeHooks(t *testing.T) {
 }`
 	add := `{"hooks": {
     "Stop": [{ "hooks": [{ "type": "command", "command": "wvr", "args": ["hook"] }] }],
-    "Interrupt": [{ "hooks": [{ "type": "command", "command": "wvr adapt codex --bell" }] }]
+    "Notification": [{ "hooks": [{ "type": "command", "command": "wvr event --bell" }] }]
   }}`
 	out, err := mergeHooks([]byte(settings), []byte(add), "/new/bin/wvr")
 	if err != nil {
@@ -39,7 +38,7 @@ func TestMergeHooks(t *testing.T) {
 			t.Errorf("%s left in:\n%s", gone, s)
 		}
 	}
-	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/wvr adapt codex --bell"`} {
+	for _, kept := range []string{`"say done"`, `"my-linter"`, `"ünïcode ✓"`, `"/new/bin/wvr event --bell"`} {
 		if !strings.Contains(s, kept) {
 			t.Errorf("%s missing from:\n%s", kept, s)
 		}
@@ -67,7 +66,7 @@ func TestMergeHooks(t *testing.T) {
 	for _, m := range h {
 		evs = append(evs, m.k)
 	}
-	if strings.Join(evs, " ") != "Stop PostToolUse Interrupt" {
+	if strings.Join(evs, " ") != "Stop PostToolUse Notification" {
 		t.Errorf("events (kept in place, new ones last): %v", evs)
 	}
 	again, err := mergeHooks(out, []byte(add), "/new/bin/wvr")
@@ -87,7 +86,6 @@ func TestBring(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", conf)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	t.Setenv("CODEX_HOME", "")
 	bs := BroughtFiles()
 	if len(bs) != 3 {
 		t.Fatalf("%d files brought, want tuicr's settings, theme and syntax theme", len(bs))
@@ -125,50 +123,45 @@ func TestBring(t *testing.T) {
 	}
 }
 
-// The weaver skill goes where each agent you have reads skills (Claude
-// Code's config directory, and for Codex ~/.agents/skills), and none where
-// you have neither; one you made yours (no mark) stays.
+// The weaver skill goes where Claude Code reads skills, when you have it
+// (its config directory is there); one you made yours (no mark) stays.
 func TestBringSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	t.Setenv("CODEX_HOME", "")
-	skills := func() []string {
-		var out []string
+	skill := home + "/.claude/skills/weaver/SKILL.md"
+	brought := func() bool {
 		for _, f := range BroughtFiles() {
-			if strings.HasSuffix(f.Path, "/SKILL.md") {
-				out = append(out, strings.TrimPrefix(f.Path, home))
+			if f.Path == skill {
+				return true
 			}
 		}
-		return out
+		return false
 	}
-	if got := skills(); len(got) != 0 {
-		t.Errorf("no agent here: skills %q", got)
+	if brought() {
+		t.Error("no Claude Code here, yet its skill is brought")
 	}
-	for _, d := range []string{"/.claude", "/.codex"} {
-		if err := os.MkdirAll(home+d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got := strings.Join(skills(), " "); got != "/.claude/skills/weaver/SKILL.md /.agents/skills/weaver/SKILL.md" {
-		t.Errorf("skills %q", got)
-	}
-	mine := home + "/.agents/skills/weaver/SKILL.md"
-	if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
+	if err := os.MkdirAll(home+"/.claude", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(mine, []byte("---\nname: weaver\n---\nmine\n"), 0o644); err != nil {
+	if !brought() {
+		t.Fatal("Claude Code here, and no skill brought")
+	}
+	if _, err := Bring(BroughtFiles()); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(skill); err != nil || !bytes.HasPrefix(b, []byte("---\nname: weaver\n")) || !bytes.Contains(b, mark) {
+		t.Errorf("the skill: %q (%v)", b, err)
+	}
+	mine := "---\nname: weaver\n---\nmine\n"
+	if err := os.WriteFile(skill, []byte(mine), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Bring(BroughtFiles()); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile(home + "/.claude/skills/weaver/SKILL.md")
-	if err != nil || !bytes.HasPrefix(b, []byte("---\nname: weaver\n")) || !bytes.Contains(b, mark) {
-		t.Errorf("Claude Code's skill: %q (%v)", b, err)
-	}
-	if b, _ := os.ReadFile(mine); string(b) != "---\nname: weaver\n---\nmine\n" {
+	if b, _ := os.ReadFile(skill); string(b) != mine {
 		t.Errorf("your skill: %q, want it left alone", b)
 	}
 }

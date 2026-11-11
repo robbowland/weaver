@@ -4,7 +4,7 @@
 needs you.**
 
 weaver gives each task its own Rex window, called a *thread*: the agent
-(Claude Code or Codex) on the right and a review of its work
+(Claude Code) on the right and a review of its work
 ([tuicr](https://github.com/agavra/tuicr)) on the left, in a git worktree of
 its own. One board shows every thread and what it
 is doing. One key jumps to the agent that has waited on you longest. And your
@@ -58,15 +58,13 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 - macOS, with [Homebrew](https://brew.sh).
 - [Rex](https://www.superlogical.com/rex), the terminal weaver runs in, with
   Remote Control on in its settings (so `wvr` can show you its session).
-- [Claude Code](https://github.com/anthropics/claude-code) or
-  [Codex](https://github.com/openai/codex), installed and signed in.
+- [Claude Code](https://github.com/anthropics/claude-code), installed and
+  signed in.
 - Option sending Alt to programs, since some of weaver's keys are its
   lists' own (`alt+m` in a view): in Rex, run Change Option Key Behavior from
   its command palette and have Option send Alt (its default, Automatic,
   sends Alt only on a U.S. keyboard layout, and types special characters on
   any other).
-- Codex threads are not followed yet: Codex runs its hooks in a daemon
-  shared by every session, which weaver cannot place in a Rex block.
 
 Homebrew installs everything else weaver uses: fzf, tuicr, Neovim (for
 editing from a review),
@@ -89,9 +87,8 @@ The command is `wvr`. `brew upgrade` keeps it current.
    ```
 
    This opens weaver's Rex session on *home*, the board of your threads.
-   The first time, `wvr` adds its hooks to Claude Code (and to Codex, if you
-   use it). Restart any Claude Code session that was already running so it
-   picks them up.
+   The first time, `wvr` adds its hooks to Claude Code. Restart any Claude
+   Code session that was already running so it picks them up.
 
 2. **Start a thread.** Press `alt+N`, type what the agent should do, and press
    `enter`. weaver creates a worktree on a new branch named after the task,
@@ -135,8 +132,7 @@ shows more of a section, `f` adds a quick filter (assigned to you, a
 repository, a label), and `/` searches what the view holds, `ctrl+s`
 asking GitHub or Linear instead.
 
-**Its workflow.** weaver installs a `weaver` skill for Claude Code (and
-Codex): agents start helpers as agents of their own beside them, commit in
+**Its workflow.** weaver installs a `weaver` skill for Claude Code: agents start helpers as agents of their own beside them, commit in
 small steps, report done as the branch's commits, and read your review
 comments from tuicr.
 
@@ -225,8 +221,8 @@ missing; `wvr doctor --fix` fixes what it can.
   and their formats.
 - [Decisions](docs/decisions.md): why weaver is the way it is.
 
-weaver follows Claude Code through its hooks and Codex through an adapter. Any
-other agent can report to it with `wvr event`
+weaver follows Claude Code through its hooks. Any other agent can report to
+it with `wvr event`
 ([design](docs/design.md#events-from-other-agents)).
 
 ## Development

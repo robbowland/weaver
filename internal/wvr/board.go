@@ -350,9 +350,6 @@ func (e *Env) rows(plain bool) string {
 		case a.NotReporting(now):
 			fact = "not reporting"
 			glyph = paint(GIdle, dim, dim, off)
-			if a.Agent == "codex" {
-				fact = "no hooks: trust them in codex /hooks"
-			}
 		case a.State == agent.StateStarting:
 			// Its agent reports within seconds.
 			fact = string(agent.StateStarting)
@@ -817,7 +814,7 @@ func welcome(cols, lines int, views bool, q string) (string, []string) {
 		rows = append(rows, row{"alt+y", "your pull requests and issues", "execute-silent(" + q + " go home)"})
 	}
 	about := "a thread is a task, its worktree, and an agent beside its review"
-	note := "or start claude or codex in any pane: weaver follows it"
+	note := "or start claude in any pane: weaver follows it"
 	text := []string{CBold + CInk + "No threads yet" + COff, CGrey + about + COff, ""}
 	acts := []string{"", "", ""}
 	w := max(rlen(about), rlen(note))

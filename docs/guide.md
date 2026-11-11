@@ -68,10 +68,8 @@ what ran in them, a shell where each program was. `wvr` then starts the
 the one Rex brought back.
 
 weaver acts only on the session it made: agents you start by hand in another
-Rex session do not report to it (adopt them, below). weaver does not follow
-Codex yet (Codex runs its hooks in a daemon every session shares, which
-weaver cannot place in a Rex block), so it says so rather than start,
-resume, adopt or restart a Codex thread.
+Rex session do not report to it (adopt them, below). It follows Claude
+Code.
 
 ## Threads
 
@@ -100,14 +98,13 @@ where you are. Each choice also has a key that changes it from anywhere:
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
 | `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
 | `base` | `alt+B` | Where a new branch starts: the remote's default branch, freshly fetched (the default); `@`, the HEAD of the checkout you are in; or any branch |
-| `agent` | `alt+c` | Claude Code or Codex |
 | `mode` | `alt+m` | Work, or read-only: a review, or an investigation of a pull request or issue |
 |  | `ctrl+e` | Write a long task in `$EDITOR` |
 |  | `esc` | Cancel |
 
 From a shell, `wvr new "fix the flaky test"` does the same. Its options are
 `--name NAME`, `--repo DIR`, `--branch NAME`, `--base REF`, `--here` (the current checkout),
-`--agent codex`, `--edit` (write the task in `$EDITOR`) and `--no-focus`.
+`--edit` (write the task in `$EDITOR`) and `--no-focus`.
 
 ### Worktrees and branches
 
@@ -132,10 +129,9 @@ is in the window.
 
 ### Restarting an agent
 
-After you update Claude Code or Codex, running agents carry on with the old
+After you update Claude Code, running agents carry on with the old
 version. `R` on the board, or `wvr restart`, starts a thread's agent again in
-its own pane, resuming the same conversation (`claude --resume`, `codex
-resume`): its window, review and number stay, and the task is never sent
+its own pane, resuming the same conversation (`claude --resume`): its window, review and number stay, and the task is never sent
 twice. `wvr restart --all` restarts every thread's agent, from any shell. An
 agent that is working, or waiting on you, is left alone, since restarting it
 would stop its turn; `--force` restarts it all the same.
@@ -233,7 +229,7 @@ review on #45`, `Implement #12`).
 `alt+m` is the read-only version. On a pull request, it starts a thread on the
 pull request's branch whose review shows it against the branch it merges
 into, and whose agent reviews without changing files (Claude Code in
-plan mode, Codex in a read-only sandbox). On an issue, it starts an
+plan mode). On an issue, it starts an
 investigation that ends in a plan for you to approve. The form's `alt+m`
 switches between work and read-only.
 
@@ -480,12 +476,11 @@ Dragging in a pane selects and copies, as Rex does.
 
 `wvr` sets itself up as it starts, when it is the `wvr` on your PATH:
 
-- **Hooks.** Claude Code's hooks (`~/.claude/settings.json`) and Codex's
-  (`~/.codex/hooks.json`, when you have Codex) run `wvr`. It backs each file
-  up before it first changes it, replaces any older weaver hooks, and leaves
-  everyone else's alone. The hooks run the binary directly, without a shell;
-  those nobody needs to wait for run in the background. Codex runs them only
-  after you trust them in its `/hooks`.
+- **Hooks.** Claude Code's hooks (`~/.claude/settings.json`) run `wvr`. It
+  backs the file up before it first changes it, replaces any older weaver
+  hooks, and leaves everyone else's alone. The hooks run the binary
+  directly, without a shell; those nobody needs to wait for run in the
+  background.
 - **tuicr's settings and theme.** For its review panel it writes tuicr's
   Micrographics theme (`micrographics.toml` and the `Micrographics.tmTheme`
   beside it) into `~/.config/tuicr/themes/`, and, when you have no
@@ -495,8 +490,7 @@ Dragging in a pane selects and copies, as Rex does.
   weaver's in its first lines, and weaver keeps it up to date while that
   line stays; a file of yours, or one whose line you removed, is left alone.
 - **The weaver skill.** It writes the `weaver` skill where Claude Code
-  reads skills (`~/.claude/skills/weaver/`) and, when you have Codex, where
-  Codex does (`~/.agents/skills/weaver/`): how an agent works in a thread
+  reads skills (`~/.claude/skills/weaver/`): how an agent works in a thread
   (helpers as agents of their own beside it, small commits of only its own
   paths, done as `git log --oneline <base>..HEAD`, and your review read
   from tuicr). Like tuicr's files, it is rewritten while its first lines
@@ -548,7 +542,7 @@ Environment variables change weaver's defaults.
 
 | Variable | Default | Does |
 | --- | --- | --- |
-| `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
+| `WEAVER_CLAUDE` | `claude` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_TUICR` | `tuicr` | The tuicr a review runs |
 | `WEAVER_SESSION` | `weaver` | The session `wvr` shows or starts |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |

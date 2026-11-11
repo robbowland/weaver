@@ -22,20 +22,17 @@ import (
 // old names): its name alone, a path to it, either with arguments.
 var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 
-// Run is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
-// hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
-// exists), run by this binary's path (or PATH), each file backed up before
+// Run is `wvr setup [--dry-run] [--bin PATH]`: weaver's hooks into Claude
+// Code's settings, run by this binary's path (or PATH), each file backed up before
 // it changes; the files it brings to other programs written (BroughtFiles);
 // its files unpacked. `wvr` does the same as it starts (SelfSetup); this
 // shows the changes.
 func Run(args []string, self string, out io.Writer) error {
-	dry, codex, bin := false, true, self
+	dry, bin := false, self
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dry-run":
 			dry = true
-		case "--no-codex":
-			codex = false
 		case "--bin":
 			if i+1 >= len(args) {
 				return &cli.Exit{Code: 2, Err: errors.New("--bin needs a path")}
@@ -43,7 +40,7 @@ func Run(args []string, self string, out io.Writer) error {
 			i++
 			bin = args[i]
 		default:
-			return &cli.Exit{Code: 2, Err: errors.New("usage: wvr setup [--dry-run] [--no-codex] [--bin PATH]")}
+			return &cli.Exit{Code: 2, Err: errors.New("usage: wvr setup [--dry-run] [--bin PATH]")}
 		}
 	}
 	if !dry {
@@ -54,12 +51,7 @@ func Run(args []string, self string, out io.Writer) error {
 	ts := Timestamp()
 	// Each configuration's problem is said as it comes; the others go on.
 	var failed error
-	codexDone := false
 	for _, c := range Configs() {
-		if c.Label == "codex" && !codex {
-			continue
-		}
-		codexDone = codexDone || c.Label == "codex"
 		ch, err := Plan(c, bin)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
@@ -104,11 +96,6 @@ func Run(args []string, self string, out io.Writer) error {
 Done. To pick it up:
   - restart any Claude Code sessions that are already running: they read hooks at start
 `)
-	if codexDone {
-		fmt.Fprint(out, `  - Codex: trust weaver's hooks in /hooks (Codex asks before running new hooks), then
-    restart running Codex sessions
-`)
-	}
 	return nil
 }
 

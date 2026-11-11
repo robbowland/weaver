@@ -24,8 +24,7 @@ const (
 )
 
 // startWait is how long a thread's agent has (s) to report before it
-// counts as not reporting: its hooks not in place (Codex runs them only
-// once trusted in /hooks).
+// counts as not reporting: its hooks not in place.
 const startWait = 120
 
 // Need is what row r asks of you at now (epoch s).

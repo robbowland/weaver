@@ -176,13 +176,7 @@ var commands = map[string]command{
 
 	// The agents' hooks, and other agents' events.
 	"hook":  {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
-	"event": {run: func(e *wvr.Env, args []string) error { return engine.Event(e.Env, "", slices.Contains(args, "--bell")) }},
-	"adapt": {run: func(e *wvr.Env, args []string) error {
-		if arg(args, 0) != "codex" {
-			return errors.New("usage: wvr adapt codex [--bell]")
-		}
-		return engine.Event(e.Env, "codex", slices.Contains(args[1:], "--bell"))
-	}},
+	"event": {run: func(e *wvr.Env, args []string) error { return engine.Event(e.Env, slices.Contains(args, "--bell")) }},
 
 	// The board's fzf, its preview and views.
 	"_rows": {session: true, run: prints(func(e *wvr.Env, _ []string) string {

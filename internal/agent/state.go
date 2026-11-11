@@ -36,10 +36,7 @@ var States = []State{StateWorking, StateNeedsYou, StateDone, StateIdle, StateInt
 // Kind is which coding agent runs in a pane.
 type Kind string
 
-const (
-	Claude Kind = "claude"
-	Codex  Kind = "codex"
-)
+const Claude Kind = "claude"
 
 // ParseKind is name as a Kind: claude when empty, false when it
 // names no agent weaver knows.
@@ -47,7 +44,7 @@ func ParseKind(name string) (Kind, bool) {
 	switch k := Kind(name); k {
 	case "":
 		return Claude, true
-	case Claude, Codex:
+	case Claude:
 		return k, true
 	}
 	return "", false

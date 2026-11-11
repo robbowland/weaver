@@ -28,8 +28,8 @@ func (e *Env) LoseStaleThread(p mux.PaneID) {
 }
 
 // ThreadLearns records conversation sid in pane p's thread record, when it
-// has one that does not know it yet (Codex says its own at its first event;
-// Claude Code's changes with /clear): so it can be resumed whether or not
+// has one that does not know it yet (Claude Code's changes with /clear):
+// so it can be resumed whether or not
 // its agent's state survives.
 func (e *Env) ThreadLearns(p mux.PaneID, sid string) {
 	f := e.ThreadFile(p)

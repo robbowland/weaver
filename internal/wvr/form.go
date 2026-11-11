@@ -34,9 +34,9 @@ import (
 // form is the thread the form would start: its name as you edited it
 // (empty: formName's), the repository (its main checkout; empty: not in
 // one), Here (the checkout "this checkout" means), the branch as you edited
-// it (empty: from the task), Where (worktree | here), the agent (claude |
-// codex), the base (empty: the default), Mode (review: read-only; empty:
-// work) and the work item it starts from.
+// it (empty: from the task), Where (worktree | here), the agent (claude),
+// the base (empty: the default), Mode (review: read-only; empty: work) and
+// the work item it starts from.
 type form struct {
 	Name   string     `json:"name,omitempty"`
 	Repo   string     `json:"repo"`
@@ -102,11 +102,6 @@ func agentCmd(a agent.Kind) string {
 			return c
 		}
 		return "claude"
-	case agent.Codex:
-		if c := os.Getenv("WEAVER_CODEX"); c != "" {
-			return c
-		}
-		return "codex"
 	}
 	return ""
 }
@@ -318,11 +313,6 @@ func (e *Env) formFields(sf, task string) []formField {
 			e.baseRow(fm, m, add)
 		}
 	}
-	if agentInstalled(fm.Agent) {
-		add("agent", "agent", string(fm.Agent), string(fm.Agent))
-	} else {
-		add("agent", "agent", string(fm.Agent)+"  not installed", string(fm.Agent)+"  "+CGrey+"not installed"+COff)
-	}
 	return fs
 }
 
@@ -369,7 +359,7 @@ func formGhost(fm form) string {
 // line between groups only (what it is, where it works, who works):
 // nearness says what belongs together, and a terminal's least gap is a
 // whole line, twice a row's height.
-var formGroup = map[string]int{"name": 1, "from": 1, "mode": 1, "repo": 2, "where": 2, "branch": 2, "base": 2, "agent": 3}
+var formGroup = map[string]int{"name": 1, "from": 1, "mode": 1, "repo": 2, "where": 2, "branch": 2, "base": 2}
 
 func (e *Env) FormRows(sf, task string) string {
 	var b strings.Builder
@@ -404,12 +394,12 @@ func formFocus(id string) string {
 
 // formKeys are each row's key, for the footer: the row's action from
 // anywhere in the form.
-var formKeys = map[string]string{"name": "alt-n", "repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "agent": "alt-c", "mode": "alt-m"}
+var formKeys = map[string]string{"name": "alt-n", "repo": "ctrl-r", "where": "alt-w", "branch": "alt-b", "base": "alt-B", "mode": "alt-m"}
 
 // formDoes is what enter does on each of the form's rows that has a
 // choice (start starts).
 var formDoes = map[string]string{"name": "NAME THE THREAD", "repo": "PICK THE REPOSITORY", "where": "PICK WHERE IT WORKS", "branch": "NAME THE BRANCH",
-	"base": "PICK WHERE IT STARTS", "agent": "SWITCH THE AGENT", "mode": "SWITCH WORK / READ-ONLY"}
+	"base": "PICK WHERE IT STARTS", "mode": "SWITCH WORK / READ-ONLY"}
 
 // formEnter is what enter does on row id, with the key that does it from
 // anywhere ("" on a row with nothing to do).
@@ -568,7 +558,7 @@ func checkThread(task string, fm form) string {
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
 // one, the form's), its worktree and its window. ok false for --help.
 func (e *Env) New(args []string) error {
-	var nameArg, repoArg, branch, base, agentArg, itemArg string
+	var nameArg, repoArg, branch, base, itemArg string
 	var from mux.PaneID
 	var where Where
 	var itemKind items.GitHubKind
@@ -594,8 +584,6 @@ func (e *Env) New(args []string) error {
 				branch = v
 			case "--base":
 				base = v
-			case "--agent":
-				agentArg = v
 			case "--pr", "--issue":
 				itemArg, itemKind = v, items.GitHubKind(strings.TrimPrefix(a, "--"))
 			}
@@ -625,10 +613,7 @@ func (e *Env) New(args []string) error {
 	if e.Session == "" {
 		return errors.New("not inside a weaver session: start it with `wvr`, then alt+N (or wvr new) there")
 	}
-	kind, ok := agent.ParseKind(agentArg)
-	if !ok {
-		return errors.New("unknown agent: " + agentArg + " (claude or codex)")
-	}
+	kind := agent.Claude
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()
 	switch {
@@ -945,7 +930,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 // (.at) for the reload's load to land on (_form land).
 func formAct(q, qs, id string) string {
 	ex := "execute"
-	if id == "agent" || id == "mode" {
+	if id == "mode" {
 		ex = "execute-silent"
 	}
 	return "execute-silent(printf '%s' {1} >" + qs + ".at)+" + ex + "(" + q + " _form " + id + " " + qs + " {q})+reload(" + q + " _form rows " + qs + " {q})" +
@@ -1031,13 +1016,6 @@ func (e *Env) Form(op, sf, q string) {
 			fm.Mode = items.ModeWork
 		} else {
 			fm.Mode = items.ModeReview
-		}
-		fm.save(sf)
-	case "agent":
-		if fm.Agent == agent.Claude {
-			fm.Agent = agent.Codex
-		} else {
-			fm.Agent = agent.Claude
 		}
 		fm.save(sf)
 	case "base":

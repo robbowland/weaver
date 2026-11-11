@@ -177,7 +177,7 @@ func Intro() string {
 		g + "alt+N" + o + "   the same from anywhere in the session\n" +
 		g + "alt+y" + o + "   the views beside home: GITHUB, LINEAR " + d + "(one with a\n" +
 		"        dot is not set up yet: going there sets it up)" + o + "\n\n" +
-		d + "Or start claude or codex in any pane: weaver follows it\n" +
+		d + "Or start claude in any pane: weaver follows it\n" +
 		"through its hooks." + o + "\n"
 }
 

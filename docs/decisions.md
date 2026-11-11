@@ -190,6 +190,16 @@ can supersede an earlier one, and says so.
   note on it (Rob asked for a rename; it had no use left): weaver's blocks
   and keys run only in sessions weaver made, which it knows by its record
   of them, so nothing needs to tell it to act on another.
+- 2026-11-11: Codex support is gone (Rob mainly uses Claude Code),
+  superseding the 2026-10-14 entries on Codex and the Rex-alone entry's note
+  that Codex threads were refused: on Rex they were, so its adapter (`wvr
+  adapt codex`), its hooks file, `--agent`, the form's agent row (alt+c),
+  `WEAVER_CODEX`, `wvr setup --no-codex` and the Codex skill were dead. It
+  is one commit, to revert as a whole. A Rex port could bring it back: what
+  stopped it is that Codex runs every session's hooks in a daemon with the
+  environment of whichever session started it, so a hook does not say its
+  block; placing it would need the daemon's sessions mapped to Rex blocks
+  (by a Codex process's own environment and directory, say).
 
 ## Holding threads
 

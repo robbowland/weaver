@@ -15,7 +15,7 @@ import (
 )
 
 // Restarting: a thread's agent started again where it is, resuming its
-// conversation, so an updated harness (a new Claude Code or Codex) takes
+// conversation, so an updated harness (a new Claude Code) takes
 // over without closing the session. Its window, nvim and number stay.
 
 const restartUsage = "usage: wvr restart [--all] [--force] [pane-id]"
@@ -127,9 +127,6 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	kind, ok := agent.ParseKind(string(th.Agent))
 	if !ok {
 		kind = agent.Claude
-	}
-	if err := e.followable(kind); err != nil {
-		return label, err
 	}
 	tok := token()
 	d := e.opening(tok)

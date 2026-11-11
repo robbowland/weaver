@@ -22,11 +22,6 @@ func TestCommand(t *testing.T) {
 		{Claude, "claude --model opus --dangerously-skip-permissions --permission-mode acceptEdits", ModeReview,
 			"claude --model opus --permission-mode plan"},
 		{Claude, "claude --permission-mode=bypassPermissions", ModeReview, "claude --permission-mode plan"},
-		{Codex, "codex", ModeReview, "codex --sandbox read-only"},
-		{Codex, "codex --sandbox read-only", ModeReview, "codex --sandbox read-only"},
-		{Codex, "codex --full-auto -s workspace-write -m o3", ModeReview, "codex -m o3 --sandbox read-only"},
-		{Codex, "codex --dangerously-bypass-approvals-and-sandbox --sandbox=danger-full-access", ModeReview, "codex --sandbox read-only"},
-		{Codex, "codex --full-auto", ModeWork, "codex --full-auto"},
 	} {
 		if got := strings.Join(Command(c.k, c.base, c.m), " "); got != c.want {
 			t.Errorf("Command(%s, %q, %q) = %q, want %q", c.k, c.base, c.m, got, c.want)

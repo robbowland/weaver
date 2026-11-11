@@ -4,9 +4,8 @@
 # `brew install robbowland/kegs/weaver` (or --HEAD, for what is on main).
 #
 #   ./install.sh                  build wvr into ~/.local/bin, and say what is left (wvr doctor)
-#     --configure                 also add the Claude Code (and Codex) hooks now
+#     --configure                 also add the Claude Code hooks now
 #                                 (`wvr setup`; wvr does it itself as it starts)
-#     --no-codex                  leave Codex alone (default: add its hooks when ~/.codex exists)
 #     --dry-run                   print what would change without writing anything
 #
 # Idempotent: rerunning refreshes the installed copy and skips what is there.
@@ -23,12 +22,11 @@ die() {
 	exit 1
 }
 
-configure=0 dry=0 codex=1
+configure=0 dry=0
 while [ $# -gt 0 ]; do
 	case $1 in
 	--configure) configure=1 ;;
 	--dry-run) dry=1 ;;
-	--no-codex) codex=0 ;;
 	-h | --help)
 		sed -n '2,11p' "$0"
 		exit 0
@@ -123,7 +121,6 @@ if [ $configure = 1 ]; then
 	# The hooks: `wvr setup` (with --dry-run, by a build of this checkout
 	# that is not installed).
 	set -- --bin "$BIN/wvr"
-	[ $codex = 1 ] || set -- "$@" --no-codex
 	if [ $dry = 1 ]; then
 		tmp=$(mktemp -d "${TMPDIR:-/tmp}/weaver.XXXXXX")
 		(cd "$SRC" && go build -o "$tmp/wvr" ./cmd/wvr) || die "cannot build weaver"

@@ -121,8 +121,6 @@ func (e *Env) gcFiles() {
 	old(e.StateDir+"/new", "*", day, true)
 	old(e.StateDir, "form.*", day, false)
 	old(e.StateDir+"/fetch", "*", day, false)
-	// Codex sessions' panes (engine.codexPane), of sessions long gone.
-	old(e.StateDir+"/codex", "*", month, false)
 	if st, err := os.Stat(e.StateDir + "/close.log"); err == nil && st.Size() > 100000 {
 		os.Remove(e.StateDir + "/close.log")
 	}

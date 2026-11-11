@@ -1,6 +1,5 @@
 #!/bin/bash
-# Agents other than Claude Code: `wvr event` (normalized JSON), and the Codex
-# adapter (`wvr adapt codex`), which weaver cannot place on Rex yet.
+# Agents other than Claude Code: `wvr event` (normalized JSON).
 . "$(dirname "$0")/../lib.sh"
 fresh
 
@@ -38,10 +37,4 @@ ok "event: session end" "$(st 2 state)" "ended"
 settle
 kill "$P"
 
-# --- the Codex adapter: weaver cannot place Codex's hooks in a Rex block
-# (its app server runs every session's, with any session's environment), so
-# it drops them, even one from inside a pane
-fresh
-printf '%s' "{\"session_id\":\"cx-1\",\"cwd\":\"$T/repo-wt-b\",\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}" | as_pane 1 wvr adapt codex
-ok "codex: its hooks are dropped" "$([ -f "$SD/${SK}_1.json" ] && echo pane-1 || echo none)" "none"
 done_suite

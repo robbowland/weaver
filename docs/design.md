@@ -26,16 +26,10 @@ Change one only with what reads it, and record why in
 
 Readers must ignore fields they don't know and tolerate missing ones.
 
-Codex runs its hooks in its app server, a daemon every Codex session shares,
-with the environment of whichever session started it, and neither a hook's
-input nor its process says where its session runs: weaver cannot place
-them in a Rex block, so `wvr adapt codex` drops every one, and weaver
-opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
-
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `pane` | int | the agent's pane: weaver's number for its Rex block |
-| `agent` | string | `claude`, `codex`, ... |
+| `agent` | string | `claude`, or the agent `wvr event` names |
 | `state` | string | `working`, `needs-you`, `done`, `idle`, `interrupted`, `ended` |
 | `since` | int | epoch s the state began; `ts` is the last event |
 | `seen` | bool | you have looked since it changed; unread = `done` and not `seen` |
@@ -61,17 +55,14 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 ## Events from other agents
 
 `wvr event [--bell]` reads one event as JSON on stdin; the pane is
-`$REX_BLOCK`'s unless the event names one. Adapters translate an agent's own
-hook input into it (`wvr adapt codex`). `--bell` rings the terminal bell on
-`/dev/tty` when the agent starts
-needing you or finishes, for agents that cannot ring through their hook
-output. Codex runs each hook in turn and waits on it, so its events are all
-taken as sync ones; what would make a hook wait on git (following a shell
-call's edits) goes to the background run.
+`$REX_BLOCK`'s unless the event names one. `--bell` rings the terminal bell
+on `/dev/tty` when the agent starts needing you or finishes, for agents that
+cannot ring through their hook output. Its tool and subagent events are
+taken as Claude Code's async ones.
 
 | Field | For | Meaning |
 | --- | --- | --- |
-| `agent` | all, required | `codex`, `gemini`, `pi`, ... (lowercase letters, digits, `_`, `-`; anything else is ignored): the state's `agent` |
+| `agent` | all, required | `gemini`, `pi`, ... (lowercase letters, digits, `_`, `-`; anything else is ignored): the state's `agent` |
 | `event` | all, required | below |
 | `session` | all | the agent's session id |
 | `pid` | all | the agent process (liveness); adapters find it at `session_start` |
@@ -79,7 +70,7 @@ call's edits) goes to the background run.
 | `source` | `session_start` | `startup`, `resume`, `clear`, `fork` |
 | `prompt`, `user` | `prompt` | the text; `user: false` for a machine-injected prompt (no turn) |
 | `waiting` | `needs_you` | what it waits on |
-| `tool_key` | `needs_you`, `tool_done` | which tool call, any text the same for a call's dialog and its end: while a dialog waits, another call ending leaves it waiting, its own moves on (the Codex adapter: the tool's name and input) |
+| `tool_key` | `needs_you`, `tool_done` | which tool call, any text the same for a call's dialog and its end: while a dialog waits, another call ending leaves it waiting, its own moves on |
 | `tool`, `file`, `command`, `paths` | `tool_done` | with `file`, an edit; without, its changes are found as for a Bash command (in `cwd`, the root and `paths`) |
 | `tool`, `error` | `tool_failed` | |
 | `message` | `stop` | its last reply |
@@ -124,10 +115,10 @@ remote is checked out tracking it (`wt switch` / `git worktree add`).
 The agent's pane takes the thread from `$STATE_DIR/new/<skey>_<token>/`:
 it moves `thread.json` to `<skey>_<its pane>.thread`, deletes `task` (read
 first, which claims it), removes the directory, then execs the agent with the
-task as its prompt (`claude "<task>"`, `codex "<task>"`). A thread restored
+task as its prompt (`claude "<task>"`). A thread restored
 after its session went leaves `resume` (the session id) there instead of
 `task`, and its agent's pane resumes: `claude --resume <session_id>`
-(the agent afresh when unknown), `codex resume <id>`. A thread closed
+(the agent afresh when unknown). A thread closed
 before its panel is recorded as bound is closed whole all the same: `close`
 finds that panel as the pane started for its agent. The pane is made to
 stay when its program exits (`Spawn.Keep`, naming the agent, and R and x),
@@ -200,15 +191,15 @@ the agent's other files. Readers ignore fields they don't know.
 | `worktree` | string | the directory the thread runs in (the checkout itself when `here`) |
 | `here` | bool | started in the current checkout, not a new worktree |
 | `worktree_created` | bool | `wvr new` made this worktree (only then may `wvr close` offer to remove it) |
-| `agent` | string | `claude` or `codex` |
-| `cmd` | string | the command its agent runs (`$WEAVER_CLAUDE`, `$WEAVER_CODEX`, else the agent's name) |
+| `agent` | string | `claude` |
+| `cmd` | string | the command its agent runs (`$WEAVER_CLAUDE`, else `claude`) |
 | `num` | int | its number in the session (below) |
 | `created` | int | epoch s |
 | `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
 | `pane` | int | the agent's pane |
 | `session_id` | string | its conversation: Claude Code's from the start (weaver chooses it), any agent's from its SessionStart on; absent while unknown |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
-| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan` or Codex's `--sandbox read-only`; absent otherwise |
+| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan`; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 The window's current name is Rex's; in the weaver session weaver labels it
@@ -287,7 +278,7 @@ thread's carries on (`writeResume`: idle, seen, without its process's
 fields) and `resume` (its session id) go to `new/<skey>_<token>/`, then
 `Respawn` starts `wvr _agent TOKEN KIND` in DIR in the pane's place, ending
 the agent, which takes them as a restored thread's pane
-does and resumes (`claude --resume`, `codex resume`). DIR is where a lost
+does and resumes (`claude --resume`). DIR is where a lost
 thread would resume (`Lost.Dir`). The pane id, its window, panel and number
 stay. It says what it did (restarted, left mid-turn, failed) on stdout and
 in a message, since the board's `R` and the popover run it out of
@@ -345,8 +336,7 @@ random nonce, said to be untrusted: written by anyone who can comment.
 Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
 silence (the item's `review_unread`). `--review` makes the thread's `mode`
-`review`: its agent runs Claude Code in plan mode, Codex in a read-only
-sandbox, each time it starts; a pull request's review panel shows the
+`review`: its agent runs Claude Code in plan mode, each time it starts; a pull request's review panel shows the
 branch against what the pull request merges into (its `weaverbase`).
 
 ### Commands for the dashboard
@@ -413,8 +403,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   written before the session was made, as the pane's first event does
   (`LoseStaleThread`), so a new pane of that number never takes it for its
   own, and the thread is never dropped. A thread record learns its
-  conversation at its agent's SessionStart (`session_id`: Codex says its own
-  then, Claude Code's changes with /clear), so it can be resumed whether or
+  conversation at its agent's SessionStart (`session_id`: Claude Code's
+  changes with /clear), so it can be resumed whether or
   not its agent's state survives.
 - **Record:** `$STATE_DIR/lost/<skey>_<session_id>.json` (a thread whose
   conversation was never known: `<skey>_thread-<created>-<num>.json`), one object:
@@ -450,9 +440,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   agent's pane takes the record and the state for its pane id (first
   retiring files under that pane id of another life of the session; its own
   life's, as when it restarts in its pane, stay, its panel still bound),
-  then execs `claude --resume <id>` (`codex resume <id>`; no conversation
-  known: the agent afresh, never `--continue` or `resume --last`, which
-  would guess another's); the panel binds as for a new thread. A
+  then execs `claude --resume <id>` (no conversation known: the agent
+  afresh, never `--continue`, which would guess another's); the panel binds as for a new thread. A
   conversation Claude Code runs elsewhere is refused, not resumed beside it. The state
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
   title and last reply.
@@ -799,11 +788,6 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
   server runs, or when the session is no longer on it; not known when a call
   that takes fails, when weaver takes nothing for lost (see [Lost
   threads](#lost-threads)).
-- **Codex:** not followed. Codex runs every session's hooks in its app
-  server, with the environment of whichever session started it, and weaver
-  cannot place them in a Rex block: `wvr adapt codex` drops them, and
-  weaver opens, resumes, adopts and restarts no Codex thread
-  (`errCodexOnRex`).
 - **Calls:** each look at the session is one `rex do` (its view, and each
   terminal's size, with `Panes` its directory and processes too); every
   other method one `rex api call`. A pane's environment goes through
@@ -869,18 +853,15 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
 `wvr` outside weaver's session (`Start`), when `$WEAVER_SELF_SETUP` is not
 `0` and it is the `wvr` on PATH (`os.SameFile` with `exec.LookPath`; a build
 run from a checkout never takes the hooks), runs `SelfSetup` before it
-starts or shows the session: for Claude
-Code (`$CLAUDE_CONFIG_DIR`, else `~/.claude`) and Codex (`$CODEX_HOME`, else
-`~/.codex`), when that directory exists, the hooks are merged as `wvr setup`
+starts or shows the session: for Claude Code (`$CLAUDE_CONFIG_DIR`, else
+`~/.claude`), when that directory exists, the hooks are merged as `wvr setup`
 merges them (`mergeHooks`, a backup first when the file was there), and one
 line on stderr says when a file changed. The files weaver brings to other
 programs (`setup.BroughtFiles`: tuicr's `config.toml`, and its theme's
 `themes/micrographics.toml` and `themes/Micrographics.tmTheme`, in
 `${XDG_CONFIG_HOME:-~/.config}/tuicr`; and the weaver skill,
 `config/skills/weaver/SKILL.md`, as `skills/weaver/SKILL.md` in Claude
-Code's config directory when it is there and as
-`~/.agents/skills/weaver/SKILL.md`, where Codex reads skills, when
-`$CODEX_HOME` is) are written where there is none, or
+Code's config directory when it is there) are written where there is none, or
 where the one there carries weaver's mark (`weaver: this file is weaver's`)
 and differs, each said on stderr; one without the mark is the user's, left
 alone (`Brought.Fate`). Nothing is set for tuicr to find them

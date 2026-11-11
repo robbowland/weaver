@@ -133,9 +133,9 @@ w70=$(working)
 ok "...and its card says what it was asked" \
 	"$(wvr _preview "$NP" | strip | sed -n '1p;3p')" "starting · 1m
 asked      Fix the flaky test"
-thread 300 codex
-ok "a Codex thread that never reports: its hooks need trusting" \
-	"$(LS_MODE=plain wvr _rows | grep -c '^\[ \]  Fix the flaky test  *no hooks: trust them in codex /hooks')" "1"
+thread 300 claude
+ok "a thread that never reports: not reporting" \
+	"$(LS_MODE=plain wvr _rows | grep -c '^\[ \]  Fix the flaky test  *not reporting')" "1"
 w300=$(working)
 ok "...counted as nothing, by the status line as by the board, and its card says so" \
 	"$((${w70:-0} - ${w300:-0}))|$(wvr _preview "$NP" | strip | sed -n '1p' | cut -d ' ' -f 1-2)" "1|not reporting"

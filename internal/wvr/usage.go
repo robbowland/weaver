@@ -45,7 +45,7 @@ const Usage = `usage: wvr [command]
                                (else an item's, or its agent's title), --repo DIR,
                                --branch NAME, --base REF (@: this checkout's HEAD),
                                --here (the current checkout),
-                               --agent claude|codex, --edit (write the task in $EDITOR),
+                               --edit (write the task in $EDITOR),
                                --from PANE (that agent's repository), --no-focus;
                                --pr REF / --issue REF: from a pull request or issue
                                (a number, owner/name#N, its URL, or a Linear ENG-42),
@@ -79,7 +79,6 @@ const Usage = `usage: wvr [command]
                                kept and come back as the weaver session starts again
   hook [--async]               Claude Code hook (reads the event JSON on stdin)
   event [--bell]               an event of any agent, as normalized JSON on stdin
-  adapt codex [--bell]         Codex hook (reads Codex's event JSON on stdin)
   review [--full] [pane-id]    open or jump to the review panel (tuicr) of the focused agent
   ls                           live dashboard of the agents in this session
   next                         jump to the next agent that needs you; repeat to cycle
@@ -88,9 +87,9 @@ const Usage = `usage: wvr [command]
   status                       agent counts
   gc                           forget agents that are gone, and remove the worktrees
                                weaver left behind
-  setup [--dry-run] [--no-codex] [--bin PATH]
-                               add weaver's hooks to Claude Code (and Codex, when ~/.codex
-                               exists), run by this binary (or PATH), backing up each file
+  setup [--dry-run] [--bin PATH]
+                               add weaver's hooks to Claude Code, run by this binary
+                               (or PATH), backing up each file
                                it changes; --dry-run shows the changes only
   doctor [--fix]               what weaver works with: there, set up, and how to fix
                                what is not; --fix installs what is missing (Homebrew),

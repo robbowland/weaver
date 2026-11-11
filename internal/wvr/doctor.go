@@ -155,23 +155,13 @@ func (e *Env) checks() []check {
 		tool("tuicr", "tuicr", "tuicr", needed, "--version", 0, 28),
 		tool("Worktrunk", "wt", "worktrunk", optional, ""),
 	}
-	// The agents: one at least, its hooks running weaver.
-	bin := e.hookBin()
-	agents := 0
-	for _, a := range []struct{ name, cmd string }{{"Claude Code", "claude"}, {"Codex", "codex"}} {
-		c := check{name: a.name, weight: optional}
-		if !onPath(a.cmd) {
-			c.found = "not installed"
-			cs = append(cs, c)
-			continue
-		}
-		agents++
-		c.weight, c.found = needed, "its hooks do not run weaver"
+	// Claude Code, its hooks running weaver.
+	c := check{name: "Claude Code", weight: needed, found: "not installed",
+		remedy: byHand{"install Claude Code (github.com/anthropics/claude-code)"}}
+	if onPath("claude") {
+		c.found, c.remedy = "its hooks do not run weaver", nil
 		for _, cf := range setup.Configs() {
-			if cf.Label != a.cmd {
-				continue
-			}
-			ch, err := setup.Plan(cf, bin)
+			ch, err := setup.Plan(cf, e.hookBin())
 			switch {
 			case err != nil:
 				c.found, c.remedy = err.Error(), byHand{"fix " + tildify(cf.File) + ", then wvr setup"}
@@ -181,12 +171,8 @@ func (e *Env) checks() []check {
 				c.ok, c.found = true, "hooks in "+tildify(cf.File)
 			}
 		}
-		cs = append(cs, c)
 	}
-	if agents == 0 {
-		cs = append(cs, check{name: "an agent", weight: needed, found: "neither Claude Code nor Codex is installed",
-			remedy: byHand{"install Claude Code (github.com/anthropics/claude-code) or Codex (github.com/openai/codex)"}})
-	}
+	cs = append(cs, c)
 	// The views, and what work items need.
 	gh := tool("gh", "gh", "gh", optional, "")
 	if gh.ok && !e.signedIn("github") {
@@ -200,7 +186,7 @@ func (e *Env) checks() []check {
 	cs = append(cs, lin)
 	cs = append(cs, broughtCheck())
 	// weaver itself: the hooks run wvr from PATH.
-	self := check{name: "wvr", weight: needed, ok: true, found: tildify(bin)}
+	self := check{name: "wvr", weight: needed, ok: true, found: tildify(e.hookBin())}
 	switch {
 	case !onPath("wvr"):
 		self.ok, self.found = false, "not on your PATH, which the agents' hooks run it from"

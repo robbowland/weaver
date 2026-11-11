@@ -35,7 +35,7 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 	}
 }
 
-// What a sync hook (Codex's, which wait) hands its background run reaches
+// What a sync hook hands its background run reaches
 // it: every exported field, the stored state's lists left behind, and so
 // the files a Bash call says it changed, which the background run follows.
 // What stays unexported is the foreground's alone: one more is a choice to

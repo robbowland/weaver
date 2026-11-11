@@ -6,5 +6,5 @@ alt+N   the same from anywhere in the session
 alt+y   the views beside home: GITHUB, LINEAR (one with a
         dot is not set up yet: going there sets it up)
 
-Or start claude or codex in any pane: weaver follows it
+Or start claude in any pane: weaver follows it
 through its hooks.
