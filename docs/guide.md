@@ -252,7 +252,8 @@ as they do on home; `tab` and `shift+tab` step to the views inside it, and
 `esc`, `q` or `alt+y` close it, leaving you where you were. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
-the home window itself, use `alt+j` and `alt+k`.
+home's session itself, use `alt+j` and `alt+k`, which step through Rex's
+sessions in its sidebar's order.
 
 Agents are grouped under these headings:
 
@@ -587,9 +588,10 @@ python3 and Rex:
   renderings. They run on a throwaway Rex server with three fake agents;
   `test/hooks.sh SUITE` runs one;
 - `test/rex.sh`: weaver on Rex end to end, on a throwaway Rex server with
-  the app's environment: its session and board, a thread, widths, its keys
-  (pressed as the app sends them), hooks, seen as you look, rename, hold and
-  resume, a Rex restart and quit.
+  the app's environment: its session and board, a thread in its own
+  session, widths, its keys (pressed as the app sends them), hooks, seen
+  through alt+1, rename (weaver's, and Rex's of the thread's session), hold
+  and resume, a Rex restart and quit.
 
 `test/hooks.sh` and `test/rex.sh` need rex, and skip without it (CI has
 none).

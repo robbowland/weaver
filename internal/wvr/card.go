@@ -141,7 +141,7 @@ func Help() string {
 		helpRow("alt+N", "new thread", "(in a view: from the item)") +
 		helpRow("alt+1", "the thread that has waited on you longest", "(row 1)") +
 		helpRow("alt+v  alt+V", "the thread's review; full screen", "") +
-		helpRow("alt+j  alt+k", "next, previous window", "(past the views)") +
+		helpRow("alt+j  alt+k", "next, previous session", "(Rex's)") +
 		helpRow("alt+h  alt+l", "the pane left, right", "") +
 		"\n" + mouseHelp()
 }

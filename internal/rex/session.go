@@ -433,7 +433,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		// A block with its window's focus takes it along, and Rex makes its
 		// new window the active one; the app goes on showing what it showed
 		// (it follows no server change). The active window goes back, so
-		// the two agree: Focus and GoWindow start from it.
+		// the two agree: Focus starts from it.
 		_ = s.callS("session.focus_window", map[string]any{"window_id": v.Active}, nil)
 	}
 	return mux.WindowID(wn), s.drawnCols(p), nil

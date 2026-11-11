@@ -142,10 +142,9 @@ key("alt+shift+v", function(ctx) return run(ctx, { "review", "--full" }) end)
 key("alt+1", function(ctx) return run(ctx, { "next" }) end)
 -- Quit the session, every agent and review in it, after asking.
 key("ctrl+q", function(ctx) return run(ctx, { "_popup", "quit" }) end)
--- The next and previous window that shows no view: through wvr,
--- since the app shows only a window it is asked to (the server's active
--- window is not what it shows).
-key("alt+j", function(ctx) return run(ctx, { "go", "window", "next" }) end)
-key("alt+k", function(ctx) return run(ctx, { "go", "window", "prev" }) end)
+-- The next and previous session in Rex's sidebar (a thread's, home's, any
+-- other): the app's own actions.
+key("alt+j", function() rex.invoke("session.next") end)
+key("alt+k", function() rex.invoke("session.previous") end)
 key("alt+h", function() rex.session.focus_direction{ direction = "left" } end)
 key("alt+l", function() rex.session.focus_direction{ direction = "right" } end)

@@ -160,7 +160,7 @@ Shift and V.
 | `alt+N` | Start a thread (in a view: a thread on the selected item) |
 | `alt+y` | In a thread: the board over it (`tab`: the views; `esc` or `alt+y`: close). On home: each view, then back |
 | `alt+1` | The agent that has needed you longest; press again for the next |
-| `alt+j` / `alt+k` | The next / previous window, in thread order |
+| `alt+j` / `alt+k` | The next / previous session in Rex's sidebar |
 | `alt+h` / `alt+l` | The pane to the left / right |
 | `alt+v` / `alt+V` | The focused agent's review / the same, full screen |
 | `alt+m` | In a view: a read-only review of the selected item |

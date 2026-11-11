@@ -485,6 +485,16 @@ can supersede an earlier one, and says so.
   (Rob: the board keeps the numbers). After a server restart the husks Rex
   brings back (home and the threads' sessions) are ended and each lost
   thread resumes in a new session.
+- 2026-11-11: alt+j and alt+k are Rex's own next and previous session
+  (Rob, choice a), superseding weaver's window cycle (`wvr go window`): a
+  thread is a session now, and the app already steps through its sidebar.
+  They are bound in weaver's sessions only, through `rex.invoke`, so in
+  others they stay the terminal's.
+- 2026-11-11: Seen as you look is gone (Rob, choice a): a done thread is
+  seen when weaver takes you to it (alt+1, the board's enter, alt+v) or
+  when its agent is prompted. Home's board followed home's events alone
+  (`rex events --session`), and Rex does not say which session an app
+  shows, so a watcher would need one stream per thread for a guess.
 
 ## Work items and views
 

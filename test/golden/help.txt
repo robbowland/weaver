@@ -36,7 +36,7 @@ ANYWHERE
   alt+N           new thread (in a view: from the item)
   alt+1           the thread that has waited on you longest (row 1)
   alt+v  alt+V    the thread's review; full screen
-  alt+j  alt+k    next, previous window (past the views)
+  alt+j  alt+k    next, previous session (Rex's)
   alt+h  alt+l    the pane left, right
 
 MOUSE

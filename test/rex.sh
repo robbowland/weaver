@@ -188,6 +188,10 @@ ok "widths: a split evened out put back, one you moved left be" "$([ "$k" != 0.5
 # first), though wvr runs with the server's environment
 active() { view | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .label'; }
 alt() { R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_$1\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":$(printf '%d' "'$1")}}" | jq -r .handled; }
+# Alt j and Alt k are the app's next and previous session, in weaver's
+# sessions (home's, a thread's); in another the terminal's.
+ok "keys: Alt j and Alt k weaver's in its sessions, not in another" \
+	"$(alt j)|$(SID=$T alt k)|$(OTHER=$(R api call session.create '{"label":"other"}' | jq -r .session_id) && SID=$OTHER alt j && R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null)" "true|true|false"
 # In one of weaver's popups (here Ctrl q's card) its keys are the popup's
 # program's, as a popup takes every key: Alt j stays in the card.
 popup() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .layer_id][0] // ""'; }
@@ -216,6 +220,10 @@ ok "hook: working, turn 1, under home's key in the thread's session's life" \
 ok "status: one working, from home or the thread" "$(REX_SESSION=$SID wvr status)|$(REX_SESSION=$T wvr status)" "[/] 1|[/] 1"
 
 hookj "$(ev Stop ',"prompt_id":"p1","last_assistant_message":"hello"')"
+seen() { jq -r '"\(.state) \(.seen)"' "$SD/rex-${S}_$AG.json"; }
+k=$(seen)
+REX_SESSION=$SID wvr next >/dev/null 2>&1
+ok "seen: a thread done is new until alt+1 takes you to it" "$k|$(seen)" "done false|done true"
 
 # --- the board's edits: rename (as its enter does it), and hold
 REX_SESSION=$SID wvr _modedone "rename 01 › " "Greeting" >/dev/null 2>&1
@@ -226,7 +234,7 @@ ok "rename in place: the thread its prompt names takes the name, and its window;
 # weaver goes on finding the thread by id.
 R session rename "$T" demo-greet >/dev/null
 ok "a thread's session renamed in Rex: still the thread, its agent still followed" \
-	"$(threads)|$(REX_SESSION=$SID wvr status)" "$T|[x] 1"
+	"$(threads)|$(REX_SESSION=$SID wvr ls 2>/dev/null | grep -c Greeting)" "$T|1"
 held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id)"' "$f"; done; }
 REX_SESSION=$SID wvr hold "$AG" "write the reply" >"$AT/hold.out" 2>&1
 waitfor '[ -z "$(threads)" ]' 100

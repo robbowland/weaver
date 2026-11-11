@@ -715,13 +715,10 @@ weaver as a thread of that one (home's).
   shell), titled `review: <dir>`, then the agent focused: whole before it
   is shown, as Rex needs. alt+v's panel, opened again, is a split on the
   agent's left.
-- **Seen as you look:** Rex has no focus hook: home's board follows the
-  session's events (`rex events --session`, `rex.Session.WatchActive`) and,
-  1.5 s after the last change of active window (weaver's moves, the app's
-  own tabs), marks the focused pane's agent seen (`seeAsYouLook`), also when
-  the board starts again in a newer weaver; passing through with alt+j/k
-  leaves them new. Rex does not say which session an app shows, so weaver's
-  own moves to an agent (`_goto`, alt+1 and the like) mark it seen too.
+- **Seen:** a done agent is seen when weaver takes you to it (the board's
+  enter, `_goto`; alt+1; alt+v) or when it is prompted again. Rex does not
+  say which session an app shows, so reaching it any other way (the
+  sidebar, alt+j/k) leaves it new.
 - **alt+1** says where it landed in a message (`Say`): `[2/3] 02 name ·
   needs you · what it waits on`.
 - **Notes to the agent:** tuicr's comments, which the agent reads (see
@@ -859,9 +856,10 @@ brought back with it, and `wvr` in one starts again.
   wvr cannot run at all is the terminal's, not swallowed. In a floating
   layer (weaver's popups: the form, a card, alt+y's board) the keys are the
   popup's program's. Rex starts a key's wvr at once, not after the last
-  one's: `wvr go window` (alt+j/k) takes the session's UI lock (`uiLock`,
-  which `wvr review` holds and `wvr next` tries), so each press moves on from
-  where the last left you.
+  one's: `wvr review` holds the session's UI lock (`uiLock`) and `wvr next`
+  tries it, so a press while the last is at work does not undo it. alt+j
+  and alt+k are the app's own `session.next` and `session.previous`
+  (`rex.invoke`), in weaver's sessions only.
 
 ## Setting itself up
 
@@ -1085,6 +1083,5 @@ registers every lexer as it loads, which costs every hook 6 ms.
   opens `wvr new --pr/--issue … [--review]` in a popup (96 x 20) from a
   detached process, so the view goes on; a Linear issue's thread starts in
   the repository used last (`$STATE_DIR/repos`).
-- **alt+j / alt+k** step past the views (`wvr go window`), so they cycle
-  threads and home only.
+- **alt+j / alt+k** are Rex's next and previous session, views and all.
 

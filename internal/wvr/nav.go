@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -17,12 +16,11 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
-	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 )
 
-// Moving between agents: the board's jumps, Alt y (go home), Alt 1 (next),
-// and seen as you look.
+// Moving between agents: the board's jumps, Alt y (go home) and Alt 1
+// (next), each of which counts the agent it reaches as seen.
 
 // focus moves your client to pane p (its window first).
 func (e *Env) focus(p mux.PaneID) { e.Mux().Focus(p) }
@@ -212,34 +210,6 @@ func (e *Env) GoView(step int) {
 	e.goTo(order[((at+step)%len(order)+len(order))%len(order)])
 }
 
-// GoWindow is `wvr go window next|prev` (Alt j, Alt k): the next or
-// previous window that shows no view
-// (home, a thread), around the end. Each press moves on from where the last
-// left you: Rex starts a key's wvr at once, so
-// a press can come while the last one's is at work, and both would read the
-// same window.
-func (e *Env) GoWindow(step int) {
-	release := e.uiLock()
-	defer release()
-	ws, cur, _ := e.where()
-	var in []mux.Window
-	at := 0
-	for _, w := range ws {
-		if w.ID == cur.ID {
-			at = len(in)
-		} else if w.View != "" {
-			continue
-		}
-		in = append(in, w)
-	}
-	if len(in) < 2 {
-		return
-	}
-	if w := in[((at+step)%len(in)+len(in))%len(in)]; w.ID != cur.ID {
-		e.Mux().Show(w.ID)
-	}
-}
-
 // showHome shows home, made again first if it was closed.
 func (e *Env) showHome() {
 	_, _, home := e.where()
@@ -323,8 +293,7 @@ func (e *Env) goBack(ws []mux.Window, cur mux.Window, home mux.WindowID) {
 	}
 }
 
-// uiLock is one `wvr review`, `wvr next` or `wvr go window` per session at a
-// time: it waits for the one at work (at most 10 s), looking every 20 ms so
+// uiLock is one `wvr review` or `wvr next` per session at a time: it waits for the one at work (at most 10 s), looking every 20 ms so
 // a queue of key presses keeps up. A lock older than 10 s was left by a
 // killed process. Its release.
 func (e *Env) uiLock() func() {
@@ -470,62 +439,6 @@ func (e *Env) agentOf(p mux.PaneID) mux.PaneID {
 		}
 	}
 	return ""
-}
-
-func doneUnseen(l string) bool {
-	return strings.Contains(l, `"state":"done"`) && !strings.Contains(l, `"seen":true`)
-}
-
-// see marks seen the agent pane p is, or whose nvim it is, when it is done
-// and unseen: that agent ("" for none), and whether it was marked.
-func (e *Env) see(p mux.PaneID) (mux.PaneID, bool) {
-	a := e.agentOf(p)
-	if a == "" {
-		return "", false
-	}
-	if l, _ := files.FirstLine(e.StateFile(a)); doneUnseen(l) {
-		e.MarkSeen(a)
-		return a, true
-	}
-	return a, false
-}
-
-// seeAsYouLook: while home's board runs, the agent of the pane you stay on
-// 1.5 s is seen,
-// however you came to its window (weaver's keys, the board, the app's own
-// tabs). Rex has no such hook: the board follows the session's events
-// (rex.Session.WatchActive) and, 1.5 s after the last change of window,
-// sees what is focused then; passing through, a window stays new. Rex does
-// not say whether an app shows the session, so this counts the session's
-// active window as looked at.
-func (e *Env) seeAsYouLook() {
-	f, ok := e.Mux().(rex.Fleet)
-	if !ok {
-		return
-	}
-	s := f.Home
-	var mu sync.Mutex
-	var t *time.Timer
-	look := func() {
-		if p, ok := e.Mux().Active(); ok && p != "" {
-			if _, marked := e.see(p); marked {
-				e.PushStatus()
-			}
-		}
-	}
-	for {
-		_ = s.WatchActive(func() {
-			mu.Lock()
-			defer mu.Unlock()
-			if t != nil {
-				t.Stop()
-			}
-			t = time.AfterFunc(1500*time.Millisecond, look)
-		})
-		// The stream ended: the session went (the board with it), or rex
-		// failed for now.
-		time.Sleep(5 * time.Second)
-	}
 }
 
 // agentCols is the agent's columns in a thread window total columns wide:

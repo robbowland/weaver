@@ -142,17 +142,8 @@ var commands = map[string]command{
 			e.GoView(1)
 		case "prev":
 			e.GoView(-1)
-		case "window":
-			switch arg(args, 1) {
-			case "next":
-				e.GoWindow(1)
-			case "prev":
-				e.GoWindow(-1)
-			default:
-				return errors.New("usage: wvr go window next|prev")
-			}
 		default:
-			return errors.New("usage: wvr go home|back|next|prev|window next|window prev")
+			return errors.New("usage: wvr go home|back|next|prev")
 		}
 		return nil
 	}},
