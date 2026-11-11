@@ -527,6 +527,12 @@ can supersede an earlier one, and says so.
   board; alt+1 goes to the helper's own window; the thread's board names a
   helper by its window's label (the name it was started with); alt+Y
   outside a thread is alt+y.
+- 2026-11-11: A helper's thread is the session its pane is in, as Rex
+  lists it, superseding the entry above's events (review): a state's
+  `rex_session` is a hook's copy, and a resumed thread's said home's until
+  its agent's first hook, hiding home's agents as helpers and its own
+  agent from its board. A resumed state takes its pane's life as the pane
+  starts.
 
 ## Work items and views
 

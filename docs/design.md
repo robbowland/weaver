@@ -49,7 +49,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
-| `rex_session` | string | the id of its Rex session; a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
+| `rex_session` | string | the id of its Rex session; a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session its pane runs in as the pane starts (`wvr _agent`), before any hook |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
 
 ## Threads
@@ -684,8 +684,9 @@ that one (home's).
   needs you · what it waits on`; a helper's, `02 › <its window's label>`.
   It goes to every agent that needs you, helpers included.
 - **Boards:** home's and alt+y's leave helpers out (`onBoard`): a helper
-  is an agent with no thread whose events come from a thread's session (the
-  `rex_session` its state keeps, matched against the thread agent's). One
+  is an agent with no thread whose pane is in a thread's session, as the
+  session's snapshot lists it (`Row.Session`, from the pane, never a copy a
+  hook wrote). One
   that needs you makes its thread's row need you, saying whose wait it is. alt+Y (`wvr go
   local`) in a thread's session opens the same board over it scoped to
   that session (`_peek FILE PANE SESSION`, `LS_SESSION` for its reloads),

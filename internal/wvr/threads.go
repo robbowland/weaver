@@ -672,7 +672,9 @@ func (e *Env) AgentPane(tok string) error {
 			bestEffort(store.Write(e.ThreadFile(pane), th))
 		}
 		if st, err := store.ReadState(d + "/state.json"); err == nil {
-			st.Pane = pn
+			// Its life is the session its pane runs in, from now: its
+			// thread's, never the one that asked for it.
+			st.Pane, st.Where = pn, e.Where
 			// Without it the agent's first hook starts its state afresh.
 			bestEffort(store.Write(sf, st))
 		}
@@ -790,11 +792,11 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 
 // writeResume leaves thread th's records in meeting place d for its agent's
 // pane (AgentPane) to take as it resumes conversation sid: the record, its
-// state as a resumed agent starts it (agent.Record.Resumed) in this
-// session, and the session id.
+// state as a resumed agent starts it (agent.Record.Resumed), its life the
+// pane's to give, and the session id.
 func (e *Env) writeResume(d string, th store.Thread, st agent.Record, sid string) error {
 	if store.Write(d+"/thread.json", th) != nil ||
-		store.Write(d+"/state.json", st.Resumed(time.Now().Unix(), e.Mux().Life())) != nil ||
+		store.Write(d+"/state.json", st.Resumed(time.Now().Unix(), agent.Where{})) != nil ||
 		os.WriteFile(d+"/resume", []byte(sid+"\n"), 0o644) != nil {
 		return errors.New("cannot write its records")
 	}

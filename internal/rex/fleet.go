@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
 )
 
@@ -106,10 +105,6 @@ func each[T any](ss []Session, of func(Session) ([]T, error)) ([]T, error) {
 	}
 	return out, nil
 }
-
-// Life is home's life: a session made again, on this server or another, is
-// another life. Zero when it is not running.
-func (f Fleet) Life() agent.Where { return f.Home.Life() }
 
 // Made is when home was made, epoch seconds.
 func (f Fleet) Made() (int64, bool) { return f.Home.Made() }

@@ -309,6 +309,10 @@ ok "...resumed, it comes back in a session of its own, named and on its conversa
 	"$(windows "$T")|$(tr '\n' ' ' <"$AT/args.${AGB#block:}" 2>/dev/null)|$(held | wc -l | tr -d ' ')" "01 Greeting · repo/main/2|--resume sid-1 |0" ||
 	sed 's/^/  resume: /' "$AT/resume.out"
 AG=$(num "$AGB")
+# Before its agent's first hook, a resumed thread is its own session's:
+# its life is the session its pane runs in, and its own board has it.
+ok "...resumed, its state is its own session's before any hook, on its board" \
+	"$(jq -r .rex_session "$SD/rex-${S}_$AG.json" 2>/dev/null)|$(LS_SESSION=$T board | grep -c Greeting)" "$T|1"
 hookj "$(ev SessionStart ',"source":"resume"')"
 
 # --- Rex restarts: it brings the sessions back, their ids and all, but a

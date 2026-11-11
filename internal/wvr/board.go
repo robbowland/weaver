@@ -246,8 +246,8 @@ type boardRow struct {
 // its helpers, each helper by its window's label when it has one; the
 // board of every thread has the rest but the helpers, a helper that needs
 // you making its thread need you, its row saying whose wait it is. A
-// helper is an agent with no thread whose events come from a thread's
-// session (the one its agent's come from).
+// helper is an agent with no thread whose pane is in a thread's session,
+// as Rex lists it.
 func onBoard(agents []session.Row, local string) []session.Row {
 	threads := map[string]bool{}
 	for _, a := range agents {
