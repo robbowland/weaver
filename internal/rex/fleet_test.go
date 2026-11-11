@@ -132,3 +132,34 @@ func TestFleetQuit(t *testing.T) {
 		t.Errorf("ended %q, want all four, %s (where it runs) last", ended, ids[0])
 	}
 }
+
+// Home closed alone and made again finds the threads' sessions still
+// running: they are the new home's, from the fleet's and from inside them.
+func TestFleetHomeAgain(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	old, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, p, _, err := (Fleet{Home: old}).OpenSession("a", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "a", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := (Fleet{Home: old}).of(string(p)).ID
+	if err := old.Quit(); err != nil {
+		t.Fatal(err)
+	}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts, err := (Fleet{Home: home}).threads(); err != nil || len(ts) != 1 || ts[0].ID != thread {
+		t.Errorf("the new home's threads: %+v %v, want %s", ts, err, thread)
+	}
+	t.Setenv("REX_SESSION", thread)
+	if h := FromEnv(dir); h.Home != home.ID {
+		t.Errorf("inside the thread, home is %s, want %s", h.Home, home.ID)
+	}
+}

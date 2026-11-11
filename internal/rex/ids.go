@@ -252,11 +252,22 @@ func (r ids) made(id, name string, at time.Time, server int, home string) error 
 
 // threads are the sessions weaver made as threads of session home.
 func (r ids) threads(home string) []string {
+	var out []string
+	for _, id := range r.allThreads() {
+		if m, _ := r.session(id); m.home == home && home != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// allThreads are the sessions weaver made as threads, of any home.
+func (r ids) allThreads() []string {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	var out []string
 	for _, d := range ents {
 		id := strings.Replace(d.Name(), "_", ":", 1)
-		if m, ok := r.session(id); ok && m.home == home && home != "" {
+		if m, ok := r.session(id); ok && m.home != "" {
 			out = append(out, id)
 		}
 	}

@@ -193,7 +193,9 @@ func Ensure(dir, name, here string, home []string, prepare func() error) (s Sess
 }
 
 // Start makes weaver's Rex session name, home (argv, in dir here) its
-// first window; it is weaver's from then on (FromEnv, Named). Ensure is
+// first window; it is weaver's from then on (FromEnv, Named), and so are
+// the threads' sessions of name that run on still with no home
+// (takeOver). Ensure is
 // how wvr starts it: Start makes one whether or not one runs.
 func Start(dir, name, here string, home []string) (Session, error) {
 	var out struct {
@@ -217,8 +219,30 @@ func Start(dir, name, here string, home []string) (Session, error) {
 	if n, err := s.num(out.Windows[0].Window); err == nil {
 		_ = s.ids().note("want", n, "0")
 	}
+	s.takeOver()
 	return s, nil
 }
+
+// takeOver makes home s the home of the threads' sessions of its name
+// that run on, their home gone (closed alone, and s made in its place):
+// not those Rex brought back after its server restarted (Restored), husks
+// that go with the home they came back with.
+func (s Session) takeOver() {
+	live, err := sessions()
+	if err != nil {
+		return
+	}
+	r := s.ids()
+	for _, id := range r.allThreads() {
+		m, _ := r.session(id)
+		if m.name == s.Name && m.home != s.ID && live[id] && !live[m.home] && !s.in(id).Restored() {
+			_ = r.made(id, m.name, time.UnixMilli(int64(m.at*1000)), m.server, s.ID)
+		}
+	}
+}
+
+// in is session id, named as s is, its numbers in s's registry.
+func (s Session) in(id string) Session { return Session{ID: id, Name: s.Name, Dir: s.Dir} }
 
 // ShowInApp asks the Rex app to show the session: it can only when Remote
 // Control is on in its settings.

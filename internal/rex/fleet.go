@@ -33,7 +33,7 @@ func (f Fleet) in(id string) Session {
 	if id == "" {
 		return f.Home
 	}
-	return Session{ID: id, Name: f.Home.Name, Dir: f.Home.Dir}
+	return f.Home.in(id)
 }
 
 // of is the session pane or window n is in.

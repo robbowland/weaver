@@ -764,7 +764,9 @@ best-effort and says nothing of failing.
   shell in each terminal; one whose server is not the one weaver made it on
   is such a husk (`Restored`): `rex.Ensure` makes it again and gives it back
   for `wvr` to end once the new one shows, with the threads' sessions Rex
-brought back with it, and `wvr` in one starts again.
+brought back with it, and `wvr` in one starts again. A home made while
+threads' sessions of its name run on, their home closed alone, takes them
+over (`takeOver`): its id goes into their records.
 - **Keys:** files are keyed `rex-<name>`; a Rex session weaver did not make
   is named by its id. Files of another key (tmux's and zellij's, from before
   weaver ran on Rex alone) name a session that no longer runs, and go as
