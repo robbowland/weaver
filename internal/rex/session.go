@@ -261,12 +261,8 @@ func (s Session) takenIn(v view, at int, skip string) bool {
 }
 
 // placing is the view to place a new window at at by (placeIn), once at
-// is known to be free in it: none for NextFree. An error when at is
-// another window's.
+// is known to be free in it. An error when at is another window's.
 func (s Session) placing(at int) (view, bool, error) {
-	if at < 0 {
-		return view{}, false, nil
-	}
 	v, err := s.view()
 	if err == nil && s.takenIn(v, at, "") {
 		return v, true, errors.New("rex: place " + strconv.Itoa(at) + " is another window's")
@@ -302,9 +298,7 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(w.Argv, " "))
 	_ = s.ids().note("view", wn, w.View)
-	if w.At >= 0 {
-		s.placeIn(v, seen, out.Window, mux.WindowID(wn), w.At)
-	}
+	s.placeIn(v, seen, out.Window, mux.WindowID(wn), w.At)
 	if !w.Background {
 		s.show(out.Window)
 	}

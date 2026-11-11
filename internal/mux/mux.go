@@ -89,14 +89,10 @@ type Exit struct {
 // weaver knows by the place it gave it, 0, not by its label).
 const HomeName = "home"
 
-// NextFree is the index to open a window at, or break a pane out to, when
-// any free one will do: the session's next.
-const NextFree = -1
-
 // NewWindow is a window to open: Spawn in its one pane, named Label, at
-// index At (NextFree: the session's next free one; else an error when
-// that index is taken), showing View when set. Background leaves the
-// session where it is.
+// index At (an error when that index is taken; a thread's session's first
+// window has none), showing View when set. Background leaves the session
+// where it is.
 type NewWindow struct {
 	Spawn
 	Label      string

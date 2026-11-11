@@ -41,7 +41,7 @@ func TestRexLostAndGC(t *testing.T) {
 	}
 	var shown []mux.PaneID
 	for i := 0; i < 2; i++ {
-		if _, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "t", At: mux.NextFree, Background: true}); err != nil {
+		if _, p, _, err := s.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "t", At: 1 + i, Background: true}); err != nil {
 			t.Fatal(err)
 		} else {
 			shown = append(shown, p)
