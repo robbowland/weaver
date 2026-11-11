@@ -48,8 +48,8 @@ func paneIn(ps []mux.Pane, p mux.PaneID) (mux.Pane, bool) {
 	return mux.Pane{}, false
 }
 
-// What weaver does with a session, on Rex: a thread's window with its
-// nvim, placed by number, typed into, started again and closed.
+// What weaver does with a session, on Rex: a window with a review panel
+// split beside its pane, placed, typed into, started again and closed.
 func TestSession(t *testing.T) {
 	server(t)
 	dir := t.TempDir()
@@ -73,7 +73,7 @@ func TestSession(t *testing.T) {
 	if ws, _ := s.Windows(); !slices.ContainsFunc(ws, func(x mux.Window) bool { return x.ID == w && x.Width == width && width > 0 }) {
 		t.Errorf("window %q is %d wide: %+v", w, width, ws)
 	}
-	nv, pid, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "nvim: demo", Background: true})
+	nv, pid, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "review: demo", Background: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +91,8 @@ func TestSession(t *testing.T) {
 	if a, ok := paneIn(ps, p); !ok || a.Window != w || a.WindowIndex != 1 || a.Cmd != "/bin/cat" || a.Exited {
 		t.Errorf("agent pane: %+v %v", a, ok)
 	}
-	if n, ok := paneIn(ps, nv); !ok || n.Window != w || n.Title != "nvim: demo" {
-		t.Errorf("nvim pane: %+v %v", n, ok)
+	if n, ok := paneIn(ps, nv); !ok || n.Window != w || n.Title != "review: demo" {
+		t.Errorf("panel pane: %+v %v", n, ok)
 	}
 
 	// Windows by their places, a view's after the rest.
@@ -927,32 +927,6 @@ func TestEnsureNoAnswer(t *testing.T) {
 	if _, running, err := Named(dir, "demo"); err != nil || !running {
 		t.Errorf("Named once Rex answers: %v %v", running, err)
 	}
-}
-
-// logRex has rex, as weaver runs it, log each call it is given: the log.
-func logRex(t *testing.T) string {
-	t.Helper()
-	bin, err := exec.LookPath(Bin())
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	log := filepath.Join(dir, "calls")
-	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + bin + "' \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "rex"), []byte(wrap), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("REX_BIN_DIR", dir)
-	return log
-}
-
-func windowOf(ws []mux.Window, w mux.WindowID) (mux.Window, bool) {
-	for _, x := range ws {
-		if x.ID == w {
-			return x, true
-		}
-	}
-	return mux.Window{}, false
 }
 
 // The rex weaver runs is the one Rex's terminals say is theirs
