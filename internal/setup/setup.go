@@ -25,8 +25,9 @@ var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 // Run is `wvr setup [--dry-run] [--no-codex] [--bin PATH]`: weaver's
 // hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
 // exists), run by this binary's path (or PATH), each file backed up before
-// it changes; its files unpacked and its Neovim plugins fetched. `wvr`
-// does the same as it starts (SelfSetup); this shows the changes.
+// it changes; the files it brings to other programs written (BroughtFiles);
+// its files unpacked and its Neovim plugins fetched. `wvr` does the same as
+// it starts (SelfSetup); this shows the changes.
 func Run(args []string, self string, out io.Writer) error {
 	dry, codex, bin := false, true, self
 	for i := 0; i < len(args); i++ {
@@ -77,6 +78,23 @@ func Run(args []string, self string, out io.Writer) error {
 		}
 		if backup != "" {
 			fmt.Fprintf(out, "backed up to %s\n", backup)
+		}
+	}
+	for _, f := range BroughtFiles() {
+		switch f.Fate() {
+		case Current:
+			fmt.Fprintf(out, "%s: %s is weaver's, as it writes it\n", f.Label, f.Path)
+		case Yours:
+			fmt.Fprintf(out, "%s: %s is yours, left alone\n", f.Label, f.Path)
+		case ToWrite:
+			if dry {
+				fmt.Fprintf(out, "%s: would write %s\n", f.Label, f.Path)
+			} else if err := f.Write(); err != nil {
+				fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
+				failed = cli.ErrSaid
+			} else {
+				fmt.Fprintf(out, "%s: wrote %s\n", f.Label, f.Path)
+			}
 		}
 	}
 	if !dry && failed == nil {

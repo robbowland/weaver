@@ -66,7 +66,7 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 - Codex threads are not followed yet: Codex runs its hooks in a daemon
   shared by every session, which weaver cannot place in a Rex block.
 
-Homebrew installs everything else weaver uses: Neovim, fzf,
+Homebrew installs everything else weaver uses: Neovim, fzf, tuicr,
 [Worktrunk](https://worktrunk.dev) for worktrees, and gh.
 
 ## Install

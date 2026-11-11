@@ -64,6 +64,8 @@ ok "...async where nobody waits" "$(jq -r '.hooks.PostToolUse[] | .hooks[] | sel
 ok "someone else's hooks survive, even beside an old weaver one" \
 	"$(jq -r '[.. | objects | select(has("command")) | .command | select(test("say|lint"))] | join(",")' "$S")|$(jq -r .model "$S")" \
 	"say done,my-linter|opus"
+ok "...and tuicr's settings and Micrographics theme brought, for the review panel" \
+	"$(cd "$H/.config/tuicr" 2>/dev/null && find . -type f | sort | tr '\n' ' ')" "./config.toml ./themes/Micrographics.tmTheme ./themes/micrographics.toml "
 ok "a backup of the settings is kept" "$(ls "$H/.claude" | grep -c '^settings.json.bak\.')" "1"
 
 ok "no ~/.codex: nothing created for Codex" "$([ -e "$H/.codex" ] && echo made || echo none)" "none"
@@ -117,7 +119,7 @@ fixed=$(env -u REX_BIN_DIR HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=
 rc=$?
 ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \
 	"$(cat "$AT/brew.log" 2>/dev/null | tr '\n' ' ')" \
-	"install neovim fzf worktrunk gh "
+	"install neovim fzf tuicr worktrunk gh "
 ok "...and still fails, saying what is left, while weaver cannot work" \
 	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] Rex')" "1|1"
 unset BREW

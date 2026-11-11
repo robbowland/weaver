@@ -679,6 +679,16 @@ can supersede an earlier one, and says so.
 
 ## Performance and packaging
 
+- 2026-11-11: weaver brings what its tuicr review panel needs on a fresh
+  machine: tuicr (a needed tool, from homebrew/core), its Micrographics
+  theme with the syntax theme beside it, and `diff_watch_interval_ms = 500`,
+  which only tuicr's own `config.toml` sets (no flag or environment), so a
+  `config.toml` is written only where there is none. weaver sets nothing
+  for tuicr to find them elsewhere (`XDG_CONFIG_HOME`, `VIMINIT`): the nvim
+  that tuicr's `e` opens would inherit it, and that nvim is Rob's own. Each
+  file carries weaver's mark and is rewritten while it does; one without it
+  is the user's and left alone, so Rob's own theme and settings stay.
+
 - 2026-10-15: weaver is one Go binary, a standalone installable app. It
   carries its Neovim plugin and configs (`go:embed`) and unpacks them once
   per build under `$XDG_DATA_HOME/weaver/runtime/<content hash>`. It was

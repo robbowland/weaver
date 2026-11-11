@@ -1,0 +1,58 @@
+# weaver: this file is weaver's. It brings the Micrographics theme for its review
+# panel (tuicr --theme micrographics) and keeps it up to date while this line
+# stays. Remove the line, and the file is yours.
+#
+# Micrographics for tuicr: black, white and greys, with green for what was
+# added and red for what was taken away; code and diff tokens take their
+# colours from the TextMate theme beside it.
+panel_bg = "#000000"
+bg_highlight = "#303030"
+fg_primary = "#ffffff"
+fg_secondary = "#999999"
+fg_dim = "#616161"
+
+syntax_theme = "Micrographics.tmTheme"
+
+diff_add = "#39d97a"
+diff_add_bg = "#0b1a12"
+diff_del = "#ff3b2f"
+diff_del_bg = "#1a0b0a"
+diff_context = "#ffffff"
+diff_hunk_header = "#999999"
+expanded_context_fg = "#616161"
+
+syntax_add_bg = "#0b1a12"
+syntax_del_bg = "#1a0b0a"
+
+file_added = "#39d97a"
+file_modified = "#ffffff"
+file_deleted = "#ff3b2f"
+file_renamed = "#999999"
+
+reviewed = "#39d97a"
+pending = "#999999"
+
+comment_note = "#999999"
+comment_suggestion = "#ffffff"
+comment_issue = "#ff3b2f"
+comment_praise = "#39d97a"
+
+border_focused = "#ffffff"
+border_unfocused = "#616161"
+status_bar_bg = "#303030"
+cursor_color = "#ffffff"
+cursor_line_bg = "#303030"
+branch_name = "#999999"
+help_indicator = "#999999"
+
+message_info_fg = "#000000"
+message_info_bg = "#ffffff"
+message_warning_fg = "#000000"
+message_warning_bg = "#999999"
+message_error_fg = "#000000"
+message_error_bg = "#ff3b2f"
+update_badge_fg = "#000000"
+update_badge_bg = "#ffffff"
+
+mode_fg = "#000000"
+mode_bg = "#ffffff"

@@ -28,8 +28,9 @@ func (e *Env) installed() bool {
 
 // SelfSetup is what `wvr` does as it starts, when it is the installed one
 // and $WEAVER_SELF_SETUP is not 0: the hooks brought up to date (a line on
-// stderr when they changed, with the backup), and the plugins fetched in the
-// background.
+// stderr when they changed, with the backup), the files weaver brings to
+// other programs written where they are to be (a line for each), and the
+// plugins fetched in the background.
 func (e *Env) SelfSetup() {
 	if os.Getenv("WEAVER_SELF_SETUP") == "0" || !e.installed() {
 		return
@@ -54,6 +55,13 @@ func (e *Env) SelfSetup() {
 		}
 		fmt.Fprintf(os.Stderr, "%swvr: %s now runs weaver's hooks by %s%s: restart its running sessions to pick them up%s\n",
 			CGrey, tildify(c.File), tildify(e.Self), bk, COff)
+	}
+	wrote, err := setup.Bring(setup.BroughtFiles())
+	for _, f := range wrote {
+		fmt.Fprintf(os.Stderr, "%swvr: wrote %s, %s%s\n", CGrey, tildify(f.Path), f.Label, COff)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%swvr: %v%s\n", CGrey, err, COff)
 	}
 	if !setup.PluginsCurrent() {
 		c := exec.Command(e.Self, "_plugins")

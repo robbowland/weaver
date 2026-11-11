@@ -1,0 +1,6 @@
+# weaver: this file is weaver's. It wrote it for its review panel, since you had
+# no tuicr config; weaver keeps it up to date while this line stays. Remove the
+# line, and the file is yours.
+
+# Re-read the diff every half second, so an agent's edits show as it makes them.
+diff_watch_interval_ms = 500

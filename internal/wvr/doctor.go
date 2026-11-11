@@ -126,6 +126,24 @@ func rexCheck() check {
 		remedy: byHand{"install Rex (superlogical.com/rex), weaver's terminal"}}
 }
 
+// broughtCheck is the files weaver brings to other programs (tuicr's
+// settings and theme): there as weaver writes them, or yours, left alone.
+func broughtCheck() check {
+	c := check{name: "tuicr's theme", weight: optional, ok: true, found: "as weaver writes it"}
+	for _, f := range setup.BroughtFiles() {
+		switch f.Fate() {
+		case setup.ToWrite:
+			c.ok, c.found = false, "not written: "+tildify(f.Path)
+			c.remedy = selfFix{"wvr setup", func() error { _, err := setup.Bring(setup.BroughtFiles()); return err }}
+			return c
+		case setup.Yours:
+			c.found = "yours in " + tildify(filepath.Dir(f.Path))
+		case setup.Current:
+		}
+	}
+	return c
+}
+
 // checks are what weaver works with, each checked.
 func (e *Env) checks() []check {
 	cs := []check{
@@ -133,6 +151,7 @@ func (e *Env) checks() []check {
 		tool("git", "git", "git", needed, "--version"),
 		tool("Neovim", "nvim", "neovim", needed, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
+		tool("tuicr", "tuicr", "tuicr", needed, "--version", 0, 28),
 		tool("Worktrunk", "wt", "worktrunk", optional, ""),
 	}
 	// The agents: one at least, its hooks running weaver.
@@ -178,6 +197,7 @@ func (e *Env) checks() []check {
 		lin.found, lin.remedy = "no API key, for the LINEAR view and Linear issues", signIn{"linear", []string{"wvr", "linear", "login"}}
 	}
 	cs = append(cs, lin)
+	cs = append(cs, broughtCheck())
 	plug := check{name: "diffview-plus.nvim", weight: optional, ok: setup.PluginsCurrent()}
 	if !plug.ok {
 		plug.found, plug.remedy = "not fetched, for reviews", selfFix{"wvr _plugins", setup.Plugins}

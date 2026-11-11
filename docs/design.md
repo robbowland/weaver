@@ -1008,7 +1008,16 @@ starts or shows the session: for Claude
 Code (`$CLAUDE_CONFIG_DIR`, else `~/.claude`) and Codex (`$CODEX_HOME`, else
 `~/.codex`), when that directory exists, the hooks are merged as `wvr setup`
 merges them (`mergeHooks`, a backup first when the file was there), and one
-line on stderr says when a file changed. When
+line on stderr says when a file changed. The files weaver brings to other
+programs (`setup.BroughtFiles`: tuicr's `config.toml`, and its theme's
+`themes/micrographics.toml` and `themes/Micrographics.tmTheme`, in
+`${XDG_CONFIG_HOME:-~/.config}/tuicr`) are written where there is none, or
+where the one there carries weaver's mark (`weaver: this file is weaver's`)
+and differs, each said on stderr; one without the mark is the user's, left
+alone (`Brought.Fate`). Nothing is set for tuicr to find them
+(`XDG_CONFIG_HOME`, `VIMINIT`): the nvim its `e` opens would inherit it.
+`wvr setup` says each file's fate and writes it; `wvr doctor` checks them
+(`tuicr's theme`) and tuicr itself (needed, 0.28 or newer). When
 `$XDG_DATA_HOME/weaver/plugins/diffview-plus.nvim/.weaver-rev` is not
 `diffviewRev`, a detached `wvr _plugins` fetches that commit (`git fetch
 --depth 1`) beside it and swaps it in. `wvr nvim` passes

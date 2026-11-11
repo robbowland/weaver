@@ -575,6 +575,14 @@ Dragging in a pane selects and copies, as Rex does.
   everyone else's alone. The hooks run the binary directly, without a shell;
   those nobody needs to wait for run in the background. Codex runs them only
   after you trust them in its `/hooks`.
+- **tuicr's settings and theme.** For its review panel it writes tuicr's
+  Micrographics theme (`micrographics.toml` and the `Micrographics.tmTheme`
+  beside it) into `~/.config/tuicr/themes/`, and, when you have no
+  `~/.config/tuicr/config.toml`, one with `diff_watch_interval_ms = 500`, so
+  the diff follows an agent's edits as it makes them (no flag sets it). Each
+  says it is weaver's in its first lines, and weaver keeps it up to date
+  while that line stays; a file of yours, or one whose line you removed, is
+  left alone.
 - **Review plugin.** It fetches
   [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim),
   which reviews are built on, for Neovims whose config has no diffview of

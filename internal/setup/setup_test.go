@@ -1,7 +1,9 @@
 package setup
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -73,5 +75,48 @@ func TestMergeHooks(t *testing.T) {
 	}
 	if _, err := mergeHooks([]byte(`[1]`), []byte(add), "x"); err == nil {
 		t.Error("a settings file that is not an object: no error")
+	}
+}
+
+// What weaver brings to tuicr goes where there is none, and where weaver's
+// own is out of date; a file of yours (no mark: one you wrote, or took over
+// by removing the line) is left as it is.
+func TestBring(t *testing.T) {
+	conf := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", conf)
+	bs := BroughtFiles()
+	if len(bs) != 3 {
+		t.Fatalf("%d files brought, want tuicr's settings, theme and syntax theme", len(bs))
+	}
+	theme, settings := conf+"/tuicr/themes/micrographics.toml", conf+"/tuicr/config.toml"
+	if err := os.MkdirAll(conf+"/tuicr/themes", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mine := "theme = \"mine\"\n"
+	if err := os.WriteFile(settings, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := "# weaver: this file is weaver's (an older one)\npanel_bg = \"#111111\"\n"
+	if err := os.WriteFile(theme, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wrote, err := Bring(bs)
+	if err != nil || len(wrote) != 2 {
+		t.Fatalf("Bring wrote %d (%v), want the theme and syntax theme", len(wrote), err)
+	}
+	if b, _ := os.ReadFile(settings); string(b) != mine {
+		t.Errorf("your settings: %q, want them left alone", b)
+	}
+	for _, f := range bs {
+		b, err := os.ReadFile(f.Path)
+		if f.Path != settings && (err != nil || !bytes.Equal(b, f.Text)) {
+			t.Errorf("%s: not weaver's text (%v)", f.Path, err)
+		}
+	}
+	if wrote, _ := Bring(BroughtFiles()); len(wrote) != 0 {
+		t.Errorf("again: wrote %d, want none", len(wrote))
+	}
+	if !bytes.Contains(bs[1].Text, []byte(`syntax_theme = "Micrographics.tmTheme"`)) {
+		t.Error("the theme does not take its syntax theme from beside it")
 	}
 }
