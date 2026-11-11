@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +77,89 @@ func TestRefs(t *testing.T) {
 	}
 	if got := RefFacts(repo, "").RemoteDefault("origin"); got != "origin/main" {
 		t.Errorf("Refs.RemoteDefault without origin/HEAD = %q", got)
+	}
+}
+
+// What a branch is reviewed against, each source in turn falling through
+// to the next when it names no commit: $WEAVER_BASE, the branch's
+// weaverbase, the upstream remote's default branch (its HEAD, else main or
+// master), origin's, a local main or master, else none. A remote HEAD
+// pointing at a branch that has gone counts for nothing.
+func TestReviewBase(t *testing.T) {
+	for _, c := range []struct {
+		name, env, weaverbase string
+		refs                  []string // refs to make at the first commit
+		heads                 map[string]string
+		want                  string
+	}{
+		{name: "WEAVER_BASE", env: "dev", weaverbase: "rel", refs: []string{"refs/heads/dev", "refs/heads/rel"}, want: "dev"},
+		{name: "weaverbase", env: "nope", weaverbase: "rel", refs: []string{"refs/heads/rel", "refs/remotes/origin/main"}, want: "rel"},
+		{name: "upstream's HEAD", weaverbase: "nope", refs: []string{"refs/remotes/upstream/dev", "refs/remotes/origin/main"},
+			heads: map[string]string{"upstream": "dev"}, want: "upstream/dev"},
+		{name: "upstream's HEAD gone, its main", refs: []string{"refs/remotes/upstream/main", "refs/remotes/origin/main"},
+			heads: map[string]string{"upstream": "gone"}, want: "upstream/main"},
+		{name: "origin's HEAD", refs: []string{"refs/remotes/origin/trunk", "refs/remotes/origin/main"},
+			heads: map[string]string{"origin": "trunk"}, want: "origin/trunk"},
+		{name: "origin's master", refs: []string{"refs/remotes/origin/master"}, want: "origin/master"},
+		{name: "a local master", refs: []string{"refs/heads/master"}, want: "master"},
+		{name: "none", want: ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := t.TempDir()
+			git := func(args ...string) {
+				t.Helper()
+				cmd := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...)
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v %s", args, err, out)
+				}
+			}
+			git("init", "-q", "-b", "feat")
+			git("commit", "-q", "--allow-empty", "-m", "init")
+			for _, r := range c.refs {
+				git("update-ref", r, "HEAD")
+			}
+			for rm, b := range c.heads {
+				git("symbolic-ref", "refs/remotes/"+rm+"/HEAD", "refs/remotes/"+rm+"/"+b)
+			}
+			if c.weaverbase != "" {
+				git("config", "branch.feat.weaverbase", c.weaverbase)
+			}
+			t.Setenv("WEAVER_BASE", c.env)
+			if got := ReviewBase(d); got != c.want {
+				t.Errorf("ReviewBase = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The fork point is the merge base as a SHA, not the base's name: a base
+// that has moved on since the branch left it keeps the branch's own
+// commits, and only them, in base..HEAD.
+func TestForkPoint(t *testing.T) {
+	d := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	t.Setenv("WEAVER_BASE", "")
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "base")
+	fork := git("rev-parse", "HEAD")
+	git("switch", "-q", "-c", "feat")
+	git("commit", "-q", "--allow-empty", "-m", "mine")
+	git("switch", "-q", "main")
+	git("commit", "-q", "--allow-empty", "-m", "moved on")
+	git("switch", "-q", "feat")
+	if got, ok := ForkPoint(d); !ok || got != fork {
+		t.Errorf("ForkPoint = %q %v, want %q", got, ok, fork)
+	}
+	git("branch", "-q", "-D", "main")
+	if got, ok := ForkPoint(d); ok {
+		t.Errorf("no base: ForkPoint = %q, want none", got)
 	}
 }
