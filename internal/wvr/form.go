@@ -43,7 +43,6 @@ type form struct {
 	Here   string     `json:"here"`
 	Branch string     `json:"branch"`
 	Where  Where      `json:"where"`
-	Agent  agent.Kind `json:"agent"`
 	Base   string     `json:"base"`
 	Mode   items.Mode `json:"mode,omitempty"`
 	Item   *items.Box `json:"item,omitempty"`
@@ -64,7 +63,7 @@ func formName(fm form) string {
 }
 
 func loadForm(f string) form {
-	fm := form{Where: WhereWorktree, Agent: agent.Claude}
+	fm := form{Where: WhereWorktree}
 	bestEffort(store.Read(f, &fm)) // none yet: the defaults
 	return fm
 }
@@ -95,23 +94,16 @@ func formPath(p string) string {
 	return t
 }
 
-func agentCmd(a agent.Kind) string {
-	switch a {
-	case agent.Claude:
-		if c := os.Getenv("WEAVER_CLAUDE"); c != "" {
-			return c
-		}
-		return "claude"
-	}
-	return ""
-}
+// agentCmd is the command a thread's agent runs: $WEAVER_CLAUDE, else
+// claude.
+func agentCmd() string { return cmp.Or(os.Getenv("WEAVER_CLAUDE"), agent.Claude) }
 
-func agentInstalled(a agent.Kind) bool {
-	c := agentCmd(a)
-	if c == "" {
+func agentInstalled() bool {
+	w := strings.Fields(agentCmd())
+	if len(w) == 0 {
 		return false
 	}
-	_, err := exec.LookPath(strings.Fields(c)[0])
+	_, err := exec.LookPath(w[0])
 	return err == nil
 }
 
@@ -319,7 +311,7 @@ func (e *Env) formFields(sf, task string) []formField {
 // formStart is the form's first row, the one enter starts the thread from:
 // what it would start, in a line.
 func formStart(fm form, task string) string {
-	what := string(fm.Agent)
+	what := agent.Claude
 	if fm.Mode == items.ModeReview {
 		what += ", read-only,"
 	}
@@ -525,8 +517,8 @@ func checkThread(task string, fm form) string {
 	if strings.TrimSpace(task) == "" && fm.Item == nil {
 		return "say what the agent should do"
 	}
-	if !agentInstalled(fm.Agent) {
-		return string(fm.Agent) + " is not installed"
+	if !agentInstalled() {
+		return agent.Claude + " is not installed"
 	}
 	if fm.Where == WhereHere {
 		if st, err := os.Stat(fm.Here); err != nil || !st.IsDir() {
@@ -613,7 +605,6 @@ func (e *Env) New(args []string) error {
 	if e.Session == "" {
 		return errors.New("not inside a weaver session: start it with `wvr`, then alt+N (or wvr new) there")
 	}
-	kind := agent.Claude
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()
 	switch {
@@ -643,7 +634,7 @@ func (e *Env) New(args []string) error {
 	if where == "" {
 		where = WhereWorktree
 	}
-	fm := form{Name: nameArg, Branch: branch, Where: where, Agent: kind, Base: base}
+	fm := form{Name: nameArg, Branch: branch, Where: where, Base: base}
 	fm.Mode = mode
 	if r, c, ok := git.RepoOf(start); ok {
 		fm.Repo, fm.Here = r, c

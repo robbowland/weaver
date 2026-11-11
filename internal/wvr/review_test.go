@@ -42,7 +42,7 @@ func TestAgentWhere(t *testing.T) {
 		{"its state's root and file", &agent.Record{Root: wt, Cwd: "/", File: wt + "/src/a.go"}, nil, wt, wt + "/src/a.go", true},
 		{"its directory, while it has no root", &agent.Record{Cwd: wt}, nil, wt, "", true},
 		{"a file outside its root, dropped", &agent.Record{Root: wt + "/src", File: td + "/elsewhere.go"}, nil, wt + "/src", "", true},
-		{"its thread's worktree, before its first hook", nil, &store.Thread{Agent: agent.Claude, Worktree: wt}, wt, "", true},
+		{"its thread's worktree, before its first hook", nil, &store.Thread{Worktree: wt}, wt, "", true},
 		{"a root that has gone", &agent.Record{Root: td + "/gone"}, nil, "", "", false},
 		{"nothing known", nil, nil, "", "", false},
 	} {

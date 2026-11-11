@@ -80,7 +80,7 @@ func (e *Env) RowOf(p mux.PaneID) (Row, int64, bool) {
 // you gave its thread, else its agent's title, else what its thread is
 // about (its task, or its item), else its prompt.
 func (r Row) Called() string {
-	return cmp.Or(r.Title, r.Ttask, r.Prompt, "new "+cmp.Or(r.Agent, string(agent.Claude))+" session")
+	return cmp.Or(r.Title, r.Ttask, r.Prompt, "new "+cmp.Or(r.Agent, agent.Claude)+" session")
 }
 
 // Called is what lost thread l is called, as it was when live: the name you

@@ -12,12 +12,12 @@ const (
 	ModeReview Mode = "review"
 )
 
-// Command is the command line that runs kind k's agent from base (the
-// command its thread was given, WEAVER_CLAUDE's say) held to mode m. A
+// Command is the command line that runs the agent from base (the command
+// its thread was given, WEAVER_CLAUDE's say) held to mode m. A
 // review is read-only whatever base says: what would loosen it goes, and
 // the agent's own read-only mode is added. The one place a thread's agent
 // gets its mode, so every start of it (new, resumed, restarted) keeps it.
-func Command(k Kind, base string, m Mode) []string {
+func Command(base string, m Mode) []string {
 	w := strings.Fields(base)
 	if m != ModeReview || len(w) == 0 {
 		return w

@@ -125,14 +125,14 @@ func (e *Env) threadNum() (int, map[int]bool) {
 
 // threadTab opens a thread's session, labelled name (its branch) for good:
 // its first window, labelled label, in dir, its agent first (`wvr _agent
-// tok kind`), then its review panel on the agent's left, bound to it
+// tok`), then its review panel on the agent's left, bound to it
 // before this returns; the agent at its width, with the focus (not gone
 // to when nofocus). Its window id. The window is made whole behind you,
 // then shown: the Rex app evens out a split made in the window it shows
 // (its balancing on creation), not one it is shown made.
-func (e *Env) threadTab(tok string, kind agent.Kind, dir, name, label string, nofocus bool) (mux.WindowID, bool) {
+func (e *Env) threadTab(tok, dir, name, label string, nofocus bool) (mux.WindowID, bool) {
 	tab, agentPane, total, err := e.Mux().OpenSession(name, mux.NewWindow{
-		Spawn: e.agentSpawn(tok, kind, dir), Label: label, Background: true,
+		Spawn: e.agentSpawn(tok, dir), Label: label, Background: true,
 	})
 	if err != nil {
 		return "", false
@@ -554,8 +554,8 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	n, _ := e.threadNum()
 	// The command its agent runs, from here (the pane will not have this
 	// environment); its mode holds it each time it starts (agent.Command).
-	rec := store.Thread{Num: n, Cmd: agentCmd(fm.Agent), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
-		Here: fm.Where == WhereHere, WorktreeCreated: created, Agent: fm.Agent, Created: time.Now().Unix(), Base: base, Title: title,
+	rec := store.Thread{Num: n, Cmd: agentCmd(), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
+		Here: fm.Where == WhereHere, WorktreeCreated: created, Created: time.Now().Unix(), Base: base, Title: title,
 		Item: ti, Mode: fm.Mode}
 	if store.Write(d+"/thread.json", rec) != nil {
 		unlock()
@@ -568,7 +568,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if e.WeaverSession() {
 		wname = session.ThreadLabel(n, label, dir)
 	}
-	tab, ok := e.threadTab(tok, fm.Agent, dir, name, wname, nofocus)
+	tab, ok := e.threadTab(tok, dir, name, wname, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -584,29 +584,25 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	return nil
 }
 
-// agentSpawn is a thread's agent pane (`wvr _agent tok kind`, in dir),
+// agentSpawn is a thread's agent pane (`wvr _agent tok`, in dir),
 // kept when its agent exits, as its thread lasts until you close it: what
 // the agent said last (a broken install, a bad flag, a goodbye) stays to be
 // read, and the board shows it exited, R to start it again, x to close the
 // thread, rather than its pane going and leaving nvim alone in the window.
-func (e *Env) agentSpawn(tok string, kind agent.Kind, dir string) mux.Spawn {
-	return mux.Spawn{Argv: []string{e.Self, "_agent", tok, string(kind)}, Dir: dir,
-		Keep: &mux.Exit{What: "weaver: " + string(kind) + " exited", Hint: "on the board, R starts it again, x closes the thread"}}
+func (e *Env) agentSpawn(tok, dir string) mux.Spawn {
+	return mux.Spawn{Argv: []string{e.Self, "_agent", tok}, Dir: dir,
+		Keep: &mux.Exit{What: "weaver: " + agent.Claude + " exited", Hint: "on the board, R starts it again, x closes the thread"}}
 }
 
-// AgentPane is `wvr _agent TOKEN AGENT`, the agent's pane of a new
+// AgentPane is `wvr _agent TOKEN`, the agent's pane of a new
 // thread. First run: record the thread for this pane, tell the nvim beside
 // it where the agent is, and start the agent with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
-func (e *Env) AgentPane(tok, agentName string) error {
-	kind, ok := agent.ParseKind(agentName)
-	if !ok {
-		return errors.New("unknown agent: " + agentName)
-	}
+func (e *Env) AgentPane(tok string) error {
 	pane := e.MyPane
 	d := e.opening(tok)
-	cmd, mode := agentCmd(kind), agent.ModeWork
+	cmd, mode := agentCmd(), agent.ModeWork
 	cmdOf := func(t store.Thread) {
 		if t.Cmd != "" {
 			cmd = t.Cmd
@@ -616,9 +612,9 @@ func (e *Env) AgentPane(tok, agentName string) error {
 	paneNum, _ := atoi(string(pane))
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
-		w := agent.Command(kind, cmd, mode)
+		w := agent.Command(cmd, mode)
 		if len(w) == 0 {
-			return errors.New("no command for " + string(kind))
+			return errors.New("no command for " + agent.Claude)
 		}
 		p, err := exec.LookPath(w[0])
 		if err != nil {
@@ -634,15 +630,12 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		// thread: the thread knows its conversation before its first hook,
 		// so it can be resumed (never --continue).
 		var ident []string
-		sid := ""
-		if kind == agent.Claude {
-			sid = uuid()
-			if sid != "" {
-				ident = append(ident, "--session-id", sid)
-			}
-			if th.Name != "" {
-				ident = append(ident, "-n", th.Name)
-			}
+		sid := uuid()
+		if sid != "" {
+			ident = append(ident, "--session-id", sid)
+		}
+		if th.Name != "" {
+			ident = append(ident, "-n", th.Name)
 		}
 		if therr == nil {
 			th.Pane = &pn
@@ -688,7 +681,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 			bestEffort(store.Write(sf, st))
 		}
 		os.RemoveAll(d)
-		return run(resumeArgs(kind, sid)...)
+		return run(resumeArgs(sid)...)
 	}
 	// Its pane again (enter on an exited agent): the conversation it was
 	// in, else the one weaver started it on.
@@ -699,7 +692,7 @@ func (e *Env) AgentPane(tok, agentName string) error {
 		sid = cmp.Or(st.SessionID, th.SessionID)
 		cmdOf(th)
 	}
-	return run(resumeArgs(kind, sid)...)
+	return run(resumeArgs(sid)...)
 }
 
 // sameLife: is a state of life w (older ones have no session id) of life
@@ -708,10 +701,10 @@ func sameLife(w, here agent.Where) bool {
 	return w == here || w.Session == "" && w.Server == here.Server
 }
 
-// resumeArgs are the arguments that resume kind's conversation sid; none,
-// a fresh start, when it is not known (never another conversation's guess:
+// resumeArgs are the arguments that resume conversation sid; none, a
+// fresh start, when it is not known (never another conversation's guess:
 // --continue, resume --last).
-func resumeArgs(kind agent.Kind, sid string) []string {
+func resumeArgs(sid string) []string {
 	if sid == "" {
 		return nil
 	}
@@ -754,10 +747,6 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	d := e.opening(tok)
 	st, th := lo.State, lo.Thread
 	sid := oneline.Line(st.SessionID)
-	kind := th.Agent
-	if kind == "" {
-		kind = agent.Kind(st.Agent)
-	}
 	dir := oneline.Line(lo.Dir())
 	nm := oneline.Line(th.Name)
 	repo := oneline.Line(th.Repo)
@@ -771,11 +760,6 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	if nm == "" {
 		nm = "thread"
 	}
-	if k, ok := agent.ParseKind(string(kind)); ok {
-		kind = k
-	} else {
-		kind = agent.Claude
-	}
 	if s, err := os.Stat(dir); err != nil || !s.IsDir() {
 		t := tildify(dir)
 		if t != "" {
@@ -785,7 +769,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 	}
 	// One running elsewhere is refused, not resumed beside it: two
 	// processes would interleave one conversation.
-	if pid := e.ClaudeRunning()[sid]; kind == agent.Claude && sid != "" && pid != "" {
+	if pid := e.ClaudeRunning()[sid]; sid != "" && pid != "" {
 		return "", fmt.Errorf("%s runs in Claude Code (pid %s) outside this session: /exit it there, then resume it", nm, pid)
 	}
 	unlock := e.numLock()
@@ -794,7 +778,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		n = th.Num
 	}
 	t2 := th
-	t2.Cmd, t2.Num, t2.Pane = agentCmd(kind), n, nil
+	t2.Cmd, t2.Num, t2.Pane = agentCmd(), n, nil
 	if err := e.writeResume(d, t2, st, sid); err != nil {
 		unlock()
 		return "", fmt.Errorf("%s: %v", nm, err)
@@ -811,7 +795,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		}
 		wname = session.ThreadLabel(n, t, dir)
 	}
-	tab, ok := e.threadTab(tok, kind, dir, nm, wname, nofocus)
+	tab, ok := e.threadTab(tok, dir, nm, wname, nofocus)
 	if !ok {
 		return "", fmt.Errorf("%s: Rex could not open its session", nm)
 	}

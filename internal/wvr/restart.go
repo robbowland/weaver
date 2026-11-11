@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -124,10 +123,6 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	// known (it never reported): its agent starts afresh.
 	st, _ := store.ReadState(e.StateFile(p))
 	st.SessionID = cmp.Or(st.SessionID, th.SessionID)
-	kind, ok := agent.ParseKind(string(th.Agent))
-	if !ok {
-		kind = agent.Claude
-	}
 	tok := token()
 	d := e.opening(tok)
 	if err := os.MkdirAll(d, 0o755); err != nil {
@@ -139,7 +134,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	if err := e.Mux().Respawn(p, e.agentSpawn(tok, kind, dir)); err != nil {
+	if err := e.Mux().Respawn(p, e.agentSpawn(tok, dir)); err != nil {
 		os.RemoveAll(d)
 		return label, errors.New("Rex could not restart it")
 	}

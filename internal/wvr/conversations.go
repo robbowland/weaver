@@ -197,8 +197,8 @@ func (e *Env) findConversation(which string) (conversation, error) {
 // thread resumed in its window starts from (threadReopen).
 func (c conversation) lost(skey, name, repo string, now int64) store.Lost {
 	return store.Lost{Lost: jsonx.Int(now), SKey: skey,
-		State: agent.Record{Agent: string(agent.Claude), State: agent.StateIdle, SessionID: c.ID, Transcript: c.File,
+		State: agent.Record{Agent: agent.Claude, State: agent.StateIdle, SessionID: c.ID, Transcript: c.File,
 			Title: c.Title, Cwd: c.Cwd, Root: c.Cwd, StartCwd: c.Start},
 		Thread: store.Thread{Name: name, Repo: repo, Branch: c.Branch, Worktree: c.Start, Here: true,
-			Agent: agent.Claude, Created: now, SessionID: c.ID}}
+			Created: now, SessionID: c.ID}}
 }

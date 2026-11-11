@@ -223,7 +223,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		rows = append(rows, Row{Pane: pane, Window: p.Window, Session: p.Session, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
-			WindowName: oneline.Line(p.WindowName), Agent: oneline.Line(string(t.Agent)), Ttask: oneline.Line(t.About()),
+			WindowName: oneline.Line(p.WindowName), Agent: agent.Claude, Ttask: oneline.Line(t.About()),
 			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}
@@ -429,7 +429,7 @@ func (e *Env) keepLost(skey string, st agent.Record, th store.Thread) bool {
 // hold, with your note).
 func (e *Env) writeLost(skey string, st agent.Record, th store.Thread, held int64, note string) bool {
 	st.SessionID = cmp.Or(st.SessionID, th.SessionID)
-	st.Agent = cmp.Or(st.Agent, string(th.Agent))
+	st.Agent = cmp.Or(st.Agent, agent.Claude)
 	id := st.SessionID
 	if id == "" {
 		id = "thread-" + strconv.FormatInt(th.Created, 10) + "-" + strconv.Itoa(th.Num)

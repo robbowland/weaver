@@ -159,7 +159,6 @@ the agent's other files. Readers ignore fields they don't know.
 | `worktree` | string | the directory the thread runs in (the checkout itself when `here`) |
 | `here` | bool | started in the current checkout, not a new worktree |
 | `worktree_created` | bool | `wvr new` made this worktree (only then may `wvr close` offer to remove it) |
-| `agent` | string | `claude` |
 | `cmd` | string | the command its agent runs (`$WEAVER_CLAUDE`, else `claude`) |
 | `num` | int | its number in the session (below) |
 | `created` | int | epoch s |
@@ -240,7 +239,7 @@ is left unless `--force`, and one whose agent has not said its session id
 cannot be. For each: its record (`pane` cleared), its state as a restored
 thread's carries on (`writeResume`: idle, seen, without its process's
 fields) and `resume` (its session id) go to `new/<skey>_<token>/`, then
-`Respawn` starts `wvr _agent TOKEN KIND` in DIR in the pane's place, ending
+`Respawn` starts `wvr _agent TOKEN` in DIR in the pane's place, ending
 the agent, which takes them as a restored thread's pane
 does and resumes (`claude --resume`). DIR is where a lost
 thread would resume (`Lost.Dir`). The pane id, its window, panel and number
@@ -671,8 +670,8 @@ weaver as a thread of that one (home's).
   left from (`$STATE_DIR/<skey>.last`, or home when it has gone); from
   anywhere else home, made again if it was closed.
 - **Views:** see [Views](#views).
-- **Threads:** a window labelled LABEL in DIR running `wvr _agent TOK
-  KIND`, then a split on its left running `wvr _panel AGENT` (argv, no
+- **Threads:** a session labelled with the thread's name, its first
+  window labelled LABEL in DIR running `wvr _agent TOK`, then a split on its left running `wvr _panel AGENT` (argv, no
   shell), titled `review: <dir>`, then the agent focused: whole before it
   is shown, as Rex needs. alt+v's panel, opened again, is a split on the
   agent's left.

@@ -24,7 +24,7 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 		dir := t.TempDir()
 		e := &session.Env{StateDir: dir + "/state", ClaudeDir: dir + "/claude", SockDir: dir + "/sock",
 			Session: "s", SKey: "rex-s", Self: "/usr/bin/true"}
-		hook(e, hooks.Input{Event: "SessionStart", SessionID: "conv", Cwd: dir, Source: "startup"}, "sync", "5", "claude", c.pid)
+		hook(e, hooks.Input{Event: "SessionStart", SessionID: "conv", Cwd: dir, Source: "startup"}, "sync", "5", c.pid)
 		st, err := store.ReadState(e.StateFile("5"))
 		if err != nil {
 			t.Fatalf("pid %s: no state: %v", c.pid, err)

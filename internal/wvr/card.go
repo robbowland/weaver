@@ -303,7 +303,7 @@ func (e *Env) Preview(args []string) string {
 		if terr != nil {
 			return out
 		}
-		s = agent.Record{State: agent.StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task, Agent: string(t.Agent)}
+		s = agent.Record{State: agent.StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task}
 	} else if err != nil {
 		return out
 	}
@@ -369,9 +369,6 @@ func card(s agent.Record, sh shown, from string, w int, head, ab string, changed
 		word = CGreen + string(agent.StateDone) + COff
 	}
 	first := word + CDim + " · " + COff + cardAge(now-since)
-	if s.Agent != "" && s.Agent != string(agent.Claude) {
-		first += CDim + " · " + COff + s.Agent
-	}
 	ls := []string{first, ""}
 	add := func(f []string) { ls = append(ls, f...) }
 	if from != "" {

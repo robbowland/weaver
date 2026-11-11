@@ -124,7 +124,7 @@ func (e *Env) agentWhere(p mux.PaneID) (rec agent.Record, root, file string, kno
 			root = s.Cwd
 		}
 	} else if t, err := store.ReadThread(e.ThreadFile(p)); err == nil {
-		rec.Agent, root = string(t.Agent), t.Worktree
+		root = t.Worktree
 	}
 	if st, err := os.Stat(root); err != nil || !st.IsDir() {
 		return rec, "", "", false

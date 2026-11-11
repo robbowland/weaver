@@ -36,7 +36,7 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 // it makes of them. Exported fields go to the background run.
 type hk struct {
 	Pane            mux.PaneID
-	AgentKind, SKey string
+	SKey string
 	// The session it acts on (its name, its home's Rex id and the one it
 	// ran in), which the background run takes rather than its
 	// environment's.
@@ -80,23 +80,20 @@ type hk struct {
 	rc           int
 }
 
-// Hook is `wvr hook [--async]` (and, from Event, another agent's event):
-// returns the bell to ring (10 needs you, 11 done; 0 none).
-func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, agent, me string) int {
+// Hook is `wvr hook [--async]`: returns the bell to ring (10 needs you,
+// 11 done; 0 none).
+func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, me string) int {
 	var ev hooks.Input
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
 		return 0
 	}
-	return hook(e, ev, mode, pane, agent, me)
+	return hook(e, ev, mode, pane, me)
 }
 
 // hook folds event ev into the state of the agent in pane.
-func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, agentName, me string) int {
-	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID, RexHere: e.RexHere}
+func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me string) int {
+	h := &hk{Pane: pane, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID, RexHere: e.RexHere}
 	me = knownPid(me)
-	if h.AgentKind == "" {
-		h.AgentKind = "claude"
-	}
 	if os.MkdirAll(e.StateDir, 0o755) != nil {
 		return 0
 	}
@@ -379,7 +376,7 @@ func writeState(e *session.Env, h *hk) {
 	if since == "" {
 		since = "0"
 	}
-	st := agent.Record{Pane: jsonx.Int(pane), Agent: h.AgentKind, State: h.State, TS: h.Now, Since: json.Number(since),
+	st := agent.Record{Pane: jsonx.Int(pane), Agent: agent.Claude, State: h.State, TS: h.Now, Since: json.Number(since),
 		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn,
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
@@ -484,7 +481,7 @@ func HookMain(e *session.Env, args []string) {
 	if me == "" {
 		me = os.Getenv("CLAUDE_PID")
 	}
-	rc := Hook(e, in, mode, e.MyPane, os.Getenv("WEAVER_AGENT"), me)
+	rc := Hook(e, in, mode, e.MyPane, me)
 	if mode == "sync" {
 		bell := os.Getenv("WEAVER_BELL")
 		if bell == "" {

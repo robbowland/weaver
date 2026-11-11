@@ -70,7 +70,7 @@ func TestRexLostAndGC(t *testing.T) {
 		n, _ := strconv.Atoi(string(p))
 		sid := "conv-" + string(p)
 		f := e.PaneFile(p, "thread")
-		if err := store.Write(f, store.Thread{Num: n, Name: "t" + string(p), Agent: agent.Claude, SessionID: sid}); err != nil {
+		if err := store.Write(f, store.Thread{Num: n, Name: "t" + string(p), SessionID: sid}); err != nil {
 			t.Fatal(err)
 		}
 		at := time.Unix(ts, 0)

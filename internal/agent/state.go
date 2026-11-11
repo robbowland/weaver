@@ -33,22 +33,8 @@ const (
 // design doc lists them (StateStarting is the board's own).
 var States = []State{StateWorking, StateNeedsYou, StateDone, StateIdle, StateInterrupted, StateEnded}
 
-// Kind is which coding agent runs in a pane.
-type Kind string
-
-const Claude Kind = "claude"
-
-// ParseKind is name as a Kind: claude when empty, false when it
-// names no agent weaver knows.
-func ParseKind(name string) (Kind, bool) {
-	switch k := Kind(name); k {
-	case "":
-		return Claude, true
-	case Claude:
-		return k, true
-	}
-	return "", false
-}
+// Claude is the agent weaver runs and follows, as its state names it.
+const Claude = "claude"
 
 // Cell is the state's cell: a mark between brackets, as the board, the
 // status line, Neovim and Worktrunk's branch markers show it.

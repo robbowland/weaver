@@ -32,7 +32,6 @@ type Thread struct {
 	Worktree        string      `json:"worktree"`
 	Here            bool        `json:"here"`
 	WorktreeCreated bool        `json:"worktree_created"`
-	Agent           agent.Kind  `json:"agent"`
 	Created         int64       `json:"created"`
 	Base            string      `json:"base"`
 	Item            *ThreadItem `json:"item,omitempty"`
