@@ -132,9 +132,9 @@ shows more of a section, `f` adds a quick filter (assigned to you, a
 repository, a label), and `/` searches what the view holds, `ctrl+s`
 asking GitHub or Linear instead.
 
-**Its workflow.** weaver installs a `weaver` skill for Claude Code: agents start helpers as agents of their own beside them, commit in
-small steps, report done as the branch's commits, and read your review
-comments from tuicr.
+**Its workflow.** weaver installs a `weaver` skill for Claude Code: agents start helpers in windows of their thread's session, close them
+once their work is in, commit in small steps, report done as the branch's
+commits, and read your review comments from tuicr.
 
 **States.** weaver follows each agent through its hooks and shows its state
 as a cell that reads without colour:

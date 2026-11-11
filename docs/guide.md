@@ -505,8 +505,8 @@ Dragging in a pane selects and copies, as Rex does.
   line stays; a file of yours, or one whose line you removed, is left alone.
 - **The weaver skill.** It writes the `weaver` skill where Claude Code
   reads skills (`~/.claude/skills/weaver/`): how an agent works in a thread
-  (helpers as agents of their own beside it, small commits of only its own
-  paths, done as `git log --oneline <base>..HEAD`, and your review read
+  (helpers as agents in windows of the thread's session, closed once their
+  work is committed, small commits of only its own paths, done as `git log --oneline <base>..HEAD`, and your review read
   from tuicr). Like tuicr's files, it is rewritten while its first lines
   say it is weaver's, and left alone once you remove that line.
 - **Old copies.** The first time, it removes what an older weaver kept

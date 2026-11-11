@@ -281,6 +281,21 @@ ok "adopt: the helper's window goes, its conversation resumes in a thread's sess
 REX_SESSION=$SID wvr close --yes "$(num "$AB")" >/dev/null 2>&1
 waitfor '[ "$(threads)" = "$T" ]' 100
 ok "close: the adopted thread's session goes, the other stays" "$(threads)|$(label "$A")" "$T|"
+# A helper done and folded in: the thread's agent closes its window (the
+# weaver skill's last step), which ends it. Not a crash: it leaves the
+# boards and weaver's state, and nothing is kept to resume.
+HB=$(R window new -s "$T" tests --focus=false -c "$AT/repo" --shell=none --json -- "$AT/bin/claude" "add a test" | jq -r '.block_ids[0]')
+waitfor '[ -f "$AT/pid.${HB#block:}" ]' 100
+HS=aaaaaaaa-0000-4000-8000-000000000002
+helperj "$(hev SessionStart ',"source":"startup"')"
+helperj "$(hev Stop ',"prompt_id":"h3","last_assistant_message":"added"')"
+HP=$(num "$HB")
+k=$(LS_SESSION=$T board | grep -c tests)
+R window close -s "$T" "$(view "$T" | jq -r --arg b "$HB" '.windows[] | select([.layers[].blocks[].block_id] | index($b)) | .window_id')"
+waitfor '[ "$(windows "$T")" = "01 Greeting · repo/main/2" ]' 50
+k="$k|$(LS_SESSION=$T board | grep -c tests)"
+ok "a helper's window closed: gone from its thread's board and weaver's state, nothing lost" \
+	"$k|$([ -f "$SD/rex-${S}_$HP.json" ] && echo kept)|$(ls "$SD"/lost/ 2>/dev/null | wc -l | tr -d ' ')" "1|0||0"
 held() { for f in "$SD"/lost/*.json; do [ -f "$f" ] && jq -r 'select(.held > 0) | "\(.note)|\(.state.session_id)"' "$f"; done; }
 REX_SESSION=$SID wvr hold "$AG" "write the reply" >"$AT/hold.out" 2>&1
 waitfor '[ -z "$(threads)" ]' 100

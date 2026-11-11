@@ -200,6 +200,17 @@ can supersede an earlier one, and says so.
   environment of whichever session started it, so a hook does not say its
   block; placing it would need the daemon's sessions mapped to Rex blocks
   (by a Codex process's own environment and directory, say).
+- 2026-11-11: The skill's helpers are windows of the thread's session,
+  superseding the entry above's blocks beside the agent and its one
+  worktree per thread now that a thread is a session (Rob): `rex window
+  new` in `$REX_SESSION`, the window id kept; never a split of the
+  agent's window (its review's place) nor a session of its own (outside
+  the thread). Finished helpers are the coordinator's to close (Rob: a
+  sidebar full of finished helpers nobody closed): a helper reports and
+  waits; the agent that started it checks nothing it owned is left
+  uncommitted, then `rex window close`s it. weaver needs nothing more:
+  a helper has no thread, so one whose window closes is forgotten, never
+  kept as lost.
 
 ## Holding threads
 

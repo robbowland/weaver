@@ -883,9 +883,11 @@ alone (`Brought.Fate`). Nothing is set for tuicr to find them
 (`XDG_CONFIG_HOME`, `VIMINIT`): the nvim its `e` opens would inherit it.
 `wvr setup` says each file's fate and writes it; `wvr doctor` checks them
 (`theme and skill`) and tuicr itself (needed, 0.28 or newer). The skill is
-weaver's workflow as policy, not machinery: one worktree per thread, helpers
-as agents in Rex blocks of their own that report back with Claude Code's
-cross-session `SendMessage`, small commits of only the paths an agent
+weaver's workflow as policy, not machinery: a thread's session on one
+worktree, helpers as agents in windows of it (`rex window new`, the window
+id kept) that report back with Claude Code's cross-session `SendMessage`,
+then wait for the agent that started them to close their window once
+nothing they owned is uncommitted, small commits of only the paths an agent
 changed, done reported as `git log --oneline <base>..HEAD`, and review
 comments read with tuicr's CLI. It names the rex skill for Rex's commands
 rather than repeat them; a skill loads when its description matches. Unpacking its
