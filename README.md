@@ -203,7 +203,7 @@ together, following the agent's edits as it makes them.
   the review back where you were.
 - `c` comments a line and `v` a range. When you're done, tell the agent to
   read your review: it reads the comments with `tuicr review comments`.
-- `:q` starts the review again, with any commits made since it opened.
+- `q` starts the review again, with any commits made since it opened.
 
 The [guide](docs/guide.md#review) says what it is compared against.
 

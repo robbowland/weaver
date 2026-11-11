@@ -4,3 +4,6 @@
 
 # Re-read the diff every half second, so an agent's edits show as it makes them.
 diff_watch_interval_ms = 500
+# q quits, as it did before tuicr 0.28, and weaver's review panel starts tuicr
+# again on the branch as it is then.
+q_quits = true

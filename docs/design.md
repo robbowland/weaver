@@ -144,7 +144,7 @@ alone in it.
 A thread's left pane is its review: `wvr _panel AGENT`, in the worktree,
 records itself as the agent's (`.panel`: its pane and pid), then runs tuicr
 (`$WEAVER_TUICR`, else `tuicr`) there, and again each time tuicr ends
-(`:q`; tuicr 0.28's `q` no longer quits), so it reads the branch afresh:
+(`q`, with weaver's `q_quits`, or `:q`), so it reads the branch afresh:
 tuicr takes its range once, as it starts. Each round it picks what to show
 (`reviewArgs`):
 

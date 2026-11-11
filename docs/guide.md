@@ -445,7 +445,7 @@ follows the agent's edits as it makes them:
   write them. When you have reviewed, tell the agent: it reads them with
   `tuicr review list --repo .` and `tuicr review comments --session
   <slug>`, which give each comment's `path:line`.
-- **A fresh range:** `:q` starts the review again, so commits made since it
+- **A fresh range:** `q` (or `:q`) starts the review again, so commits made since it
   opened join its list (tuicr reads its range once, as it starts).
 
 A branch with nothing of its own yet says `no changes on this branch yet`,
@@ -490,10 +490,10 @@ Dragging in a pane selects and copies, as Rex does.
   Micrographics theme (`micrographics.toml` and the `Micrographics.tmTheme`
   beside it) into `~/.config/tuicr/themes/`, and, when you have no
   `~/.config/tuicr/config.toml`, one with `diff_watch_interval_ms = 500`, so
-  the diff follows an agent's edits as it makes them (no flag sets it). Each
-  says it is weaver's in its first lines, and weaver keeps it up to date
-  while that line stays; a file of yours, or one whose line you removed, is
-  left alone.
+  the diff follows an agent's edits as it makes them (no flag sets it), and
+  `q_quits = true`, so `q` starts the review again. Each says it is
+  weaver's in its first lines, and weaver keeps it up to date while that
+  line stays; a file of yours, or one whose line you removed, is left alone.
 - **The weaver skill.** It writes the `weaver` skill where Claude Code
   reads skills (`~/.claude/skills/weaver/`) and, when you have Codex, where
   Codex does (`~/.agents/skills/weaver/`): how an agent works in a thread
