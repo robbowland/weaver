@@ -12,6 +12,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/process"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -39,6 +40,7 @@ func sub1(re *regexp.Regexp, l string) string {
 func (e *Env) GC() {
 	e.gcAgents()
 	e.gcFiles()
+	rex.Prune(e.RexDir())
 }
 
 // gcAgents is GC's agents, their panels' bindings and their threads: of

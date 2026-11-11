@@ -773,8 +773,9 @@ best-effort and says nothing of failing.
   name weaver gave a session it made, when (epoch seconds to the
   millisecond), the pid of the server it made it on and, for a thread's,
   home's id (a thread's session has home's name, so its agents' files are
-  keyed by home). The record of a thread's session that has gone goes a
-  minute after it was made. Rex saves its sessions as its server stops and brings them
+  keyed by home). `GC` forgets the record of a session Rex no longer
+  runs (a husk ended, an old home, a thread's closed; `rex.Prune`), but
+  not in the minute after it was made, which Rex may not list yet. Rex saves its sessions as its server stops and brings them
   back when one starts again at that endpoint, ids and all, with a fresh
   shell in each terminal; one whose server is not the one weaver made it on
   is such a husk (`Restored`): `rex.Ensure` makes it again and gives it back

@@ -261,6 +261,20 @@ func (r ids) threads(home string) []string {
 	return out
 }
 
+// prune forgets the sessions weaver made that Rex no longer runs (live):
+// a husk ended, an old home, a thread's closed. Not one made in the last
+// minute, which Rex may not list yet.
+func (r ids) prune(live map[string]bool) {
+	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
+	before := float64(time.Now().Add(-time.Minute).UnixMilli()) / 1000
+	for _, d := range ents {
+		id := strings.Replace(d.Name(), "_", ":", 1)
+		if m, ok := r.session(id); ok && !live[id] && m.at < before {
+			os.Remove(r.path("sessions", d.Name()))
+		}
+	}
+}
+
 // allThreads are the sessions weaver made as threads, of any home.
 func (r ids) allThreads() []string {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))

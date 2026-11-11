@@ -86,3 +86,25 @@ func TestLatestWithinASecond(t *testing.T) {
 		t.Errorf("an older record: %+v %v", m, ok)
 	}
 }
+
+// Weaver's records of the sessions it made go once Rex no longer runs
+// them (a husk ended, an old home, a thread's closed): not one made in the
+// last minute, which Rex may not list yet, nor one that runs.
+func TestPrune(t *testing.T) {
+	r := ids{t.TempDir()}
+	old, young := time.Now().Add(-2*time.Minute), time.Now()
+	for _, s := range []struct {
+		id, home string
+		at       time.Time
+	}{{"session:live", "", old}, {"session:gone", "", old}, {"session:thread-gone", "session:gone", old}, {"session:new", "session:live", young}} {
+		if err := r.made(s.id, "w", s.at, 0, s.home); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.prune(map[string]bool{"session:live": true})
+	for id, kept := range map[string]bool{"session:live": true, "session:gone": false, "session:thread-gone": false, "session:new": true} {
+		if _, ok := r.session(id); ok != kept {
+			t.Errorf("%s kept %v, want %v", id, ok, kept)
+		}
+	}
+}

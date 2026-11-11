@@ -128,6 +128,14 @@ func (a *Answer) Keyed(dir, skey string) (f Fleet, running, answered bool) {
 	return Fleet{}, false, true
 }
 
+// Prune forgets the sessions weaver made, in dir, that Rex no longer runs
+// (ids.prune); nothing while Rex does not answer.
+func Prune(dir string) {
+	if live, err := sessions(); err == nil {
+		ids{dir}.prune(live)
+	}
+}
+
 // sessions are the ids of the sessions Rex runs.
 func sessions() (map[string]bool, error) {
 	var l struct {
