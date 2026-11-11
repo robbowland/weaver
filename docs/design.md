@@ -120,11 +120,14 @@ tuicr takes its range once, as it starts. Each round it picks what to show
   diff is empty, `-w` or not, so a commit and its revert, or a change the
   base got too and was merged back, show it though they are commits.
 
-The review base (`git.ReviewBase`) is `$WEAVER_BASE`, else `git config
-branch.<branch>.weaverbase` (a pull request's thread sets it to what the
-pull request merges into), else the upstream remote's default branch (its
-`HEAD`, else `main` or `master`: a fork's base), else origin's, else a local
-`main` or `master`; each only when it names a commit. Every run has
+The review base is the thread's record's `base`, read again each round
+(weaver's store is its one source); when that is none or names no commit
+(a branch deleted), the default branch: the upstream remote's (its `HEAD`,
+else `main` or `master`: a fork's base), else origin's, else a local `main`
+or `master`. Its fork point is worked out each round too, so a rebase onto
+a newer base, or the base merged in, moves it. The base is the
+remote-tracking branch, which the panel never fetches: one fetched long
+ago is as old as that. Every run has
 `--theme micrographics --no-update-check` and `EDITOR=nvim`, so tuicr's `e`
 (on a diff line) opens `nvim +N file` in the panel, with your own Neovim
 config, and tuicr comes back on the same hunk when it quits. tuicr shows a
@@ -165,7 +168,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `cmd` | string | the command its agent runs (`$WEAVER_CLAUDE`, else `claude`) |
 | `num` | int | its number in the session (below) |
 | `created` | int | epoch s |
-| `base` | string | where a branch it made started (`origin/main`, `main`, `@`, …); `""` when it made none |
+| `base` | string | the branch it is reviewed against, a branch's name and never a SHA: a pull request's thread's what the pull request merges into (`origin/<base>`), another's the branch it started from as the remote has it (`origin/main`, `origin/release/2.0`; `@` recorded as the branch checked out); `""` for none, the default branch |
 | `pane` | int | the agent's pane |
 | `session_id` | string | its conversation: Claude Code's from the start (weaver chooses it), any agent's from its SessionStart on; absent while unknown |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
@@ -284,9 +287,8 @@ A pull request's repository is found among the checkouts weaver knows (yours,
 recent threads' and agents', `~/code/<name>` and the like, zoxide's of the
 same name) by the GitHub URL of a remote as configured; none known, the form
 asks (`^r`). A branch that already has a running thread in this session goes
-to that thread instead. A pull request's branch gets `git config
-branch.<branch>.weaverbase <remote>/<base>`, so reviews compare with what it
-merges into.
+to that thread instead. A pull request's thread's record keeps what it
+merges into as its `base`, so reviews compare with that.
 
 The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
 and an item's thread may start without one: its agent then runs with no
@@ -303,7 +305,7 @@ Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
 silence (the item's `review_unread`). `--review` makes the thread's `mode`
 `review`: its agent runs Claude Code in plan mode, each time it starts; a pull request's review panel shows the
-branch against what the pull request merges into (its `weaverbase`).
+branch against what the pull request merges into (its record's `base`).
 
 ### Commands for the dashboard
 

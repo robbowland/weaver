@@ -461,11 +461,12 @@ follows the agent's edits as it makes them:
 
 A branch that changes nothing yet says `no changes on this branch yet` (so
 does one whose commits undo each other), and the review starts as soon as
-there is an edit. A branch is compared
-from where it left `$WEAVER_BASE`, else `git config
-branch.<branch>.weaverbase` (a pull request's thread sets it), else the
-default branch of the `upstream` or `origin` remote, else `main` or
-`master`. weaver brings tuicr's Micrographics theme, and a tuicr config
+there is an edit. A thread's branch is compared from where it left the
+branch the thread started from (a pull request's: what it merges into),
+else the default branch of the `upstream` or `origin` remote, else `main`
+or `master`; a rebase or a merge of that branch moves where it left it.
+The remote's branches are as weaver last fetched them: the panel fetches
+nothing. weaver brings tuicr's Micrographics theme, and a tuicr config
 that follows edits as they are made when you have none
 ([Setup](#what-wvr-sets-up)).
 

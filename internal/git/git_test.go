@@ -80,21 +80,17 @@ func TestRefs(t *testing.T) {
 	}
 }
 
-// What a branch is reviewed against, each source in turn falling through
-// to the next when it names no commit: $WEAVER_BASE, the branch's
-// weaverbase, the upstream remote's default branch (its HEAD, else main or
-// master), origin's, a local main or master, else none. A remote HEAD
-// pointing at a branch that has gone counts for nothing.
-func TestReviewBase(t *testing.T) {
+// The default branch, each place in turn: the upstream remote's (its HEAD,
+// else main or master), origin's, a local main or master, else none. A
+// remote HEAD pointing at a branch that has gone counts for nothing.
+func TestDefaultBase(t *testing.T) {
 	for _, c := range []struct {
-		name, env, weaverbase string
-		refs                  []string // refs to make at the first commit
-		heads                 map[string]string
-		want                  string
+		name  string
+		refs  []string // refs to make at the first commit
+		heads map[string]string
+		want  string
 	}{
-		{name: "WEAVER_BASE", env: "dev", weaverbase: "rel", refs: []string{"refs/heads/dev", "refs/heads/rel"}, want: "dev"},
-		{name: "weaverbase", env: "nope", weaverbase: "rel", refs: []string{"refs/heads/rel", "refs/remotes/origin/main"}, want: "rel"},
-		{name: "upstream's HEAD", weaverbase: "nope", refs: []string{"refs/remotes/upstream/dev", "refs/remotes/origin/main"},
+		{name: "upstream's HEAD", refs: []string{"refs/remotes/upstream/dev", "refs/remotes/origin/main"},
 			heads: map[string]string{"upstream": "dev"}, want: "upstream/dev"},
 		{name: "upstream's HEAD gone, its main", refs: []string{"refs/remotes/upstream/main", "refs/remotes/origin/main"},
 			heads: map[string]string{"upstream": "gone"}, want: "upstream/main"},
@@ -121,20 +117,18 @@ func TestReviewBase(t *testing.T) {
 			for rm, b := range c.heads {
 				git("symbolic-ref", "refs/remotes/"+rm+"/HEAD", "refs/remotes/"+rm+"/"+b)
 			}
-			if c.weaverbase != "" {
-				git("config", "branch.feat.weaverbase", c.weaverbase)
-			}
-			t.Setenv("WEAVER_BASE", c.env)
-			if got := ReviewBase(d); got != c.want {
-				t.Errorf("ReviewBase = %q, want %q", got, c.want)
+			if got := defaultBase(d); got != c.want {
+				t.Errorf("defaultBase = %q, want %q", got, c.want)
 			}
 		})
 	}
 }
 
-// The fork point is the merge base as a SHA, not the base's name: a base
-// that has moved on since the branch left it keeps the branch's own
-// commits, and only them, in base..HEAD.
+// The fork point is the merge base with the thread's base, as a SHA, not
+// the base's name, worked out afresh: a base that has moved on keeps the
+// branch's own commits, and only them; a rebase onto the moved base, or
+// the base merged in, moves it to the base's tip; a base deleted is the
+// default branch; with no default either, none.
 func TestForkPoint(t *testing.T) {
 	d := t.TempDir()
 	git := func(args ...string) string {
@@ -146,20 +140,45 @@ func TestForkPoint(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
-	t.Setenv("WEAVER_BASE", "")
 	git("init", "-q", "-b", "main")
 	git("commit", "-q", "--allow-empty", "-m", "base")
 	fork := git("rev-parse", "HEAD")
+	git("switch", "-q", "-c", "rel")
+	git("commit", "-q", "--allow-empty", "-m", "rel's")
+	relFork := git("rev-parse", "HEAD")
 	git("switch", "-q", "-c", "feat")
 	git("commit", "-q", "--allow-empty", "-m", "mine")
-	git("switch", "-q", "main")
-	git("commit", "-q", "--allow-empty", "-m", "moved on")
+	git("switch", "-q", "rel")
+	git("commit", "-q", "--allow-empty", "-m", "rel moved on")
+	relTip := git("rev-parse", "HEAD")
 	git("switch", "-q", "feat")
-	if got, ok := ForkPoint(d); !ok || got != fork {
-		t.Errorf("ForkPoint = %q %v, want %q", got, ok, fork)
+	for _, c := range []struct{ name, base, want string }{
+		{"its base, moved on", "rel", relFork},
+		{"none recorded: the default branch", "", fork},
+		{"a base that names nothing: the default branch", "gone", fork},
+	} {
+		if got, ok := ForkPoint(d, c.base); !ok || got != c.want {
+			t.Errorf("%s: ForkPoint = %q %v, want %q", c.name, got, ok, c.want)
+		}
+	}
+	git("rebase", "-q", "rel")
+	if got, _ := ForkPoint(d, "rel"); got != relTip {
+		t.Errorf("rebased onto its base: ForkPoint = %q, want its tip %q", got, relTip)
+	}
+	git("switch", "-q", "rel")
+	git("commit", "-q", "--allow-empty", "-m", "rel again")
+	relTip = git("rev-parse", "HEAD")
+	git("switch", "-q", "feat")
+	git("merge", "-q", "--no-edit", "rel")
+	if got, _ := ForkPoint(d, "rel"); got != relTip {
+		t.Errorf("its base merged in: ForkPoint = %q, want its tip %q", got, relTip)
+	}
+	git("branch", "-q", "-D", "rel")
+	if got, ok := ForkPoint(d, "rel"); !ok || got != fork {
+		t.Errorf("its base deleted: ForkPoint = %q %v, want the default branch's %q", got, ok, fork)
 	}
 	git("branch", "-q", "-D", "main")
-	if got, ok := ForkPoint(d); ok {
-		t.Errorf("no base: ForkPoint = %q, want none", got)
+	if got, ok := ForkPoint(d, "rel"); ok {
+		t.Errorf("no base, no default: ForkPoint = %q, want none", got)
 	}
 }

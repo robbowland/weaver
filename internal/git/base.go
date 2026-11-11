@@ -2,14 +2,13 @@ package git
 
 import (
 	"cmp"
-	"os"
 	"strings"
 )
 
-// baseRefs are where a branch's review base is looked for when nothing names
-// it, in order: the upstream remote's default branch (a fork's base), then
-// origin's, each where its HEAD points, else its main or master; then a local
-// main or master.
+// baseRefs are where a branch's default branch is looked for, in order:
+// the upstream remote's default branch (a fork's base), then origin's, each
+// where its HEAD points, else its main or master; then a local main or
+// master.
 var baseRefs = []string{
 	"refs/remotes/upstream/HEAD",
 	"refs/remotes/upstream/main",
@@ -21,32 +20,22 @@ var baseRefs = []string{
 	"refs/heads/master",
 }
 
-// ReviewBase is what the branch checked out in dir is reviewed against:
-// $WEAVER_BASE, else `git config branch.<branch>.weaverbase` (a pull
-// request's base, as a thread from one sets it), else the default branch
-// (baseRefs), each only when it names a commit; "" for none.
-func ReviewBase(dir string) string {
-	if b := os.Getenv("WEAVER_BASE"); b != "" && isCommit(dir, b) {
-		return b
+// ForkPoint is where the branch in dir left base, the branch it is
+// reviewed against (its thread's, weaver's store says): their merge base,
+// as a SHA, worked out afresh each time, so a rebase onto a newer base, or
+// the base merged in, moves it. A base that names no commit (deleted, or
+// none recorded) is the default branch (baseRefs). A review is given the
+// SHA, never the base's name: tuicr diffs a range's two ends, so with
+// main..HEAD a file main gained after the fork would show as deleted.
+// False with no base, or none in common.
+func ForkPoint(dir, base string) (string, bool) {
+	if base == "" || !isCommit(dir, base) {
+		base = defaultBase(dir)
 	}
-	if br, ok := Line(dir, "symbolic-ref", "--quiet", "--short", "HEAD"); ok && br != "" {
-		if b, ok := Line(dir, "config", "branch."+br+".weaverbase"); ok && b != "" && isCommit(dir, b) {
-			return b
-		}
-	}
-	return defaultBase(dir)
-}
-
-// ForkPoint is where the branch in dir left its review base: their merge
-// base, as a SHA. A review is given the SHA, never the base's name: tuicr
-// diffs a range's two ends, so with main..HEAD a file main gained after the
-// fork would show as deleted. False with no base, or none in common.
-func ForkPoint(dir string) (string, bool) {
-	b := ReviewBase(dir)
-	if b == "" {
+	if base == "" {
 		return "", false
 	}
-	sha, ok := Line(dir, "merge-base", b, "HEAD")
+	sha, ok := Line(dir, "merge-base", base, "HEAD")
 	return sha, ok && sha != ""
 }
 

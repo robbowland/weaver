@@ -223,7 +223,8 @@ func panelTitle(dir string) string { return "review: " + filepath.Base(dir) }
 // once, as it starts, and a commit made while it is open joins its commit
 // list only then. It ends with its pane.
 func (e *Env) Panel(args []string) error {
-	if a, ok := mux.ParsePane(firstArg(args)); ok && e.MyPane != "" {
+	a, ok := mux.ParsePane(firstArg(args))
+	if ok && e.MyPane != "" {
 		e.bindPanel(a, e.MyPane, os.Getpid())
 	}
 	tuicr, err := exec.LookPath(cmp.Or(os.Getenv("WEAVER_TUICR"), "tuicr"))
@@ -239,7 +240,7 @@ func (e *Env) Panel(args []string) error {
 	// ctrl+c is tuicr's while it runs, never the loop's.
 	sig := make(chan os.Signal, 1)
 	for {
-		args := reviewArgs(dir)
+		args := reviewArgs(dir, e.reviewBase(a))
 		if args == nil {
 			fmt.Print("\033[2J\033[H" + CGrey + "no changes on this branch yet" + COff + "\n")
 			time.Sleep(2 * time.Second)
@@ -262,17 +263,17 @@ func (e *Env) Panel(args []string) error {
 }
 
 // reviewArgs are tuicr's arguments for the branch in dir as it is now: its
-// commits since it left its base, with what is not committed yet (`-r
+// commits since it left base (git.ForkPoint), with what is not committed yet (`-r
 // FORK..HEAD -w`, FORK the fork point's SHA: git.ForkPoint); with no
 // commits of its own, what is not committed (`-w`); with no base, tuicr's
 // own choice of commit. nil with nothing to review: tuicr refuses a review
 // whose diff is empty ("No changes to review"), `-w` or not, so it is
 // judged by what the branch changes in all since its fork point, never by
 // whether it has commits (a commit and its revert change nothing).
-func reviewArgs(dir string) []string {
+func reviewArgs(dir, base string) []string {
 	look := []string{"--theme", "micrographics", "--no-update-check"}
 	head, hasHead := git.Line(dir, "rev-parse", "--verify", "--quiet", "HEAD")
-	fork, hasBase := git.ForkPoint(dir)
+	fork, hasBase := git.ForkPoint(dir, base)
 	switch {
 	case hasBase && !changedSince(dir, fork):
 		return nil
@@ -284,6 +285,14 @@ func reviewArgs(dir string) []string {
 		return look
 	}
 	return nil
+}
+
+// reviewBase is the branch agent's thread is reviewed against, as its
+// record says now (a pull request's follows its base): "" for none, the
+// default branch.
+func (e *Env) reviewBase(agent mux.PaneID) string {
+	th, _ := store.ReadThread(e.ThreadFile(agent))
+	return th.Base
 }
 
 // changedSince: does the work tree at dir differ from commit c, in a file

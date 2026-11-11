@@ -2,8 +2,10 @@ package wvr
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,5 +128,34 @@ func TestBindPanelUnknownPid(t *testing.T) {
 	e.bindPanel("5", "6", 4321)
 	if got := read(); got != "6\n4321\n" {
 		t.Errorf("known pid: %q", got)
+	}
+}
+
+// A thread's base is recorded as a branch's name, never a SHA: a
+// remote-tracking branch as it is, a local one as the remote's when the
+// remote has it, @ as the branch checked out; else none.
+func TestBaseBranch(t *testing.T) {
+	d := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "base")
+	git("remote", "add", "origin", "https://example.com/o/r.git")
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("branch", "-q", "local-only")
+	sha := git("rev-parse", "HEAD")
+	for base, want := range map[string]string{
+		"origin/main": "origin/main", "main": "origin/main", "local-only": "local-only",
+		"@": "origin/main", sha: "", "nope": "", "": "",
+	} {
+		if got := baseBranch(d, base); got != want {
+			t.Errorf("baseBranch(%q) = %q, want %q", base, got, want)
+		}
 	}
 }

@@ -108,7 +108,6 @@ func TestLuaSettings(t *testing.T) {
 // yet), then the branch's commits since its fork point, by SHA, with what
 // is not committed, also once the base has moved on.
 func TestReviewArgs(t *testing.T) {
-	t.Setenv("WEAVER_BASE", "")
 	d := t.TempDir()
 	git := func(args ...string) string {
 		t.Helper()
@@ -119,7 +118,7 @@ func TestReviewArgs(t *testing.T) {
 		return strings.TrimSpace(string(out))
 	}
 	look := " --theme micrographics --no-update-check"
-	got := func() string { return strings.Join(reviewArgs(d), " ") }
+	got := func() string { return strings.Join(reviewArgs(d, ""), " ") }
 	git("init", "-q", "-b", "main")
 	if err := os.WriteFile(d+"/a.txt", []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -171,5 +170,41 @@ func TestReviewArgs(t *testing.T) {
 	git("merge", "-q", "--no-edit", "main")
 	if a := got(); a != "" {
 		t.Errorf("its change in the base, merged back: %q, want nothing", a)
+	}
+}
+
+// A thread is reviewed against its own base, as its record says now: one
+// off a release branch from where it left that branch, not main.
+func TestReviewAgainstThreadBase(t *testing.T) {
+	d := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "base")
+	git("switch", "-q", "-c", "release/2.0")
+	if err := os.WriteFile(d+"/rel.txt", []byte("rel\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "release's")
+	fork := git("rev-parse", "HEAD")
+	git("switch", "-q", "-c", "fix")
+	if err := os.WriteFile(d+"/fix.txt", []byte("fix\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "fix")
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-s"}}
+	if err := store.Write(e.ThreadFile("5"), store.Thread{Num: 1, Base: baseBranch(d, "release/2.0")}); err != nil {
+		t.Fatal(err)
+	}
+	if a := strings.Join(reviewArgs(d, e.reviewBase("5")), " "); !strings.HasPrefix(a, "-r "+fork+"..HEAD ") {
+		t.Errorf("a thread off release/2.0: %q, want from %s", a, fork)
 	}
 }

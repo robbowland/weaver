@@ -268,6 +268,43 @@ func (e *Env) threadBase(repo string, fm form) (string, string) {
 	return ld, "could not fetch " + rm + " (offline?): starts from " + from
 }
 
+// prBaseRef is the remote-tracking branch of repo that pull request base
+// (its base branch's name) merges into: the preferred remote's, else the
+// local branch.
+func prBaseRef(repo, base string) string {
+	if rm := git.PreferredRemote(repo); rm != "" {
+		return rm + "/" + base
+	}
+	return base
+}
+
+// baseBranch is base (a ref a thread's branch starts from) as the branch
+// its thread is reviewed against, a branch's name and never a SHA, so its
+// fork point is worked out afresh as the branches move: a remote-tracking
+// branch as it is, a local one as the preferred remote's when that has it,
+// @ as the branch checked out in repo; "" when it names no branch (a SHA,
+// a tag, a detached HEAD): the default branch.
+func baseBranch(repo, base string) string {
+	if base == "@" || base == "HEAD" {
+		b, ok := git.Line(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+		if !ok || b == "" {
+			return ""
+		}
+		base = b
+	}
+	switch {
+	case base == "":
+	case git.OK(repo, "show-ref", "--verify", "--quiet", "refs/remotes/"+base):
+		return base
+	case git.OK(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+base):
+		if rm := git.PreferredRemote(repo); rm != "" && git.HasRemoteBranch(repo, rm, base) {
+			return rm + "/" + base
+		}
+		return base
+	}
+	return ""
+}
+
 // prHead puts pull request pr's head where its thread works, branch of
 // repo: fetched, with what it merges into, from the remote it is on
 // (pull/N/head, a fork's too, kept at refs/weaver/pr/N); branch made there
@@ -525,17 +562,11 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 		name = branch
 	}
-	// A pull request's thread reviews against what it merges into (its
-	// panel's base: git.ReviewBase).
+	// A pull request's thread reviews against what it merges into; any
+	// other against the branch it started from (its record's base).
 	prBase := ""
 	if isPR && pr.Base != "" {
-		prBase = pr.Base
-		if rm := git.PreferredRemote(fm.Repo); rm != "" {
-			prBase = rm + "/" + pr.Base
-		}
-		if branch != "" {
-			exec.Command("git", "-C", fm.Repo, "config", "branch."+branch+".weaverbase", prBase).Run()
-		}
+		prBase = prBaseRef(fm.Repo, pr.Base)
 	}
 	// The agent's first prompt: the task, with the item it is on; with no
 	// task, nothing (it waits for you).
@@ -555,7 +586,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	// The command its agent runs, from here (the pane will not have this
 	// environment); its mode holds it each time it starts (agent.Command).
 	rec := store.Thread{Num: n, Cmd: agentCmd(), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
-		Here: fm.Where == WhereHere, WorktreeCreated: created, Created: time.Now().Unix(), Base: base, Title: title,
+		Here: fm.Where == WhereHere, WorktreeCreated: created, Created: time.Now().Unix(), Base: cmp.Or(prBase, baseBranch(fm.Repo, base)), Title: title,
 		Item: ti, Mode: fm.Mode}
 	if store.Write(d+"/thread.json", rec) != nil {
 		unlock()

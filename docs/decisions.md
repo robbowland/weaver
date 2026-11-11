@@ -331,6 +331,15 @@ can supersede an earlier one, and says so.
   the panel's processes, since no nvim weaver could ask over a socket runs
   there. Review notes are tuicr's saved comments, which the agent reads with
   tuicr's CLI.
+- 2026-11-11: A thread is reviewed against the base its record keeps
+  (Rob), superseding `$WEAVER_BASE` and `git config
+  branch.<b>.weaverbase`, both gone, so weaver's store is the one source:
+  a thread off release/2.0 was reviewed against main. The base is a
+  branch's name, never a SHA (the remote-tracking one where the remote
+  has it), and its fork point is worked out every round, so a rebase
+  onto a newer base or the base merged in moves it; a base deleted falls
+  back to the default branch. The panel fetches nothing, so a stale
+  remote-tracking base is a limit.
 - 2026-11-11: The hooks no longer talk to Neovim, superseding the
   msgpack-RPC of 2026-10-15 (Performance and packaging) and every entry
   above on what nvim is told: with tuicr beside the agent, no nvim weaver
