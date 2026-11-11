@@ -459,8 +459,9 @@ follows the agent's edits as it makes them:
 - **A fresh range:** `q` (or `:q`) starts the review again, so commits made since it
   opened join its list (tuicr reads its range once, as it starts).
 
-A branch with nothing of its own yet says `no changes on this branch yet`,
-and the review starts as soon as there is an edit. A branch is compared
+A branch that changes nothing yet says `no changes on this branch yet` (so
+does one whose commits undo each other), and the review starts as soon as
+there is an edit. A branch is compared
 from where it left `$WEAVER_BASE`, else `git config
 branch.<branch>.weaverbase` (a pull request's thread sets it), else the
 default branch of the `upstream` or `origin` remote, else `main` or

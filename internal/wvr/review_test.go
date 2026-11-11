@@ -145,4 +145,31 @@ func TestReviewArgs(t *testing.T) {
 	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
 		t.Errorf("a commit of its own: %q", a)
 	}
+	// Commits with no change in all (tuicr refuses a range whose diff is
+	// empty): reverted, then the change back, untracked.
+	git("revert", "--no-edit", "HEAD")
+	if a := got(); a != "" {
+		t.Errorf("a commit and its revert: %q, want nothing", a)
+	}
+	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
+		t.Errorf("reverted, with a file git does not track: %q", a)
+	}
+	// Its change in the base too (squashed in there), and the base merged
+	// back: commits of its own, nothing it changes.
+	git("add", ".")
+	git("commit", "-q", "-m", "new again")
+	git("switch", "-q", "main")
+	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("commit", "-q", "-m", "squashed")
+	git("switch", "-q", "feat")
+	git("merge", "-q", "--no-edit", "main")
+	if a := got(); a != "" {
+		t.Errorf("its change in the base, merged back: %q, want nothing", a)
+	}
 }

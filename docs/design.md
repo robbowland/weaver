@@ -114,8 +114,11 @@ tuicr takes its range once, as it starts. Each round it picks what to show
   the fork showed as deleted);
 - with no commits of its own, what is not committed (`-w`);
 - with no review base, tuicr's own choice of commit;
-- with nothing at all, `no changes on this branch yet`, looked at again
-  every 2 s: tuicr refuses an empty range, `-w` or not.
+- with nothing changed in all since the fork point (`changedSince`: the
+  work tree against it, files git does not track too), `no changes on this
+  branch yet`, looked at again every 2 s: tuicr refuses a review whose
+  diff is empty, `-w` or not, so a commit and its revert, or a change the
+  base got too and was merged back, show it though they are commits.
 
 The review base (`git.ReviewBase`) is `$WEAVER_BASE`, else `git config
 branch.<branch>.weaverbase` (a pull request's thread sets it to what the
