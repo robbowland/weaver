@@ -13,20 +13,24 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 )
 
-// Peeked is a state file's state, pid and start, read without parsing it.
+// Peeked is a state file's state, pid, start and time, read without
+// parsing it.
 type Peeked struct {
 	State      agent.State
 	Pid, Start string
+	TS         int64
 }
 
 var (
 	rePkState = regexp.MustCompile(`"state":"([a-z-]+)"`)
 	rePkPid   = regexp.MustCompile(`"pid":([0-9]+)`)
 	rePkStart = regexp.MustCompile(`"proc_start":"([^"]*)"`)
+	rePkTs    = regexp.MustCompile(`"ts":([0-9]+)`)
 )
 
-// Peek is the stored state's state, pid and start, read from its first
-// line without parsing it.
+// Peek is the stored state's state, pid, start and time, read from its
+// first line without parsing it: what a hook and a sweep need of every
+// state file, fast.
 func Peek(sf string) Peeked {
 	l, _ := files.FirstLine(sf)
 	var p Peeked
@@ -38,6 +42,9 @@ func Peek(sf string) Peeked {
 	}
 	if m := rePkStart.FindStringSubmatch(l); m != nil {
 		p.Start = m[1]
+	}
+	if m := rePkTs.FindStringSubmatch(l); m != nil {
+		p.TS, _ = strconv.ParseInt(m[1], 10, 64)
 	}
 	return p
 }

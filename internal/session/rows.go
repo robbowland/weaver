@@ -422,24 +422,6 @@ func (e *Env) LostCheck(f string) bool {
 	return lost && known
 }
 
-var rePid = []byte(`"pid":`)
-
-// pidOf is the pid in a state file's first line ("pid":N); empty without
-// one.
-func pidOf(f string) string {
-	l, _ := files.FirstLine(f)
-	i := strings.Index(l, string(rePid))
-	if i < 0 {
-		return ""
-	}
-	j := i + len(rePid)
-	k := j
-	for k < len(l) && l[k] >= '0' && l[k] <= '9' {
-		k++
-	}
-	return l[j:k]
-}
-
 // Lose keeps the thread of the agent whose state file is f as lost, then
 // removes its files; only if its pid is still pid when we hold its lock.
 func (e *Env) Lose(f, pid string) bool {
@@ -447,7 +429,7 @@ func (e *Env) Lose(f, pid string) bool {
 		return true
 	}
 	defer store.Lock(f)()
-	if pidOf(f) != pid {
+	if Peek(f).Pid != pid {
 		return true
 	}
 	b := strings.TrimSuffix(f, ".json")
@@ -517,7 +499,7 @@ func (e *Env) Forget(f, pid string) {
 		return
 	}
 	defer store.Lock(f)()
-	if pidOf(f) != pid {
+	if Peek(f).Pid != pid {
 		return
 	}
 	removePaneFiles(strings.TrimSuffix(f, ".json"))

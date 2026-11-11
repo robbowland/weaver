@@ -4,8 +4,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,20 +14,6 @@ import (
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/store"
 )
-
-var (
-	reGcPid   = regexp.MustCompile(`"pid":([0-9]+)`)
-	reGcStart = regexp.MustCompile(`"proc_start":"([^"]*)"`)
-	reGcState = regexp.MustCompile(`"state":"([a-z-]+)"`)
-	reGcTs    = regexp.MustCompile(`"ts":([0-9]+)`)
-)
-
-func sub1(re *regexp.Regexp, l string) string {
-	if m := re.FindStringSubmatch(l); m != nil {
-		return m[1]
-	}
-	return ""
-}
 
 // GC forgets agents that are gone: a dead agent is retired (its thread
 // kept as lost when its session went), a state without a pid is retired an
@@ -50,9 +34,8 @@ func (e *Env) gcAgents() {
 	now := time.Now().Unix()
 	l := e.newLives()
 	for _, f := range paneFiles(e.StateDir, "json") {
-		line, _ := files.FirstLine(f)
-		pid, start, st := sub1(reGcPid, line), sub1(reGcStart, line), agent.State(sub1(reGcState, line))
-		ts, _ := strconv.ParseInt(sub1(reGcTs, line), 10, 64)
+		pk := Peek(f)
+		pid, start, st, ts := pk.Pid, pk.Start, pk.State, pk.TS
 		skey := KeyOfFile(f)
 		switch {
 		case pid != "":
