@@ -33,7 +33,7 @@ func TestFleet(t *testing.T) {
 		t.Fatalf("threads: %+v %v", ts, err)
 	}
 	thread := ts[0]
-	panel, _, err := f.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Title: "panel", Background: true})
+	panel, err := f.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Title: "panel", Background: true})
 	if err != nil {
 		t.Fatalf("a split in the thread's session: %v", err)
 	}

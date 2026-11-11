@@ -157,14 +157,15 @@ func (e *Env) threadTab(tok, dir, name, label string, nofocus bool) (mux.WindowI
 // left of agentPane, in dir, the agent keeping its width of the total
 // columns; bound to the agent before this returns.
 func (e *Env) splitPanel(agentPane mux.PaneID, dir string, total int) bool {
-	rp, pid, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
+	rp, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
 		Spawn: mux.Spawn{Argv: []string{e.Self, "_panel", string(agentPane)}, Dir: dir},
 		Cols:  max(total-agentCols(total)-1, 1), Title: panelTitle(dir), Background: true,
 	})
 	if err != nil {
 		return false
 	}
-	e.bindPanel(agentPane, rp, pid)
+	// Its pid it records itself as it starts (`wvr _panel`).
+	e.bindPanel(agentPane, rp, 0)
 	return true
 }
 

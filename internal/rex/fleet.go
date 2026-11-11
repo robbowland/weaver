@@ -218,10 +218,9 @@ func (f Fleet) CloseSession(p mux.PaneID) {
 	}
 }
 
-// SplitLeft opens a pane on the left of pane of: the new pane and the pid
-// of its process, 0 when that is not known yet (Rex starts it through the
-// user's shell).
-func (f Fleet) SplitLeft(of mux.PaneID, s mux.NewSplit) (mux.PaneID, int, error) {
+// SplitLeft opens a pane on the left of pane of: the new pane (its
+// program says its own pid: Rex starts it through the user's shell).
+func (f Fleet) SplitLeft(of mux.PaneID, s mux.NewSplit) (mux.PaneID, error) {
 	return f.of(string(of)).SplitLeft(of, s)
 }
 

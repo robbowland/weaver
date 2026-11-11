@@ -28,8 +28,7 @@ import (
 // openLeftOf opens a pane running argv left of pane target, in its window;
 // the new pane.
 func (e *Env) openLeftOf(target mux.PaneID, cwd, name string, argv ...string) (mux.PaneID, error) {
-	p, _, err := e.Mux().SplitLeft(target, mux.NewSplit{Spawn: mux.Spawn{Argv: argv, Dir: cwd}, Title: name})
-	return p, err
+	return e.Mux().SplitLeft(target, mux.NewSplit{Spawn: mux.Spawn{Argv: argv, Dir: cwd}, Title: name})
 }
 
 // ThreadWidth is `wvr _width AGENT` (settleWidths' passes): threadWidth,

@@ -338,13 +338,14 @@ func (s Session) drawnCols(p mux.PaneID) int {
 	return sz.Columns
 }
 
-// SplitLeft gives no pid (0): Rex starts the program through the user's
-// login shell, which becomes it only once its startup is done, so no
-// process is the program's when the block is made.
-func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, error) {
+// SplitLeft opens a pane on the left of pane of. Rex starts the program
+// through the user's login shell, which becomes it only once its startup
+// is done, so no process is the program's yet as the block is made: the
+// program says its pid itself (`wvr _panel` binds itself).
+func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, error) {
 	anchor, err := s.block(of)
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 	ratio := 0.8
 	if total := s.drawnCols(of); n.Cols > 0 && total > 0 {
@@ -355,18 +356,18 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 	}
 	if err := s.callS("session.new_split", map[string]any{"anchor_id": anchor, "direction": "horizontal", "side": "before",
 		"ratio": ratio, "focus": !n.Background, "layout": layout(n.Spawn, n.Title)}, &out); err != nil {
-		return "", 0, err
+		return "", err
 	}
 	if len(out.Blocks) == 0 {
-		return "", 0, errors.New("rex: no pane made")
+		return "", errors.New("rex: no pane made")
 	}
 	pn, err := s.num(out.Blocks[0])
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(n.Argv, " "))
 	_ = s.ids().note("split", string(of), strconv.FormatFloat(ratio, 'f', -1, 64))
-	return mux.PaneID(pn), 0, nil
+	return mux.PaneID(pn), nil
 }
 
 // Respawn starts sp in a block beside p's, which it then closes, and has

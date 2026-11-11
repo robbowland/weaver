@@ -7,7 +7,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -73,16 +72,9 @@ func TestSession(t *testing.T) {
 	if ws, _ := s.Windows(); !slices.ContainsFunc(ws, func(x mux.Window) bool { return x.ID == w && x.Width == width && width > 0 }) {
 		t.Errorf("window %q is %d wide: %+v", w, width, ws)
 	}
-	nv, pid, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "review: demo", Background: true})
+	nv, err := s.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Title: "review: demo", Background: true})
 	if err != nil {
 		t.Fatal(err)
-	}
-	// A pid is the program's or none (0): Rex starts it through the
-	// user's shell, which has not yet become it.
-	if pid != 0 {
-		if out, _ := exec.Command("/bin/ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output(); strings.TrimSpace(string(out)) != "/bin/sleep 600" {
-			t.Errorf("the split's pid %d runs %q", pid, out)
-		}
 	}
 	ps, err := s.Panes()
 	if err != nil {

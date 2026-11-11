@@ -816,8 +816,8 @@ over (`takeOver`): its id goes into their records.
   app connected, which `rex do` cannot choose among, each app attached to
   the session by name), else make it the server's active window. A window's width
   is its zoomed block's while one is zoomed (`zoomed_block_id`), whatever
-  that block's share of the layout. `SplitLeft` gives pid 0, not known yet
-  (Rex runs a command through the login shell, whose pid it would be): `wvr
+  that block's share of the layout. `SplitLeft` gives no pid, none being
+  the program's yet (Rex runs a command through the login shell): `wvr
   _panel` records its own pid as it starts.
 - **Messages:** Rex has no message line: `Say` and `SayToSession` show
   their text as one line in a small floating layer at the foot of the
