@@ -671,8 +671,8 @@ made that way has `$STATE_DIR/<skey>.layout` saying `weaver`; thread labels
 and numbered placement act only there.
 
 - **Identity:** weaver acts on the Rex session it runs in (`rex.Chosen`)
-  when weaver made it (`$STATE_DIR/rex/sessions/<id>`), or in any with
-  `$WEAVER_MUX=rex`; in another Rex session's terminal, or outside Rex, it
+  when weaver made it (`$STATE_DIR/rex/sessions/<id>`); in another Rex
+  session's terminal, or outside Rex, it
   is in none, and commands that act on a session act on weaver's.
   `Session` is the name weaver gave it (one it did not make is named by
   its id), `SKey` is `rex-<session>` (a `/` as `_`), and `MyPane` the
@@ -807,7 +807,7 @@ you see (focus, names, widths) is best-effort and says nothing of failing.
 - **Calls:** each look at the session is one `rex do` (its view, and each
   terminal's size, with `Panes` its directory and processes too); every
   other method one `rex api call`. A pane's environment goes through
-  `env(1)`, Rex setting none: `WEAVER_MUX=rex`, and `WEAVER_WVR`, the
+  `env(1)`, Rex setting none: `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay
   when its program exits: Rex is told as it is made. A popup is a floating

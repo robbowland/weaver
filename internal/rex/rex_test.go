@@ -389,13 +389,13 @@ func TestKeysRun(t *testing.T) {
 	}
 	var env string
 	for i := 0; i < 50; i++ {
-		if b, _ := os.ReadFile(out); strings.Contains(string(b), "WEAVER_MUX") {
+		if b, _ := os.ReadFile(out); strings.Contains(string(b), "REX_SESSION") {
 			env = string(b)
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	for _, want := range []string{"XDG_STATE_HOME=/the/state\n", "WEAVER_VIEWS=\n", "REX_SESSION=" + s.ID + "\n", "WEAVER_MUX=rex\n"} {
+	for _, want := range []string{"XDG_STATE_HOME=/the/state\n", "WEAVER_VIEWS=\n", "REX_SESSION=" + s.ID + "\n"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("a key's wvr has no %q in its environment:\n%s", want, env)
 		}

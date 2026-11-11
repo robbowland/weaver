@@ -13,7 +13,7 @@ command -v rex >/dev/null || { echo "SKIP rex is not installed"; exit 0; }
 # A Unix socket's path has room for about 100 bytes: not $TMPDIR's.
 AT=$(mktemp -d /tmp/weaver-rex.XXXXXX)
 S=wr$$
-unset WEAVER_MUX WEAVER_RESTORE LINEAR_API_KEY
+unset WEAVER_RESTORE LINEAR_API_KEY
 # Every Rex variable but where rex is (REX_BIN_DIR) is the caller's: gone.
 # Rex keeps a server's runtime files under REX_RUNTIME_DIR: here, never in
 # your Rex's directory, and rex never falls back to your server.

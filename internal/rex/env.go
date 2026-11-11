@@ -22,14 +22,10 @@ type Here struct {
 	Where  agent.Where
 }
 
-// Chosen: does weaver act on the Rex session it runs in? In a session
-// weaver made, or in any when $WEAVER_MUX says rex (what weaver runs in
-// its blocks and keys, and its tests); elsewhere (a Rex terminal of
-// another session, a terminal outside Rex) weaver is in no session.
+// Chosen: does weaver act on the Rex session it runs in? Only in a session
+// weaver made; elsewhere (a Rex terminal of another session, a terminal
+// outside Rex) weaver is in no session.
 func Chosen(dir string) bool {
-	if os.Getenv("WEAVER_MUX") == "rex" {
-		return true
-	}
 	_, ok := ids{dir}.session(os.Getenv("REX_SESSION"))
 	return ok && os.Getenv("REX_SESSION") != ""
 }

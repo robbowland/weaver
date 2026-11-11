@@ -186,6 +186,10 @@ can supersede an earlier one, and says so.
   forgotten rather than kept as lost, unless the machine restarted, which
   still counts as lost. Quitting with the old weaver before upgrading keeps
   every thread as lost, and those come back.
+- 2026-11-11: `WEAVER_MUX=rex` is gone, superseding the Rex-alone entry's
+  note on it (Rob asked for a rename; it had no use left): weaver's blocks
+  and keys run only in sessions weaver made, which it knows by its record
+  of them, so nothing needs to tell it to act on another.
 
 ## Holding threads
 

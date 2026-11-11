@@ -15,7 +15,7 @@ set -u
 # These tests may run inside a Claude Code agent, in a Rex terminal: nothing
 # of its session may leak into the fake agents. Every Rex variable but where
 # rex is (REX_BIN_DIR) is the caller's: gone.
-unset CLAUDE_PID CLAUDE_CODE_SESSION_ID CLAUDECODE CLAUDE_PROJECT_DIR CLAUDE_ENV_FILE WEAVER_MUX WEAVER_SESSION
+unset CLAUDE_PID CLAUDE_CODE_SESSION_ID CLAUDECODE CLAUDE_PROJECT_DIR CLAUDE_ENV_FILE WEAVER_SESSION
 for v in $(compgen -e | grep '^REX_' | grep -v '^REX_BIN_DIR$'); do unset "$v"; done
 command -v rex >/dev/null || { echo "SKIP rex is not installed"; exit 0; }
 

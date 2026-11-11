@@ -551,7 +551,6 @@ Environment variables change weaver's defaults.
 | `WEAVER_CLAUDE`, `WEAVER_CODEX` | `claude`, `codex` | The command a thread's agent runs, with its arguments (`claude --model opus`) |
 | `WEAVER_TUICR` | `tuicr` | The tuicr a review runs |
 | `WEAVER_SESSION` | `weaver` | The session `wvr` shows or starts |
-| `WEAVER_MUX` | | `rex`: act on the Rex session you are in, whether weaver made it or not (its blocks and keys set it) |
 | `WEAVER_RESTORE` | `1` | `0`: when the weaver session starts again after its server went, list its lost threads on home instead of resuming them |
 | `WEAVER_WIP` | `5` | How many threads you mean to have open at once: past it, the board's count shows it (`7/5`) and the new-thread form says how to hold or close one; `0`: no limit |
 | `WEAVER_AGENT_WIDTH` | `20%` | The agent's share of a thread window's width (`25%`), or columns (`60`) |

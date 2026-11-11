@@ -58,7 +58,7 @@ local function run(ctx, args, cwd)
   for _, a in ipairs(args) do argv[#argv + 1] = a end
   local env = {}
   for k, v in pairs(settings) do env[k] = v end
-  env.REX_SESSION, env.REX_BLOCK, env.WEAVER_MUX = ctx.session_id, false, "rex"
+  env.REX_SESSION, env.REX_BLOCK = ctx.session_id, false
   env.REX_BIN_DIR = rexbin ~= "" and rexbin or false
   local opts = {
     cwd = (cwd ~= nil and cwd ~= "") and cwd or nil,
