@@ -82,17 +82,16 @@ func wtMarker(dir, m string) {
 	bestEffort(exec.Command("wt", args...).Run()) // a branch's mark, nothing more
 }
 
-// followBashEdits: a Bash command or MCP tool that changed files (sed -i, a
+// followBash: a Bash command or MCP tool that changed files (sed -i, a
 // heredoc, a formatter, an MCP write) counts as an edit. Which files: what
 // the call says (Claude Code's bashEditDiff), else, in the repos the command
 // names, the one it ran in and the agent's root, the files git sees as
-// changed since the previous such call. The newest is followed. False when
-// nothing changed.
-func followBashEdits(e *session.Env, h *hk) bool {
+// changed since the previous such call. The newest is followed.
+func followBash(e *session.Env, h *hk) {
 	stamp := e.PaneFile(h.Pane, "bash")
 	nw := stamp + "." + strconv.Itoa(os.Getpid())
 	if os.WriteFile(nw, nil, 0o644) != nil {
-		return false
+		return
 	}
 	var ps []string
 	if h.ChangedKnown {
@@ -102,7 +101,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 		sst, err := os.Stat(stamp)
 		if err != nil {
 			bestEffort(os.Rename(nw, stamp)) // without it, the next command looks further back
-			return false
+			return
 		}
 		ps = changedSince(h, sst.ModTime())
 		bestEffort(os.Rename(nw, stamp))
@@ -118,7 +117,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 		}
 	}
 	if len(cs) == 0 {
-		return false
+		return
 	}
 	sort.SliceStable(cs, func(i, j int) bool {
 		if !cs[i].t.Equal(cs[j].t) {
@@ -129,7 +128,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 	newest := cs[0].p
 	r, ok := git.FileWorkTree(newest)
 	if !ok {
-		return false
+		return
 	}
 	if files.Exists(h.sf) {
 		store.UpdateState(h.sf, func(st *agent.Record) {
@@ -147,12 +146,7 @@ func followBashEdits(e *session.Env, h *hk) bool {
 			st.Files = fs
 		})
 	}
-	if h.Tool == "Bash" {
-		h.logLine(e, logBash{h.logHead("bash"), h.Cmd, newest})
-	} else {
-		h.logLine(e, logEdit{logHead: h.logHead("edit"), File: newest, Root: r, Tool: h.Tool})
-	}
-	return true
+	return
 }
 
 // followable are the files of paths that following can show: on disk, in

@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/robbowland/weaver/internal/jsonx"
@@ -22,9 +21,6 @@ type toolResponse struct {
 		// held back what it saw.
 		Shared bool `json:"shared"`
 	} `json:"bashEditDiff"`
-	// The Agent tool's.
-	AgentID   string `json:"agentId"`
-	AgentType string `json:"agentType"`
 }
 
 func (in Input) response() toolResponse {
@@ -55,27 +51,4 @@ func (in Input) Changes() (paths []string, known bool) {
 		}
 	}
 	return paths, true
-}
-
-// Launched is the subagent an Agent tool call started: its id and type, and
-// what it was asked to do (the call's description). "" when the call is not
-// one.
-func (in Input) Launched() (id, typ, desc string) {
-	if in.Event != "PostToolUse" || in.ToolName != "Agent" && in.ToolName != "Task" {
-		return "", "", ""
-	}
-	r := in.response()
-	var t struct {
-		Description  string `json:"description"`
-		SubagentType string `json:"subagent_type"`
-	}
-	_ = json.Unmarshal(in.ToolInput, &t) // none: no description
-	if r.AgentID == "" {
-		return "", "", ""
-	}
-	typ = r.AgentType
-	if typ == "" {
-		typ = t.SubagentType
-	}
-	return oneline.Line(r.AgentID), typ, t.Description
 }

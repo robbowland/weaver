@@ -25,7 +25,6 @@ type Env struct {
 	MyPane    mux.PaneID  // the pane weaver runs in; empty in a popup
 	Where     agent.Where // the life of the session its agents run in (Rex's, or the pane an event is from)
 	StateDir  string
-	LogDir    string
 	LostDir   string
 	SockDir   string
 	ClaudeDir string
@@ -42,7 +41,6 @@ func Load() *Env {
 		state = home + "/.local/state"
 	}
 	e.StateDir = state + "/weaver"
-	e.LogDir = e.StateDir + "/log"
 	e.LostDir = e.StateDir + "/lost"
 	e.SockDir = "/tmp/weaver-" + strconv.Itoa(os.Getuid())
 	e.ClaudeDir = os.Getenv("CLAUDE_CONFIG_DIR")

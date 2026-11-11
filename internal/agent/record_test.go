@@ -12,7 +12,7 @@ import (
 func TestResumed(t *testing.T) {
 	carried := map[string]bool{"Agent": true, "SessionID": true, "Title": true, "Turn": true,
 		"PromptID": true, "Transcript": true, "Cwd": true, "Root": true, "StartCwd": true, "ProjectRoot": true,
-		"File": true, "Prompt": true, "LastMessage": true, "Log": true, "Tasks": true, "Files": true}
+		"File": true, "Prompt": true, "LastMessage": true, "Tasks": true, "Files": true}
 	renewed := map[string]bool{"State": true, "TS": true, "Since": true, "Seen": true, "Where": true, "Subagents": true}
 	gone := map[string]bool{"Pane": true, "Pid": true, "ProcStart": true, "Waiting": true, "Pending": true,
 		"MarkedRoot": true, "Marker": true, "Background": true, "BackgroundTasks": true, "Doing": true,
@@ -21,7 +21,7 @@ func TestResumed(t *testing.T) {
 		Pid: "9", ProcStart: "p", Title: "t", Turn: 4, PromptID: "q", Transcript: "tr", Cwd: "c",
 		Root: "r", StartCwd: "sc", ProjectRoot: "pr", File: "f", Prompt: "pp", Waiting: "w", Pending: "pe",
 		LastMessage: "lm", MarkedRoot: "mr", Marker: "m", Background: 2, BackgroundTasks: "b", Doing: "d",
-		DoingID: "di", DoneIDs: "dd", Where: Where{Server: 1, Session: "$1"}, EndReason: "e", Log: "l",
+		DoingID: "di", DoneIDs: "dd", Where: Where{Server: 1, Session: "$1"}, EndReason: "e",
 		Subagents: []Subagent{{ID: "a"}}, Tasks: []Task{{ID: "t"}}, Files: []string{"f"}}
 	w := Where{Server: 7, Session: "$2"}
 	got := full.Resumed(100, w)

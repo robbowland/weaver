@@ -158,6 +158,12 @@ can supersede an earlier one, and says so.
   it reads no snapshot. A repository's existing
   `refs/worktree/weaver/{sessions,reviewed}` refs and private indexes are
   left as they are.
+- 2026-11-11: The activity log is gone (Rob, decision 3), and with it
+  `:AgentLog` and `:AgentWhy`, which went with the Neovim plugin: the log
+  told the story of each turn for them, and tests read it as an oracle,
+  which now read the state. So did what only the log carried: a prompt's
+  long text, and what an Agent call asked its subagent to do. A
+  `~/.local/state/weaver/log/` from before is left as it is.
 
 ## Holding threads
 

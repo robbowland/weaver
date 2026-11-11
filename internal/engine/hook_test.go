@@ -76,7 +76,7 @@ func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
 			t.Errorf("follow %q, %d files: handed on %v %d", c.follow, c.n, y.ChangedKnown, len(y.Changed))
 		}
 	}
-	want := map[string]bool{"sf": true, "changes": true, "launchID": true, "launchType": true, "launchAs": true, "rc": true}
+	want := map[string]bool{"sf": true, "rc": true}
 	rt := reflect.TypeOf(hk{})
 	gv, hv := reflect.ValueOf(got).Elem(), reflect.ValueOf(h).Elem()
 	for i := 0; i < rt.NumField(); i++ {

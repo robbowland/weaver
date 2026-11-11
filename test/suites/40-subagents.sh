@@ -50,7 +50,6 @@ ok "...and the file joins the agent's files" "$(st 0 'files | map(select(endswit
 ev PostToolUse "$T/repo" "$(bash_by sub-a "cd $T/repo-wt-a && git log -1")"
 ok "Bash that changes nothing: root stays" "$(st 0 root)" "$T/repo-wt-b"
 settle
-ok "the log has the Bash commands" "$(jq -r 'select(.ev == "bash") | .cmd' "$(st 0 log)" | grep -c 'git')" "2"
 
 # --- MCP edit tools are followed (defect 11); MCP reads are not looked at
 sleep 0.1

@@ -126,7 +126,6 @@ func (e *Env) gcFiles() {
 	if st, err := os.Stat(e.StateDir + "/close.log"); err == nil && st.Size() > 100000 {
 		os.Remove(e.StateDir + "/close.log")
 	}
-	old(e.LogDir, "*.jsonl", month, false)
 	old(e.LostDir, "*.json", month, false)
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)

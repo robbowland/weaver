@@ -394,8 +394,8 @@ needs:
 - **Processes.** Sockets nothing listens on are removed. What an agent
   left running in the background from its worktree (a dev server, a
   watcher) is not: end it yourself once its thread has gone.
-- **Files.** Agents that are gone are forgotten. Activity logs and lost
-  threads go after a month.
+- **Files.** Agents that are gone are forgotten. Lost threads go after a
+  month.
 
 ## What weaver tracks
 
@@ -424,12 +424,10 @@ you, two finished that you haven't seen, and three are working. The board's
 border shows the same counts in colour, updated as they change rather than
 polled.
 
-### Turns and the activity log
+### Turns
 
 Each prompt of yours starts a turn, which the board and the card count.
-Everything an agent does is logged to
-`~/.local/state/weaver/log/<session>.jsonl`. The formats are in
-[design.md](design.md).
+weaver's files and their formats are in [design.md](design.md).
 
 ## Review
 
@@ -534,7 +532,7 @@ Homebrew's, and Homebrew's again once you remove it.
 ### Files
 
 wvr unpacks the files it carries under `~/.local/share/weaver/runtime`. Its state,
-including agents' states, lost threads and activity logs, lives under
+including agents' states and lost threads, lives under
 `~/.local/state/weaver`.
 
 ## Settings

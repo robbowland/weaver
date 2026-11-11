@@ -28,7 +28,6 @@ import (
 // agent's, made one by Event) folded into its state file. What it needs besides the state (Rex, Worktrunk,
 // snapshots, the status) runs after it in a detached `wvr hook --bg`.
 
-
 // bellJSON rings the bell: Claude Code writes terminalSequence to the agent's
 // terminal.
 const bellJSON = `{"terminalSequence":"\u0007"}`
@@ -44,7 +43,7 @@ type hk struct {
 	Mode           string `json:"-"`
 	sf             string
 
-	Event, Cwd, Sid, File, Prompt, PromptLong, Tool, Ntype string
+	Event, Cwd, Sid, File, Prompt, Tool, Ntype             string
 	Now, NowMs                                             int64
 	WaitingNew, Key, LastNew, Aid, Atype, BgNew, BgdescNew string
 	Source, Interrupt, TitleNew, PromptID, Transcript      string
@@ -77,11 +76,7 @@ type hk struct {
 	// to the background run, which follows them (FollowBash).
 	Changed      []string
 	ChangedKnown bool
-	// What the call changed, what each file held before with it (the
-	// foreground's alone: too big to hand on), and the subagent an Agent
-	// call started.
-	launchID, launchType, launchAs string
-	rc                             int
+	rc           int
 }
 
 // Hook is `wvr hook [--async]` (and, from Event, another agent's event):
@@ -158,7 +153,6 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.File = oneline.Ctl(in.EditFile())
 	if in.Event == "UserPromptSubmit" && in.Yours() {
 		h.Prompt = oneline.Ctl(oneline.Squash(in.Prompt, 120))
-		h.PromptLong = oneline.Ctl(oneline.Squash(in.Prompt, 2000))
 	}
 	h.Tool = oneline.Ctl(in.ToolName)
 	h.Ntype = oneline.Ctl(in.Ntype)
@@ -222,10 +216,6 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.Tasks = hooks.Tasks(h.sess().Tasks, in)
 	h.Paths = in.CommandPaths()
 	h.Changed, h.ChangedKnown = in.Changes()
-	h.launchID, h.launchType, h.launchAs = in.Launched()
-	h.launchID = oneline.Ctl(h.launchID)
-	h.launchType = oneline.Ctl(oneline.Squash(h.launchType, 40))
-	h.launchAs = oneline.Ctl(oneline.Squash(h.launchAs, 200))
 	return h.Event != ""
 }
 
@@ -409,79 +399,15 @@ func writeState(e *session.Env, h *hk) {
 	// The life of the Rex session it runs in: a server or session made
 	// again is another, however soon (session's lives.lost).
 	st.Where = e.Where
-	if h.Sid != "" {
-		st.Log = e.LogDir + "/" + h.Sid + ".jsonl"
-	}
 	bestEffort(store.Write(h.sf, st))
 }
 
-// followBash follows what a Bash or MCP call changed: the files it edited,
-// else (none found) its command in the log.
-func followBash(e *session.Env, h *hk) {
-	if !followBashEdits(e, h) {
-		if h.Tool == "Bash" {
-			h.logLine(e, logBash{logHead: h.logHead("bash"), Cmd: h.Cmd})
-		}
-	}
-}
-
-// hookLog is the activity log's lines for this event (docs/design.md).
-func (h *hk) hookLog(e *session.Env) {
-	if h.Sid == "" {
-		return
-	}
-	switch h.Event {
-	case "SessionStart":
-		h.logLine(e, logSession{h.logHead("session"), h.Source})
-	case "UserPromptSubmit":
-		if h.yourPrompt() {
-			h.logLine(e, logPrompt{h.logHead("prompt"), h.PromptLong, h.PromptID})
-		}
-	case "PostToolUse":
-		if h.EvFile != "" {
-			h.logLine(e, logEdit{h.logHead("edit"), h.EvFile, h.Root, h.Tool, h.Aid})
-		}
-		if h.launchID != "" {
-			h.logLine(e, logAgent{h.logHead("agent"), h.launchID, h.launchType, h.launchAs})
-		}
-	case "PostToolUseFailure":
-		if h.Interrupt != "" {
-			h.logLine(e, logInterrupt{h.logHead("interrupt"), h.Tool})
-		}
-	case "SubagentStart", "SubagentStop":
-		phase := "stop"
-		if h.Event == "SubagentStart" {
-			phase = "start"
-		}
-		h.logLine(e, logSubagent{h.logHead("subagent"), h.Aid, h.Atype, phase})
-	case "Stop":
-		h.logLine(e, logStop{h.logHead("stop"), h.LastNew})
-	case "StopFailure":
-		h.logLine(e, logError{h.logHead("error"), h.Err})
-	case "SessionEnd":
-		h.logLine(e, h.logHead("end"))
-	}
-	if h.Moved && h.Root != h.Old.Root {
-		h.logLine(e, logCwd{h.logHead("cwd"), h.Cwd, h.Root})
-	}
-	if h.State != h.Old.State {
-		if h.State == agent.StateNeedsYou {
-			h.logLine(e, logNeedsYou{h.logHead("needs-you"), h.Waiting})
-		}
-		h.logLine(e, logState{h.logHead("state"), h.State})
-	}
-}
-
-// afterWrite: the activity log, the turn's prompt, following a Bash or MCP
-// edit (async), and the background work when there is some.
+// afterWrite: what a new session teaches its thread, following a Bash or
+// MCP edit (async), and the background work when there is some.
 func afterWrite(e *session.Env, h *hk) {
-	if h.Sid != "" {
-		bestEffort(os.MkdirAll(e.LogDir, 0o755)) // else no log line
-	}
 	if h.Event == "SessionStart" {
 		e.ThreadLearns(h.Pane, h.Sid)
 	}
-	h.hookLog(e)
 	// Following a Bash or MCP edit needs git: here when this process runs in
 	// the background anyway (Claude Code's async hook), else in the
 	// background run, never while the agent waits on its hook.

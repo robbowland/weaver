@@ -146,5 +146,5 @@ hook 2 UserPromptSubmit "$T/repo" "" "unicode: é ü 漢字"
 hook 2 PostToolUse "$T/repo" "$W/naïve file.txt"
 ok "a root and file with spaces and unicode" "$(st 2 root)|$(st 2 file)" "$W|$W/naïve file.txt"
 ok "...the prompt survives" "$(st 2 prompt)" "unicode: é ü 漢字"
-ok "...and the activity log stays valid JSON" "$(jq -s 'length > 0' "$(st 2 log)")" "true"
+ok "...and the state stays valid JSON" "$(jq -c type "$SD/${SK}_2.json")" '"object"'
 done_suite

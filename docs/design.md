@@ -12,7 +12,6 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
-| `$STATE_DIR/log/<session_id>.jsonl` | the agent session's activity log |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below) |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread window being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
@@ -55,32 +54,9 @@ opens, resumes, adopts and restarts no Codex thread (see [Rex](#rex)).
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |
 | `doing`, `doing_id` | string | the command it runs now, from the async PreToolUse on Bash until that tool's PostToolUse (its `tool_use_id`), the turn's end or the agent stopping work; absent when none |
 | `done_ids` | string | the `tool_use_id`s of the last 8 tools that finished this turn, space-separated: an async PreToolUse landing after its PostToolUse sets nothing |
-| `log` | string | absolute path of the activity log |
 | `server` | int | the pid of the Rex server the agent runs on; a server started again is another, however soon, so its threads count as lost |
 | `tmux_session` | string | the id of its Rex session (the name is from when weaver ran on tmux); a session quit and made again is another. With `server`, the life of the session it runs in (`agent.Where`); a resumed state takes the life of the session it resumes in |
 | `end_reason` | string | after SessionEnd, its `reason` (`prompt_input_exit`, `clear`, `logout`, `other`, ...); absent before |
-
-## Activity log
-
-`$STATE_DIR/log/<session_id>.jsonl`, append-only, one object per line, each
-under 4 KB so appends stay atomic. Every line has `t` (epoch s), `pane`,
-`turn` and `ev`:
-
-| `ev` | Fields |
-| --- | --- |
-| `session` | `source` (startup, resume, clear, compact) |
-| `prompt` | `text`, `prompt_id` |
-| `edit` | `file`, `root`, `tool`, `agent_id`? |
-| `bash` | `cmd` (at most 200 chars), `file`? |
-| `needs-you` | `waiting` |
-| `state` | `state` |
-| `interrupt` | `tool` |
-| `cwd` | `cwd`, `root` |
-| `subagent` | `agent_id`, `agent_type`, `phase` (start, stop), `desc`? |
-| `agent` | `agent_id`, `agent_type`, `desc` (the Agent call's description, at most 200 chars): what a subagent was asked to do |
-| `stop` | `last` (at most 400 chars) |
-| `error` | `error` |
-| `end` | |
 
 ## Events from other agents
 
@@ -115,7 +91,7 @@ call's edits) goes to the background run.
 `tool_done`, `tool_failed`, `interrupt`, `stop`, `error`, `compact`,
 `session_end`, `subagent_start`, `subagent_stop`. Each maps onto the Claude
 Code event the state machine already handles, so every agent gets the same
-states, turns and log.
+states and turns.
 
 ## Threads
 
@@ -479,7 +455,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   would guess another's); the panel binds as for a new thread. A
   conversation Claude Code runs elsewhere is refused, not resumed beside it. The state
   carries on: the first hook (SessionStart, source `resume`) keeps its turns,
-  title and last reply, and its activity log continues.
+  title and last reply.
   A record whose directory is gone stays lost.
 - **The weaver session:** as it starts, its home (`wvr home`, behind the
   board as `wvr _boot`) runs `GC`, then resumes every thread lost by a

@@ -36,8 +36,6 @@ ok "event: no agent named: ignored" "$(st 2 state)" "needs-you"
 ev "{$base,\"event\":\"session_end\"}"
 ok "event: session end" "$(st 2 state)" "ended"
 settle
-ok "event: the activity log has it all" \
-	"$(jq -r .ev "$(st 2 log)" | sort -u | tr '\n' ' ')" "bash edit end error interrupt needs-you prompt session state stop "
 kill "$P"
 
 # --- the Codex adapter: weaver cannot place Codex's hooks in a Rex block

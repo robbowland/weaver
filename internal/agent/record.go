@@ -41,7 +41,6 @@ type Record struct {
 	DoneIDs         string      `json:"done_ids,omitempty"`
 	Where
 	EndReason string     `json:"end_reason,omitempty"`
-	Log       string     `json:"log,omitempty"`
 	Subagents []Subagent `json:"subagents"`
 	Tasks     []Task     `json:"tasks"`
 	Files     []string   `json:"files"`
@@ -78,6 +77,6 @@ func (r Record) Resumed(now int64, w Where) Record {
 	return Record{Agent: r.Agent, State: StateIdle, TS: now, Since: json.Number(strconv.FormatInt(now, 10)), Seen: true,
 		SessionID: r.SessionID, Title: r.Title, Turn: r.Turn, PromptID: r.PromptID,
 		Transcript: r.Transcript, Cwd: r.Cwd, Root: r.Root, StartCwd: r.StartCwd, ProjectRoot: r.ProjectRoot,
-		File: r.File, Prompt: r.Prompt, LastMessage: r.LastMessage, Log: r.Log, Where: w,
+		File: r.File, Prompt: r.Prompt, LastMessage: r.LastMessage, Where: w,
 		Subagents: []Subagent{}, Tasks: r.Tasks, Files: r.Files}
 }
