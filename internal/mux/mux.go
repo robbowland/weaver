@@ -144,6 +144,12 @@ type Mux interface {
 
 	// OpenWindow opens a window: its id, its pane and its width.
 	OpenWindow(w NewWindow) (WindowID, PaneID, int, error)
+	// OpenSession opens a session of its own for a thread, labelled
+	// label, w its first window: the window, its pane and its width.
+	OpenSession(label string, w NewWindow) (WindowID, PaneID, int, error)
+	// CloseSession ends the thread's session pane p is in, and every pane
+	// in it.
+	CloseSession(p PaneID)
 	// SplitLeft opens a pane on the left of pane of: the new pane and the
 	// pid of its process, 0 when that is not known yet (Rex starts it
 	// through the user's shell).

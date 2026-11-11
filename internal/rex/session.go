@@ -20,9 +20,9 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 )
 
-// Session is the Rex session ID as weaver acts on it (mux.Mux). Weaver
-// calls it Name (its files' key is Key(Name)) and keeps its numbers for
-// Rex's blocks and windows in Dir. Rex has no status line or window marks
+// Session is the Rex session ID as weaver acts on it, one of its Fleet's.
+// Weaver calls it Name (its files' key is Key(Name)) and keeps its numbers
+// for Rex's blocks and windows in Dir. Rex has no status line or window marks
 // (it shows an agent's state itself, from what Claude Code reports to it),
 // nor a message line: Say shows its text in a floating layer of its own.
 type Session struct {
@@ -31,13 +31,14 @@ type Session struct {
 	Dir  string
 }
 
-var _ mux.Mux = Session{}
-
 // Key is the key of weaver's Rex session name in file names: rex-<name>,
 // a / as _.
 func Key(name string) string { return "rex-" + strings.ReplaceAll(name, "/", "_") }
 
 func (s Session) ids() ids { return ids{s.Dir} }
+
+// num is the number of id, a block or window of the session.
+func (s Session) num(id string) (string, error) { return s.ids().num(id, s.ID) }
 
 // callS calls API method on the session.
 func (s Session) callS(method string, in map[string]any, out any) error {
@@ -211,7 +212,7 @@ func (s Session) Active() (mux.PaneID, bool) {
 	}
 	for _, w := range v.Windows {
 		if w.ID == v.Active && w.Focused != "" {
-			n, err := s.ids().num(w.Focused)
+			n, err := s.num(w.Focused)
 			return mux.PaneID(n), err == nil
 		}
 	}
@@ -300,11 +301,11 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 	if out.Window == "" || len(out.Blocks) == 0 {
 		return "", "", 0, errors.New("rex: no window made")
 	}
-	wn, err := s.ids().num(out.Window)
+	wn, err := s.num(out.Window)
 	if err != nil {
 		return "", "", 0, err
 	}
-	pn, err := s.ids().num(out.Blocks[0])
+	pn, err := s.num(out.Blocks[0])
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -374,7 +375,7 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, int, erro
 	if len(out.Blocks) == 0 {
 		return "", 0, errors.New("rex: no pane made")
 	}
-	pn, err := s.ids().num(out.Blocks[0])
+	pn, err := s.num(out.Blocks[0])
 	if err != nil {
 		return "", 0, err
 	}
@@ -417,7 +418,7 @@ func (s Session) BreakOut(p mux.PaneID, label string, at int, background bool) (
 		return "", 0, err
 	}
 	_ = s.callS("block.close", map[string]any{"block_id": stand}, nil)
-	wn, err := s.ids().num(out.Window)
+	wn, err := s.num(out.Window)
 	if err != nil {
 		return "", 0, err
 	}

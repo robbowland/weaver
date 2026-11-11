@@ -12,11 +12,12 @@ import (
 )
 
 // Here is where weaver runs, as Rex tells it ($REX_SESSION, $REX_BLOCK):
-// the session, weaver's name for it, the pane and the session's life;
-// outside Rex, nothing.
+// the session, its home (itself, but for a thread's session), weaver's
+// name for it, the pane and the session's life; outside Rex, nothing.
 type Here struct {
 	Inside bool
 	ID     string
+	Home   string
 	Name   string
 	Pane   mux.PaneID
 	Where  agent.Where
@@ -38,14 +39,17 @@ func FromEnv(dir string) Here {
 		return Here{}
 	}
 	r := ids{dir}
-	h := Here{Inside: true, ID: sid, Where: agent.Where{Server: serverPID(), Session: sid}}
+	h := Here{Inside: true, ID: sid, Home: sid, Where: agent.Where{Server: serverPID(), Session: sid}}
 	if m, ok := r.session(sid); ok {
 		h.Name = m.name
+		if m.home != "" {
+			h.Home = m.home
+		}
 	} else {
 		h.Name = strings.TrimPrefix(sid, "session:")
 	}
 	if b := os.Getenv("REX_BLOCK"); b != "" {
-		if n, err := r.num(b); err == nil {
+		if n, err := r.num(b, sid); err == nil {
 			h.Pane = mux.PaneID(n)
 		}
 	}
@@ -207,10 +211,10 @@ func Start(dir, name, here string, home []string) (Session, error) {
 		return Session{}, errors.New("rex: no session made")
 	}
 	s := Session{ID: out.ID, Name: name, Dir: dir}
-	if err := s.ids().made(out.ID, name, time.Now(), serverPID()); err != nil {
+	if err := s.ids().made(out.ID, name, time.Now(), serverPID(), ""); err != nil {
 		return s, err
 	}
-	if n, err := s.ids().num(out.Windows[0].Window); err == nil {
+	if n, err := s.num(out.Windows[0].Window); err == nil {
 		_ = s.ids().note("want", n, "0")
 	}
 	return s, nil

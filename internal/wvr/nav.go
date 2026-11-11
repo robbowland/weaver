@@ -499,10 +499,11 @@ func (e *Env) see(p mux.PaneID) (mux.PaneID, bool) {
 // not say whether an app shows the session, so this counts the session's
 // active window as looked at.
 func (e *Env) seeAsYouLook() {
-	s, ok := e.Mux().(rex.Session)
+	f, ok := e.Mux().(rex.Fleet)
 	if !ok {
 		return
 	}
+	s := f.Home
 	var mu sync.Mutex
 	var t *time.Timer
 	look := func() {

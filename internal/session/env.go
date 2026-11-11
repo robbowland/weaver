@@ -21,7 +21,8 @@ import (
 type Env struct {
 	Session   string      // the session's name; empty outside one
 	SKey      string      // the session's key in file names: rex-<name>
-	RexID     string      // the session's Rex id
+	RexID     string      // the session's Rex id: its home's
+	RexHere   string      // the Rex session weaver runs in: home's, or a thread's
 	MyPane    mux.PaneID  // the pane weaver runs in; empty in a popup
 	Where     agent.Where // the life of the session its agents run in (Rex's, or the pane an event is from)
 	StateDir  string
@@ -52,7 +53,7 @@ func Load() *Env {
 		return e
 	}
 	h := rex.FromEnv(e.RexDir())
-	e.RexID, e.Session, e.MyPane, e.Where = h.ID, h.Name, h.Pane, h.Where
+	e.RexID, e.RexHere, e.Session, e.MyPane, e.Where = h.Home, h.ID, h.Name, h.Pane, h.Where
 	if e.Session != "" {
 		e.SKey = rex.Key(e.Session)
 	}
@@ -75,9 +76,10 @@ func Executable() string {
 	return p
 }
 
-// Mux is the session weaver acts on: the Rex session e.RexID.
+// Mux is the session weaver acts on: home's Rex session e.RexID, with
+// its threads' sessions, from where weaver runs (e.RexHere).
 func (e *Env) Mux() mux.Mux {
-	return rex.Session{ID: e.RexID, Name: e.Session, Dir: e.RexDir()}
+	return rex.Fleet{Home: rex.Session{ID: e.RexID, Name: e.Session, Dir: e.RexDir()}, Here: e.RexHere}
 }
 
 // RexRestored: is this a Rex session Rex brought back after its server

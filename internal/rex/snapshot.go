@@ -296,7 +296,7 @@ func (s Session) place(n string) int {
 func (s Session) windowsOf(sn snapshot) []mux.Window {
 	var ws []mux.Window
 	for _, w := range sn.View.Windows {
-		n, err := s.ids().num(w.ID)
+		n, err := s.num(w.ID)
 		if err != nil {
 			continue
 		}
@@ -310,14 +310,14 @@ func (s Session) windowsOf(sn snapshot) []mux.Window {
 func (s Session) panesOf(sn snapshot) []mux.Pane {
 	var ps []mux.Pane
 	for _, w := range sn.View.Windows {
-		wn, err := s.ids().num(w.ID)
+		wn, err := s.num(w.ID)
 		if err != nil {
 			continue
 		}
 		cols, lines := sn.size(w)
 		bs, at := w.tiled()
 		for _, b := range bs {
-			n, err := s.ids().num(b.ID)
+			n, err := s.num(b.ID)
 			if err != nil {
 				continue
 			}

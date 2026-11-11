@@ -58,7 +58,7 @@ func hookBg(e *session.Env) {
 // started by an older weaver says none: its environment's, as then.
 func (h *hk) actOn(e *session.Env) {
 	if h.Session != "" {
-		e.Session, e.SKey, e.RexID = h.Session, h.SKey, h.RexID
+		e.Session, e.SKey, e.RexID, e.RexHere = h.Session, h.SKey, h.RexID, h.RexHere
 	}
 }
 

@@ -25,7 +25,11 @@ import (
 //	view/<num>     the view window num shows
 //	split/<num>    the ratio weaver last gave the split beside block num
 //	               (SetWidth), for Moved to tell from one you moved
-//	sessions/<id>  a session weaver made: its name, when, and its server
+//	in/<num>       the session the block or window num is in, as Rex
+//	               calls it (session:...); none for one numbered before
+//	               weaver kept it, all in its home session
+//	sessions/<id>  a session weaver made: its name, when, its server and,
+//	               for a thread's, the session it is a thread of (its home)
 //	said/<sid>     the block of the message last shown in session sid (Say)
 //	remote-off     when weaver last said the app takes no actions
 //	lock, start    held while a number is given or moved, and while wvr
@@ -48,9 +52,9 @@ func (r ids) path(kind, name string) string { return filepath.Join(r.dir, kind, 
 
 func fileName(id string) string { return strings.ReplaceAll(id, ":", "_") }
 
-// num is id's number, given it now if it has none; none for a block
-// replaced (errRetired).
-func (r ids) num(id string) (string, error) {
+// num is id's number, given it now if it has none, in session in; none
+// for a block replaced (errRetired).
+func (r ids) num(id, in string) (string, error) {
 	if id == "" {
 		return "", errors.New("rex: no id")
 	}
@@ -79,6 +83,9 @@ func (r ids) num(id string) (string, error) {
 		return "", err
 	}
 	if err := r.write("u", fileName(id), n); err != nil {
+		return "", err
+	}
+	if err := r.note("in", n, in); err != nil {
 		return "", err
 	}
 	return n, r.write("", "next", strconv.Itoa(next+1))
@@ -171,12 +178,16 @@ func (r ids) noted(kind, n string) string {
 
 // madeSession is weaver's record of a Rex session it made
 // (sessions/<id>, made): the name it gave it, when (epoch seconds to the
-// millisecond; whole seconds in older records), and the pid of the server
-// it made it on (0 in older records).
+// millisecond; whole seconds in older records), the pid of the server
+// it made it on (0 in older records), and the session it is a thread of
+// (none for a home session). A thread's session has its home's name:
+// weaver's files are keyed by the home, whichever of its sessions an
+// agent runs in.
 type madeSession struct {
 	name   string
 	at     float64
 	server int
+	home   string
 }
 
 // session is weaver's record of Rex session id, when weaver made it.
@@ -193,6 +204,9 @@ func (r ids) session(id string) (madeSession, bool) {
 	if len(ls) > 2 {
 		m.server, _ = strconv.Atoi(ls[2])
 	}
+	if len(ls) > 3 {
+		m.home = ls[3]
+	}
 	return m, m.name != ""
 }
 
@@ -208,15 +222,15 @@ func (r ids) keyed(skey string) (string, string, bool) {
 	return r.latest(func(n string) bool { return Key(n) == skey })
 }
 
-// latest is the session weaver made last of a name that matches, and its
-// name.
+// latest is the home session weaver made last of a name that matches,
+// and its name.
 func (r ids) latest(match func(name string) bool) (string, string, bool) {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	var best, bestName string
 	at := -1.0
 	for _, d := range ents {
 		id := strings.Replace(d.Name(), "_", ":", 1)
-		if m, ok := r.session(id); ok && match(m.name) && m.at > at {
+		if m, ok := r.session(id); ok && m.home == "" && match(m.name) && m.at > at {
 			best, bestName, at = id, m.name, m.at
 		}
 	}
@@ -224,12 +238,29 @@ func (r ids) latest(match func(name string) bool) (string, string, bool) {
 }
 
 // made records session id as weaver's, named name, made at, on the server
-// whose pid is server (sessions/<id>: the name, the time in epoch seconds
-// to the millisecond, so the later of two made in one second is told,
-// and the pid).
-func (r ids) made(id, name string, at time.Time, server int) error {
+// whose pid is server, a thread of session home ("" for a home session)
+// (sessions/<id>: the name, the time in epoch seconds to the millisecond,
+// so the later of two made in one second is told, the pid and the home).
+func (r ids) made(id, name string, at time.Time, server int, home string) error {
 	t := strconv.FormatFloat(float64(at.UnixMilli())/1000, 'f', 3, 64)
-	return r.write("sessions", fileName(id), name+"\n"+t+"\n"+strconv.Itoa(server))
+	v := name + "\n" + t + "\n" + strconv.Itoa(server)
+	if home != "" {
+		v += "\n" + home
+	}
+	return r.write("sessions", fileName(id), v)
+}
+
+// threads are the sessions weaver made as threads of session home.
+func (r ids) threads(home string) []string {
+	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
+	var out []string
+	for _, d := range ents {
+		id := strings.Replace(d.Name(), "_", ":", 1)
+		if m, ok := r.session(id); ok && m.home == home && home != "" {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (r ids) write(kind, name, v string) error {

@@ -802,7 +802,7 @@ func TestFromEnv(t *testing.T) {
 	rextest.NoRex(t)
 	dir := t.TempDir()
 	r := ids{dir}
-	if err := r.made("session:abc", "weaver", time.Unix(1, 0), 0); err != nil {
+	if err := r.made("session:abc", "weaver", time.Unix(1, 0), 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_SERVER", "unix:///nowhere")
@@ -1086,10 +1086,10 @@ func TestRestoredAcrossABoot(t *testing.T) {
 	rextest.NoRex(t)
 	dir := t.TempDir()
 	r := ids{dir}
-	if err := r.made("session:before", "w", time.Unix(process.BootTime()-60, 0), 0); err != nil {
+	if err := r.made("session:before", "w", time.Unix(process.BootTime()-60, 0), 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.made("session:since", "w", time.Now(), 0); err != nil {
+	if err := r.made("session:since", "w", time.Now(), 0, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !(Session{ID: "session:before", Dir: dir}).Restored() {

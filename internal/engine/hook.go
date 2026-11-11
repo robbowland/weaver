@@ -37,11 +37,12 @@ const bellJSON = `{"terminalSequence":"\u0007"}`
 type hk struct {
 	Pane            mux.PaneID
 	AgentKind, SKey string
-	// The session it acts on (its name and Rex id), which the background
-	// run takes rather than its environment's.
-	Session, RexID string
-	Mode           string `json:"-"`
-	sf             string
+	// The session it acts on (its name, its home's Rex id and the one it
+	// ran in), which the background run takes rather than its
+	// environment's.
+	Session, RexID, RexHere string
+	Mode                    string `json:"-"`
+	sf                      string
 
 	Event, Cwd, Sid, File, Prompt, Tool, Ntype             string
 	Now, NowMs                                             int64
@@ -91,7 +92,7 @@ func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, agent, me str
 
 // hook folds event ev into the state of the agent in pane.
 func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, agentName, me string) int {
-	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID}
+	h := &hk{Pane: pane, AgentKind: agentName, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID, RexHere: e.RexHere}
 	me = knownPid(me)
 	if h.AgentKind == "" {
 		h.AgentKind = "claude"
