@@ -1216,21 +1216,9 @@ func (e *Env) Close(args []string) error {
 		name = k + " in pane " + string(agentPane)
 	}
 	// Its state and name as its row on the board says them.
-	called := ""
-	exited := false
-	if r, _, ok := e.RowOf(agentPane); ok {
-		st, called, exited = r.State, r.Called(), r.Exited
-	}
-	what := CGrey + string(cmp.Or(st, agent.StateStarting)) + COff
-	switch {
-	case exited:
-		what = CGrey + "exited" + COff
-	case st == agent.StateNeedsYou:
-		what = CRed + "needs you" + COff
-	case st == agent.StateDone:
-		what = CGreen + string(agent.StateDone) + COff
-	case st == agent.StateWorking:
-		what = string(agent.StateWorking)
+	called, what := "", stateWord(session.Row{State: cmp.Or(st, agent.StateStarting)}, time.Now().Unix())
+	if r, now, ok := e.RowOf(agentPane); ok {
+		called, what = r.Called(), stateWord(r, now)
 	}
 	editing := nv != "" && e.editing(agentPane)
 	// Its worktree may go only if weaver made it and nothing would be lost.

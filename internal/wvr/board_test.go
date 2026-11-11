@@ -131,3 +131,25 @@ func TestOnBoard(t *testing.T) {
 		t.Errorf("thread 1's own board: %+v, want its agent as it is and its helper by name", got)
 	}
 }
+
+// Every card says a state by one rule (stateWord), as the board groups it:
+// done only while not looked at, not reporting and exited whatever the
+// state says.
+func TestStateWord(t *testing.T) {
+	now := int64(1000)
+	for _, c := range []struct {
+		r    session.Row
+		want string
+	}{
+		{session.Row{State: agent.StateDone}, CGreen + "done" + COff},
+		{session.Row{State: agent.StateDone, Seen: true}, "done"},
+		{session.Row{State: agent.StateNeedsYou}, CRed + "needs you" + COff},
+		{session.Row{State: agent.StateNeedsYou, Exited: true}, "exited"},
+		{session.Row{State: agent.StateStarting, Since: 1}, "not reporting"},
+		{session.Row{State: agent.StateWorking}, "working"},
+	} {
+		if got := stateWord(c.r, now); got != c.want {
+			t.Errorf("stateWord(%+v) = %q, want %q", c.r, got, c.want)
+		}
+	}
+}

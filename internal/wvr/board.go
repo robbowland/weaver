@@ -38,6 +38,53 @@ const (
 	COff   = "\033[0m"
 )
 
+// palette is the colours a list paints with: weaver's, or none (plain).
+type palette struct{ red, green, grey, dim, off string }
+
+var colours = palette{CRed, CGreen, CGrey, CDim, COff}
+
+// stateCell is row r's state cell, as every list of agents paints it (the
+// board, the views): by what it asks of you (session.Need), then how it is
+// quiet.
+func stateCell(r session.Row, now int64, p palette) string {
+	switch r.Need(now) {
+	case session.NeedYou:
+		return paint(GNeed, p.red, p.dim, p.off)
+	case session.NeedLook:
+		return paint(GDone, p.green, p.dim, p.off)
+	case session.NeedWait:
+		return paint(GWork, p.grey, p.dim, p.off)
+	case session.NeedNothing:
+	}
+	switch {
+	case r.Exited, r.NotReporting(now):
+	case r.State == agent.StateDone:
+		return paint(GSeen, p.dim, p.dim, p.off)
+	case r.State == agent.StateInterrupted:
+		return paint(GInt, p.grey, p.dim, p.off)
+	}
+	return paint(GIdle, p.dim, p.dim, p.off)
+}
+
+// stateWord is row r's state in a word, as every card says it (an agent's,
+// a view's thread, close's): exited, not reporting, needs you, done (not
+// looked at yet), else its state's own word.
+func stateWord(r session.Row, now int64) string {
+	switch {
+	case r.Exited:
+		return "exited"
+	case r.NotReporting(now):
+		return "not reporting"
+	}
+	switch r.Need(now) {
+	case session.NeedYou:
+		return CRed + "needs you" + COff
+	case session.NeedLook:
+		return CGreen + string(agent.StateDone) + COff
+	}
+	return string(cmp.Or(r.State, agent.StateIdle))
+}
+
 // paint: a cell's brackets in dim, its mark in colour, each closed by off.
 func paint(cell, colour, dim, off string) string {
 	r := []rune(cell)
@@ -298,6 +345,7 @@ func (e *Env) rows(plain bool) string {
 	if colour == "1" {
 		red, green, grey, dim, bold, off = CRed, CGreen, CGrey, CDim, CBold, COff
 	}
+	p := palette{red, green, grey, dim, off}
 	width := 100
 	if n, ok := cli.EnvInt("COLUMNS"); ok {
 		width = n
@@ -329,19 +377,16 @@ func (e *Env) rows(plain bool) string {
 		// line counts it; the glyph and fact say how.
 		need := a.Need(now)
 		g := int(need)
-		var glyph, fact string
+		glyph, fact := stateCell(a, now, p), ""
 		switch {
 		case a.Exited:
 			fact = "exited · R starts it again, x closes it"
-			glyph = paint(GIdle, dim, dim, off)
 		case a.State == agent.StateNeedsYou:
 			fact = a.Waiting
 			if fact == "" {
 				fact = "input"
 			}
-			glyph = paint(GNeed, red, dim, off)
 		case a.State == agent.StateWorking:
-			glyph = paint(GWork, grey, dim, off)
 			switch {
 			case a.Doing != "":
 				fact = "running " + a.Doing
@@ -361,25 +406,16 @@ func (e *Env) rows(plain bool) string {
 				fact = "thinking"
 			}
 		case a.State == agent.StateDone:
-			if a.Seen {
-				glyph = paint(GSeen, dim, dim, off)
-			} else {
-				glyph = paint(GDone, green, dim, off)
-			}
 			fact = a.Last
 		case a.State == agent.StateInterrupted:
 			fact = string(agent.StateInterrupted)
-			glyph = paint(GInt, grey, dim, off)
 		case a.NotReporting(now):
 			fact = "not reporting"
-			glyph = paint(GIdle, dim, dim, off)
 		case a.State == agent.StateStarting:
 			// Its agent reports within seconds.
 			fact = string(agent.StateStarting)
-			glyph = paint(GWork, grey, dim, off)
 		default:
 			// Idle, or ended: quiet, the idle cell.
-			glyph = paint(GIdle, dim, dim, off)
 			if a.Turn == 0 {
 				fact = "no prompt yet"
 			}

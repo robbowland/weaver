@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/markdown"
@@ -228,17 +227,13 @@ type cardField struct {
 
 // viewThread is a thread of this session, as a view matches it to an item.
 type viewThread struct {
-	pane  mux.PaneID // its agent's
-	num   int
-	state agent.State
-	since int64
-	// What it asks of you, and why it is quiet, as the board says them
-	// (session.Need).
-	need                 session.Need
-	exited, notReporting bool
-	ref                  string // its work item's
-	repo                 string // its repository on GitHub, owner/name
-	branch               string
+	pane   mux.PaneID // its agent's
+	num    int
+	row    session.Row // as the board shows it (session.Row.Shown)
+	now    int64       // when that was
+	ref    string      // its work item's
+	repo   string      // its repository on GitHub, owner/name
+	branch string
 }
 
 // itemThreads are the session's threads.
@@ -259,8 +254,7 @@ func (e *Env) itemThreads() []viewThread {
 		if err != nil {
 			continue
 		}
-		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, since: r.Since, branch: th.Branch,
-			need: r.Need(now), exited: r.Exited, notReporting: r.NotReporting(now)}
+		t := viewThread{pane: r.Pane, num: r.Tnum, row: r, now: now, branch: th.Branch}
 		if th.Item != nil {
 			t.ref = th.Item.Ref
 		}
@@ -296,42 +290,11 @@ func threadOf(ts []viewThread, it viewItem) (viewThread, bool) {
 	return viewThread{}, false
 }
 
-// cell is the thread's cell, painted as the board paints it: by what it
-// asks of you, then how it is quiet.
-func (t viewThread) cell() string {
-	switch t.need {
-	case session.NeedYou:
-		return paint(GNeed, CRed, CDim, COff)
-	case session.NeedLook:
-		return paint(GDone, CGreen, CDim, COff)
-	case session.NeedWait:
-		return paint(GWork, CGrey, CDim, COff)
-	case session.NeedNothing:
-	}
-	switch {
-	case t.exited, t.notReporting:
-	case t.state == agent.StateDone:
-		return paint(GSeen, CDim, CDim, COff)
-	case t.state == agent.StateInterrupted:
-		return paint(GInt, CGrey, CDim, COff)
-	}
-	return paint(GIdle, CDim, CDim, COff)
-}
+// cell is the thread's cell, painted as the board paints it.
+func (t viewThread) cell() string { return stateCell(t.row, t.now, colours) }
 
 // word is the thread's state as the card says it, as the board does.
-func (t viewThread) word() string {
-	switch {
-	case t.exited:
-		return "exited"
-	case t.notReporting:
-		return "not reporting"
-	case t.need == session.NeedYou:
-		return CRed + "needs you" + COff
-	case t.need == session.NeedLook:
-		return CGreen + "done" + COff
-	}
-	return string(t.state)
-}
+func (t viewThread) word() string { return stateWord(t.row, t.now) }
 
 // untick is a title without its code's backticks, which GitHub and Linear
 // show as code and a line shows as noise.
@@ -664,7 +627,7 @@ func (e *Env) itemCard(src itemSource, ref string) string {
 	ls := []string{markdown.Link(it.url, CBold+oneline.Line(it.title)+COff), CDim + it.sub + " · " + age(int64(now.Sub(it.updated).Seconds())) + COff, ""}
 	if t, ok := threadOf(e.itemThreads(), it); ok {
 		ls = append(ls, CDim+oneline.Cut("thread           ", 11)+COff+fmt.Sprintf("%02d %s %s", t.num, t.cell(), t.word())+
-			CDim+" · "+age(now.Unix()-t.since)+" · ⏎ goes there"+COff)
+			CDim+" · "+age(now.Unix()-t.row.Since)+" · ⏎ goes there"+COff)
 	} else {
 		on := ""
 		if it.startOn != "" {

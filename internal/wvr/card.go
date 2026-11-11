@@ -309,30 +309,22 @@ func (e *Env) Preview(args []string) string {
 	}
 	// Its state as its row on the board says it (refined, starting or not
 	// reporting, exited), else as its record does.
-	sh := shownOf(s)
-	if r, now, ok := e.RowOf(p); ok {
-		sh = shown{state: r.State, since: r.Since, seen: r.Seen, waiting: r.Waiting, exited: r.Exited, notReporting: r.NotReporting(now)}
+	r, _, ok := e.RowOf(p)
+	if !ok {
+		r = rowOfRecord(s)
 	}
-	return out + card(s, sh, from, previewCols(), head, ab, changed, nw, shared)
+	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared)
 }
 
-// shown is an agent's state as its card says it: the board's, from its row.
-type shown struct {
-	state                      agent.State
-	since                      int64 // epoch s
-	seen, exited, notReporting bool
-	waiting                    string
-}
-
-// shownOf is record s's state as it stands, for an agent with no row.
-func shownOf(s agent.Record) shown {
+// rowOfRecord is record s's state as a row, for an agent with no row.
+func rowOfRecord(s agent.Record) session.Row {
 	since := time.Now().Unix()
 	if v := jsonx.NumberOr(s.Since, 0); s.Since != "" {
 		since = int64(v)
 	} else if s.TS != 0 {
 		since = s.TS
 	}
-	return shown{state: cmp.Or(s.State, agent.StateIdle), since: since, seen: s.Seen, waiting: s.Waiting}
+	return session.Row{State: cmp.Or(s.State, agent.StateIdle), Since: since, Seen: s.Seen, Waiting: s.Waiting}
 }
 
 // itemLine is a thread record's work item for its card: PR o/r#45, issue
@@ -354,29 +346,22 @@ func itemLine(t store.Thread) string {
 	return l
 }
 
-func card(s agent.Record, sh shown, from string, w int, head, ab string, changed, nw, shared int) string {
+func card(s agent.Record, r session.Row, from string, w int, head, ab string, changed, nw, shared int) string {
 	now := time.Now().Unix()
-	st, since := sh.state, sh.since
-	word := string(st)
-	switch {
-	case sh.exited:
-		word = "exited · R starts it again"
-	case sh.notReporting:
-		word = "not reporting"
-	case st == agent.StateNeedsYou:
-		word = CRed + "needs you" + COff
-	case st == agent.StateDone && !sh.seen:
-		word = CGreen + string(agent.StateDone) + COff
+	st := r.State
+	word := stateWord(r, now)
+	if r.Exited {
+		word += " · R starts it again"
 	}
-	first := word + CDim + " · " + COff + cardAge(now-since)
+	first := word + CDim + " · " + COff + cardAge(now-r.Since)
 	ls := []string{first, ""}
 	add := func(f []string) { ls = append(ls, f...) }
 	if from != "" {
 		add(field(w, "from", from, "", 1))
 	}
 	add(field(w, "asked", s.Prompt, "", 4))
-	if st == agent.StateNeedsYou && !sh.exited {
-		waits := sh.waiting
+	if st == agent.StateNeedsYou && !r.Exited {
+		waits := r.Waiting
 		if waits == "" {
 			waits = "you"
 		}
