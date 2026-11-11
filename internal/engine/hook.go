@@ -477,11 +477,7 @@ func HookMain(e *session.Env, args []string) {
 		return
 	}
 	in, _ := io.ReadAll(os.Stdin)
-	me := os.Getenv("WEAVER_AGENT_PID")
-	if me == "" {
-		me = os.Getenv("CLAUDE_PID")
-	}
-	rc := Hook(e, in, mode, e.MyPane, me)
+	rc := Hook(e, in, mode, e.MyPane, os.Getenv("CLAUDE_PID"))
 	if mode == "sync" {
 		bell := os.Getenv("WEAVER_BELL")
 		if bell == "" {
