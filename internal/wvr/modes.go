@@ -30,10 +30,10 @@ const (
 	editHold   = "hold"
 )
 
-var reEditPrompt = regexp.MustCompile(`^(rename|hold) (%?\d+) › $`)
+var reEditPrompt = regexp.MustCompile(`^(rename|hold) (\d+) › $`)
 
 // editing is the edit the board's prompt ($FZF_PROMPT) is open for, and
-// which thread: its number, or %pane for one without; "" when browsing.
+// which thread: its number; "" when browsing.
 func editing() (kind, which string) {
 	m := reEditPrompt.FindStringSubmatch(os.Getenv("FZF_PROMPT"))
 	if m == nil {
@@ -56,14 +56,11 @@ func (e *Env) EditMode(args []string) error {
 	kind, p := arg(args, 0), mux.PaneID(arg(args, 1))
 	q := session.Quote(e.Self)
 	th, err := store.ReadThread(e.ThreadFile(p))
-	if err != nil {
+	if err != nil || th.Num == 0 {
 		fmt.Println("change-footer(" + CGrey + "not a thread yet: a adopts it" + COff + ")")
 		return nil
 	}
-	which := "%" + string(p)
-	if th.Num > 0 {
-		which = fmt.Sprintf("%02d", th.Num)
-	}
+	which := fmt.Sprintf("%02d", th.Num)
 	open := "show-input+unbind(" + lsKeys + ")+disable-search+change-prompt(" + kind + " " + which + " › )"
 	switch kind {
 	case editRename:
@@ -164,13 +161,9 @@ func Fold() {
 	bestEffort(files.Put(b+".heldopen", "1"))
 }
 
-// paneOfThread is the agent's pane of the thread an edit's prompt names:
-// its number in this session, or %pane.
+// paneOfThread is the agent's pane of the thread an edit's prompt names
+// by its number in this session.
 func (e *Env) paneOfThread(which string) (mux.PaneID, bool) {
-	if strings.HasPrefix(which, "%") {
-		p, ok := mux.ParsePane(strings.TrimPrefix(which, "%"))
-		return p, ok && files.Exists(e.ThreadFile(p))
-	}
 	n, err := strconv.Atoi(which)
 	if err != nil {
 		return "", false
