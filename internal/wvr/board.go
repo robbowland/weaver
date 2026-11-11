@@ -244,17 +244,9 @@ type boardRow struct {
 // onBoard are the agents a board lists, of agents: a thread's own board
 // (local, its Rex session) has the agents in that session, its agent and
 // its helpers, each helper by its window's label when it has one; the
-// board of every thread has the rest but the helpers, a helper that needs
-// you making its thread need you, its row saying whose wait it is. A
-// helper is an agent with no thread whose pane is in a thread's session,
-// as Rex lists it.
+// board of every thread has the rest but the helpers, each thread as it
+// shows (session.Row.Shown: what its helpers need of you rolled in).
 func onBoard(agents []session.Row, local string) []session.Row {
-	threads := map[string]bool{}
-	for _, a := range agents {
-		if a.Tnum > 0 && a.Session != "" {
-			threads[a.Session] = true
-		}
-	}
 	var out []session.Row
 	for _, a := range agents {
 		switch {
@@ -262,20 +254,13 @@ func onBoard(agents []session.Row, local string) []session.Row {
 			if a.Session != local {
 				continue
 			}
-			if a.Tnum == 0 && a.WindowName != "" {
+			if a.Helper() && a.WindowName != "" {
 				a.Title = a.WindowName
 			}
-		case a.Tnum == 0 && threads[a.Session]:
+		case a.Helper():
 			continue
-		case a.Tnum == 0:
-		case a.State != agent.StateNeedsYou && !a.Exited:
-			for _, h := range agents {
-				if h.Tnum == 0 && h.Session != "" && h.Session == a.Session && h.State == agent.StateNeedsYou && !h.Exited {
-					a.State, a.Since = agent.StateNeedsYou, h.Since
-					a.Waiting = cmp.Or(h.WindowName, h.Called()) + ": " + cmp.Or(h.Waiting, "input")
-					break
-				}
-			}
+		default:
+			a = a.Shown()
 		}
 		out = append(out, a)
 	}

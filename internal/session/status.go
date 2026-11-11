@@ -26,10 +26,10 @@ func (e *Env) StatusText() string {
 	rows, now := e.AgentRows()
 	var n, d, w int
 	for _, r := range rows {
-		if r.Pane == "" {
+		if r.Pane == "" || r.Helper() {
 			continue
 		}
-		switch r.Need(now) {
+		switch r.Shown().Need(now) {
 		case NeedYou:
 			n++
 		case NeedLook:

@@ -250,6 +250,7 @@ func (e *Env) itemThreads() []viewThread {
 		if r.Tnum == 0 {
 			continue
 		}
+		r := r.Shown()
 		f := r.Sfile
 		if !strings.HasSuffix(f, ".thread") {
 			f = strings.TrimSuffix(f, ".json") + ".thread"

@@ -371,13 +371,6 @@ func (e *Env) Next() {
 		pane  mux.PaneID
 		label string
 	}
-	// A helper's thread, by the session its events come from.
-	threadOf := map[string]int{}
-	for _, r := range rows {
-		if r.Tnum > 0 && r.Session != "" {
-			threadOf[r.Session] = r.Tnum
-		}
-	}
 	var cs []c
 	for _, r := range rows {
 		if r.Pane == "" {
@@ -400,11 +393,11 @@ func (e *Env) Next() {
 		if rlen(l) > 40 {
 			l = oneline.Cut(l, 39) + "…"
 		}
-		switch n := threadOf[r.Session]; {
+		switch {
 		case r.Tnum > 0:
 			l = fmt.Sprintf("%02d %s", r.Tnum, l)
-		case n > 0:
-			l = fmt.Sprintf("%02d › %s", n, cmp.Or(r.WindowName, l))
+		case r.Helper():
+			l = fmt.Sprintf("%02d › %s", r.Thread, cmp.Or(r.WindowName, l))
 		}
 		if r.State == agent.StateNeedsYou {
 			l += " · needs you"

@@ -56,6 +56,8 @@ type Row struct {
 	Bg, Nsub, Turn                                                    int    // background tasks, subagents
 	Tdone, Ttotal                                                     int    // its tasks
 	Tnum                                                              int    // its thread's number; 0 for none
+	Thread                                                            int    // the thread it is of: its own, or a helper's (rollUp); 0 for none
+	Via                                                               *Row   // on a thread's agent: its helper that has needed you longest, nil for none (rollUp)
 	Review                                                            bool   // its thread is read-only: a review, an investigation
 	Exited                                                            bool   // its agent has exited and left its pane (kept: R starts it again, x closes it)
 	Doing                                                             string // the command it runs now
@@ -248,7 +250,49 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		}
 		out = append(out, r)
 	}
+	rollUp(out)
 	return out, now
+}
+
+// rollUp gives each helper its thread, and each thread's agent the helper
+// of it that has needed you longest (Via), which Shown rolls into it. A
+// helper is an agent with no thread whose pane is in a thread's session.
+func rollUp(rows []Row) {
+	agentOf := map[string]int{} // a thread's session: its agent's row
+	for i, r := range rows {
+		if r.Tnum > 0 && r.Session != "" {
+			agentOf[r.Session], rows[i].Thread = i, r.Tnum
+		}
+	}
+	for i, r := range rows {
+		t, ok := agentOf[r.Session]
+		if r.Tnum > 0 || !ok {
+			continue
+		}
+		rows[i].Thread = rows[t].Tnum
+		if v := rows[t].Via; r.State == agent.StateNeedsYou && !r.Exited && (v == nil || r.Since < v.Since) {
+			h := rows[i]
+			rows[t].Via = &h
+		}
+	}
+}
+
+// Helper: is r a thread's helper (rollUp)?
+func (r Row) Helper() bool { return r.Tnum == 0 && r.Thread > 0 }
+
+// Shown is r as its thread shows wherever threads are listed (the board,
+// the views, the counts): a thread's agent with what its helpers need of
+// you rolled in. One whose helper needs you (Via) needs you, saying which
+// helper waits on what and since when, though its own agent works, is done
+// or has exited.
+func (r Row) Shown() Row {
+	if r.Via == nil || r.State == agent.StateNeedsYou && !r.Exited {
+		return r
+	}
+	v := *r.Via
+	r.State, r.Since, r.Exited = agent.StateNeedsYou, v.Since, false
+	r.Waiting = cmp.Or(v.WindowName, v.Called()) + ": " + cmp.Or(v.Waiting, "input")
+	return r
 }
 
 // claudeSession is Claude Code's own record of a session it runs
