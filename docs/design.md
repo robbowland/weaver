@@ -203,8 +203,9 @@ weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
 (`toWeaverSession`), and says so when that is not running.
 
 - **From its pane** (an agent weaver follows, without a thread record):
-  refused when its agent has ended, has not said its session id, or is in
-  a turn (working or needing you). Its pane closes, ending its agent (one
+  refused when its agent has ended, has not said its session id, is in a
+  turn (working or needing you), or runs background commands or subagents,
+  which its pane's end would end. Its pane closes, ending its agent (one
   process to a conversation); once its process has gone its state is
   forgotten and its conversation resumed as one by session id is, below.
   Typed into the agent (`! wvr adopt`), wvr runs in the pane that goes, so

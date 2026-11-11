@@ -86,8 +86,8 @@ func (e *Env) paneArg(which string) (mux.PaneID, bool) {
 const sidPrefix = 4
 
 // adoptPane makes the agent in pane p, which weaver follows but did not
-// start, a thread: its agent ends with its pane, between turns (one
-// process to a conversation), and its conversation resumes in a thread's
+// start, a thread: its agent ends with its pane, between turns and with
+// nothing in the background (one process to a conversation), and its conversation resumes in a thread's
 // session of its own (resumeThread). Typed into the agent (`! wvr adopt`),
 // this runs in the pane that goes: the rest is done from outside it.
 func (e *Env) adoptPane(p mux.PaneID) (string, error) {
@@ -104,6 +104,9 @@ func (e *Env) adoptPane(p mux.PaneID) (string, error) {
 		return "", errors.New("its agent has not said which conversation it is in yet")
 	case st.State == agent.StateWorking || st.State == agent.StateNeedsYou:
 		return "", errors.New("its turn is under way: adopt it once it is done")
+	case st.Background > 0 || len(st.Subagents) > 0:
+		// Its pane goes, and what runs in it with it.
+		return "", errors.New("its background work is under way: adopt it once that is done")
 	}
 	if th, err := store.ReadThread(e.ThreadFile(p)); err == nil {
 		return "", fmt.Errorf("%s is thread %d already", cmp.Or(oneline.Line(th.Name), "it"), th.Num)

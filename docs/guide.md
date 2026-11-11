@@ -368,7 +368,8 @@ like any other:
   a thread's session, say): `a` on its row, or `! wvr adopt` typed into the
   agent, ends it with its pane and resumes its conversation as a thread in
   a session of its own, with a review on its left. Adopt it between turns:
-  while a turn is under way it is refused.
+  while a turn, a background command or a subagent is under way it is
+  refused, since its pane's end would end them.
 - **A conversation that isn't running**, such as one you ran outside weaver
   before a restart: `a` anywhere else on the board lists your recent Claude
   Code conversations, and `enter` resumes one as a thread, in the directory
