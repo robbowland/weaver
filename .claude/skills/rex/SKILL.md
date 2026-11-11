@@ -136,7 +136,7 @@ Rex section with this.
   rewrites it); restore it and `rex config reload` after.
 - **Set `WEAVER_SELF_SETUP=0`** in the QA shell: with the QA build first on
   PATH it counts as installed, and its start points the user's Claude Code
-  and Codex hooks at the QA binary (restore from the `.bak.<time>` beside
+  hooks at the QA binary (restore from the `.bak.<time>` beside
   them if it happens).
 - **A QA session destroyed with threads in it leaves them lost**, and the
   next start's boot (home's board, in Rex's environment, not the QA shell's)

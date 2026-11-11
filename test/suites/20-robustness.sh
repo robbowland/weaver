@@ -91,8 +91,8 @@ jq '.proc_start = "Thu Jan  1 00:00:00 1970"' "$SD/${SK}_2.json" >"$AT/r.json" &
 ok "a pid now running something else: forgotten" "$(wvr ls | grep -c 'reused')" "0"
 kill "$LIVE_PID"
 
-# --- state of a session that no longer exists (a tmux one from before
-# weaver ran on Rex only, or one whose name was reused) is cleaned up
+# --- state of a session that no longer exists (one from before weaver
+# ran on Rex only, or one whose name was reused) is cleaned up
 jq -c '.ts -= 7200' "$SD/${SK}_0.json" >"$SD/weaver-gone-session_0.json"
 cp "$SD/${SK}_0.json" "$SD/weaver-busy-session_0.json"
 wvr gc >/dev/null

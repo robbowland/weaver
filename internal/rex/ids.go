@@ -20,8 +20,8 @@ import (
 //	n/<num>        the block or window (block:..., window:...) num names
 //	u/<id>         num, for the block or window id (its ':' as '_')
 //	cmd/<num>      the argv weaver started in block num, space-separated
-//	want/<num>     the place weaver gave window num (home 0, a thread its
-//	               number, a view 900 and on)
+//	want/<num>     the place weaver gave window num of home's (home 0, a
+//	               view 900 and on)
 //	view/<num>     the view window num shows
 //	split/<num>    the ratio weaver last gave the split beside block num
 //	               (SetWidth), for Moved to tell from one you moved
