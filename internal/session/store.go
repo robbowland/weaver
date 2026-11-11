@@ -41,7 +41,3 @@ func (e *Env) ThreadLearns(p mux.PaneID, sid string) {
 	}
 	store.UpdateThread(f, func(th *store.Thread) { th.SessionID = sid })
 }
-
-// bestEffort marks an error left unhandled on purpose: what failed (a
-// marker, a cache, a view started early) costs nothing that matters.
-func bestEffort(error) {}

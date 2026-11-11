@@ -38,10 +38,6 @@ const (
 	COff   = "\033[0m"
 )
 
-func sortStable[T any](s []T, less func(a, b T) bool) {
-	sort.SliceStable(s, func(i, j int) bool { return less(s[i], s[j]) })
-}
-
 // paint: a cell's brackets in dim, its mark in colour, each closed by off.
 func paint(cell, colour, dim, off string) string {
 	r := []rune(cell)

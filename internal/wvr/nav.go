@@ -373,7 +373,6 @@ func (e *Env) Next() {
 		class int
 		since int64
 		pane  mux.PaneID
-		tab   mux.WindowID
 		label string
 	}
 	// A helper's thread, by the session its events come from.
@@ -419,7 +418,7 @@ func (e *Env) Next() {
 		} else {
 			l += " · done"
 		}
-		cs = append(cs, c{class, r.Since, r.Pane, r.Window, l})
+		cs = append(cs, c{class, r.Since, r.Pane, l})
 	}
 	if len(cs) == 0 {
 		if cli.IsTTY(1) {

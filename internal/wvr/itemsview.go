@@ -231,7 +231,6 @@ type viewThread struct {
 	pane  mux.PaneID // its agent's
 	num   int
 	state agent.State
-	seen  bool
 	since int64
 	// What it asks of you, and why it is quiet, as the board says them
 	// (session.Need).
@@ -259,7 +258,7 @@ func (e *Env) itemThreads() []viewThread {
 		if err != nil {
 			continue
 		}
-		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, seen: r.Seen, since: r.Since, branch: th.Branch,
+		t := viewThread{pane: r.Pane, num: r.Tnum, state: r.State, since: r.Since, branch: th.Branch,
 			need: r.Need(now), exited: r.Exited, notReporting: r.NotReporting(now)}
 		if th.Item != nil {
 			t.ref = th.Item.Ref

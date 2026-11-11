@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,14 +59,6 @@ func (h *hk) actOn(e *session.Env) {
 	if h.Session != "" {
 		e.Session, e.SKey, e.RexID, e.RexHere = h.Session, h.SKey, h.RexID, h.RexHere
 	}
-}
-
-// sameRoot: is h's root still the agent's? A later hook may have moved it
-// on while this one waited.
-func sameRoot(h *hk) bool {
-	l, _ := files.FirstLine(h.sf)
-	m := regexp.MustCompile(`"root":"([^"]*)"`).FindStringSubmatch(l)
-	return m == nil || m[1] == h.Root
 }
 
 // wtMarker sets or clears a Worktrunk branch marker in dir.

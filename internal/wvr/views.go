@@ -28,10 +28,10 @@ import (
 const viewBase = 900
 
 type view struct {
-	name, label string
-	argv        []string
-	env         []string
-	dir         string
+	label string
+	argv  []string
+	env   []string
+	dir   string
 }
 
 // viewNames are the session's views, in order: $WEAVER_VIEWS (none, or
@@ -173,7 +173,7 @@ func (e *Env) authFile(name string) string { return e.StateDir + "/" + name + "-
 func (e *Env) viewOf(name string) (view, error) {
 	switch name {
 	case "github", "linear":
-		return view{name, strings.ToUpper(name), []string{e.Self, "_items", name}, nil, os.Getenv("HOME")}, nil
+		return view{strings.ToUpper(name), []string{e.Self, "_items", name}, nil, os.Getenv("HOME")}, nil
 	}
 	return view{}, fmt.Errorf("no view %q (github or linear)", name)
 }
@@ -212,7 +212,7 @@ func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 	if e.viewNeeds(name).state != viewReady {
 		// Not ready: its window shows what it needs, and becomes the view
 		// once it has it.
-		v, err = view{name, strings.ToUpper(name), []string{e.Self, "_viewsetup", name}, nil, os.Getenv("HOME")}, nil
+		v, err = view{strings.ToUpper(name), []string{e.Self, "_viewsetup", name}, nil, os.Getenv("HOME")}, nil
 	}
 	if err != nil {
 		return "", err
