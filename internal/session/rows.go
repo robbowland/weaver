@@ -277,6 +277,18 @@ func rollUp(rows []Row) {
 	}
 }
 
+// rolled: does r show its helper's wait (Via), not its own?
+func (r Row) rolled() bool { return r.Via != nil && (r.State != agent.StateNeedsYou || r.Exited) }
+
+// Waiter is the pane whose wait r shows (Shown): its helper's when that is
+// why it needs you, else its own. A jump to r goes there.
+func (r Row) Waiter() mux.PaneID {
+	if r.rolled() {
+		return r.Via.Pane
+	}
+	return r.Pane
+}
+
 // Helper: is r a thread's helper (rollUp)?
 func (r Row) Helper() bool { return r.Tnum == 0 && r.Thread > 0 }
 
@@ -286,7 +298,7 @@ func (r Row) Helper() bool { return r.Tnum == 0 && r.Thread > 0 }
 // helper waits on what and since when, though its own agent works, is done
 // or has exited.
 func (r Row) Shown() Row {
-	if r.Via == nil || r.State == agent.StateNeedsYou && !r.Exited {
+	if !r.rolled() {
 		return r
 	}
 	v := *r.Via

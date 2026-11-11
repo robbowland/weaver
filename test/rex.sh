@@ -259,11 +259,23 @@ helperj "$(hev PermissionRequest ',"tool_name":"Bash","tool_input":{"command":"g
 board() { REX_SESSION=$SID COLUMNS=160 wvr ls 2>/dev/null; }
 ok "boards: every thread's has the thread, needing you for its helper; the thread's own has both" \
 	"$(board | grep -c 'helper: ')|$(board | grep -c 'check the tests')|$(LS_SESSION=$T board | grep -c 'Greeting')|$(LS_SESSION=$T board | grep -c 'helper')" "1|0|1|1"
-REX_SESSION=$SID wvr next >/dev/null 2>&1
 focused() { view "$T" | jq -r '.active_window_id as $a | .windows[] | select(.window_id == $a) | .focused_block_id'; }
+agent_focus() { R api call session.focus_block "{\"session_id\":\"$T\",\"block_id\":\"$AGB\"}" >/dev/null; }
+# enter on the thread's row (the board's jump) goes where its wait is.
+agent_focus
+REX_SESSION=$SID wvr _goto "$AG" "" >/dev/null 2>&1
 waitfor '[ "$(focused)" = "$HB" ]' 50
-ok "alt+1: to the helper that needs you, in its window" "$(focused)" "$HB"
+k=$(focused)
+agent_focus
+REX_SESSION=$SID wvr next >/dev/null 2>&1
+waitfor '[ "$(focused)" = "$HB" ]' 50
+ok "enter on the thread, and alt+1: to the helper that needs you, in its window" "$k|$(focused)" "$HB|$HB"
 helperj "$(hev Stop ',"prompt_id":"h2","last_assistant_message":"tests pass"')"
+# A helper merely done is its thread's to look at, not alt+1's.
+agent_focus
+REX_SESSION=$SID wvr next >/dev/null 2>&1
+sleep 0.5
+ok "alt+1: past a helper that is done" "$(focused)" "$AGB"
 # Adopted: its agent ends with its window, its conversation resumes as a
 # thread in a session of its own.
 REX_SESSION=$SID wvr adopt "$HP" >"$AT/adopt.out" 2>&1

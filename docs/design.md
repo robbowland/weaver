@@ -682,7 +682,9 @@ that one (home's).
   sidebar, alt+j/k) leaves it new.
 - **alt+1** says where it landed in a message (`Say`): `[2/3] 02 name ·
   needs you · what it waits on`; a helper's, `02 › <its window's label>`.
-  It goes to every agent that needs you, helpers included.
+  It goes to every agent that needs you, helpers included, and to every
+  agent done that you have not looked at but a helper (its thread's to
+  look at).
 - **Helpers:** a helper is an agent with no thread whose pane is in a
   thread's session, as the session's snapshot lists it (`Row.Session`, from
   the pane, never a copy a hook wrote). Where rows are made (`AgentRows`,
@@ -693,6 +695,8 @@ that one (home's).
   works, is done or has exited. The boards, the views' thread rows and the
   counts (`wvr status`) read `Shown` and leave helpers out.
 - **Boards:** home's and alt+y's list threads as they show (`onBoard`).
+  A jump to a thread (enter, a number, `_goto`) whose wait is its helper's
+  goes to the helper's window (`Row.Waiter`).
   alt+Y (`wvr go
   local`) in a thread's session opens the same board over it scoped to
   that session (`_peek FILE PANE SESSION`, `LS_SESSION` for its reloads),

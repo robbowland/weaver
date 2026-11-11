@@ -36,6 +36,9 @@ func TestRollUp(t *testing.T) {
 	if s := rows[5].Shown(); s.State != agent.StateWorking || rows[5].Via != nil {
 		t.Errorf("thread 3, its helper done: %+v", s)
 	}
+	if rows[0].Waiter() != "3" || rows[3].Waiter() != "5" || rows[5].Waiter() != "6" {
+		t.Errorf("waiters: %s %s %s, want the waiting helpers', else the thread's own", rows[0].Waiter(), rows[3].Waiter(), rows[5].Waiter())
+	}
 	if rows[0].State != agent.StateDone {
 		t.Errorf("the thread's own row changed: %+v", rows[0])
 	}

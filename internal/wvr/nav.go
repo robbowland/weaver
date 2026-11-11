@@ -27,7 +27,8 @@ import (
 func (e *Env) focus(p mux.PaneID) { e.Mux().Focus(p) }
 
 // Goto is `wvr _goto PANE TAB`: jump to an agent from the home board
-// (which stays) and count it as seen; with no PANE, to the tab.
+// (which stays), to its helper when its wait is the helper's
+// (session.Row.Waiter), and count it as seen; with no PANE, to the tab.
 func (e *Env) Goto(pane, tab string) {
 	p, ok := mux.ParsePane(pane)
 	if !ok {
@@ -35,6 +36,9 @@ func (e *Env) Goto(pane, tab string) {
 			e.Mux().Show(w)
 		}
 		return
+	}
+	if r, _, ok := e.RowOf(p); ok {
+		p = r.Waiter()
 	}
 	e.focus(p)
 	e.MarkSeen(p)
@@ -381,6 +385,10 @@ func (e *Env) Next() {
 		switch r.Need(now) {
 		case session.NeedYou:
 		case session.NeedLook:
+			// A helper merely done is its thread's to look at.
+			if r.Helper() {
+				continue
+			}
 			class = 1
 		case session.NeedWait, session.NeedNothing:
 			continue

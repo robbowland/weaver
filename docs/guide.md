@@ -254,8 +254,9 @@ leaves helpers out; a thread whose helper (an agent its agent started in a
 window of the thread's session) waits on a permission or a question needs
 you, and its row says which helper. `alt+Y` (`alt+shift+y`) opens the
 thread's own board instead: its agent and its helpers, each helper by its
-window's name, with the same keys; outside a thread it is `alt+y`. `alt+1`
-goes to a waiting helper's window itself. Choosing
+window's name, with the same keys; outside a thread it is `alt+y`. `enter`
+on a thread whose helper waits, and `alt+1`, go to that helper's window
+itself; `alt+1` passes a helper that is merely done. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
 home's session itself, use `alt+j` and `alt+k`, which step through Rex's

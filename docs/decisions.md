@@ -533,6 +533,9 @@ can supersede an earlier one, and says so.
   its agent's first hook, hiding home's agents as helpers and its own
   agent from its board. A resumed state takes its pane's life as the pane
   starts.
+- 2026-11-11: A jump to a thread whose wait is its helper's (enter, a
+  number) goes to the helper's window, as alt+1 does, and alt+1 stops at
+  a helper only when it needs you, never when it is merely done (Rob).
 
 ## Work items and views
 
