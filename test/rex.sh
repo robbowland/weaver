@@ -37,11 +37,13 @@ exec bash --noprofile --norc -i
 EOF
 chmod +x "$AT/bin/claude"
 # A fake tuicr: notes how the review panel ran it, and what its e would
-# edit with, then ends, as q does.
+# edit with, then ends, as q does; while tuicr.hold is there, stays open
+# as tuicr does until you quit it.
 cat >"$AT/bin/tuicr" <<EOF
 #!/bin/bash
 printf '%s\n' "\$*" >>"$AT/tuicr.runs"
 printf '%s\n' "\$EDITOR" >"$AT/tuicr.editor"
+[ -e "$AT/tuicr.hold" ] && exec sleep 60
 sleep 1
 EOF
 chmod +x "$AT/bin/tuicr"
@@ -162,6 +164,22 @@ git -C "$AT/repo" add hello.txt && git -C "$AT/repo" -c user.email=t@e -c user.n
 waitfor 'grep -q -- "^-r " "$AT/tuicr.runs" 2>/dev/null' 60
 ok "...a commit: tuicr again, on its commits since the fork point, with nvim for its e" \
 	"$(tail -n 1 "$AT/tuicr.runs" 2>/dev/null)|$(cat "$AT/tuicr.editor" 2>/dev/null)" "-r $FORK..HEAD -w --theme micrographics --no-update-check|nvim"
+# tuicr open: a commit on top waits for its q; a rewrite of what it was
+# launched on (an amend) has it run again on the range as it is now.
+runs() { wc -l <"$AT/tuicr.runs" | tr -d ' '; }
+touch "$AT/tuicr.hold"
+n=$(runs)
+waitfor '[ "$(runs)" -gt "$n" ]' 60
+n=$(runs)
+git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --allow-empty -m more
+sleep 3
+k=$(( $(runs) - n ))
+# (the commit tuicr was launched on rewritten: back to it, then amended)
+git -C "$AT/repo" reset -q --hard HEAD~1
+git -C "$AT/repo" -c user.email=t@e -c user.name=t commit -q --amend --allow-empty -m rewritten
+waitfor '[ "$(runs)" -gt "$((n + k))" ]' 60
+ok "...open: a commit on top waits for q; a rewrite runs it again" "$k|$(( $(runs) - n ))" "0|1"
+rm -f "$AT/tuicr.hold"
 # alt+v on the agent with its panel closed: a panel again, on its left.
 R api call block.close "{\"session_id\":\"$T\",\"block_id\":\"$PB\"}" >/dev/null
 waitfor '[ "$(windows "$T")" = "01 say hello · repo/main/1" ]' 50

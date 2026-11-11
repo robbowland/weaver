@@ -464,7 +464,10 @@ does one whose commits undo each other), and the review starts as soon as
 there is an edit. A thread's branch is compared from where it left the
 branch the thread started from (a pull request's: what it merges into),
 else the default branch of the `upstream` or `origin` remote, else `main`
-or `master`; a rebase or a merge of that branch moves where it left it.
+or `master`; a rebase or a merge of that branch moves where it left it,
+and the open review starts again on its own when that, or a rewrite of
+its commits (an amend, a squash), would leave it showing the wrong diff.
+New commits on top wait for `q`, so a comment you are typing stays.
 The remote's branches are as weaver last fetched them: the panel fetches
 nothing. weaver brings tuicr's Micrographics theme, and a tuicr config
 that follows edits as they are made when you have none

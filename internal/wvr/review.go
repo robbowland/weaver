@@ -246,12 +246,22 @@ func (e *Env) Panel(args []string) error {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		was := spanOf(dir, e.reviewBase(a))
 		c := exec.Command(tuicr, args...)
 		c.Dir, c.Env, c.Stdin, c.Stdout, c.Stderr = dir, env, os.Stdin, os.Stdout, os.Stderr
 		signal.Notify(sig, os.Interrupt, syscall.SIGQUIT)
 		start := time.Now()
-		err := c.Run()
+		ended, err := untilRewritten(c, func() bool { return was.rewritten(dir, spanOf(dir, e.reviewBase(a))) })
 		signal.Stop(sig)
+		if ended {
+			// Out of tuicr's screen, the terminal as it was, and at once
+			// on the range as it is now.
+			fmt.Print("\033[?1049l\033[?25h")
+			stty := exec.Command("stty", "sane")
+			stty.Stdin = os.Stdin
+			_ = stty.Run()
+			continue
+		}
 		// One that ends at once (failing, or a q at once) waits out a
 		// second, or two when it failed: never a spin.
 		wait := time.Second
@@ -259,6 +269,54 @@ func (e *Env) Panel(args []string) error {
 			wait = 2 * time.Second
 		}
 		time.Sleep(wait - time.Since(start))
+	}
+}
+
+// span is a review's range as tuicr was launched on it: HEAD and the fork
+// point (tuicr takes its range once, as it starts).
+type span struct{ head, fork string }
+
+func spanOf(dir, base string) span {
+	h, _ := git.Line(dir, "rev-parse", "--verify", "--quiet", "HEAD")
+	f, _ := git.ForkPoint(dir, base)
+	return span{h, f}
+}
+
+// rewritten: has the branch moved from s to now so that a review launched
+// on s shows it wrongly? Its fork point moved (a rebase onto a newer base,
+// the base merged in, its base changed), or HEAD is no longer s's HEAD nor
+// after it (an amend, a squash, a reset). New commits on top are not: q
+// picks them up, and a review ended for them would drop a comment half
+// typed.
+func (s span) rewritten(dir string, now span) bool {
+	if now.fork != s.fork {
+		return true
+	}
+	return now.head != s.head && !git.OK(dir, "merge-base", "--is-ancestor", s.head, now.head)
+}
+
+// untilRewritten runs c until it ends, looking every second whether its
+// range was rewritten (moved), and ending it when it was: whether it was
+// ended for that, and how it ended.
+func untilRewritten(c *exec.Cmd, moved func() bool) (bool, error) {
+	if err := c.Start(); err != nil {
+		return false, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- c.Wait() }()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	ended := false
+	for {
+		select {
+		case err := <-done:
+			return ended, err
+		case <-tick.C:
+			if moved() {
+				ended = true
+				_ = c.Process.Signal(syscall.SIGTERM)
+			}
+		}
 	}
 }
 

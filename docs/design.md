@@ -104,7 +104,13 @@ A thread's left pane is its review: `wvr _panel AGENT`, in the worktree,
 records itself as the agent's (`.panel`: its pane and pid), then runs tuicr
 (`$WEAVER_TUICR`, else `tuicr`) there, and again each time tuicr ends
 (`q`, with weaver's `q_quits`, or `:q`), so it reads the branch afresh:
-tuicr takes its range once, as it starts. Each round it picks what to show
+tuicr takes its range once, as it starts. While it runs the loop looks
+every second whether that range was rewritten (`span.rewritten`): the
+fork point moved (a rebase onto a newer base, the base merged in, the
+thread's base changed), or HEAD is neither what tuicr was launched on nor
+after it (an amend, a squash, a reset); then it ends tuicr and runs it
+again on the range as it is now. New commits on top wait for `q`: an end
+for them would drop a comment half typed. Each round it picks what to show
 (`reviewArgs`):
 
 - the branch's commits since its fork point, with what is not committed:
