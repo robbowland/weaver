@@ -128,7 +128,8 @@ func rexCheck() check {
 
 // broughtCheck is the files weaver brings to other programs (tuicr's
 // settings and theme, the weaver skill): there as weaver writes them, or
-// yours, left alone.
+// yours, left alone; tuicr's settings of yours said short of what the
+// review panel leans on (panelSettings).
 func broughtCheck() check {
 	c := check{name: "theme and skill", weight: optional, ok: true, found: "as weaver writes them"}
 	for _, f := range setup.BroughtFiles() {
@@ -139,10 +140,33 @@ func broughtCheck() check {
 			return c
 		case setup.Yours:
 			c.found = "yours: " + tildify(f.Path)
+			if filepath.Base(f.Path) != "config.toml" {
+				break
+			}
+			if lacks := panelSettings(f.Path); len(lacks) > 0 {
+				c.ok, c.found = false, "yours, without "+strings.Join(lacks, " and ")+": "+tildify(f.Path)
+				c.remedy = byHand{"add q_quits = true (q quits) and diff_watch_interval_ms = 500 (edits show as made) to " + tildify(f.Path)}
+				return c
+			}
 		case setup.Current:
 		}
 	}
 	return c
+}
+
+// panelSettings are the settings of tuicr's the review panel leans on that
+// tuicr's config at f does not set: q_quits (q ends tuicr, for the panel
+// to run it again on the branch as it is) and diff_watch_interval_ms
+// (edits show as an agent makes them).
+func panelSettings(f string) []string {
+	b, _ := os.ReadFile(f)
+	var lacks []string
+	for _, k := range []string{"q_quits", "diff_watch_interval_ms"} {
+		if !regexp.MustCompile(`(?m)^\s*` + k + `\s*=`).Match(b) {
+			lacks = append(lacks, k)
+		}
+	}
+	return lacks
 }
 
 // checks are what weaver works with, each checked.

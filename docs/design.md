@@ -875,7 +875,9 @@ and differs, each said on stderr; one without the mark is the user's, left
 alone (`Brought.Fate`). Nothing is set for tuicr to find them
 (`XDG_CONFIG_HOME`, `VIMINIT`): the nvim its `e` opens would inherit it.
 `wvr setup` says each file's fate and writes it; `wvr doctor` checks them
-(`theme and skill`) and tuicr itself (needed, 0.28 or newer). The skill is
+(`theme and skill`: a tuicr config of the user's is named short of
+`q_quits` or `diff_watch_interval_ms` when it lacks them, which the panel
+leans on) and tuicr itself (needed, 0.28 or newer). The skill is
 weaver's workflow as policy, not machinery: a thread's session on one
 worktree, helpers as agents in windows of it (`rex window new`, the window
 id kept) that report back with Claude Code's cross-session `SendMessage`,
