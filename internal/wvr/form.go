@@ -721,21 +721,7 @@ func (e *Env) New(args []string) error {
 		}
 		f.Close()
 		defer os.Remove(f.Name())
-		ed := os.Getenv("VISUAL")
-		if ed == "" {
-			ed = os.Getenv("EDITOR")
-		}
-		if ed == "" {
-			ed = "vi"
-		}
-		w := strings.Fields(ed)
-		c := exec.Command(w[0], append(w[1:], f.Name())...)
-		if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-			c.Stdin, c.Stdout = tty, tty
-			defer tty.Close()
-		}
-		c.Stderr = os.Stderr
-		c.Run()
+		editFile(f.Name())
 		b, _ := files.ReadTrim(f.Name())
 		if strings.TrimSpace(b) == "" {
 			return cli.ErrCancelled
@@ -1104,22 +1090,7 @@ func (e *Env) Form(op, sf, q string) {
 		if err != nil || first != q {
 			os.WriteFile(sf+".task", []byte(q+"\n"), 0o644)
 		}
-		ed := os.Getenv("VISUAL")
-		if ed == "" {
-			ed = os.Getenv("EDITOR")
-		}
-		if ed == "" {
-			ed = "vi"
-		}
-		// $EDITOR may carry arguments ("code -w").
-		w := strings.Fields(ed)
-		c := exec.Command(w[0], append(w[1:], sf+".task")...)
-		if t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-			c.Stdin, c.Stdout = t, t
-			defer t.Close()
-		}
-		c.Stderr = os.Stderr
-		c.Run()
+		editFile(sf + ".task")
 	case "query":
 		first := q
 		if l, err := files.FirstLine(sf + ".task"); err == nil {
@@ -1351,4 +1322,17 @@ func (e *Env) recentRepos(first string) string {
 		b.WriteString(d + "\t" + filepath.Base(d) + "  " + CGrey + formPath(d) + COff + "\n")
 	}
 	return b.String()
+}
+
+// editFile edits file f in your editor ($VISUAL, else $EDITOR, which may
+// carry arguments, "code -w"; else vi) at the terminal, till it exits.
+func editFile(f string) {
+	w := strings.Fields(cmp.Or(os.Getenv("VISUAL"), os.Getenv("EDITOR"), "vi"))
+	c := exec.Command(w[0], append(w[1:], f)...)
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		c.Stdin, c.Stdout = tty, tty
+		defer tty.Close()
+	}
+	c.Stderr = os.Stderr
+	bestEffort(c.Run())
 }
