@@ -371,6 +371,23 @@ else
 		sed 's/^/  restart: /' "$AT/restart.out"
 fi
 
+# --- a thread's own window closed by hand while a helper runs: the thread
+# is closed as the board's x closes it, its session ending, helpers too
+(cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'second thread' >/dev/null 2>&1)
+waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
+T2=$(threads | grep -vx "$T")
+B2=$(block_at "$T2" 1 1)
+waitfor '[ -f "$AT/pid.${B2#block:}" ]' 100
+printf '%s' "$(ev SessionStart ',"source":"startup"')" | CLAUDE_PID=$(cat "$AT/pid.${B2#block:}") REX_SESSION=$T2 REX_BLOCK=$B2 wvr hook >/dev/null
+R window new -s "$T2" helper --focus=false -c "$AT/repo" --shell=none -- sleep 600 >/dev/null
+A2=$(num "$B2")
+R window close -s "$T2" "$(view "$T2" | jq -r '.windows[0].window_id')"
+waitfor '! kill -0 "$(cat "$AT/pid.${B2#block:}")" 2>/dev/null' 50
+REX_SESSION=$SID wvr ls >/dev/null 2>&1
+waitfor '[ -z "$(label "$T2")" ]' 50
+ok "a thread's window closed by hand: its session ends, helper and all, the thread gone, not lost" \
+	"$(label "$T2")|$(threads)|$([ -f "$SD/rex-${S}_$A2.thread" ] && echo kept)|$(held | wc -l | tr -d ' ')" "|$T||0"
+
 # --- quit: the sessions end, the thread kept
 T=$(threads)
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1

@@ -550,6 +550,11 @@ can supersede an earlier one, and says so.
 
 ## Work items and views
 
+- 2026-11-11: A thread whose own window is closed by hand while its
+  helpers run is closed: its session ends with them (Rob, review V9).
+  Before, the thread was forgotten and its session lived on with no
+  thread; kept as lost instead, it would be resumed into a second session
+  beside the first.
 - 2026-10-16: Threads start from a pull request or an issue, seen in the
   best tools for them rather than a picker of weaver's own: gh-dash for
   GitHub (12.6k stars, sections as tabs, custom keys with the row's

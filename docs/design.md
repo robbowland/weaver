@@ -700,6 +700,10 @@ that one (home's).
   It goes to every agent that needs you, helpers included, and to every
   agent done that you have not looked at but a helper (its thread's to
   look at).
+- **A thread's window closed by hand:** its agent gone while its session
+  runs on (its helpers' windows) is the thread closed, as `x` closes it:
+  as the agent is retired its session ends, helpers and all, and the
+  thread is forgotten, not kept as lost.
 - **Helpers:** a helper is an agent with no thread whose pane is in a
   thread's session, as the session's snapshot lists it (`Row.Session`, from
   the pane, never a copy a hook wrote). Where rows are made (`AgentRows`,

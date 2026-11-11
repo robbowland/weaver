@@ -140,9 +140,11 @@ func (l *lives) lostCheck(f string) (lost, known bool) {
 }
 
 // retire: the agent of state file f (pid) is gone: its thread lost with
-// its session is kept, anything else forgotten. When whether its session
-// went cannot be told (Rex not answering), nothing yet: a later look
-// decides.
+// its session is kept, anything else forgotten. A thread's agent gone
+// while its session runs on (its window closed by hand, its helpers'
+// running) is the thread closed: its session ends with it, as close ends
+// it. When whether its session went cannot be told (Rex not answering),
+// nothing yet: a later look decides.
 func (l *lives) retire(f, pid string) {
 	lost, known := l.lostCheck(f)
 	switch {
@@ -150,6 +152,9 @@ func (l *lives) retire(f, pid string) {
 		return
 	case lost && l.e.Lose(f, pid):
 		return
+	}
+	if a, ok := l.onRex(KeyOfFile(f)); ok && a.running && files.Exists(strings.TrimSuffix(f, ".json")+".thread") {
+		a.s.CloseSession(PaneOfFile(f))
 	}
 	l.e.Forget(f, pid)
 }
