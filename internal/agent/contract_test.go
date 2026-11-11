@@ -8,31 +8,15 @@ import (
 	"testing"
 )
 
-// The contracts between weaver's halves, which no single test sees whole:
-// the states an agent can be in and their cells, as the Go half
-// (State.Cell), Neovim (STATES in init.lua, GLYPH in status.lua) and
-// docs/design.md have them. A copied list drifting from the first fails here.
+// The states an agent can be in, as the Go half has them (States) and
+// docs/design.md's state file table says them. A list drifting from the
+// other fails here.
 func TestStateContract(t *testing.T) {
-	read := func(p string) string {
-		b, err := os.ReadFile("../../" + p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(b)
+	b, err := os.ReadFile("../../docs/design.md")
+	if err != nil {
+		t.Fatal(err)
 	}
-	key := regexp.MustCompile(`\[?'?([a-z-]+)'?\]?\s*=`)
-
-	m := regexp.MustCompile(`(?m)^local STATES = \{ (.*) \}$`).FindStringSubmatch(read("nvim/lua/weaver/init.lua"))
-	if m == nil {
-		t.Fatal("no STATES in nvim/lua/weaver/init.lua")
-	}
-	var lua []string
-	for _, k := range key.FindAllStringSubmatch(m[1], -1) {
-		lua = append(lua, k[1])
-	}
-	sort.Strings(lua)
-
-	row := regexp.MustCompile("(?m)^\\| `state` \\| string \\|(.*)$").FindStringSubmatch(read("docs/design.md"))
+	row := regexp.MustCompile("(?m)^\\| `state` \\| string \\|(.*)$").FindStringSubmatch(string(b))
 	if row == nil {
 		t.Fatal("no state row in docs/design.md's state file table")
 	}
@@ -41,9 +25,6 @@ func TestStateContract(t *testing.T) {
 		doc = append(doc, k[1])
 	}
 	sort.Strings(doc)
-	if strings.Join(lua, " ") != strings.Join(doc, " ") {
-		t.Errorf("Neovim's states %v are not the design doc's %v", lua, doc)
-	}
 	var goStates []string
 	for _, s := range States {
 		goStates = append(goStates, string(s))
@@ -51,23 +32,6 @@ func TestStateContract(t *testing.T) {
 	sort.Strings(goStates)
 	if strings.Join(goStates, " ") != strings.Join(doc, " ") {
 		t.Errorf("the Go half's states %v are not the design doc's %v", goStates, doc)
-	}
-
-	glyph := map[string]string{}
-	status := read("nvim/lua/weaver/status.lua")
-	block := regexp.MustCompile(`(?s)local GLYPH = \{\n(.*?)\n\}`).FindStringSubmatch(status)
-	if block == nil {
-		t.Fatal("no GLYPH in nvim/lua/weaver/status.lua")
-	}
-	for _, l := range strings.Split(block[1], "\n") {
-		if g := regexp.MustCompile(`^\s*\[?'?([a-z-]+)'?\]?\s*=\s*\{\s*'(.)'`).FindStringSubmatch(l); g != nil {
-			glyph[g[1]] = g[2]
-		}
-	}
-	for _, s := range lua {
-		if c := State(s).Cell(); c[1:2] != glyph[s] {
-			t.Errorf("state %s: the Go half's cell %q, Neovim's mark %q", s, c, glyph[s])
-		}
 	}
 	if StateStarting.Cell() != CellWorking {
 		t.Errorf("a starting thread shows as %q, not working's %q", StateStarting.Cell(), CellWorking)

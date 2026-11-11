@@ -465,104 +465,6 @@ default branch of the `upstream` or `origin` remote, else `main` or
 that follows edits as they are made when you have none
 ([Setup](#what-wvr-sets-up)).
 
-### weaver's Neovim plugin
-
-weaver no longer opens a Neovim beside the agent; its plugin still loads in
-a Neovim of yours that loads it ([In your own Neovim](#in-your-own-neovim)).
-
-#### Reviewing
-
-Reviews open in one
-[diffview-plus](https://github.com/dlyongemallo/diffview-plus.nvim) view. A
-scope's key opens the view; pressing it again from elsewhere brings the view
-back, refreshed; pressing it inside the view closes it; and another scope's
-key replaces it. The view refreshes itself as the agent edits. A review is of
-the worktree the agent, or one of its subagents, last edited, whatever
-Neovim's directory; inside the view, a key works on the view's worktree.
-`:AgentReviewed` marks the worktree you are reviewing, from any tab: the open
-view's, else the one reviewed in place, else the agent's.
-
-| Key | Command | Shows |
-| --- | --- | --- |
-| `<leader>at` | `:AgentReview turn` | The agent's last turn (the turn so far, while it works) |
-| `<leader>au` | `:AgentReview uncommitted` | The worktree against the index |
-| `<leader>ab` | `:AgentReview branch` | The whole branch, committed or not |
-| `<leader>ar` | `:AgentReview reviewed` | Everything since you last marked it reviewed |
-| `<leader>am` | `:AgentReview mine` | Only the files this agent changed |
-| `<leader>aR` | `:AgentReviewed` | Mark the worktree reviewed as it is now |
-| `<leader>aT` | `:AgentTurns` | Pick a turn and review its own diff |
-| `<leader>aa` | `:AgentDiffs` | Pick an agent, the main thread or a subagent, and a worktree it changed: its own changes there |
-| `<leader>ac` | `:AgentChanges turn` | The last turn's hunks in quickfix (any scope works) |
-| `<leader>al` | `:AgentLog` | The agent's activity, turn by turn |
-| `<leader>aw` | `:AgentWhy` | Which turn and prompt last changed this line (`!` opens that turn) |
-| `<leader>an` | `:AgentNote` | Note this line, or the selected lines, for the agent |
-| `<leader>as` | `:AgentSend` | Send your notes to the agent (`!`: even while it works) |
-
-A turn's diff mixes the main thread with every subagent working in that
-worktree, and misses subagents in other worktrees. `<leader>aa` lists each
-agent's own changes instead: the main thread's, and each subagent's under
-the task it was given, in every worktree it changed, with what it added and
-removed, the agents still at work first. Picking one reviews just that
-agent's files there, since just before its first change: your edits, and
-other agents' files in the same worktree, stay out. The view compares two
-snapshots rather than opening the worktree's files, so no language server
-starts for another worktree, and it follows the agent as it works. Two
-agents editing one file share it: the file shows as the agent last left it.
-An agent's Bash changes show when Claude Code says what a command changed,
-which it does in auto mode, or with `"bashEditDiffEnabled": true` in its
-settings; without that, only its edits do.
-
-To review in your own buffers instead, `<leader>ai` turns on the branch in
-place: every buffer of the worktree compares against the branch's root, so
-gitsigns' signs and your hunk keys (LazyVim's `]h`/`[h`, `<leader>ghp`) show
-everything the branch changed, committed or not, and the quickfix list holds
-every change, file by file, for `]q`/`[q`. `<leader>aI` steps the same
-changes commit by commit, oldest first (a merge's are the other branch's,
-so it has none), then what is not committed: each commit's changes where
-they are in the file now, marked `(changed since)` where a later change
-rewrote them. The signs stay the branch's either way, and the list follows
-your edits, the agent's and its commits, a rebase included. The same key
-again ends it. Nothing opens or moves on its own, a quickfix list of yours
-stays current, and it says once what it holds.
-
-| Key | Command | Does |
-| --- | --- | --- |
-| `<leader>ai` | `:AgentInPlace` | The branch in your own buffers, file by file (again: off) |
-| `<leader>aI` | `:AgentInPlace commits` | The same, commit by commit (again: off) |
-
-As you review, note what the agent should change. `<leader>an` on a line or a
-selection, in a review or in any file of its Neovim, asks for the note and
-marks the line. `<leader>as` sends every note as one message, each with its
-file, lines and the code it is on, to the agent's prompt as if you had typed
-it (`wvr send`). It sends only when the agent is waiting for your next
-prompt; while the agent works or waits on a dialog, the notes stay for later.
-`:AgentNotes` lists them in quickfix, and `:AgentNotesClear` drops them.
-
-In a review, `gf` opens the file at the same line in the tab you came from.
-Untracked files the agent created are listed like any other, without touching
-your index. In diffview-plus's file panel, `w` marks a file reviewed and `H`
-hides the reviewed ones.
-
-`:checkhealth weaver` says whether diffview-plus, the snacks picker,
-gitsigns and the agent binding are in place.
-
-#### In your own Neovim
-
-wvr keeps a copy of its Neovim plugin at `~/.local/share/weaver/nvim`. To
-use its reviews or statusline in your Neovim, add it to your config; with
-lazy.nvim:
-
-```lua
-{ dir = (vim.env.XDG_DATA_HOME or vim.env.HOME .. '/.local/share') .. '/weaver/nvim', name = 'weaver', lazy = false }
-```
-
-Then:
-
-- `require('weaver.diffview').show({ key = ..., label = ..., root = ..., compare = { kind = 'branch', base = 'origin/main' } })`
-  opens the same one-view review (see `nvim/lua/weaver/diffview.lua`);
-- `require('weaver.status').statusline()` is the agent's state for a
-  statusline, empty where the bar already shows it.
-
 ## Mouse
 
 Every key has a place to click, as in btop or lazygit, and every click has a
@@ -600,10 +502,10 @@ Dragging in a pane selects and copies, as Rex does.
   says it is weaver's in its first lines, and weaver keeps it up to date
   while that line stays; a file of yours, or one whose line you removed, is
   left alone.
-- **Review plugin.** It fetches
-  [diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim),
-  which reviews are built on, for Neovims whose config has no diffview of
-  their own.
+- **Old copies.** The first time, it removes what an older weaver kept
+  for its Neovim plugin: its copy at `~/.local/share/weaver/nvim` and the
+  plugins it fetched, `~/.local/share/weaver/plugins`. A Neovim config of
+  yours that loaded the plugin from there no longer finds it.
 
 It prints one line whenever it changes a file. `wvr setup --dry-run` shows
 what it would change, and `WEAVER_SELF_SETUP=0` turns this off.
@@ -637,8 +539,7 @@ Homebrew's, and Homebrew's again once you remove it.
 
 ### Files
 
-wvr unpacks the files it carries under `~/.local/share/weaver/runtime`, and
-keeps a copy of its Neovim plugin at `~/.local/share/weaver/nvim`. Its state,
+wvr unpacks the files it carries under `~/.local/share/weaver/runtime`. Its state,
 including agents' states, lost threads and activity logs, lives under
 `~/.local/state/weaver`.
 
@@ -670,9 +571,9 @@ Environment variables change weaver's defaults.
 
 ## Development
 
-The engine is Go (`cmd/wvr`, `internal/`) and the Neovim side is Lua
-(`nvim/`). They meet at the contracts in [design.md](design.md), and
-[decisions.md](decisions.md) says why things are as they are.
+weaver is Go (`cmd/wvr`, `internal/`). Its contracts are in
+[design.md](design.md), and [decisions.md](decisions.md) says why things
+are as they are.
 
 `./install.sh` builds a checkout into `~/.local/bin/wvr`, ahead of Homebrew's
 on PATH. It needs Go, is safe to rerun, and `--dry-run` shows what it would
@@ -682,11 +583,8 @@ do. Remove `~/.local/bin/wvr` to go back to Homebrew's build.
 nothing of yours touched. Besides weaver's own dependencies, they need jq,
 python3 and Rex:
 
-- `go vet` and `go test`, including the contracts between the Go half, its
-  Neovim side and the design doc (the states and their cells);
-- `test/nvim/run.sh`: the Neovim specs, headless. Set `WEAVER_TEST_PLUGINS`
-  to a directory holding `diffview-plus.nvim` if lazy.nvim's plugin directory
-  doesn't have it;
+- `go vet` and `go test`, including the contract between the Go half and
+  the design doc (the states);
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
   state machine and its robustness, `alt+1`, the counts, subagents,
   per-turn snapshots, other agents' events, the installer and the board's

@@ -69,13 +69,8 @@ install_files() {
 		say "kept $BIN/weaver, the old name, as this build: remove it once its sessions have restarted"
 	fi
 	mv -f "$BIN/.wvr.new" "$BIN/wvr"
-	# Its files unpacked now (its Neovim plugin kept at $DEST/nvim for Neovim
-	# configs), not when it first needs them.
-	"$BIN/wvr" _runtime || warn "could not unpack weaver's files under $DEST"
-	# The binary carries the Neovim plugin and the configs (it unpacks them
-	# under $DEST/runtime). An older install's copies beside it
-	# stay while what it started may still use them (an nvim loaded its plugin
-	# from there).
+	# The binary carries its configs, and unpacks them under $DEST/runtime
+	# when it first needs them.
 	say "installed $BIN/wvr"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
@@ -85,8 +80,7 @@ install_files() {
 
 # Before weaver was one binary, install.sh copied its script, itself and
 # config/ into $DEST and linked the script into $BIN. The binary carries
-# them now ($DEST/nvim stays: the binary keeps it, for Neovim configs).
-# Remove those copies, but only ones that look like what it wrote.
+# them now. Remove those copies, but only ones that look like what it wrote.
 remove_old_copies() {
 	local f gone=()
 	for f in "$DEST/weaver" "$DEST/install.sh"; do

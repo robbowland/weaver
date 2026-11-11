@@ -5,14 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 
 	"github.com/robbowland/weaver/internal/setup"
 )
 
 // weaver sets itself up as it starts (`wvr`), so nothing needs doing by
 // hand after an install or upgrade: the agents' hooks run this binary, and
-// the Neovim plugins its review needs are there.
+// tuicr has its theme.
 
 // installed: is this binary the wvr on PATH (not a build run from a
 // checkout, whose path the hooks must not take)?
@@ -29,8 +28,7 @@ func (e *Env) installed() bool {
 // SelfSetup is what `wvr` does as it starts, when it is the installed one
 // and $WEAVER_SELF_SETUP is not 0: the hooks brought up to date (a line on
 // stderr when they changed, with the backup), the files weaver brings to
-// other programs written where they are to be (a line for each), and the
-// plugins fetched in the background.
+// other programs written where they are to be (a line for each).
 func (e *Env) SelfSetup() {
 	if os.Getenv("WEAVER_SELF_SETUP") == "0" || !e.installed() {
 		return
@@ -62,10 +60,5 @@ func (e *Env) SelfSetup() {
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%swvr: %v%s\n", CGrey, err, COff)
-	}
-	if !setup.PluginsCurrent() {
-		c := exec.Command(e.Self, "_plugins")
-		c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		c.Start()
 	}
 }

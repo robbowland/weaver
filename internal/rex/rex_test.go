@@ -120,7 +120,11 @@ func TestSession(t *testing.T) {
 		t.Errorf("windows: %q, want %q", order, want)
 	}
 
-	if err := s.Type(p, "hello rex"); err != nil {
+	b, err := s.block(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run("send", "-s", s.ID, "-b", b, "hello rex"); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; !strings.Contains(string(s.Screen(p)), "hello rex"); i++ {

@@ -74,8 +74,6 @@ const Usage = `usage: wvr [command]
                                start a thread's agent again where it is (after an update),
                                resuming its conversation; --all, every thread's; one
                                mid-turn is left unless --force
-  send [--force] PANE < text   the text to agent PANE's prompt (its nvim's :AgentSend), when
-                               it waits for you to say more; --force, even while it works
   quit [--yes]                 quit this session (outside it, "weaver") with
                                every agent and review in it, after asking; its threads are
                                kept and come back as the weaver session starts again

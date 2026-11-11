@@ -1,8 +1,9 @@
 # weaver design: contracts
 
-The engine (the `wvr` binary, `cmd/wvr` and `internal/`) and the
-Neovim side (`nvim/`) meet at the contracts below. Change one only with both
-sides agreeing, and record why in [decisions.md](decisions.md).
+The contracts of the engine (the `wvr` binary, `cmd/wvr` and `internal/`):
+its files and their formats, and what it asks of Rex, tuicr and the agents.
+Change one only with what reads it, and record why in
+[decisions.md](decisions.md).
 
 ## Files
 
@@ -672,11 +673,11 @@ to start one, with nothing to select.
 
 The group is what the agent asks of you (`session.Need`: needs you, done and
 unseen, working or starting, nothing), from its row (`AgentRows`: its
-hooks' state refined by Claude Code's own session file). The status bar's
-counts, ctrl+q's question (`@weaver-busy`: needs you or working), alt+1,
-the card, close's card, quit's card, `wvr restart`'s mid-turn guard and
-`wvr send` all take it from there, so none says otherwise. So the headings'
-counts are the status bar's, and the order is the one alt+1
+hooks' state refined by Claude Code's own session file). The border's
+counts, ctrl+q's question (needs you or working: mid-turn), alt+1,
+the card, close's card, quit's card and `wvr restart`'s mid-turn guard all
+take it from there, so none says otherwise. So the headings' counts are the
+border's, and the order is the one alt+1
 visits, but for read-only threads: REVIEWS holds them whatever their state
 (the title's counts, by state, still include them). A row: its number (1-9), glyph, name (`Row.Called`, as everything that
 names it: the name you gave the thread, else Claude Code's title, else the
@@ -876,13 +877,8 @@ and numbered placement act only there.
   own moves to an agent (`_goto`, alt+1 and the like) mark it seen too.
 - **alt+1** says where it landed in a message (`Say`): `[2/3] 02 name ·
   needs you · what it waits on`.
-- **Notes to the agent:** `weaver.notes` keeps your notes (file relative to
-  its repository, lines, the version a review shows them in, the lines' text,
-  your note) and `:AgentSend` pipes them, as one message, to `$WEAVER_BIN send
-  $WEAVER_PANE`. `wvr send` checks the agent's state as the board has it:
-  only idle, done or interrupted take it (a dialog could take pasted text as
-  an answer), unless `--force`. Then one paste (`block.event`, so its
-  newlines do not submit) and Enter.
+- **Notes to the agent:** tuicr's comments, which the agent reads (see
+  [Review panel](#review-panel)); weaver types nothing into an agent.
 - **Resume:** a lost thread whose directory has gone resumes in its
   repository's main checkout (`.thread.repo`), from which Claude Code finds
   the session in any of its worktrees (and since 2.1.223, in any project).
@@ -1033,14 +1029,10 @@ and differs, each said on stderr; one without the mark is the user's, left
 alone (`Brought.Fate`). Nothing is set for tuicr to find them
 (`XDG_CONFIG_HOME`, `VIMINIT`): the nvim its `e` opens would inherit it.
 `wvr setup` says each file's fate and writes it; `wvr doctor` checks them
-(`tuicr's theme`) and tuicr itself (needed, 0.28 or newer). When
-`$XDG_DATA_HOME/weaver/plugins/diffview-plus.nvim/.weaver-rev` is not
-`diffviewRev`, a detached `wvr _plugins` fetches that commit (`git fetch
---depth 1`) beside it and swaps it in. Given
-`WEAVER_PLUGINS=$XDG_DATA_HOME/weaver/plugins`, `weaver.lua` appends
-diffview-plus there to the runtimepath (and sources its `plugin/`) when no
-`lua/diffview/init.lua` is on it and lazy.nvim knows no `diffview*` plugin.
-diffview-plus is GPL-3.0, so weaver fetches it rather than carry it.
+(`tuicr's theme`) and tuicr itself (needed, 0.28 or newer). Unpacking its
+files also removes what weaver kept beside them until it dropped its Neovim
+plugin: the plugin's copy (`$XDG_DATA_HOME/weaver/nvim`, which Neovim
+configs loaded) and the plugins it fetched for it (`weaver/plugins`).
 
 ## Views
 

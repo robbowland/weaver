@@ -172,9 +172,6 @@ type Mux interface {
 	Show(w WindowID)
 	Focus(p PaneID)
 
-	// Type pastes text into pane p as one paste (its newlines do not
-	// submit), then presses Enter.
-	Type(p PaneID, text string) error
 	// Say shows text for ms milliseconds where you are; SayToSession, to
 	// everyone looking at the session.
 	Say(ms int, text string)

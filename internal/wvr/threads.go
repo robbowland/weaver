@@ -33,10 +33,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Threads: a task, its worktree and a window with nvim and the agent
-// (`wvr new`); brought back when lost (`wvr resume`); closed (`weaver
-// close`); told something (`wvr send`); and the session quit (`weaver
-// quit`).
+// Threads: a task, its worktree and a window with its review and the agent
+// (`wvr new`); brought back when lost (`wvr resume`); closed (`wvr
+// close`); and the session quit (`wvr quit`).
 
 func (e *Env) threadsNew() string { return e.StateDir + "/new" }
 
@@ -1426,51 +1425,6 @@ func (e *Env) CloseTail(a []string) error {
 	}
 	e.PushStatus()
 	return rc
-}
-
-// Send is `wvr send [--force] PANE < TEXT`: the text to agent PANE's
-// prompt, as if you typed it (a bracketed paste, then enter), only while it
-// waits for you to say more (idle, done, interrupted) unless forced.
-func (e *Env) Send(args []string) error {
-	want, force := mux.PaneID(""), false
-	usage := "usage: wvr send [--force] PANE < TEXT"
-	for _, a := range args {
-		switch {
-		case a == "--force":
-			force = true
-		case strings.HasPrefix(a, "-"):
-			return errors.New(usage)
-		default:
-			want, _ = mux.ParsePane(a)
-		}
-	}
-	if !digits(string(want)) || cli.IsTTY(0) {
-		return errors.New(usage)
-	}
-	text, _ := io.ReadAll(os.Stdin)
-	if strings.TrimSpace(string(text)) == "" {
-		return errors.New("nothing to send")
-	}
-	r, _, ok := e.RowOf(want)
-	if !ok {
-		return errors.New("no agent in pane " + string(want))
-	}
-	st := r.State
-	if r.Exited {
-		return errors.New("the agent has exited: R on the board starts it again")
-	}
-	if !force {
-		switch st {
-		case agent.StateIdle, agent.StateDone, agent.StateInterrupted:
-		case agent.StateNeedsYou:
-			return errors.New("the agent waits on a dialog: answer it first (or --force)")
-		case agent.StateWorking, agent.StateEnded, agent.StateStarting:
-			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
-		default:
-			return fmt.Errorf("the agent is %s: send when it waits for you (or --force)", st)
-		}
-	}
-	return e.Mux().Type(want, string(text))
 }
 
 // toWeaverSession makes the session acted on, outside one, weaver's

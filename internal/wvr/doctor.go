@@ -198,11 +198,6 @@ func (e *Env) checks() []check {
 	}
 	cs = append(cs, lin)
 	cs = append(cs, broughtCheck())
-	plug := check{name: "diffview-plus.nvim", weight: optional, ok: setup.PluginsCurrent()}
-	if !plug.ok {
-		plug.found, plug.remedy = "not fetched, for reviews", selfFix{"wvr _plugins", setup.Plugins}
-	}
-	cs = append(cs, plug)
 	// weaver itself: the hooks run wvr from PATH.
 	self := check{name: "wvr", weight: needed, ok: true, found: tildify(bin)}
 	switch {

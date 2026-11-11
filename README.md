@@ -68,7 +68,8 @@ GITHUB view, alt+1 to the agent waiting on you, then the board](docs/demo/weaver
 - Codex threads are not followed yet: Codex runs its hooks in a daemon
   shared by every session, which weaver cannot place in a Rex block.
 
-Homebrew installs everything else weaver uses: Neovim, fzf, tuicr,
+Homebrew installs everything else weaver uses: fzf, tuicr, Neovim (for
+editing from a review),
 [Worktrunk](https://worktrunk.dev) for worktrees, and gh.
 
 ## Install
@@ -225,8 +226,9 @@ other agent can report to it with `wvr event`
 
 ## Development
 
-The engine is Go (`cmd/wvr`, `internal/`) and the Neovim side is Lua
-(`nvim/`). They meet at the contracts in [docs/design.md](docs/design.md).
+weaver is Go (`cmd/wvr`, `internal/`); its contracts (files, formats, and
+what it asks of Rex, tuicr and the agents) are in
+[docs/design.md](docs/design.md).
 
 ```sh
 test/run.sh    # every suite, each on a throwaway Rex server (needs rex, jq and python3)
@@ -249,9 +251,7 @@ The GITHUB view's searches, and the pull request fields they read, come from
 [gh-dash](https://github.com/dlvhdr/gh-dash) by Dolev Hadar (MIT). The LINEAR
 view's queries, and the issue fields they read, come from
 [linear-tui](https://github.com/k1-c/linear-tui) by k1-c (MIT). Reviews are
-[tuicr](https://github.com/agavra/tuicr)'s. weaver's Neovim plugin builds on
-[diffview-plus.nvim](https://github.com/dlyongemallo/diffview-plus.nvim)
-(GPL-3.0), which weaver fetches rather than bundles.
+[tuicr](https://github.com/agavra/tuicr)'s (MIT).
 
 ## Licence
 

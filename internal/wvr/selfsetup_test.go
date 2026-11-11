@@ -8,7 +8,6 @@ import (
 
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/session"
-	"github.com/robbowland/weaver/internal/setup"
 )
 
 // wvr sets itself up as it starts: only when it is the wvr on PATH, the
@@ -29,13 +28,6 @@ func TestSelfSetup(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("WEAVER_SELF_SETUP", "")
-	// The plugins are there already: nothing to fetch.
-	if err := os.MkdirAll(setup.PluginsDir()+"/diffview-plus.nvim", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(setup.PluginsDir()+"/diffview-plus.nvim/.weaver-rev", []byte(setup.DiffviewRev+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	settings := filepath.Join(home, ".claude", "settings.json")
 
 	t.Setenv("PATH", "/usr/bin:/bin")

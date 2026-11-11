@@ -7,13 +7,11 @@ description: Use when running, writing or judging weaver's tests: which suite co
 
 ## The suites
 
-`test/run.sh` runs them all (~4 min): `go vet` + `go test ./...` (with the
-Go/nvim/design.md contract tests), `test/nvim/run.sh` (headless specs; needs
-diffview-plus, gitsigns, snacks in `WEAVER_TEST_PLUGINS` or lazy's dir),
-`test/hooks.sh [suite…]` (~2 min, test/suites/*.sh on a throwaway Rex
-server), `test/rex.sh` (~20 s, weaver on a throwaway Rex server end to end);
-both skip without rex. CI (macos-15, no Rex: it runs only Go's and the
-Neovim specs) runs `test/run.sh` and golangci-lint with only-new-issues:
+`test/run.sh` runs them all (~3 min): `go vet` + `go test ./...` (with the
+Go/design.md state contract), `test/hooks.sh [suite…]` (~2 min,
+test/suites/*.sh on a throwaway Rex server), `test/rex.sh` (~30 s, weaver
+on a throwaway Rex server end to end, with a fake tuicr); both skip without
+rex. CI (macos-15, no Rex: it runs only Go's tests) runs `test/run.sh` and golangci-lint with only-new-issues:
 keep lint at its count (42 at the time of writing; `golangci-lint run
 ./...`).
 
@@ -44,7 +42,7 @@ they start, so do not edit Go while one is about to.
   the fix in place, run, restore), then passes with it. Say so in the
   commit's Verified line.
 - Test at the boundary the bug crossed: a real Rex server (rextest), the
-  real key path
-  (`client.key` on Rex), the real nvim (test/nvim).
+  real key path (`client.key` on Rex), the real tuicr by hand (a scratch
+  Rex session: its `:q`, `e`, saved comments).
 - Commit messages: `type(scope): what is true now`, a body saying what was
   wrong and why, and a `Verified:` paragraph naming what ran.

@@ -693,22 +693,6 @@ func (s Session) sayRemoteOff() {
 	s.Say(8000, "weaver: for weaver to show you its windows, turn on Remote Control in Rex's settings (Rex Server)")
 }
 
-// Type pastes text (a paste event: the program sees one bracketed paste,
-// so its newlines do not submit), then presses Enter once it has landed.
-func (s Session) Type(p mux.PaneID, text string) error {
-	b, err := s.block(p)
-	if err != nil {
-		return err
-	}
-	if err := s.callS("block.event", map[string]any{"block_id": b,
-		"event": map[string]any{"type": "paste", "payload": map[string]any{"text": text}}}, nil); err != nil {
-		return errors.New("rex would not paste into pane " + string(p))
-	}
-	time.Sleep(200 * time.Millisecond)
-	_, err = run("send-key", "-s", s.ID, "-b", b, "enter")
-	return err
-}
-
 // sayScript prints $1, the text (an argument: the shell never reads it),
 // on a clear screen with no cursor and no wrapping (what does not fit is
 // cut at the right, never scrolling its start away), then waits $2

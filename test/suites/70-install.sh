@@ -1,7 +1,7 @@
 #!/bin/bash
 # install.sh in a sandbox home: a fresh install (one binary, its files
-# unpacked, its Neovim plugin where Neovim configs load it), the old install's
-# copies removed, Claude Code hooks upgraded from older weaver (and agentnav)
+# unpacked), the old install's copies removed (its Neovim plugin's among
+# them), Claude Code hooks upgraded from older weaver (and agentnav)
 # entries without leaving stale ones or touching anyone else's, Codex's, and
 # idempotent reruns.
 . "$(dirname "$0")/../lib.sh"
@@ -15,6 +15,10 @@ mkdir -p "$H/.local/share/weaver/config"
 printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/weaver"
 printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/install.sh"
 echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
+# ...and what weaver kept beside it until it dropped its Neovim plugin: the
+# plugin's copy for Neovim configs, and the plugins it fetched for it.
+mkdir -p "$H/.local/share/weaver/nvim/lua/weaver" "$H/.local/share/weaver/plugins/diffview-plus.nvim"
+printf 'return {}\n' >"$H/.local/share/weaver/nvim/lua/weaver/init.lua"
 # Go's caches stay yours: in the sandbox home every run would fetch and
 # build weaver's modules again, into a cache rm cannot remove (read-only).
 export GOMODCACHE GOCACHE
@@ -27,11 +31,6 @@ inst() {
 out=$(inst)
 ok "install builds weaver, one binary, into ~/.local/bin" \
 	"$([ -f "$H/.local/bin/wvr" ] && [ ! -L "$H/.local/bin/wvr" ] && go version -m "$H/.local/bin/wvr" | grep -c 'path	github.com/robbowland/weaver/cmd/wvr')" "1"
-ok "...unpacks its files" "$(ls "$H/.local/share/weaver/runtime"/*/config/rex.lua 2>/dev/null | wc -l | tr -d ' ')" "1"
-ok "...keeps its Neovim plugin where Neovim configs load it" \
-	"$(cd "$ROOT/nvim" && find . -type f | sort | tr '\n' ' ')" \
-	"$(cd "$H/.local/share/weaver/nvim" && find . -type f ! -name .weaver-runtime | sort | tr '\n' ' ')"
-ok "...and removes the old install's copies" "$(ls "$H/.local/share/weaver" | tr '\n' ' ')" "nvim runtime "
 
 # Claude Code settings from an older weaver, agentnav, and someone else.
 cat >"$H/.claude/settings.json" <<'EOF'
@@ -51,6 +50,9 @@ cat >"$H/.claude/settings.json" <<'EOF'
 }
 EOF
 out=$(inst --configure)
+ok "...unpacks its files as it sets up" "$(ls "$H/.local/share/weaver/runtime"/*/config/rex.lua 2>/dev/null | wc -l | tr -d ' ')" "1"
+ok "...and removes the old install's copies, its Neovim plugin's and the plugins it fetched among them" \
+	"$(ls "$H/.local/share/weaver" | tr '\n' ' ')" "runtime "
 S=$H/.claude/settings.json
 ok "no stale weaver or agentnav hook is left" \
 	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(weaver|agentnav)( |$)"))] | length' "$S")" "0"

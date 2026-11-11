@@ -26,8 +26,8 @@ var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
 // hooks into Claude Code's settings (and Codex's hooks, when ~/.codex
 // exists), run by this binary's path (or PATH), each file backed up before
 // it changes; the files it brings to other programs written (BroughtFiles);
-// its files unpacked and its Neovim plugins fetched. `wvr` does the same as
-// it starts (SelfSetup); this shows the changes.
+// its files unpacked. `wvr` does the same as it starts (SelfSetup); this
+// shows the changes.
 func Run(args []string, self string, out io.Writer) error {
 	dry, codex, bin := false, true, self
 	for i := 0; i < len(args); i++ {
@@ -95,11 +95,6 @@ func Run(args []string, self string, out io.Writer) error {
 			} else {
 				fmt.Fprintf(out, "%s: wrote %s\n", f.Label, f.Path)
 			}
-		}
-	}
-	if !dry && failed == nil {
-		if err := Plugins(); err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
 		}
 	}
 	if dry || failed != nil {

@@ -261,6 +261,16 @@ can supersede an earlier one, and says so.
   starts listens on a socket, so `wvr nvim`, the `WeaverEvent` calls, the
   `.nvim` binding, the socket and the sweep of nvims a server left behind
   went, and with them neovim/go-client.
+- 2026-11-11: weaver's Neovim plugin is gone (`nvim/`, its specs, the
+  diffview-plus fetch, `:checkhealth weaver`), superseding the entries above
+  on what it did and the 2026-10-15 one on where Neovim configs load it:
+  nothing of weaver's has a job in the Neovim behind tuicr's `e`, which
+  loads only Rob's config. Its copy at `~/.local/share/weaver/nvim` is
+  deleted once, with the plugins fetched for it, so a config that loaded it
+  stops rather than keep loading the last copy forever. `wvr send`, which
+  only the plugin's `:AgentSend` used, goes too: review notes are tuicr's
+  comments, which the agent reads itself (Rob, 2026-11-11), and typing into
+  an agent could answer its dialogs.
 
 ## Dashboard
 

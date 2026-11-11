@@ -32,13 +32,6 @@ func main() {
 		return
 	case "setup":
 		exit(setup.Run(args, wvr.Load().Self, os.Stdout))
-	case "_plugins":
-		exit(setup.Plugins())
-	case "_runtime":
-		// install.sh: unpack this build's files now, so Neovim configs find
-		// its plugin before weaver next runs.
-		_, err := setup.Runtime()
-		exit(err)
 	}
 	c, ok := commands[cmd]
 	if !ok {
@@ -128,7 +121,6 @@ var commands = map[string]command{
 	"review":  {session: true, run: (*wvr.Env).Review},
 	"_panel":  {run: (*wvr.Env).Panel},
 	"close":   {session: true, run: (*wvr.Env).Close},
-	"send":    {session: true, run: (*wvr.Env).Send},
 	"view":    {session: true, run: (*wvr.Env).View},
 	"resume":  {run: helped((*wvr.Env).Resume)},
 	"adopt":   {run: helped((*wvr.Env).Adopt)},
