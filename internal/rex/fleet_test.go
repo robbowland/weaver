@@ -26,7 +26,7 @@ func TestFleet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts, err := f.Threads()
+	ts, err := f.threads()
 	if err != nil || len(ts) != 1 || ts[0].ID == home.ID {
 		t.Fatalf("threads: %+v %v", ts, err)
 	}
@@ -63,7 +63,7 @@ func TestFleet(t *testing.T) {
 	os.Unsetenv("REX_SESSION")
 
 	f.CloseSession(p)
-	if ts, err := f.Threads(); err != nil || len(ts) != 0 {
+	if ts, err := f.threads(); err != nil || len(ts) != 0 {
 		t.Errorf("threads once closed: %+v %v", ts, err)
 	}
 	if !home.Running() {

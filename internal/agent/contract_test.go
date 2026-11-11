@@ -8,7 +8,11 @@ import (
 	"testing"
 )
 
-// The states an agent can be in, as the Go half has them (States) and
+// states are the states a state file can hold, in the order the design
+// doc lists them (StateStarting is the board's own).
+var states = []State{StateWorking, StateNeedsYou, StateDone, StateIdle, StateInterrupted, StateEnded}
+
+// The states an agent can be in, as the Go half has them (states) and
 // docs/design.md's state file table says them. A list drifting from the
 // other fails here.
 func TestStateContract(t *testing.T) {
@@ -26,7 +30,7 @@ func TestStateContract(t *testing.T) {
 	}
 	sort.Strings(doc)
 	var goStates []string
-	for _, s := range States {
+	for _, s := range states {
 		goStates = append(goStates, string(s))
 	}
 	sort.Strings(goStates)

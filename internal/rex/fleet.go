@@ -55,10 +55,10 @@ func (f Fleet) Has(id string) bool {
 	return ok && m.home == f.Home.ID
 }
 
-// Threads are the sessions of the threads that run, as Rex lists them.
+// threads are the sessions of the threads that run, as Rex lists them.
 // Weaver's record of one that has gone goes too, but not in its first
 // minute: it may have been made since Rex listed them.
-func (f Fleet) Threads() ([]Session, error) {
+func (f Fleet) threads() ([]Session, error) {
 	live, err := f.live, error(nil)
 	if live == nil {
 		if live, err = sessions(); err != nil {
@@ -79,7 +79,7 @@ func (f Fleet) Threads() ([]Session, error) {
 
 // all is home and the sessions of the threads that run.
 func (f Fleet) all() ([]Session, error) {
-	ts, err := f.Threads()
+	ts, err := f.threads()
 	return append([]Session{f.Home}, ts...), err
 }
 
@@ -119,7 +119,7 @@ func (f Fleet) Running() bool { return f.Home.Running() }
 
 // Quit ends the threads' sessions, then home's.
 func (f Fleet) Quit() error {
-	ts, _ := f.Threads()
+	ts, _ := f.threads()
 	for _, t := range ts {
 		_ = t.Quit()
 	}

@@ -29,10 +29,6 @@ const (
 	StateStarting State = "starting"
 )
 
-// States are the states a state file can hold, in the order the
-// design doc lists them (StateStarting is the board's own).
-var States = []State{StateWorking, StateNeedsYou, StateDone, StateIdle, StateInterrupted, StateEnded}
-
 // Claude is the agent weaver runs and follows, as its state names it.
 const Claude = "claude"
 
