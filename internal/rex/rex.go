@@ -1,4 +1,4 @@
-// Package rex is weaver's session on Rex (mux.Mux), through Rex's own
+// Package rex is weaver's sessions on Rex (Fleet), through Rex's own
 // command, rex: its API (rex api call) and its Lua (rex do).
 package rex
 

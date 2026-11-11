@@ -77,7 +77,7 @@ func Executable() string {
 
 // Mux is the session weaver acts on: home's Rex session e.RexID, with
 // its threads' sessions, from where weaver runs (e.RexHere).
-func (e *Env) Mux() mux.Mux {
+func (e *Env) Mux() rex.Fleet {
 	return rex.Fleet{Home: rex.Session{ID: e.RexID, Name: e.Session, Dir: e.RexDir()}, Here: e.RexHere}
 }
 

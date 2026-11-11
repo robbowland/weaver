@@ -1,15 +1,10 @@
-// Package mux is what weaver needs of the terminal multiplexer its session
-// runs on (Rex): its panes and windows, by ids weaver's files keep, and
-// what weaver does with them. weaver's own policy (thread numbers, state
-// files, what counts as seen) stays out of it.
+// Package mux is weaver's words for what its sessions on Rex hold: panes
+// and windows by the ids weaver's files keep, and the programs it starts
+// in them (rex.Fleet acts on them). weaver's own policy (thread numbers,
+// state files, what counts as seen) stays out of it.
 package mux
 
-import (
-	"os/exec"
-	"strings"
-
-	"github.com/robbowland/weaver/internal/agent"
-)
+import "strings"
 
 // PaneID is a pane as weaver's file names and records keep it: the number
 // weaver gave its Rex block, "3".
@@ -117,77 +112,4 @@ type NewSplit struct {
 	Cols       int
 	Title      string
 	Background bool
-}
-
-// Mux is the session weaver acts on, on its multiplexer. Methods that
-// steer what you see (focus, names, widths, marks) are best-effort and say
-// nothing of failing; a caller that needs to know reads the state after.
-type Mux interface {
-	// Life is the life of the session: a session made again, on this
-	// server or another, is another life. Zero when it is not running.
-	Life() agent.Where
-	// Made is when the session was made, epoch seconds.
-	Made() (int64, bool)
-	// Running: is the session running?
-	Running() bool
-	// Quit ends the session and every pane in it.
-	Quit() error
-
-	// Panes are the session's panes.
-	Panes() ([]Pane, error)
-	// Windows are the session's windows.
-	Windows() ([]Window, error)
-	// Active is the session's active pane.
-	Active() (PaneID, bool)
-	// PID is the pid of the process pane p runs.
-	PID(p PaneID) (int, bool)
-	// Screen is what pane p shows, with its colours.
-	Screen(p PaneID) []byte
-
-	// OpenWindow opens a window: its id, its pane and its width.
-	OpenWindow(w NewWindow) (WindowID, PaneID, int, error)
-	// OpenSession opens a session of its own for a thread, labelled
-	// label, w its first window: the window, its pane and its width.
-	OpenSession(label string, w NewWindow) (WindowID, PaneID, int, error)
-	// CloseSession ends the thread's session pane p is in, and every pane
-	// in it.
-	CloseSession(p PaneID)
-	// SplitLeft opens a pane on the left of pane of: the new pane and the
-	// pid of its process, 0 when that is not known yet (Rex starts it
-	// through the user's shell).
-	SplitLeft(of PaneID, s NewSplit) (PaneID, int, error)
-	// BreakOut moves pane p to a window of its own in the session, named
-	// label, at index at (NextFree: its next free one; else an error when
-	// that is taken): the window and its width. Background leaves the
-	// session where it is; else the focus goes with the pane.
-	BreakOut(p PaneID, label string, at int, background bool) (WindowID, int, error)
-	// Respawn starts s again in pane p, ending what runs there.
-	Respawn(p PaneID, s Spawn) error
-	// Close ends pane p, and CloseWindow window w.
-	Close(p PaneID)
-	CloseWindow(w WindowID)
-	// Place moves window w to index at, when that is free.
-	Place(w WindowID, at int)
-	// Label names window w, and Title pane p.
-	Label(w WindowID, label string)
-	Title(p PaneID, title string)
-	// SetWidth makes pane p cols wide; Zoom has it fill its window, or
-	// back.
-	SetWidth(p PaneID, cols int)
-	Zoom(p PaneID)
-
-	// Show shows window w; Focus pane p, its window first.
-	Show(w WindowID)
-	Focus(p PaneID)
-
-	// Say shows text for ms milliseconds where you are; SayToSession, to
-	// everyone looking at the session.
-	Say(ms int, text string)
-	SayToSession(ms int, text string)
-
-	// Popup is the command that shows argv over where you are, sized by
-	// size from the terminal's columns and lines, in dir (empty: the
-	// multiplexer's choice); it returns when the popup closes. False when
-	// no terminal shows the session.
-	Popup(size func(cols, lines int) (int, int), dir string, argv []string) (*exec.Cmd, bool)
 }

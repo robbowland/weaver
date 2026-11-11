@@ -41,7 +41,7 @@ func (e *Env) ThreadWidth(agent string) {
 	if !ok {
 		return
 	}
-	if m, ok := e.Mux().(interface{ Moved(mux.PaneID) bool }); ok && m.Moved(p) {
+	if e.Mux().Moved(p) {
 		return
 	}
 	e.threadWidth(p)

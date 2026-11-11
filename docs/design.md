@@ -713,9 +713,9 @@ that one (home's).
 
 ## Rex
 
-Weaver acts on its session through `mux.Mux` (`internal/mux`), which
-`Env.Mux` returns: `rex.Fleet` (`internal/rex`), home's `rex.Session` with
-its threads' sessions. Rex finds a block or window only in its own session
+Weaver acts on its session through `rex.Fleet` (`internal/rex`), which
+`Env.Mux` returns: home's `rex.Session` with its threads' sessions, in the
+words of `internal/mux` (its panes, windows and programs). Rex finds a block or window only in its own session
 (a call naming another's answers `block not found`), so a pane's or
 window's call goes to the session its number is in; `Panes` and `Windows`
 are every session's, asked at once; a popup or message goes where wvr
