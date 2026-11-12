@@ -69,6 +69,9 @@ func TestFit(t *testing.T) {
 	}{
 		{"abc", 5, "abc  "},
 		{"abcdef", 4, "abc…"},
+		{"漢字漢字", 5, "漢字…"},
+		{"👍 ok", 4, "👍 …"},
+		{"\x1b[31mabcdef\x1b[0m", 4, "\x1b[31mabc…\x1b[0m"},
 		{"é⏎x", 3, "é⏎x"},
 		{"anything", 0, ""},
 	} {

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -243,15 +244,15 @@ func (r *renderer) code(n ast.Node, w int) []string {
 		lang = strings.ToUpper(string(f.Language(r.src)))
 	}
 	top := st.Faint + "┌" + st.Off
-	if lang != "" && utf8.RuneCountInString(lang)+3 <= w {
-		top += strings.Repeat(" ", w-1-utf8.RuneCountInString(lang)) + st.Faint + lang + st.Off
+	if lang != "" && ansi.StringWidth(lang)+3 <= w {
+		top += strings.Repeat(" ", w-1-ansi.StringWidth(lang)) + st.Faint + lang + st.Off
 	}
 	out := []string{top}
 	lines := n.Lines()
 	for i := 0; i < lines.Len(); i++ {
 		s := lines.At(i)
 		l := strings.TrimRight(strings.ReplaceAll(string(s.Value(r.src)), "\t", "  "), "\n")
-		out = append(out, "  "+st.Strong+cut(l, w-4)+st.Off)
+		out = append(out, "  "+st.Strong+ansi.Truncate(l, w-4, "…")+st.Off)
 	}
 	return append(out, strings.Repeat(" ", max(w-1, 0))+st.Faint+"┘"+st.Off)
 }
@@ -340,7 +341,7 @@ func (r *renderer) list(n *ast.List, w int) []string {
 				mark = st.Faint + "[" + st.Off + st.Good + "x" + st.Off + st.Faint + "]" + st.Off + " "
 			}
 		}
-		mw := visible(mark)
+		mw := ansi.StringWidth(mark)
 		ls := r.blocks(c, w-mw)
 		if len(ls) == 0 {
 			ls = []string{""}
@@ -399,7 +400,7 @@ func (r *renderer) table(n *east.Table, w int) []string {
 	ws := make([]int, cols)
 	for _, cs := range rows {
 		for i, c := range cs {
-			ws[i] = max(ws[i], utf8.RuneCountInString(c))
+			ws[i] = max(ws[i], ansi.StringWidth(c))
 		}
 	}
 	// Narrowed, widest first, till the row fits (" │ " between columns).
@@ -423,8 +424,8 @@ func (r *renderer) table(n *east.Table, w int) []string {
 			if j < len(cs) {
 				c = cs[j]
 			}
-			c = cut(c, ws[j])
-			c += strings.Repeat(" ", ws[j]-utf8.RuneCountInString(c))
+			c = ansi.Truncate(c, ws[j], "…")
+			c += strings.Repeat(" ", ws[j]-ansi.StringWidth(c))
 			if i < head {
 				c = st.Faint + strings.ToUpper(c) + st.Off
 			} else {
@@ -497,7 +498,7 @@ func (r *renderer) inline(n ast.Node, style string) []span {
 		case *ast.AutoLink:
 			u := string(c.URL(r.src))
 			shown := strings.TrimPrefix(strings.TrimPrefix(string(c.Label(r.src)), "https://"), "http://")
-			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint, url: u}, span{text: cut(shown, 48), style: st.Text, url: u},
+			out = append(out, span{text: "[" + nbsp + "SRC:" + nbsp, style: st.Faint, url: u}, span{text: ansi.Truncate(shown, 48, "…"), style: st.Text, url: u},
 				span{text: nbsp + "]", style: st.Faint, url: u})
 		case *ast.Image:
 			alt := "image"
@@ -574,21 +575,23 @@ func wrap(sp []span, w int, st Style) []string {
 			n++
 		}
 		for _, p := range pend {
-			rs := []rune(p.text)
+			t := p.text
 			// A word longer than the line, cut across lines.
-			for n+len(rs) > w {
-				if n >= w {
+			for n+ansi.StringWidth(t) > w {
+				head := ansi.Truncate(t, w-n, "")
+				if head == "" {
+					if n == 0 {
+						break // a character wider than a line: as it is
+					}
 					flush()
 					continue
 				}
-				k := w - n
-				line.WriteString(Link(p.url, p.style+string(rs[:k])+st.Off))
-				n += k
-				rs = rs[k:]
+				line.WriteString(Link(p.url, p.style+head+st.Off))
+				t = ansi.TruncateLeft(t, ansi.StringWidth(head), "")
 				flush()
 			}
-			line.WriteString(Link(p.url, p.style+string(rs)+st.Off))
-			n += len(rs)
+			line.WriteString(Link(p.url, p.style+t+st.Off))
+			n += ansi.StringWidth(t)
 		}
 		pend, pendN, space = nil, 0, false
 	}
@@ -611,7 +614,7 @@ func wrap(sp []span, w int, st Style) []string {
 				continue
 			}
 			pend = append(pend, part{style, f, s.url})
-			pendN += utf8.RuneCountInString(f)
+			pendN += ansi.StringWidth(f)
 		}
 	}
 	put()
@@ -623,19 +626,4 @@ func wrap(sp []span, w int, st Style) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
-}
-
-var reSGR = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-func visible(s string) int { return utf8.RuneCountInString(reSGR.ReplaceAllString(s, "")) }
-
-// cut is s at most n runes, an ellipsis ending one cut short.
-func cut(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	return string([]rune(s)[:n-1]) + "…"
 }

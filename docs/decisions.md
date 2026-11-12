@@ -936,6 +936,16 @@ can supersede an earlier one, and says so.
   `robbowland/homebrew-kegs`, as `weaver` 0.1.0: built from the tag, with
   every tool weaver works with as a dependency (the tap's gh-dash fork and
   linear-tui among them). The formula lives in the tap only.
+- 2026-11-12: Text is measured, cut and wrapped by charmbracelet/x/ansi
+  (Rob): one library, in terminal columns (wide characters and emoji two,
+  marks none), colours and links not counted. It replaced rex's own width
+  table, markdown's and the views' rune counts, and the cards' wrap, which
+  counted characters, so a CJK title overran its column. go-runewidth,
+  which it brings, stays at v0.0.31 or later: earlier releases build their
+  width tables as they load, 21 ms at the start of every hook (inittrace;
+  start-up 10.8 to 23.1 ms). From v0.0.31 the libraries add 0.05 ms of
+  init, and start-up is unchanged (10.55 against 10.50 ms median, 400
+  interleaved runs each, load 7 on 12 cores).
 
 ## Code
 

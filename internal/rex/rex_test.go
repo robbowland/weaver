@@ -656,30 +656,6 @@ func TestOnScreen(t *testing.T) {
 	}
 }
 
-// A message is as wide as its columns, wide characters and emoji two,
-// marks none; cut, it keeps its start and says so.
-func TestWidth(t *testing.T) {
-	for text, want := range map[string]int{"weaver: ok": 10, "漢字": 4, "ｗｉｄｅ": 8, "é": 1, "👍": 2, "❤️": 2} {
-		if got := width(text); got != want {
-			t.Errorf("width(%q) %d, want %d", text, got, want)
-		}
-	}
-	for _, c := range []struct {
-		text string
-		n    int
-		want string
-	}{
-		{"weaver: ok", 10, "weaver: ok"},
-		{"weaver: 漢字漢字", 13, "weaver: 漢字…"},
-		{"weaver: 漢字漢字", 14, "weaver: 漢字…"},
-		{"weaver: long thread name", 12, "weaver: lon…"},
-	} {
-		if got := head(c.text, c.n); got != c.want || width(got) > c.n {
-			t.Errorf("head(%q, %d) %q, want %q", c.text, c.n, got, c.want)
-		}
-	}
-}
-
 // message is what weaver's message shows: the last of its lines, as many
 // as its terminal has rows; "" when there is none. Its label, which heads
 // it in the app, is what it shows too.

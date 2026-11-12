@@ -3,6 +3,8 @@ package wvr
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // What is written shows inside the frame: every row as wide as it, the
@@ -24,7 +26,7 @@ func TestFrameScreen(t *testing.T) {
 		"└────────────────────────────┘",
 	}
 	for i, r := range rows {
-		if got := reAnsi.ReplaceAllString(r, ""); i >= len(want) || got != want[i] {
+		if got := ansi.Strip(r); i >= len(want) || got != want[i] {
 			t.Errorf("row %d: %q", i, got)
 		}
 	}

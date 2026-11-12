@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Squash is s with runs of white space and control characters as one
@@ -71,14 +73,9 @@ func Ctl(s string) string {
 	}, s)
 }
 
-// Fit is s cut to n characters (… at the cut) and padded to n.
+// Fit is s cut to n columns (… at the cut) and padded to n, its colours
+// kept.
 func Fit(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(s) > n {
-		r := []rune(s)
-		s = string(r[:n-1]) + "…"
-	}
-	return s + strings.Repeat(" ", n-utf8.RuneCountInString(s))
+	s = ansi.Truncate(s, n, "…")
+	return s + strings.Repeat(" ", max(n-ansi.StringWidth(s), 0))
 }

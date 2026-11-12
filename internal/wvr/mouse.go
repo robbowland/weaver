@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/session"
 )
@@ -34,9 +35,9 @@ func hintLine(hs []choice, gap int) string {
 func hintAt(hs []choice, gap, col int) (choice, bool) {
 	at := 1
 	for _, h := range hs {
-		w := rlen(h.key)
+		w := ansi.StringWidth(h.key)
 		if h.what != "" {
-			w += 1 + rlen(h.what)
+			w += 1 + ansi.StringWidth(h.what)
 		}
 		if col >= at && col < at+w {
 			return h, true

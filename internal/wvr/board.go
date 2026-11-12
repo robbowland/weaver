@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
@@ -106,8 +106,6 @@ func age(s int64) string {
 	}
 	return strconv.FormatInt(s/86400, 10) + "d"
 }
-
-func rlen(s string) int { return utf8.RuneCountInString(s) }
 
 // ttySize is the terminal's rows and columns, from /dev/tty.
 func ttySize() (int, int, bool) {
@@ -450,8 +448,8 @@ func (e *Env) rows(plain bool) string {
 			}
 		}
 		counts[g]++
-		wn = max(wn, rlen(name))
-		wf = max(wf, rlen(fact))
+		wn = max(wn, ansi.StringWidth(name))
+		wf = max(wf, ansi.StringWidth(fact))
 		rs = append(rs, r)
 	}
 	live := len(rs)
@@ -489,8 +487,8 @@ func (e *Env) rows(plain bool) string {
 			age: age(now - since), root: l.Dir, label: name + " · " + where + " · " + was,
 			stale: g == groupHeld && now-since > heldStale}
 		counts[g]++
-		wn = max(wn, rlen(name))
-		wf = max(wf, rlen(fact))
+		wn = max(wn, ansi.StringWidth(name))
+		wf = max(wf, ansi.StringWidth(fact))
 		rs = append(rs, r)
 	}
 	n := len(rs)
@@ -512,7 +510,7 @@ func (e *Env) rows(plain bool) string {
 				rs[i].where += " ×" + strconv.Itoa(c)
 			}
 		}
-		ww = max(ww, rlen(rs[i].where))
+		ww = max(ww, ansi.StringWidth(rs[i].where))
 	}
 
 	// Columns: key and glyph, name, fact, where (when there is room), age.
@@ -617,12 +615,12 @@ func (e *Env) rows(plain bool) string {
 	titleR, tc = strings.TrimSuffix(titleR, "  "), strings.TrimSuffix(tc, "  ")
 	gap := ""
 	if !plain {
-		k := max(lsCols-4-rlen(titleL)-rlen(titleR)-4, 1)
+		k := max(lsCols-4-ansi.StringWidth(titleL)-ansi.StringWidth(titleR)-4, 1)
 		if titleR != "" {
 			gap = " " + dim + strings.Repeat("─", k) + off + " "
 		}
 	} else {
-		gap = strings.Repeat(" ", max(width-rlen(titleL)-rlen(titleR), 2))
+		gap = strings.Repeat(" ", max(width-ansi.StringWidth(titleL)-ansi.StringWidth(titleR), 2))
 	}
 	base := sockBase()
 	if !plain {
@@ -844,12 +842,12 @@ func (e *Env) boardHints() []choice {
 	}
 	var hs []choice
 	for _, it := range items {
-		if w+rlen(it)+2 > width {
+		if w+ansi.StringWidth(it)+2 > width {
 			break
 		}
 		k, rest, _ := strings.Cut(it, " ")
 		hs = append(hs, choice{k, rest})
-		w += rlen(it) + 2
+		w += ansi.StringWidth(it) + 2
 	}
 	if help {
 		hs = append(hs, choice{"?", helpWhat})
@@ -876,11 +874,11 @@ func welcome(cols, lines int, views bool, q string) (string, []string) {
 	note := "or start claude in any pane: weaver follows it"
 	text := []string{CBold + CInk + "No threads yet" + COff, CGrey + about + COff, ""}
 	acts := []string{"", "", ""}
-	w := max(rlen(about), rlen(note))
+	w := max(ansi.StringWidth(about), ansi.StringWidth(note))
 	for _, r := range rows {
 		text = append(text, CInk+fmt.Sprintf("%-8s", r.key)+COff+CGrey+r.what+COff)
 		acts = append(acts, r.act)
-		w = max(w, 8+rlen(r.what))
+		w = max(w, 8+ansi.StringWidth(r.what))
 	}
 	text = append(text, "", CDim+note+COff)
 	acts = append(acts, "", "")

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/mux"
@@ -71,12 +72,12 @@ func TestRefreshKeepsFailedSection(t *testing.T) {
 	// failed are named.
 	e := viewEnv(t)
 	updateGitHub(e, func(o *ghCache) { *o = c })
-	if h := reAnsi.ReplaceAllString(e.itemFresh(githubSource{}), ""); h != "as of 1h ago · TEAM, MINE failed: gh: HTTP 502" {
+	if h := ansi.Strip(e.itemFresh(githubSource{})); h != "as of 1h ago · TEAM, MINE failed: gh: HTTP 502" {
 		t.Errorf("header %q", h)
 	}
 	d := githubSource{}.read(e).sections["prs"]
 	for i, want := range []string{"QUEUE · 1", "TEAM · failed", "MINE · 1 · failed, as of 1h ago"} {
-		if h := reAnsi.ReplaceAllString(d[i].heading(), ""); h != want {
+		if h := ansi.Strip(d[i].heading()); h != want {
 			t.Errorf("heading %q, want %q", h, want)
 		}
 	}
@@ -94,7 +95,7 @@ func TestHeadingCount(t *testing.T) {
 		{itemSection{title: "Queue", items: its, more: true, fetched: now}, "QUEUE · 30+"},
 		{itemSection{title: "Queue", items: its[:5], fetched: now}, "QUEUE · 5"},
 	} {
-		if got := reAnsi.ReplaceAllString(c.s.heading(), ""); got != c.want {
+		if got := ansi.Strip(c.s.heading()); got != c.want {
 			t.Errorf("%q, want %q", got, c.want)
 		}
 	}
@@ -141,7 +142,7 @@ func TestMoreLine(t *testing.T) {
 		f := strings.Split(l, "\t")
 		ids += f[0] + "/" + f[2] + "/" + f[3] + " "
 		if f[0] == "m1" {
-			more = reAnsi.ReplaceAllString(f[4], "")
+			more = ansi.Strip(f[4])
 		}
 	}
 	// A heading or a gap steps to the lines around it the cursor rests on.
@@ -168,7 +169,7 @@ func TestSearchSection(t *testing.T) {
 		c.search(f.Section())
 	})
 	heading := func(kind string) string {
-		return reAnsi.ReplaceAllString(githubSource{}.read(e).sections[kind][0].heading(), "")
+		return ansi.Strip(githubSource{}.read(e).sections[kind][0].heading())
 	}
 	if h := heading("prs"); h != "SEARCH · mentions me · asking…" {
 		t.Errorf("asked: %q", h)

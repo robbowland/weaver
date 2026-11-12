@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 var plain = Style{}
@@ -66,13 +68,13 @@ func TestRender(t *testing.T) {
 	}
 }
 
-// Every line fits, styles and all, and a word longer than the line is cut
-// across lines.
+// Every line fits its columns, styles and all, wide characters two each,
+// and a word longer than the line is cut across lines.
 func TestRenderWraps(t *testing.T) {
 	st := Style{Text: "\x1b[38;2;153;153;153m", Strong: "\x1b[1m", Faint: "\x1b[2m", Good: "\x1b[32m", Off: "\x1b[0m"}
-	got := Render("a **bold** word and supercalifragilisticexpialidocious, then more words to wrap", 12, st)
+	got := Render("a **bold** word and supercalifragilisticexpialidocious, then 漢字漢字漢字漢字漢字漢字漢字 to wrap", 12, st)
 	for _, l := range strings.Split(got, "\n") {
-		if n := len([]rune(reSGRTest.ReplaceAllString(l, ""))); n > 12 {
+		if n := ansi.StringWidth(l); n > 12 {
 			t.Errorf("%q is %d wide", l, n)
 		}
 	}

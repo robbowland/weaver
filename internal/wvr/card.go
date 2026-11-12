@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
@@ -32,25 +33,6 @@ var reTNR = regexp.MustCompile(`[\t\n\r]+`)
 
 func cardOne(s string) string { return reTNR.ReplaceAllString(s, " ") }
 
-// wrap: words into lines of at most n characters (a longer word is cut).
-func wrap(t string, n int) []string {
-	var ls []string
-	for _, x := range strings.Split(t, " ") {
-		if x == "" {
-			continue
-		}
-		switch {
-		case len(ls) == 0:
-			ls = append(ls, oneline.Cut(x, n))
-		case rlen(ls[len(ls)-1])+1+rlen(x) <= n:
-			ls[len(ls)-1] += " " + x
-		default:
-			ls = append(ls, oneline.Cut(x, n))
-		}
-	}
-	return ls
-}
-
 // field is a card's field: its label, then the value wrapped under itself,
 // at most lines lines, in w columns.
 func field(w int, label, text, color string, lines int) []string {
@@ -58,7 +40,7 @@ func field(w int, label, text, color string, lines int) []string {
 	if t == "" {
 		return nil
 	}
-	ls := wrap(t, max(w-11, 20))
+	ls := strings.Split(ansi.Wrap(t, max(w-11, 20), ""), "\n")
 	var out []string
 	for i, l := range ls {
 		if i >= lines {
@@ -150,7 +132,7 @@ const helpCol = 16
 
 // helpRow is a help card's line: key k, what it does, and a dim note.
 func helpRow(k, what, note string) string {
-	s := "  " + CGrey + k + COff + strings.Repeat(" ", max(helpCol-rlen(k), 1)) + what
+	s := "  " + CGrey + k + COff + strings.Repeat(" ", max(helpCol-ansi.StringWidth(k), 1)) + what
 	if note != "" {
 		s += " " + CDim + note + COff
 	}
@@ -473,9 +455,8 @@ func (e *Env) lostCard(sid, title string) string {
 	case strings.HasPrefix(dir, home+"/"):
 		dir = "~" + dir[len(home):]
 	}
-	if n := max(w-11, 20); rlen(dir) > n {
-		r := []rune(dir)
-		dir = "…" + string(r[len(r)-n+1:])
+	if n := max(w-11, 20); ansi.StringWidth(dir) > n {
+		dir = ansi.TruncateLeft(dir, ansi.StringWidth(dir)-n+1, "…")
 	}
 	ls := []string{"lost" + CDim + " · " + COff + age(now-lost) + CDim + " · its session went" + COff, ""}
 	if lo.Held > 0 {

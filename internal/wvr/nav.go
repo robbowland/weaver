@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
@@ -399,9 +400,7 @@ func (e *Env) Next() {
 		if i := strings.IndexByte(l, '\n'); i >= 0 {
 			l = l[:i]
 		}
-		if rlen(l) > 40 {
-			l = oneline.Cut(l, 39) + "…"
-		}
+		l = ansi.Truncate(l, 40, "…")
 		switch {
 		case r.Tnum > 0:
 			l = fmt.Sprintf("%02d %s", r.Tnum, l)

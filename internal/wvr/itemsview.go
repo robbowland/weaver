@@ -6,12 +6,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
@@ -301,23 +301,6 @@ func (t viewThread) word() string { return stateWord(t.row, t.now) }
 // show as code and a line shows as noise.
 func untick(s string) string { return strings.ReplaceAll(s, "`", "") }
 
-var reAnsi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-func visible(s string) int { return rlen(reAnsi.ReplaceAllString(s, "")) }
-
-// fitAnsi is s (in one colour) cut to n visible characters and padded to
-// n, its colour kept.
-func fitAnsi(s string, n int) string {
-	if visible(s) <= n {
-		return s + strings.Repeat(" ", n-visible(s))
-	}
-	colour := reAnsi.FindString(s)
-	if !strings.HasPrefix(s, colour) {
-		colour = ""
-	}
-	return colour + oneline.Fit(reAnsi.ReplaceAllString(s, ""), n) + COff
-}
-
 // itemKind is the kind src's view shows, kept in
 // $STATE_DIR/<skey>.<name>-kind.
 func (e *Env) itemKind(src itemSource) string {
@@ -394,7 +377,7 @@ func (e *Env) itemRows(src itemSource) string {
 	wf, ww := 8, 8
 	for _, s := range sections {
 		for _, it := range s.items {
-			wf, ww = max(wf, visible(it.fact)), max(ww, rlen(it.where))
+			wf, ww = max(wf, ansi.StringWidth(it.fact)), max(ww, ansi.StringWidth(it.where))
 		}
 	}
 	wf, ww = min(wf, 22), min(ww, 24)
@@ -415,7 +398,7 @@ func (e *Env) itemRows(src itemSource) string {
 			if t, ok := threadOf(ts, it); ok {
 				num, cell = fmt.Sprintf("%02d", t.num), t.cell()
 			}
-			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + fitAnsi(it.fact, wf) + "  " +
+			text := CDim + num + COff + " " + cell + "  " + oneline.Fit(oneline.Line(it.title), wt) + "  " + oneline.Fit(it.fact, wf) + "  " +
 				CGrey + oneline.Fit(it.where, ww) + COff + "  " + CDim + fmt.Sprintf("%3s", age(int64(now.Sub(it.updated).Seconds()))) + COff
 			search := ""
 			if !searched[it.ref] {

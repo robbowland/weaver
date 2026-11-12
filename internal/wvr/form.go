@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
@@ -86,7 +87,7 @@ func tildify(p string) string {
 // parts when long.
 func formPath(p string) string {
 	t := tildify(p)
-	if rlen(t) > 40 {
+	if ansi.StringWidth(t) > 40 {
 		d := p[:max(strings.LastIndexByte(p, '/'), 0)]
 		t = "…/" + filepath.Base(d) + "/" + filepath.Base(p)
 	}
@@ -238,20 +239,13 @@ func (e *Env) formFields(sf, task string) []formField {
 	var fs []formField
 	add := func(id, l, c string) { fs = append(fs, formField{id, l, c}) }
 	if n := formName(fm); n != "" {
-		if rlen(n) > 56 {
-			n = oneline.Cut(n, 55) + "…"
-		}
-		add("name", "name", n)
+		add("name", "name", ansi.Truncate(n, 56, "…"))
 	} else {
 		add("name", "name", CGrey+"its agent's title"+COff)
 	}
 	if fm.Item != nil {
 		it := fm.Item.Item
-		title := it.Content().Title
-		if rlen(title) > 56 {
-			title = oneline.Cut(title, 55) + "…"
-		}
-		add("from", "from", CBold+it.Label()+COff+"  "+title)
+		add("from", "from", CBold+it.Label()+COff+"  "+ansi.Truncate(it.Content().Title, 56, "…"))
 		if fm.Mode == items.ModeReview {
 			add("mode", "mode", "review  "+CGrey+"read-only"+COff)
 		} else {
@@ -406,12 +400,12 @@ func formEnter(id string) string {
 // in the same places on every row, enter's slot as wide as its widest, so
 // nothing in it moves as the cursor does: only what enter does changes.
 func formHints(id string) []choice {
-	w := rlen(formEnter("start"))
+	w := ansi.StringWidth(formEnter("start"))
 	for f := range formDoes {
-		w = max(w, rlen(formEnter(f)))
+		w = max(w, ansi.StringWidth(formEnter(f)))
 	}
 	what := formEnter(id)
-	what += strings.Repeat(" ", w-rlen(what))
+	what += strings.Repeat(" ", w-ansi.StringWidth(what))
 	return []choice{{"⏎", what}, {"↑↓", "FIELDS"}, {"ctrl+e", "TASK IN $EDITOR"}, {"esc", "CANCEL"}}
 }
 

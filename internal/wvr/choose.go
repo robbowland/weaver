@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -70,15 +71,15 @@ func chooseIn(t *os.File, pad, right string, cs []choice, def int) int {
 		// Each button's text where the card's values start (its own
 		// padding a column before).
 		b.WriteString("\r\033[2K" + pad + "       ")
-		col := rlen(pad) + 7 + 1
+		col := ansi.StringWidth(pad) + 7 + 1
 		for i, c := range cs {
 			if i > 0 {
 				b.WriteString("   ")
 				col += 3
 			}
 			label := " " + c.key + " " + c.what + " "
-			spans[i] = [2]int{col, col + rlen(label)}
-			col += rlen(label)
+			spans[i] = [2]int{col, col + ansi.StringWidth(label)}
+			col += ansi.StringWidth(label)
 			if i == at {
 				b.WriteString("\033[48;2;255;255;255m\033[38;2;0;0;0m" + label + COff)
 			} else {

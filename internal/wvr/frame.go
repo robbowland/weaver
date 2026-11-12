@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
@@ -163,23 +164,23 @@ func (f *frame) screen() ([]string, int) {
 	in, n := max(f.w-4, 1), max(f.h-2, 1)
 	var body []string
 	for _, l := range f.lines {
-		body = append(body, cutAnsi(l, in)...)
+		body = append(body, strings.Split(ansi.Hardwrap(l, in, true), "\n")...)
 	}
 	if len(body) > n {
 		body = body[len(body)-n:]
 	}
 	label := f.label
-	if visible(label) > f.w-4 {
+	if ansi.StringWidth(label) > f.w-4 {
 		label = ""
 	}
 	edge := CDim + "│" + COff
-	rows := []string{CDim + "┌─" + COff + label + CDim + strings.Repeat("─", max(f.w-3-visible(label), 0)) + "┐" + COff}
+	rows := []string{CDim + "┌─" + COff + label + CDim + strings.Repeat("─", max(f.w-3-ansi.StringWidth(label), 0)) + "┐" + COff}
 	for i := 0; i < n; i++ {
 		l := ""
 		if i < len(body) {
 			l = body[i]
 		}
-		rows = append(rows, edge+" "+l+COff+strings.Repeat(" ", in-visible(l))+" "+edge)
+		rows = append(rows, edge+" "+l+COff+strings.Repeat(" ", in-ansi.StringWidth(l))+" "+edge)
 	}
 	return append(rows, CDim+"└"+strings.Repeat("─", max(f.w-2, 0))+"┘"+COff), len(body)
 }
@@ -220,31 +221,4 @@ func (f *frame) choose(t *os.File, cs []choice, def int) int {
 	f.mu.Unlock()
 	fmt.Fprintf(t, "\033[%d;1H", n+1)
 	return chooseIn(t, CDim+"│"+COff+" ", fmt.Sprintf("\033[%dG", f.w)+CDim+"│"+COff, cs, def)
-}
-
-// cutAnsi is s in lines of at most n characters, its colours where they
-// fall.
-func cutAnsi(s string, n int) []string {
-	var ls []string
-	var b strings.Builder
-	k := 0
-	for i := 0; i < len(s); {
-		if s[i] == 0x1b {
-			if m := reAnsi.FindStringIndex(s[i:]); m != nil && m[0] == 0 {
-				b.WriteString(s[i : i+m[1]])
-				i += m[1]
-				continue
-			}
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if k == n {
-			ls = append(ls, b.String())
-			b.Reset()
-			k = 0
-		}
-		b.WriteRune(r)
-		k++
-		i += size
-	}
-	return append(ls, b.String())
 }

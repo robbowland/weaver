@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/linear"
 )
@@ -55,7 +56,7 @@ func TestKeySearch(t *testing.T) {
 		c.Results[github.PRs][0].Items = []github.Item{{Kind: github.PRs, Repo: "o/r", Number: 45, Title: "Add a flag", Author: "alice", Head: "add-flag"}}
 	})
 	for _, l := range strings.Split(e.itemRows(githubSource{}), "\n") {
-		if f := strings.Split(l, "\t"); f[0] == "i0" && reAnsi.ReplaceAllString(f[5], "") != "#45  Add a flag  @alice · o/r · add-flag" {
+		if f := strings.Split(l, "\t"); f[0] == "i0" && ansi.Strip(f[5]) != "#45  Add a flag  @alice · o/r · add-flag" {
 			t.Errorf("search line %q", f[5])
 		}
 	}
