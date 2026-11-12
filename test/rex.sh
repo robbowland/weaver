@@ -207,16 +207,22 @@ alt() { R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"pr
 # sessions (home's, a thread's); in another the terminal's.
 ok "keys: Alt j and Alt k weaver's in its sessions, not in another" \
 	"$(alt j)|$(SID=$T alt k)|$(OTHER=$(R api call session.create '{"label":"other"}' | jq -r .session_id) && SID=$OTHER alt j && R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null)" "true|true|false"
-# In one of weaver's popups (here Ctrl q's card) its keys are the popup's
-# program's, as a popup takes every key: Alt j stays in the card.
+# In one of weaver's popups its keys are the popup's program's, as a popup
+# takes every key: Alt j stays in Ctrl q's card. wvr opens a popup only
+# when an app is attached, and none is here, so the card opens in a
+# floating layer made as wvr's makes one; wvr opening it (Ctrl q) is
+# checked by hand (.claude/skills/testing).
 popup() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .layer_id][0] // ""'; }
-(REX_SESSION=$SID wvr _popup quit >/dev/null 2>&1 &)
-waitfor '[ -n "$(popup)" ]' 50
+pblock() { view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .blocks[0].block_id][0] // ""'; }
+R api call session.new_layer "$(jq -nc --arg s "$SID" --arg w "$AT/bin/wvr" '{session_id: $s, bounds: [0.2, 0.2, 0.6, 0.6], focus: true,
+	layout: {block: {flavor: "com.superlogical.terminal.shell", label: "weaver", options: {command: [$w, "quit"]}}}}')" >/dev/null
+waitfor 'R capture -s "$SID" -b "$(pblock)" 2>/dev/null | grep -q "n keep"' 50
 # (The app focuses the popup's block; a server without one leaves it.)
-R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$(view | jq -r '[.windows[].layers[] | select(.kind != "tiled") | .blocks[0].block_id][0]')\"}" >/dev/null
+R api call session.focus_block "{\"session_id\":\"$SID\",\"block_id\":\"$(pblock)\"}" >/dev/null
 k=$(alt j)
 sleep 0.5
-ok "keys: in a popup, Alt j is the popup's" "$k|$(active)|$([ -n "$(popup)" ] && echo open)" "false|home|open" ||
+ok "keys: in a popup, Alt j is the popup's: Ctrl q's card keeps it" \
+	"$k|$(active)|$(R capture -s "$SID" -b "$(pblock)" 2>/dev/null | grep -c "n keep")" "false|home|1" ||
 	view | jq -c '.active_window_id as $a | .windows[] | {label, active: (.window_id == $a), f: .focused_block_id[-6:], layers: [.layers[] | {kind, b: [.blocks[].block_id[-6:]]}]}' | sed 's/^/  view: /'
 R api call session.close_layer "{\"session_id\":\"$SID\",\"layer_id\":\"$(popup)\"}" >/dev/null 2>&1
 waitfor '[ -z "$(popup)" ]' 50

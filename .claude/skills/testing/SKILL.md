@@ -42,7 +42,18 @@ they start, so do not edit Go while one is about to.
   the fix in place, run, restore), then passes with it. Say so in the
   commit's Verified line.
 - Test at the boundary the bug crossed: a real Rex server (rextest), the
-  real key path (`client.key` on Rex), the real tuicr by hand (a scratch
-  Rex session: its `:q`, `e`, saved comments).
+  real key path (`client.key` on Rex), and by hand what no suite reaches
+  (below).
 - Commit messages: `type(scope): what is true now`, a body saying what was
   wrong and why, and a `Verified:` paragraph naming what ran.
+
+## By hand
+
+What the suites cannot reach, checked in a scratch Rex session with the
+app attached:
+
+- The real tuicr: its `:q`, `e`, saved comments.
+- wvr opening its popups: Ctrl q's card, Alt N's form, the board's `x`,
+  Alt y over a thread. wvr opens a popup only when an app is attached, and
+  a test server has none, so `test/rex.sh` opens a card in a floating
+  layer itself.
