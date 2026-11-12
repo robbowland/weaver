@@ -17,6 +17,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
 )
 
@@ -101,12 +102,7 @@ func layout(sp mux.Spawn, label string) map[string]any {
 }
 
 // cut is s cut to the longest label Rex takes, 128 characters.
-func cut(s string) string {
-	if r := []rune(s); len(r) > 128 {
-		return string(r[:128])
-	}
-	return s
-}
+func cut(s string) string { return oneline.Cut(s, 128) }
 
 // serverPID is the pid of the Rex server $REX_SERVER names: from the
 // runtime file Rex keeps for it when there is one (no call: hooks ask),
