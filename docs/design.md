@@ -56,7 +56,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 
 `wvr new` makes the worktree (Worktrunk's `wt switch [--create] <branch>
 --no-cd --format json`, whose `path` and `action` say where and whether it was
-made; else `git worktree add` at `<repo>/../<repo>.<branch with / as ->`), then
+made), then
 one window: its agent's pane, `wvr _agent <token> <agent>` in `<dir>`,
 labelled `<label>`, then a split on its left running `wvr _panel <agent
 pane>` (argv, no shell): its review panel, recorded as bound to it
@@ -76,9 +76,9 @@ is tried again). Offline, too slow, or
 without a remote, the branch starts from the local default branch (the one
 the remote's `HEAD` names, else `main` or `master`) and one dim line says so.
 An explicit base (`--base`, the form's `alt-B`) is used as it is: `@` is the
-HEAD of the checkout you are in (Worktrunk runs with `-C` that checkout; git
-gets its commit), `^` the default branch. A branch that exists only on the
-remote is checked out tracking it (`wt switch` / `git worktree add`).
+HEAD of the checkout you are in (Worktrunk runs with `-C` that checkout), `^`
+the default branch. A branch that exists only on the remote is checked out
+tracking it (`wt switch`).
 
 The agent's pane takes the thread from `$STATE_DIR/new/<skey>_<token>/`:
 it moves `thread.json` to `<skey>_<its pane>.thread`, deletes `task` (read
@@ -338,8 +338,8 @@ of its upstream with nothing unpushed, and nothing else uses it
 (`worktreeUsers`, which the sweep asks too: a thread of any session working
 there, a lost one, a pane of the session in it; not the thread being
 closed's). It checks again after the agent has exited, and never forces:
-Worktrunk (`wt remove --no-delete-branch --foreground`) and git refuse a dirty
-worktree themselves. Its ignored files, which removing it would take (an
+Worktrunk (`wt remove --no-delete-branch --foreground`) refuses a dirty
+worktree itself. Its ignored files, which removing it would take (an
 `.env`, local settings; not whole ignored directories a build makes again,
 nor `.DS_Store`), are copied first to `$STATE_DIR/trash/<name>-<when>/`,
 kept a month, and what says it was removed says where. The branch always
@@ -439,7 +439,7 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   (`worktreeUsers`, as close asks), when `worktreeRemovable` holds
   (clean, its HEAD merged into a default branch or pushed), its ignored
   files kept first as close keeps them, with `wt remove
-  --no-delete-branch` or `git worktree remove`, and says so in a message.
+  --no-delete-branch`, and says so in a message.
   Close's `keep` takes a worktree off the list.
 - **Dashboard:** lost threads (of every session) last, under `LOST`, glyph
   `[-]`, without a number or a 1-9 key and not counted in the title; their item

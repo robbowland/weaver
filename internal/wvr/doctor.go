@@ -178,7 +178,7 @@ func (e *Env) checks() []check {
 		tool("Neovim", "nvim", "neovim", optional, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
 		tool("tuicr", "tuicr", "tuicr", needed, "--version", 0, 28),
-		tool("Worktrunk", "wt", "worktrunk", optional, ""),
+		tool("Worktrunk", "wt", "worktrunk", needed, ""),
 	}
 	// Claude Code, its hooks running weaver.
 	c := check{name: "Claude Code", weight: needed, found: "not installed",

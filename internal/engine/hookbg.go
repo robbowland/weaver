@@ -64,9 +64,6 @@ func (h *hk) actOn(e *session.Env) {
 
 // wtMarker sets or clears a Worktrunk branch marker in dir.
 func wtMarker(dir, m string) {
-	if _, err := exec.LookPath("wt"); err != nil {
-		return
-	}
 	args := []string{"-C", dir, "config", "state", "marker", "clear"}
 	if m != "" {
 		args = []string{"-C", dir, "config", "state", "marker", "set", m}

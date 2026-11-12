@@ -21,7 +21,7 @@ jobs:
           # Old findings are being worked down; new code adds none.
           only-new-issues: true
       # No Rex here: test/hooks.sh and test/rex.sh skip.
-      - run: brew install fzf jq
+      - run: brew install fzf jq worktrunk
       - run: |
           git config --global user.name weaver-ci
           git config --global user.email weaver-ci@example.com

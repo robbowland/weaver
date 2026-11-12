@@ -63,9 +63,10 @@ threads come back after Rex restarts or the machine does.
   sends Alt only on a U.S. keyboard layout, and types special characters on
   any other).
 
-Homebrew installs everything else weaver uses: fzf, tuicr, Neovim (for
-editing from a review),
-[Worktrunk](https://worktrunk.dev) for worktrees, and gh.
+Homebrew installs everything else weaver uses: fzf, tuicr and
+[Worktrunk](https://worktrunk.dev) (which makes the threads' worktrees), which
+weaver needs, and Neovim (for editing from a review) and gh, which it can do
+without.
 
 ## Install
 

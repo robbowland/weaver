@@ -218,7 +218,7 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 }
 
 // threadBase is the base for a new branch of repo (empty: Worktrunk's
-// default, or git's HEAD), and why it is not the fetched remote default
+// default), and why it is not the fetched remote default
 // when it is not; fm's base, when set, as it is.
 func (e *Env) threadBase(repo string, fm form) (string, string) {
 	if fm.Base != "" {
@@ -374,9 +374,8 @@ func checkedOut(repo, branch string) string {
 
 // threadWorktree is the worktree for branch of repo, made unless it exists
 // (from base if given; a branch only on the remote is checked out to track
-// it), working from checkout from (where @ is): with Worktrunk when it is
-// installed, else with git at Worktrunk's default path. Its directory,
-// whether this made it, and the base it was made from.
+// it), working from checkout from (where @ is), by Worktrunk: its
+// directory, whether this made it, and the base it was made from.
 func threadWorktree(repo, branch, base, from, note string) (string, bool, string, bool) {
 	create := !git.HasBranch(repo, branch)
 	if create {
@@ -395,63 +394,30 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 		fb = " from " + base
 	}
 	fmt.Fprintf(os.Stderr, "%sweaver: worktree for %s%s%s\n", CGrey, branch, fb, COff)
-	if os.Getenv("WEAVER_WORKTRUNK") != "0" {
-		if _, err := exec.LookPath("wt"); err == nil {
-			args := []string{"-C", from, "switch"}
-			if create {
-				args = append(args, "--create")
-			}
-			if base != "" {
-				args = append(args, "--base", base)
-			}
-			args = append(args, "--no-cd", "--format", "json", branch)
-			c := exec.Command("wt", args...)
-			c.Stderr = os.Stderr
-			out, err := c.Output()
-			if err != nil {
-				return "", false, base, false
-			}
-			var r struct{ Path, Action string }
-			json.Unmarshal(out, &r)
-			if st, err := os.Stat(r.Path); r.Path == "" || err != nil || !st.IsDir() {
-				fmt.Fprintln(os.Stderr, "weaver: Worktrunk did not say where the worktree is")
-				return "", false, base, false
-			}
-			return r.Path, r.Action == "created", base, true
-		}
-	}
-	// The branch's own worktree, when it has one.
-	if wtp := checkedOut(repo, branch); wtp != "" {
-		return wtp, false, base, true
-	}
-	// Worktrunk's shortcuts, for git: @ is the checkout's HEAD, ^ the
-	// default branch.
-	switch base {
-	case "@":
-		base, _ = git.Line(from, "rev-parse", "--verify", "--quiet", "HEAD")
-	case "^":
-		base = git.LocalDefault(repo)
-	}
-	path := filepath.Dir(repo) + "/" + filepath.Base(repo) + "." + strings.ReplaceAll(branch, "/", "-")
-	var c *exec.Cmd
+	args := []string{"-C", from, "switch"}
 	if create {
-		args := []string{"-C", repo, "worktree", "add", "-b", branch, path}
-		if base != "" {
-			args = append(args, base)
-		}
-		c = exec.Command("git", args...)
-	} else {
-		c = exec.Command("git", "-C", repo, "worktree", "add", path, branch)
+		args = append(args, "--create")
 	}
-	c.Stdout, c.Stderr = os.Stderr, os.Stderr
-	if c.Run() != nil {
+	if base != "" {
+		args = append(args, "--base", base)
+	}
+	args = append(args, "--no-cd", "--format", "json", branch)
+	c := exec.Command("wt", args...)
+	c.Stderr = os.Stderr
+	out, err := c.Output()
+	if errors.Is(err, exec.ErrNotFound) {
+		fmt.Fprintln(os.Stderr, "weaver: Worktrunk is not installed: wvr doctor --fix installs it")
+	}
+	if err != nil {
 		return "", false, base, false
 	}
-	p, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		p = path
+	var r struct{ Path, Action string }
+	json.Unmarshal(out, &r)
+	if st, err := os.Stat(r.Path); r.Path == "" || err != nil || !st.IsDir() {
+		fmt.Fprintln(os.Stderr, "weaver: Worktrunk did not say where the worktree is")
+		return "", false, base, false
 	}
-	return p, true, base, true
+	return r.Path, r.Action == "created", base, true
 }
 
 // threadItem is work item it as its thread's record keeps it (nil for

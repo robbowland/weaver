@@ -547,6 +547,12 @@ can supersede an earlier one, and says so.
 - 2026-11-11: A jump to a thread whose wait is its helper's (enter, a
   number) goes to the helper's window, as alt+1 does, and alt+1 stops at
   a helper only when it needs you, never when it is merely done (Rob).
+- 2026-11-12: Worktrunk is required (Rob). weaver makes and removes a
+  thread's worktree with `wt` alone; the plain-git fallback (`git worktree
+  add` at `../<repo>.<branch>`, `git worktree remove`, `WEAVER_WORKTRUNK=0`)
+  is gone: one path to keep and test, and your Worktrunk `worktree-path` and
+  hooks always apply. `wvr doctor` checks for it as it does for tuicr, and
+  `--fix` installs it.
 
 ## Work items and views
 

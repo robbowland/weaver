@@ -113,10 +113,8 @@ From a shell, `wvr new "fix the flaky test"` does the same. Its options are
 
 ### Worktrees and branches
 
-weaver creates new worktrees with [Worktrunk](https://worktrunk.dev) when it
-is installed (`wt switch --create`), so your Worktrunk `worktree-path` and
-hooks apply. Without Worktrunk, or with `WEAVER_WORKTRUNK=0`, it uses `git
-worktree add` at `../<repo>.<branch>`.
+weaver creates new worktrees with [Worktrunk](https://worktrunk.dev) (`wt
+switch --create`), so your Worktrunk `worktree-path` and hooks apply.
 
 A new branch starts from the remote's default branch (`origin`, else the first
 remote), freshly fetched. The form starts that fetch as it opens, and its
@@ -164,8 +162,8 @@ when nvim is open in the review, whose unsaved edits would go).
 
 If weaver created the thread's worktree, and nothing in it would be lost (no
 uncommitted changes, and its commits merged into the default branch or
-pushed), weaver then offers to remove it, with `wt remove` or `git worktree
-remove`. The branch always stays.
+pushed), weaver then offers to remove it, with `wt remove`. The branch always
+stays.
 
 ## Pull requests and issues
 
@@ -572,7 +570,6 @@ Environment variables change weaver's defaults.
 | `WEAVER_AGENT_MIN_COLS` | `44` | The least a percentage gives the agent, as long as the review keeps 60 columns |
 | `WEAVER_BELL` | `1` | `needs-you`: ring only when an agent needs you; `0`: never |
 | `WEAVER_FETCH_TIMEOUT` | `10` | Seconds a new thread waits for its remote's fetch before starting from the local default branch |
-| `WEAVER_WORKTRUNK` | `1` | `0`: create worktrees with plain git even when Worktrunk is installed |
 | `WEAVER_WT_MARKERS` | `1` | `0`: stop setting [Worktrunk](https://github.com/max-sixty/worktrunk) branch markers (the state's cell: `[/]` working, `[!]` needs you, `[x]` done) |
 | `WEAVER_VIEWS` | both, except hidden ones | The views beside home: `github`, `linear`, both, or `none` |
 | `WEAVER_ITEM_TASK` | `0` | `1`: a thread from a pull request or issue starts with weaver's task written into the form (`Review #45`, `Implement ENG-42`); otherwise the task is empty, and an empty task starts the agent with no prompt |

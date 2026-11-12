@@ -22,6 +22,7 @@ import (
 // leaves the list. The ignored files of one that goes are kept aside (not
 // whole ignored directories, nor .DS_Store).
 func TestSweepWorktrees(t *testing.T) {
+	ownWorktrunk(t)
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	git := func(args ...string) {
 		t.Helper()
@@ -52,7 +53,6 @@ func TestSweepWorktrees(t *testing.T) {
 	write(wt("done")+"/.env", "TOKEN=x\n")
 	write(wt("done")+"/node_modules/pkg.js", "x\n")
 	write(wt("done")+"/.DS_Store", "x\n")
-	t.Setenv("WEAVER_WORKTRUNK", "0")
 	e := &Env{&session.Env{StateDir: dir + "/state", LostDir: dir + "/state/lost"}}
 	if err := os.MkdirAll(e.LostDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -97,6 +97,37 @@ func TestSweepWorktrees(t *testing.T) {
 	if n := len(e.worktreesMade()); n != 3 {
 		t.Errorf("kept on purpose: %d left on the list, want 3", n)
 	}
+}
+
+// A thread's worktree is Worktrunk's: made where Worktrunk puts one, from
+// its base, and found again, not made, for a branch that has one.
+func TestThreadWorktree(t *testing.T) {
+	ownWorktrunk(t)
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	repo := dir + "/repo"
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", repo},
+		{"-C", repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	for _, want := range []bool{true, false} {
+		got, made, _, ok := threadWorktree(repo, "feat-x", "main", repo, "")
+		if !ok || got != dir+"/repo.feat-x" || made != want || !files.Exists(got+"/.git") {
+			t.Errorf("worktree %q, made %v, ok %v: want %s/repo.feat-x, made %v", got, made, ok, dir, want)
+		}
+	}
+}
+
+// ownWorktrunk has Worktrunk read a configuration of the test's own, so
+// none of yours (its paths, its hooks) runs.
+func ownWorktrunk(t *testing.T) {
+	d := t.TempDir()
+	t.Setenv("WORKTRUNK_CONFIG_PATH", d+"/config.toml")
+	t.Setenv("WORKTRUNK_APPROVALS_PATH", d+"/approvals.toml")
+	t.Setenv("XDG_CONFIG_HOME", d)
 }
 
 // What uses a worktree, as close and the sweep both ask: a thread of any

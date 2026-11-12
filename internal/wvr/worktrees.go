@@ -99,8 +99,8 @@ func dropDir(ws []madeWorktree, dir string) []madeWorktree {
 	return out
 }
 
-// removeWorktree removes worktree dir of repo, its branch kept: with
-// Worktrunk when it is there (its hooks run), else git. Its ignored files,
+// removeWorktree removes worktree dir of repo, its branch kept, by
+// Worktrunk (its hooks run). Its ignored files,
 // which would go with it, are kept first (keepIgnored): where, "" for none.
 // What they print goes to out.
 func (e *Env) removeWorktree(dir, repo string, out io.Writer) (string, error) {
@@ -111,12 +111,7 @@ func (e *Env) removeWorktree(dir, repo string, out io.Writer) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not keep its ignored files: %w", err)
 	}
-	var c *exec.Cmd
-	if _, err := exec.LookPath("wt"); err == nil && os.Getenv("WEAVER_WORKTRUNK") != "0" {
-		c = exec.Command("wt", "-C", repo, "remove", "--no-delete-branch", "--foreground", dir)
-	} else {
-		c = exec.Command("git", "-C", repo, "worktree", "remove", dir)
-	}
+	c := exec.Command("wt", "-C", repo, "remove", "--no-delete-branch", "--foreground", dir)
 	c.Stdout, c.Stderr = out, out
 	if err := c.Run(); err != nil {
 		if kept != "" {
