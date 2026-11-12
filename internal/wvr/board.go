@@ -81,6 +81,7 @@ func stateWord(r session.Row, now int64) string {
 		return CRed + "needs you" + COff
 	case session.NeedLook:
 		return CGreen + string(agent.StateDone) + COff
+	case session.NeedWait, session.NeedNothing:
 	}
 	return string(cmp.Or(r.State, agent.StateIdle))
 }
