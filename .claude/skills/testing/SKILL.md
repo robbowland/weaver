@@ -12,7 +12,7 @@ Go/design.md state contract), `test/hooks.sh [suite…]` (~2 min,
 test/suites/*.sh on a throwaway Rex server), `test/rex.sh` (~30 s, weaver
 on a throwaway Rex server end to end, with a fake tuicr); both skip without
 rex. CI (macos-15, no Rex: it runs only Go's tests) runs `test/run.sh` and golangci-lint with only-new-issues:
-keep lint at its count (42 at the time of writing; `golangci-lint run
+keep lint at its count (36 at the time of writing; `golangci-lint run
 ./...`).
 
 Every suite starts its own server and state (`$AT`, `XDG_STATE_HOME`), never
