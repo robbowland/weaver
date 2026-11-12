@@ -1,24 +1,14 @@
 #!/bin/bash
 # install.sh in a sandbox home: a fresh install (one binary, its files
-# unpacked), the old install's copies removed (its Neovim plugin's among
-# them), Claude Code hooks upgraded from older weaver (and agentnav)
-# entries without leaving stale ones or touching anyone else's, and
-# idempotent reruns.
+# unpacked), Claude Code hooks upgraded from an older weaver's entries
+# without leaving stale ones or touching anyone else's, and idempotent
+# reruns.
 . "$(dirname "$0")/../lib.sh"
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
 H=$AT/install-home
 rm -rf "$H"
 mkdir -p "$H/.claude"
-# What the install before the binary left: its script, itself and config/.
-mkdir -p "$H/.local/share/weaver/config"
-printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/weaver"
-printf '#!/usr/bin/env bash\n' >"$H/.local/share/weaver/install.sh"
-echo '{}' >"$H/.local/share/weaver/config/claude-hooks.json"
-# ...and what weaver kept beside it until it dropped its Neovim plugin: the
-# plugin's copy for Neovim configs, and the plugins it fetched for it.
-mkdir -p "$H/.local/share/weaver/nvim/lua/weaver" "$H/.local/share/weaver/plugins/diffview-plus.nvim"
-printf 'return {}\n' >"$H/.local/share/weaver/nvim/lua/weaver/init.lua"
 # Go's caches stay yours: in the sandbox home every run would fetch and
 # build weaver's modules again, into a cache rm cannot remove (read-only).
 export GOMODCACHE GOCACHE
@@ -32,30 +22,28 @@ out=$(inst)
 ok "install builds weaver, one binary, into ~/.local/bin" \
 	"$([ -f "$H/.local/bin/wvr" ] && [ ! -L "$H/.local/bin/wvr" ] && go version -m "$H/.local/bin/wvr" | grep -c 'path	github.com/robbowland/weaver/cmd/wvr')" "1"
 
-# Claude Code settings from an older weaver, agentnav, and someone else.
+# Claude Code settings from an older weaver, and someone else.
 cat >"$H/.claude/settings.json" <<'EOF'
 {
   "model": "opus",
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "weaver hook" }, { "type": "command", "command": "say done" }] }
+      { "hooks": [{ "type": "command", "command": "wvr hook" }, { "type": "command", "command": "say done" }] }
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write|MultiEdit|NotebookEdit|EnterWorktree|ExitWorktree", "hooks": [{ "type": "command", "command": "weaver hook" }] },
-      { "matcher": "", "hooks": [{ "type": "command", "command": "weaver hook --async", "async": true }] },
+      { "matcher": "Edit|Write|MultiEdit|NotebookEdit|EnterWorktree|ExitWorktree", "hooks": [{ "type": "command", "command": "wvr hook" }] },
+      { "matcher": "", "hooks": [{ "type": "command", "command": "wvr hook --async", "async": true }] },
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "my-linter" }] }
     ],
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "/old/bin/wvr hook" }] }]
   }
 }
 EOF
 out=$(inst --configure)
 ok "...unpacks its files as it sets up" "$(ls "$H/.local/share/weaver/runtime"/*/config/rex.lua 2>/dev/null | wc -l | tr -d ' ')" "1"
-ok "...and removes the old install's copies, its Neovim plugin's and the plugins it fetched among them" \
-	"$(ls "$H/.local/share/weaver" | tr '\n' ' ')" "runtime "
 S=$H/.claude/settings.json
-ok "no stale weaver or agentnav hook is left" \
-	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(weaver|agentnav)( |$)"))] | length' "$S")" "0"
+ok "no stale weaver hook is left" \
+	"$(jq '[.. | objects | select(has("command")) | .command | select(test("^(\\S*/)?wvr "))] | length' "$S")" "0"
 ok "each event (each matcher of it) has exactly one wvr hook" \
 	"$(jq '[.hooks[][] | [.hooks[] | select(.command | endswith("/wvr"))] | length | select(. > 0)] | unique' -c "$S")|$(jq '[.hooks | to_entries[] | select(any(.value[].hooks[]; .command | endswith("/wvr")))] | length' "$S")|$(jq -c '[.hooks.PreToolUse[] | select(any(.hooks[]; .command | endswith("/wvr"))) | .matcher]' "$S")" \
 	"[1]|$(jq '.hooks | length' "$ROOT/config/claude-hooks.json")|[\"AskUserQuestion\",\"Bash\"]"
@@ -78,15 +66,6 @@ out=$(inst --configure)
 ok "rerun: settings unchanged" "$(cat "$S")" "$before"
 ok "...no new backup" "$(ls "$H/.claude" | grep -c '^settings.json.bak\.')" "1"
 ok "...and says so" "$(printf '%s\n' "$out" | grep -c 'already runs weaver')" "1"
-# The command's old name: a weaver binary there is kept the same build (its
-# sessions' hooks run it), never made where there was none.
-printf 'old' >"$H/.local/bin/old" && cp "$H/.local/bin/wvr" "$H/.local/bin/weaver" && cat "$H/.local/bin/old" >>"$H/.local/bin/weaver"
-out=$(inst)
-ok "the old name, weaver: kept as this build, and said" \
-	"$(cmp -s "$H/.local/bin/weaver" "$H/.local/bin/wvr" && echo same)|$(printf '%s\n' "$out" | grep -c 'kept .*/weaver, the old name')" "same|1"
-rm -f "$H/.local/bin/weaver" "$H/.local/bin/old"
-inst >/dev/null
-ok "...and not made where there was none" "$([ -e "$H/.local/bin/weaver" ] && echo made || echo none)" "none"
 # What weaver works with: wvr doctor --fix has Homebrew install what is
 # missing (a fake brew here, on a PATH with git and nothing else).
 BREW=$AT/fakebrew

@@ -17,9 +17,9 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 )
 
-// reOurs is a hook command of weaver's (wvr, or weaver and agentnav, its
-// old names): its name alone, a path to it, either with arguments.
-var reOurs = regexp.MustCompile(`^(\S*/)?(wvr|weaver|agentnav)( |$)`)
+// reOurs is a hook command of weaver's: wvr alone, a path to it, either
+// with arguments.
+var reOurs = regexp.MustCompile(`^(\S*/)?wvr( |$)`)
 
 // Run is `wvr setup [--dry-run] [--bin PATH]`: weaver's hooks into Claude
 // Code's settings, run by this binary's path (or PATH), each file backed up before
@@ -192,8 +192,8 @@ func copyFile(from, to string) error {
 	return os.WriteFile(to, b, st.Mode().Perm())
 }
 
-// mergeHooks is settings with every weaver hook (whatever its form: "weaver
-// hook", a path to weaver with args, or agentnav, its old name) removed and
+// mergeHooks is settings with every weaver hook (whatever its form: "wvr
+// hook", or a path to wvr with args) removed and
 // add's hooks put in, their "wvr" run as bin: so a changed matcher or
 // event never leaves a stale entry behind. Hooks of anything else are never
 // touched; a matcher group left empty, or an event left with none, goes.

@@ -12,7 +12,6 @@
 set -eu
 
 SRC=$(cd "$(dirname "$0")" && pwd -P)
-DEST="${XDG_DATA_HOME:-$HOME/.local/share}/weaver"
 BIN="$HOME/.local/bin"
 
 say() { printf '%s\n' "$*"; }
@@ -51,24 +50,15 @@ install_files() {
 		return
 	fi
 	mkdir -p "$BIN"
-	# Only ever replace weaver: a weaver binary, or (as weaver) a link an
-	# older install made.
 	if [ -e "$BIN/wvr" ] && ! ours "$BIN/wvr"; then
 		die "$BIN/wvr exists and is not weaver; not replacing it"
 	fi
 	# Built beside it, then renamed over it: a hook running meanwhile runs the
 	# old binary or the new one, never half of either.
 	(cd "$SRC" && go build -trimpath -o "$BIN/.wvr.new" ./cmd/wvr) || die "cannot build weaver"
-	# The command was weaver before it was wvr: hooks of Claude Code sessions
-	# started then, and a home board open since, still run that path, so it
-	# is kept the same build until you remove it.
-	if [ -f "$BIN/weaver" ] && [ ! -L "$BIN/weaver" ] && ours "$BIN/weaver"; then
-		cp -f "$BIN/.wvr.new" "$BIN/.weaver.new" && mv -f "$BIN/.weaver.new" "$BIN/weaver"
-		say "kept $BIN/weaver, the old name, as this build: remove it once its sessions have restarted"
-	fi
 	mv -f "$BIN/.wvr.new" "$BIN/wvr"
-	# The binary carries its configs, and unpacks them under $DEST/runtime
-	# when it first needs them.
+	# The binary carries its configs, and unpacks them under
+	# ~/.local/share/weaver/runtime when it first needs them.
 	say "installed $BIN/wvr"
 	case ":$PATH:" in
 	*":$BIN:"*) ;;
@@ -76,47 +66,8 @@ install_files() {
 	esac
 }
 
-# Before weaver was one binary, install.sh copied its script, itself and
-# config/ into $DEST and linked the script into $BIN. The binary carries
-# them now. Remove those copies, but only ones that look like what it wrote.
-remove_old_copies() {
-	local f gone=()
-	for f in "$DEST/weaver" "$DEST/install.sh"; do
-		if [ -f "$f" ] && [ ! -L "$f" ] && head -n 1 "$f" 2>/dev/null | grep -q '^#!.*bash'; then
-			gone+=("$f")
-		fi
-	done
-	if [ -d "$DEST/config" ] && [ -f "$DEST/config/claude-hooks.json" ]; then
-		gone+=("$DEST/config")
-	fi
-	[ ${#gone[@]} -gt 0 ] || return 0
-	if [ $dry = 1 ]; then
-		say "would remove the old install's copies: ${gone[*]}"
-		return
-	fi
-	rm -rf "${gone[@]}"
-	say "removed the old install's copies: ${gone[*]}"
-}
-
-# weaver was called agentnav: remove that install, but only the copy and the
-# link install.sh made, never a file it did not create.
-remove_agentnav() {
-	local old="${XDG_DATA_HOME:-$HOME/.local/share}/agentnav"
-	if [ -L "$BIN/agentnav" ] && [ "$(readlink "$BIN/agentnav")" = "$old/agentnav" ]; then
-		if [ $dry = 1 ]; then
-			say "would remove the old agentnav install: $BIN/agentnav and $old"
-		else
-			rm -f "$BIN/agentnav"
-			rm -rf "$old"
-			say "removed the old agentnav install: $BIN/agentnav and $old"
-		fi
-	fi
-}
-
 check_deps
 install_files
-remove_old_copies
-remove_agentnav
 if [ $configure = 1 ]; then
 	# The hooks: `wvr setup` (with --dry-run, by a build of this checkout
 	# that is not installed).

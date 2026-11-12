@@ -8,19 +8,19 @@ import (
 	"testing"
 )
 
-// mergeHooks takes out every weaver hook (wvr, weaver or agentnav), whatever its form,
+// mergeHooks takes out every weaver hook, whatever its form,
 // puts the current ones in run by bin, touches nobody else's, keeps the
 // settings' order, and changes nothing the second time.
 func TestMergeHooks(t *testing.T) {
 	settings := `{
   "model": "opus",
   "hooks": {
-    "Stop": [{ "hooks": [{ "type": "command", "command": "weaver hook" }, { "type": "command", "command": "say done" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "wvr hook" }, { "type": "command", "command": "say done" }] }],
     "PostToolUse": [
-      { "matcher": "Edit", "hooks": [{ "type": "command", "command": "/old/bin/weaver", "args": ["hook"] }] },
+      { "matcher": "Edit", "hooks": [{ "type": "command", "command": "/old/bin/wvr", "args": ["hook"] }] },
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "my-linter" }] }
     ],
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "agentnav hook" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "/old/bin/wvr hook" }] }]
   },
   "statusLine": { "type": "command", "command": "ünïcode ✓" }
 }`
@@ -33,7 +33,7 @@ func TestMergeHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(out)
-	for _, gone := range []string{`"weaver hook"`, `/old/bin/weaver`, `agentnav`, `"SessionStart"`} {
+	for _, gone := range []string{`"wvr hook"`, `/old/bin/wvr`, `"SessionStart"`} {
 		if strings.Contains(s, gone) {
 			t.Errorf("%s left in:\n%s", gone, s)
 		}

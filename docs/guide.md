@@ -517,10 +517,6 @@ Dragging in a pane selects and copies, as Rex does.
   work is committed, small commits of only its own paths, done as `git log --oneline <base>..HEAD`, and your review read
   from tuicr). Like tuicr's files, it is rewritten while its first lines
   say it is weaver's, and left alone once you remove that line.
-- **Old copies.** The first time, it removes what an older weaver kept
-  for its Neovim plugin: its copy at `~/.local/share/weaver/nvim` and the
-  plugins it fetched, `~/.local/share/weaver/plugins`. A Neovim config of
-  yours that loaded the plugin from there no longer finds it.
 
 It prints one line whenever it changes a file. `wvr setup --dry-run` shows
 what it would change, and `WEAVER_SELF_SETUP=0` turns this off.

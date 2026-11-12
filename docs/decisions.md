@@ -972,6 +972,15 @@ can supersede an earlier one, and says so.
   start-up 10.8 to 23.1 ms). From v0.0.31 the libraries add 0.05 ms of
   init, and start-up is unchanged (10.55 against 10.50 ms median, 400
   interleaved runs each, load 7 on 12 cores).
+- 2026-11-12: weaver no longer tidies up after an install from before
+  0.13, superseding the 2026-10-16 entry's notes on the old names (Rob:
+  once he ran 0.13 from Homebrew; backwards compatibility does not matter).
+  `wvr setup` takes out only hooks run by `wvr`; one run by `weaver` or
+  `agentnav` is left as anyone's. `install.sh` no longer removes agentnav's
+  install or the copies the install before the binary left, nor keeps
+  `~/.local/bin/weaver` as its build, and `wvr` no longer removes the
+  Neovim plugin's copies under `~/.local/share/weaver`. Rob's machine had
+  none of them left.
 
 ## Code
 

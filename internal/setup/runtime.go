@@ -42,7 +42,6 @@ func Runtime() (string, error) {
 	id := hex.EncodeToString(h.Sum(nil))[:16]
 	dir := data + "/weaver/runtime/" + id
 	if _, err := os.Stat(dir + "/config/rex.lua"); err == nil {
-		removeOldCopies(data + "/weaver")
 		return dir, nil
 	}
 	tmp := dir + ".tmp." + strconv.Itoa(os.Getpid())
@@ -70,20 +69,8 @@ func Runtime() (string, error) {
 			return "", err
 		}
 	}
-	removeOldCopies(data + "/weaver")
 	pruneRuntimes(data+"/weaver/runtime", id)
 	return dir, nil
-}
-
-// removeOldCopies removes, from base, what weaver no longer keeps there:
-// its Neovim plugin's copy (nvim, which Neovim configs loaded) and the
-// plugins it fetched for it (plugins).
-func removeOldCopies(base string) {
-	for _, d := range []string{"nvim", "plugins"} {
-		if _, err := os.Lstat(base + "/" + d); err == nil {
-			os.RemoveAll(base + "/" + d)
-		}
-	}
 }
 
 // pruneRuntimes removes the unpacked files of builds other than this one
