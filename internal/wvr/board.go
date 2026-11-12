@@ -376,49 +376,7 @@ func (e *Env) rows(plain bool) string {
 		// line counts it; the glyph and fact say how.
 		need := a.Need(now)
 		g := int(need)
-		glyph, fact := stateCell(a, now, p), ""
-		switch {
-		case a.Exited:
-			fact = "exited · R starts it again, x closes it"
-		case a.State == agent.StateNeedsYou:
-			fact = a.Waiting
-			if fact == "" {
-				fact = "input"
-			}
-		case a.State == agent.StateWorking:
-			switch {
-			case a.Doing != "":
-				fact = "running " + a.Doing
-			case a.Bg > 0:
-				fact = strconv.Itoa(a.Bg) + " in background"
-			case a.Nsub > 0:
-				fact = strconv.Itoa(a.Nsub) + " subagent"
-				if a.Nsub != 1 {
-					fact += "s"
-				}
-			case a.Ttotal > 0:
-				fact = strconv.Itoa(a.Tdone) + "/" + strconv.Itoa(a.Ttotal) + " tasks"
-			case a.File != "":
-				fact = "editing " + a.File
-			default:
-				// Nothing it runs or edits yet: the model at work.
-				fact = "thinking"
-			}
-		case a.State == agent.StateDone:
-			fact = a.Last
-		case a.State == agent.StateInterrupted:
-			fact = string(agent.StateInterrupted)
-		case a.NotReporting(now):
-			fact = "not reporting"
-		case a.State == agent.StateStarting:
-			// Its agent reports within seconds.
-			fact = string(agent.StateStarting)
-		default:
-			// Idle, or ended: quiet, the idle cell.
-			if a.Turn == 0 {
-				fact = "no prompt yet"
-			}
-		}
+		glyph, fact := stateCell(a, now, p), rowFact(a, now)
 		where := git.WhereOf(a.Root).Name()
 		// Needs you, done and working: longest first; idle: latest first.
 		k := since
@@ -779,6 +737,45 @@ func (e *Env) rows(plain bool) string {
 		fmt.Fprintf(&b, "%s\t\t\t%s\t%s\t\t%s\t\n", it.id, prevp, nextp, it.text)
 	}
 	return b.String()
+}
+
+// rowFact is what a live row says of its agent: what it waits on, what it
+// runs (else does) while it works, what it last said, or why it is quiet.
+func rowFact(a session.Row, now int64) string {
+	switch {
+	case a.Exited:
+		return "exited · R starts it again, x closes it"
+	case a.State == agent.StateNeedsYou:
+		return cmp.Or(a.Waiting, "input")
+	case a.State == agent.StateWorking:
+		switch {
+		case a.Doing != "":
+			return "running " + a.Doing
+		case a.Bg > 0:
+			return strconv.Itoa(a.Bg) + " in background"
+		case a.Nsub > 0:
+			return strconv.Itoa(a.Nsub) + " subagent" + plural(a.Nsub)
+		case a.Ttotal > 0:
+			return strconv.Itoa(a.Tdone) + "/" + strconv.Itoa(a.Ttotal) + " tasks"
+		case a.File != "":
+			return "editing " + a.File
+		}
+		// Nothing it runs or edits yet: the model at work.
+		return "thinking"
+	case a.State == agent.StateDone:
+		return a.Last
+	case a.State == agent.StateInterrupted:
+		return string(agent.StateInterrupted)
+	case a.NotReporting(now):
+		return "not reporting"
+	case a.State == agent.StateStarting:
+		// Its agent reports within seconds.
+		return string(agent.StateStarting)
+	case a.Turn == 0:
+		return "no prompt yet"
+	}
+	// Idle, or ended: quiet, the idle cell.
+	return ""
 }
 
 // boardHints are the dashboard's footer: the keys that work now, as many as
