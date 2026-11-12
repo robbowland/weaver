@@ -230,6 +230,14 @@ can supersede an earlier one, and says so.
   uncommitted, then `rex window close`s it. weaver needs nothing more:
   a helper has no thread, so one whose window closes is forgotten, never
   kept as lost.
+- 2026-11-12: The review panel needs Rob's fork of tuicr
+  (robbowland/kegs/tuicr, 0.28.0-rb1 or later), as doctor checks by its
+  version's `-rbN`. The fork opens an empty range with `-w` on the work
+  tree (upstream's #804), diffs a range reviewed with `-w` from the range's
+  own base so a merged-in base no longer shows, and has the opt-in keys
+  weaver's quieter look uses (`show_brand`, `section_style = "rule"`,
+  `show_total_stat`, the theme's `file_header`). Upstream's tuicr is
+  replaced by hand: both formulae install a `tuicr`.
 
 ## Holding threads
 

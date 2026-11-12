@@ -66,7 +66,11 @@ threads come back after Rex restarts or the machine does.
 Homebrew installs everything else weaver uses: fzf, tuicr and
 [Worktrunk](https://worktrunk.dev) (which makes the threads' worktrees), which
 weaver needs, and Neovim (for editing from a review) and gh, which it can do
-without.
+without. The tuicr is [a fork](https://github.com/robbowland/tuicr)
+(`robbowland/kegs/tuicr`, 0.28.0-rb1 or later): it shows a branch with no
+commits yet as its uncommitted edits, keeps a base merged into the branch out
+of the diff, and has the quieter look weaver's review uses. `wvr doctor` says
+when the tuicr you have is upstream's.
 
 ## Install
 
@@ -189,8 +193,8 @@ conversations.
 
 ## Review
 
-Each thread's review is [tuicr](https://github.com/agavra/tuicr), in its
-worktree: the branch since it left its base, commits and uncommitted edits
+Each thread's review is [tuicr](https://github.com/agavra/tuicr) (Rob's
+fork of it), in its worktree: the branch since it left its base, commits and uncommitted edits
 together, following the agent's edits as it makes them.
 
 - `(` and `)` step through the branch commit by commit.

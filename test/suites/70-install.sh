@@ -103,7 +103,7 @@ fixed=$(env -u REX_BIN_DIR HOME=$H XDG_DATA_HOME=$H/.local/share XDG_STATE_HOME=
 rc=$?
 ok "doctor --fix: Homebrew installs what weaver works with and is missing, in one go" \
 	"$(cat "$AT/brew.log" 2>/dev/null | tr '\n' ' ')" \
-	"install neovim fzf tuicr worktrunk gh "
+	"install neovim fzf robbowland/kegs/tuicr worktrunk gh "
 ok "...and still fails, saying what is left, while weaver cannot work" \
 	"$rc|$(printf '%s\n' "$fixed" | grep -c '^\[!\] Rex')" "1|1"
 unset BREW

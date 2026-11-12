@@ -117,6 +117,42 @@ func tool(name, cmd, formula string, w weight, versionArg string, least ...int) 
 	return c
 }
 
+// tuicrFork is the formula of Rob's fork of tuicr, which the review panel
+// needs: upstream's refuses a range with no commits that -w would show (the
+// work tree), and lets a merged base into a range's diff.
+const tuicrFork = "robbowland/kegs/tuicr"
+
+// reTuicrFork is the fork's version, as tuicr --version says it: upstream's
+// with -rbN after it (0.28.0-rb1).
+var reTuicrFork = regexp.MustCompile(`(\d+(?:\.\d+)+)-rb\d+`)
+
+// tuicrCheck is tuicr as the review panel needs it: Rob's fork, at 0.28 or
+// later. Upstream's tuicr is replaced, by hand: the fork installs a tuicr
+// of the same name.
+func tuicrCheck() check {
+	c := check{name: "tuicr", weight: needed}
+	if !onPath("tuicr") {
+		c.found, c.remedy = "not installed", brewInstall{tuicrFork}
+		return c
+	}
+	out, err := exec.Command("tuicr", "--version").Output()
+	if err != nil {
+		c.found, c.remedy = "does not run", brewUpgrade{tuicrFork}
+		return c
+	}
+	m := reTuicrFork.FindStringSubmatch(string(out))
+	switch {
+	case m == nil:
+		c.found = reVersion.FindString(string(out)) + ", upstream's: weaver needs its fork"
+		c.remedy = byHand{"brew uninstall tuicr && brew install " + tuicrFork}
+	case !atLeast(m[1], 0, 28):
+		c.found, c.remedy = m[0]+", weaver needs 0.28.0-rb1 or newer", brewUpgrade{tuicrFork}
+	default:
+		c.ok, c.found = true, m[0]
+	}
+	return c
+}
+
 // rexCheck is Rex, which weaver runs on: its rex, where the Rex app keeps
 // it or on PATH (rex.Bin).
 func rexCheck() check {
@@ -177,7 +213,7 @@ func (e *Env) checks() []check {
 		tool("git", "git", "git", needed, "--version"),
 		tool("Neovim", "nvim", "neovim", optional, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
-		tool("tuicr", "tuicr", "tuicr", needed, "--version", 0, 28),
+		tuicrCheck(),
 		tool("Worktrunk", "wt", "worktrunk", needed, ""),
 	}
 	// Claude Code, its hooks running weaver.

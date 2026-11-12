@@ -538,6 +538,14 @@ fixes each problem. `wvr doctor --fix` does what it can: Homebrew installs
 what is missing or too old, weaver sets up its hooks and brings tuicr's files
 and its skill, and each sign-in is offered.
 
+The review panel needs Rob's fork of tuicr (`robbowland/kegs/tuicr`,
+0.28.0-rb1 or later; its version ends in `-rb1`): upstream's refuses a
+branch with no commits yet, where the fork shows its uncommitted edits, and
+lets a base merged into the branch into the diff. `--fix` installs the fork
+when there is no tuicr; one of upstream's you replace yourself, as doctor
+says (`brew uninstall tuicr && brew install robbowland/kegs/tuicr`), since
+both install a `tuicr`.
+
 ### Upgrading
 
 `brew upgrade` keeps weaver current, and `brew install --HEAD
