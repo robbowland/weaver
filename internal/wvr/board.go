@@ -113,7 +113,7 @@ func ttySize() (int, int, bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	cols, rows, err := term.GetSize(int(f.Fd()))
 	if err != nil || rows == 0 || cols == 0 {
 		return 0, 0, false
@@ -237,9 +237,9 @@ func cardRoom(items, cols, lines int) string {
 		}
 	}
 	if base := sockBase(); base != "" {
-		os.WriteFile(base+".room", []byte(pw+"\n"), 0o644)
+		bestEffort(os.WriteFile(base+".room", []byte(pw+"\n"), 0o644))
 		if hide {
-			os.WriteFile(base+".tight", nil, 0o644)
+			bestEffort(os.WriteFile(base+".tight", nil, 0o644))
 		} else if files.Exists(base + ".tight") {
 			os.Remove(base + ".tight")
 		}
@@ -634,7 +634,7 @@ func (e *Env) rows(plain bool) string {
 			}
 			bestEffort(files.Put(base+".title", out))
 			if n == 0 {
-				os.WriteFile(base+".keys", nil, 0o644)
+				bestEffort(os.WriteFile(base+".keys", nil, 0o644))
 			}
 		}
 		if n == 0 {
@@ -974,7 +974,7 @@ func (e *Env) Chrome() string {
 	pw, _ := files.FirstLine(base + ".room")
 	last, _ := files.FirstLine(base + ".shown")
 	if pw != "" && pw != last {
-		os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644)
+		bestEffort(os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644))
 		out += "change-preview-window(" + pw + ")+"
 	}
 	label, _ := files.FirstLine(base + ".label")

@@ -139,14 +139,14 @@ func (e *Env) fetchStart(repo, sf string) {
 	os.Remove(f + ".pid")
 	rm := git.PreferredRemote(repo)
 	if rm == "" {
-		os.WriteFile(f+".rc", []byte("none\n"), 0o644)
+		bestEffort(os.WriteFile(f+".rc", []byte("none\n"), 0o644))
 		return
 	}
 	c := exec.Command(e.Self, "_fetch", repo, rm, f, sf)
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if c.Start() == nil {
-		os.WriteFile(f+".pid", []byte(strconv.Itoa(c.Process.Pid)+"\n"), 0o644)
-		c.Process.Release()
+		bestEffort(os.WriteFile(f+".pid", []byte(strconv.Itoa(c.Process.Pid)+"\n"), 0o644))
+		bestEffort(c.Process.Release())
 	}
 }
 
@@ -156,7 +156,7 @@ func (e *Env) Fetch(repo, remote, f, sf string) {
 	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if ef, err := os.Create(f + ".err"); err == nil {
 		c.Stderr = ef
-		defer ef.Close()
+		defer func() { _ = ef.Close() }()
 	}
 	rc := 0
 	if err := c.Run(); err != nil {
@@ -707,11 +707,14 @@ func (e *Env) New(args []string) error {
 		if err != nil {
 			return errors.New("cannot make a temporary file")
 		}
-		if t != "" {
-			f.WriteString(t + "\n")
-		}
-		f.Close()
 		defer os.Remove(f.Name())
+		var werr error
+		if t != "" {
+			_, werr = f.WriteString(t + "\n")
+		}
+		if errors.Join(werr, f.Close()) != nil {
+			return errors.New("cannot write the task for the editor")
+		}
 		editFile(f.Name())
 		b, _ := files.ReadTrim(f.Name())
 		if strings.TrimSpace(b) == "" {
@@ -731,13 +734,13 @@ func (e *Env) New(args []string) error {
 	if _, err := exec.LookPath("fzf"); err != nil || !term.IsTerminal(0) || !term.IsTerminal(1) {
 		return errors.New(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
 	}
-	os.MkdirAll(e.StateDir, 0o755)
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
 	tf, err := os.CreateTemp(e.StateDir, "form.")
 	if err != nil {
 		return errors.New("cannot make the form's file")
 	}
 	sf := tf.Name()
-	tf.Close()
+	_ = tf.Close() // empty: the form writes it by name
 	fm.save(sf)
 	defer func() {
 		os.Remove(sf)
@@ -792,7 +795,7 @@ func readKey() byte {
 	if err != nil {
 		return 0x1b
 	}
-	defer t.Close()
+	defer func() { _ = t.Close() }()
 	fd := int(t.Fd())
 	if old, err := term.MakeRaw(fd); err == nil {
 		defer func() { bestEffort(term.Restore(fd, old)) }()
@@ -1074,7 +1077,7 @@ func (e *Env) Form(op, sf, q string) {
 	case "editor":
 		first, err := files.FirstLine(sf + ".task")
 		if err != nil || first != q {
-			os.WriteFile(sf+".task", []byte(q+"\n"), 0o644)
+			bestEffort(os.WriteFile(sf+".task", []byte(q+"\n"), 0o644))
 		}
 		editFile(sf + ".task")
 	case "query":
@@ -1317,7 +1320,7 @@ func editFile(f string) {
 	c := exec.Command(w[0], append(w[1:], f)...)
 	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 		c.Stdin, c.Stdout = tty, tty
-		defer tty.Close()
+		defer func() { _ = tty.Close() }()
 	}
 	c.Stderr = os.Stderr
 	bestEffort(c.Run())

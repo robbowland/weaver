@@ -107,7 +107,9 @@ func TestFleetQuit(t *testing.T) {
 	}
 	t.Setenv("REX_BIN_DIR", wd)
 
-	os.WriteFile(mark, nil, 0o644)
+	if err := os.WriteFile(mark, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	err = (Fleet{Home: home, Here: ids[0]}).Quit()
 	os.Remove(mark)
 	if err == nil || !home.Running() {

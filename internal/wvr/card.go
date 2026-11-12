@@ -501,7 +501,7 @@ func View(what string) string {
 		out += "hide-preview+"
 	}
 	if next != "" {
-		os.WriteFile(f, []byte(next+"\n"), 0o644)
+		bestEffort(os.WriteFile(f, []byte(next+"\n"), 0o644))
 	} else {
 		os.Remove(f)
 	}

@@ -156,7 +156,7 @@ func (e *Env) rememberRepo(r string) {
 	if r == "" {
 		return
 	}
-	os.MkdirAll(e.StateDir, 0o755)
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
 	f := e.StateDir + "/repos"
 	ls := []string{r}
 	if b, err := os.ReadFile(f); err == nil {
@@ -517,7 +517,10 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if os.MkdirAll(d, 0o755) != nil {
 		return errors.New("cannot create " + d)
 	}
-	os.WriteFile(d+"/task", []byte(prompt), 0o644)
+	if os.WriteFile(d+"/task", []byte(prompt), 0o644) != nil {
+		os.RemoveAll(d)
+		return errors.New("cannot write the task for its agent in " + d)
+	}
 	// Its stable number: the lowest free one (two at once must not share).
 	unlock := e.numLock()
 	n, _ := e.threadNum()
@@ -700,7 +703,10 @@ func (e *Env) threadRestore(lf string, nofocus bool) (string, error) {
 			return msg, nil
 		}
 	}
-	os.Rename(d+"/lost.json", lf)
+	// Put back, else kept where it is (said), never removed with d.
+	if os.Rename(d+"/lost.json", lf) != nil {
+		return "", fmt.Errorf("%w; its record is in %s", err, d)
+	}
 	os.RemoveAll(d)
 	return "", err
 }
@@ -887,7 +893,7 @@ func (e *Env) Resume(args []string) error {
 			fmt.Fprint(t, cardRow(pad, "", CGrey+"its worktree goes once nothing in it is unsaved"+COff))
 			fmt.Fprint(t, "\n")
 			c := choose(t, pad, []choice{{"y", "forget"}, {"n", "keep"}}, 1)
-			t.Close()
+			_ = t.Close()
 			if c != 0 {
 				return cli.ErrCancelled
 			}
@@ -1177,7 +1183,7 @@ func (e *Env) Close(args []string) error {
 			return errors.New("close needs a terminal to ask, or --yes")
 		}
 		tty, out = t, t
-		defer t.Close()
+		defer func() { _ = t.Close() }()
 	}
 	goes := "the agent"
 	if nv != "" {
@@ -1262,7 +1268,7 @@ func (e *Env) Close(args []string) error {
 // (REX_BLOCK unset), what it says going to close.log: for work that closes
 // the pane, popup or session this runs in.
 func (e *Env) outside(args ...string) {
-	os.MkdirAll(e.StateDir, 0o755)
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
 	signal.Ignore(syscall.SIGHUP, syscall.SIGTERM)
 	c := exec.Command(e.Self, args...)
 	c.Env = append(os.Environ(), "REX_BLOCK=")
@@ -1270,7 +1276,7 @@ func (e *Env) outside(args ...string) {
 		c.Stdout, c.Stderr = f, f
 	}
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	c.Start()
+	bestEffort(c.Start())
 }
 
 // CloseTail is the closing itself (`wvr _close AGENT PANEL PID START
@@ -1422,7 +1428,7 @@ func (e *Env) Quit(args []string) error {
 		}
 		fmt.Fprint(t, "\n")
 		c := choose(t, pad, []choice{{"y", "quit"}, {"n", "keep"}}, 1)
-		t.Close()
+		_ = t.Close()
 		if c != 0 {
 			return cli.ErrCancelled
 		}

@@ -83,7 +83,7 @@ func readConversation(f string) (conversation, error) {
 	if err != nil {
 		return c, err
 	}
-	defer fh.Close()
+	defer func() { _ = fh.Close() }()
 	st, err := fh.Stat()
 	if err != nil {
 		return c, err

@@ -49,9 +49,13 @@ func TestThreadNumSkipsLeftovers(t *testing.T) {
 			t.Fatal(err)
 		}
 		at := time.Now().Add(-age)
-		os.Chtimes(f, at, at)
+		if err := os.Chtimes(f, at, at); err != nil {
+			t.Fatal(err)
+		}
 	}
-	os.WriteFile(filepath.Join(e.StateDir, e.SKey+"_3.thread"), []byte(`{"num":1}`), 0o644)
+	if err := os.WriteFile(filepath.Join(e.StateDir, e.SKey+"_3.thread"), []byte(`{"num":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	put("1", `{"num":2}`, time.Second)
 	put("2", `{"num":3}`, time.Minute)
 	n, used := e.threadNum()

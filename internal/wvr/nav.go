@@ -331,7 +331,7 @@ func (e *Env) tryUILock() (func(), bool) {
 
 func (e *Env) takeUILock(nowait bool) (func(), bool) {
 	d := e.StateDir + "/" + e.SKey + ".ui"
-	os.MkdirAll(e.StateDir, 0o755)
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
 	for i := 0; ; i++ {
 		if os.Mkdir(d, 0o755) == nil {
 			break
@@ -355,7 +355,7 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	os.WriteFile(d+"/at", []byte(strconv.FormatInt(time.Now().Unix(), 10)+"\n"), 0o644)
+	bestEffort(os.WriteFile(d+"/at", []byte(strconv.FormatInt(time.Now().Unix(), 10)+"\n"), 0o644))
 	return func() { os.RemoveAll(d) }, true
 }
 

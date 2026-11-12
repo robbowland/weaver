@@ -14,8 +14,9 @@ linters:
     - unused
   settings:
     # Unchecked: output to the terminal, removing what may already be gone,
-    # and exec, which returns only when it failed. Everything else is
-    # checked or named as best-effort.
+    # setting an environment variable (which fails only on a name with = or
+    # NUL in it, and weaver's are constants), and exec, which returns only
+    # when it failed. Everything else is checked or named as best-effort.
     errcheck:
       exclude-functions:
         - fmt.Fprint
@@ -23,6 +24,8 @@ linters:
         - fmt.Fprintln
         - os.Remove
         - os.RemoveAll
+        - os.Setenv
+        - os.Unsetenv
         - syscall.Exec
     # A switch over a closed set (a state, a kind of item) names every case:
     # a new case breaks every switch that has not handled it.

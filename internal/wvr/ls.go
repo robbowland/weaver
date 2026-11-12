@@ -41,7 +41,7 @@ const lsKeys = "j,k,g,G,n,x,h,a,r,R,v,e,s,q,?,/,1,2,3,4,5,6,7,8,9"
 // it (`wvr _boot`), and reloads it when done.
 func (e *Env) Home() error {
 	if e.Session != "" {
-		os.MkdirAll(e.StateDir, 0o755)
+		bestEffort(os.MkdirAll(e.StateDir, 0o755))
 		sock := e.SockDir + "/" + e.SKey + ".fzf." + strconv.Itoa(os.Getpid()) + ".sock"
 		c := exec.Command(e.Self, "_boot", sock)
 		if log, err := os.OpenFile(e.StateDir+"/hook.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err == nil {
@@ -49,7 +49,7 @@ func (e *Env) Home() error {
 		}
 		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if c.Start() == nil {
-			go c.Wait()
+			go func() { bestEffort(c.Wait()) }() // what it says is in its log
 		}
 	}
 	os.Setenv("LS_HOME", "1")
@@ -183,7 +183,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		os.Unsetenv("FZF_SOCK")
 		pw, _ := files.FirstLine(base + ".room")
 		label, _ := files.FirstLine(base + ".label")
-		os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644)
+		bestEffort(os.WriteFile(base+".shown", []byte(pw+"\n"), 0o644))
 		if pw == "" {
 			pw = "down,50%,border-top,wrap,hidden"
 		}
@@ -260,7 +260,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			if err != nil {
 				return "", nil
 			}
-			t.Close()
+			_ = t.Close() // opened only to see that there is one
 			// A newer weaver is installed (_chrome ended the board for it):
 			// the board starts again in it, whose keys know its rows.
 			if next, ok := e.successor(base + ".born"); ok {
@@ -301,7 +301,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		case "resume":
 			// A lost thread: back in a session of its own (where you land).
 			if pane != "" {
-				exec.Command(e.Self, "resume", pane).Run()
+				bestEffort(exec.Command(e.Self, "resume", pane).Run())
 			}
 			return "", nil
 		case "new":
@@ -327,7 +327,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		if pane == "" {
 			return "", nil
 		}
-		exec.Command(e.Self, "_goto", pane, tab).Run()
+		bestEffort(exec.Command(e.Self, "_goto", pane, tab).Run())
 		if key == "ctrl-e" {
 			syscall.Exec(e.Self, []string{e.Self, "review", pane}, os.Environ())
 		}

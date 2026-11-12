@@ -85,8 +85,11 @@ func ServerAt(t testing.TB, bin, dir string) (stop func()) {
 	var once sync.Once
 	stop = func() {
 		once.Do(func() {
-			done := make(chan error, 1)
-			go func() { done <- srv.Wait() }()
+			done := make(chan struct{})
+			go func() {
+				_ = srv.Wait() // a server stopped by a signal: no failure
+				close(done)
+			}()
 			_ = srv.Process.Signal(syscall.SIGTERM)
 			select {
 			case <-done:
