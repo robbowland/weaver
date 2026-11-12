@@ -504,8 +504,12 @@ Dragging in a pane selects and copies, as Rex does.
   Micrographics theme (`micrographics.toml` and the `Micrographics.tmTheme`
   beside it) into `~/.config/tuicr/themes/`, and, when you have no
   `~/.config/tuicr/config.toml`, one with `diff_watch_interval_ms = 500`, so
-  the diff follows an agent's edits as it makes them (no flag sets it), and
-  `q_quits = true`, so `q` starts the review again. Each says it is
+  the diff follows an agent's edits as it makes them (no flag sets it),
+  `q_quits = true`, so `q` starts the review again, and the quiet look:
+  the terminal's background, no cursor-line highlight, no commit pane at
+  the start, no tuicr label, hunk headers as dim rules, the whole review's
+  `+/-`. The theme is quiet too: black, interface text in grey, green and
+  red only for change. Each says it is
   weaver's in its first lines, and weaver keeps it up to date while that
   line stays; a file of yours, or one whose line you removed, is left alone.
 - **The weaver skill.** It writes the `weaver` skill where Claude Code

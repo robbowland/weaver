@@ -7,3 +7,16 @@ diff_watch_interval_ms = 500
 # q quits, as it did before tuicr 0.28, and weaver's review panel starts tuicr
 # again on the branch as it is then.
 q_quits = true
+
+# The quiet look (Rob's fork of tuicr has the last three): the terminal's own
+# background behind the panels, no highlight on the cursor's line, a chain of
+# single-child folders as one row, no commit pane at the start (:set commits!
+# shows it), no tuicr label in the header, hunk headers as dim rules, and the
+# whole review's +/- beside the file's.
+transparent_background = true
+cursor_line = false
+compact_folders = true
+show_commits = false
+show_brand = false
+section_style = "rule"
+show_total_stat = true
