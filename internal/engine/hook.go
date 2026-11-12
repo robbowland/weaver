@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -44,11 +43,13 @@ type hk struct {
 	Mode                    string `json:"-"`
 	sf                      string
 
-	Event, Cwd, Sid, File, Prompt, Tool, Ntype             string
-	Now, NowMs                                             int64
-	WaitingNew, Key, LastNew, Aid, Atype, BgNew, BgdescNew string
-	Source, Interrupt, TitleNew, PromptID, Transcript      string
-	NewCwd, Rejected, Err, Cmd, EndNew                     string
+	Event, Cwd, Sid, File, Prompt, Tool, Ntype      string
+	Now, NowMs                                      int64
+	WaitingNew, Key, LastNew, Aid, Atype, BgdescNew string
+	BgNew                                           int
+	Source, TitleNew, PromptID, Transcript          string
+	NewCwd, Err, Cmd, EndNew                        string
+	Interrupt, Rejected                             bool
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
@@ -61,11 +62,12 @@ type hk struct {
 	Subagents []agent.Subagent `json:"-"`
 	Tasks     []agent.Task     `json:"-"`
 
-	State                                                                 agent.State
-	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last, Seen        string
-	Marked, Marker, MarkDir, Bg, Bgdesc, Pid, ProcStart, Title, EndReason string
-	Turn                                                                  int
-	Moved                                                                 bool
+	State                                                             agent.State
+	Root, EvFile, Start, Proj, Since, Waiting, Pending, Last          string
+	Marked, Marker, MarkDir, Bgdesc, Pid, ProcStart, Title, EndReason string
+	Turn, Bg                                                          int
+	Seen                                                              bool
+	Moved                                                             bool
 	// What it is running now (a Bash command, from the async PreToolUse
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
@@ -175,7 +177,7 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.Atype = oneline.Ctl(oneline.Squash(in.AgentType, 40))
 	if in.Event == "Stop" {
 		bg := in.BackgroundWork()
-		h.BgNew = strconv.Itoa(len(bg))
+		h.BgNew = len(bg)
 		var ds []string
 		for _, d := range bg {
 			ds = append(ds, oneline.Squash(d, 80))
@@ -183,16 +185,12 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 		h.BgdescNew = oneline.Ctl(oneline.Squash(strings.Join(ds, "; "), 240))
 	}
 	h.Source = oneline.Ctl(in.Source)
-	if in.Interrupt {
-		h.Interrupt = "1"
-	}
+	h.Interrupt = in.Interrupt
 	h.TitleNew = oneline.Ctl(oneline.Squash(in.Title, 80))
 	h.PromptID = oneline.Ctl(in.PromptID)
 	h.Transcript = oneline.Ctl(in.Transcript)
 	h.NewCwd = oneline.Ctl(in.NewCwd)
-	if in.Rejected() {
-		h.Rejected = "1"
-	}
+	h.Rejected = in.Rejected()
 	h.Err = oneline.Ctl(oneline.Squash(string(in.Error), 100))
 	h.ToolUseID = oneline.Ctl(oneline.Squash(in.ToolUseID, 80))
 	if in.ToolName == "Bash" {
@@ -327,17 +325,16 @@ func (h *hk) run(e *session.Env, me string) {
 		h.Turn++
 	}
 
-	bg, _ := cli.Atoi(h.BgNew)
 	ch := agent.Transition(h.Old, h.sess(), agent.Event{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
-		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt != "", Rejected: h.Rejected != "",
-		Background: bg, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
+		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt, Rejected: h.Rejected,
+		Background: h.BgNew, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
 		Title: h.TitleNew, Transcript: h.Transcript, LastMessage: h.LastNew, EndReason: h.EndNew, Now: h.Now})
 	n := ch.Next
 	h.State, h.Waiting, h.Pending = n.State, n.Waiting, n.Pending
-	h.Bg, h.Bgdesc = strconv.Itoa(n.Background), n.BackgroundTasks
+	h.Bg, h.Bgdesc = n.Background, n.BackgroundTasks
 	h.Doing, h.DoingID, h.DoneIDs = n.Doing, n.DoingID, n.DoneIDs
 	h.EndReason, h.rc = n.EndReason, ch.Bell
-	h.Since, h.Seen = n.Since.String(), strconv.FormatBool(n.Seen)
+	h.Since, h.Seen = n.Since.String(), n.Seen
 	h.Last, h.Prompt, h.File, h.Title, h.PromptID, h.Transcript = n.LastMessage, n.Prompt, n.File, n.Title, n.PromptID, n.Transcript
 	// Worktrunk branch markers, like its own Claude Code plugin sets for the
 	// session's start directory, but on the worktree the agent is really in.
@@ -369,17 +366,14 @@ func writeState(e *session.Env, h *hk) {
 		since = "0"
 	}
 	st := agent.Record{Pane: jsonx.Int(pane), Agent: agent.Claude, State: h.State, TS: h.Now, Since: json.Number(since),
-		Seen: h.Seen == "true", SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn,
+		Seen: h.Seen, SessionID: h.Sid, ProcStart: h.ProcStart, Title: h.Title, Turn: h.Turn,
 		PromptID: h.PromptID, Transcript: h.Transcript, Cwd: h.Cwd, Root: h.Root, StartCwd: h.Start, ProjectRoot: h.Proj,
 		File: h.File, Prompt: h.Prompt, Waiting: h.Waiting, Pending: h.Pending, LastMessage: h.Last, MarkedRoot: h.Marked,
-		Marker: h.Marker, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
+		Marker: h.Marker, Background: h.Bg, BackgroundTasks: h.Bgdesc, DoneIDs: h.DoneIDs, EndReason: h.EndReason,
 	}
 	st.Files, st.Subagents, st.Tasks = orEmpty(h.Files), orEmpty(h.Subagents), orEmpty(h.Tasks)
 	if p := knownPid(h.Pid); p != "" {
 		st.Pid = json.Number(p)
-	}
-	if cli.Digits(h.Bg) {
-		st.Background, _ = cli.Atoi(h.Bg)
 	}
 	if h.Doing != "" {
 		st.Doing, st.DoingID = h.Doing, h.DoingID
