@@ -20,8 +20,6 @@ import (
 // hour after its session went, or at once when its session was made since
 // (an earlier server's, whose pane number a new pane takes), an ended one
 // forgotten an hour after it ended; then old files and dead sockets.
-// States of other keys (tmux's and zellij's, from before weaver ran on
-// Rex only) go the same way as their agents do.
 func (e *Env) GC() {
 	e.gcAgents()
 	e.gcFiles()

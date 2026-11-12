@@ -122,7 +122,7 @@ func TestRexLostAndGC(t *testing.T) {
 	thread("9001", dead, now)
 	thread("9002", "-", now)
 	thread("9003", "", now)
-	if lost, known := e.newLives().lost(skey, now, life); lost || !known {
+	if lost, known := e.newLives().lost(now, life); lost || !known {
 		t.Errorf("running: lost %v, known %v", lost, known)
 	}
 	os.Remove(log)
@@ -148,7 +148,7 @@ func TestRexLostAndGC(t *testing.T) {
 	for _, p := range []mux.PaneID{"9001", "9003"} {
 		thread(p, "", now-7200)
 	}
-	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
+	if lost, known := e.newLives().lost(now, life); !lost || !known {
 		t.Errorf("gone: lost %v, known %v", lost, known)
 	}
 	os.Remove(log)
@@ -168,11 +168,11 @@ func TestRexLostAndGC(t *testing.T) {
 	if err := os.RemoveAll(e.LostDir); err != nil {
 		t.Fatal(err)
 	}
-	if lost, known := e.newLives().lost(skey, now, life); !lost || !known {
+	if lost, known := e.newLives().lost(now, life); !lost || !known {
 		t.Errorf("its server stopped: lost %v, known %v", lost, known)
 	}
 	where = agent.Where{Server: os.Getpid(), Session: s.ID}
-	if lost, known := e.newLives().lost(skey, now, where); lost || known {
+	if lost, known := e.newLives().lost(now, where); lost || known {
 		t.Errorf("no answer: lost %v, known %v", lost, known)
 	}
 	for _, p := range shown {

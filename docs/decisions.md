@@ -201,6 +201,13 @@ can supersede an earlier one, and says so.
   so read as no session they were forgotten, quit or crash alike, and the
   sweep then removed their worktrees. Upgrade from 0.12 only: it goes with
   the back-compat cleanup, once Rob runs this build.
+- 2026-11-12: A state names its session as `rex_session` only, superseding
+  the entry above (Rob: once he ran 0.13 from Homebrew). His six states
+  still under `tmux_session` (four agents with no event since 0.13, two
+  lost records) were renamed by hand first, as the fallback read them.
+  Nor is a file of another key (tmux's, zellij's) taken any more for a
+  session that never runs and is never lost, or a pane's `.bash` stamp
+  removed with it: no weaver since 0.12 writes either.
 - 2026-11-11: `WEAVER_MUX=rex` is gone, superseding the Rex-alone entry's
   note on it (Rob asked for a rename; it had no use left): weaver's blocks
   and keys run only in sessions weaver made, which it knows by its record

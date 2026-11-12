@@ -14,9 +14,7 @@ import (
 // lives is what Rex says of the sessions weaver's files name, and what
 // weaver makes of it: Rex is asked a thing at most once while it is kept,
 // so every file one pass looks at (a gc run, the board's rows) is judged
-// by the same answers. A file is keyed by its session (rex-<name>); a key
-// of another (tmux's or zellij's, from before weaver ran on Rex only)
-// names a session that no longer runs, and is never lost.
+// by the same answers. A file is keyed by its session (rex-<name>).
 type lives struct {
 	e    *Env
 	boot int64 // when the machine started (epoch s); 0 when not known
@@ -42,11 +40,8 @@ func (e *Env) newLives() *lives { return &lives{e: e, boot: process.BootTime()} 
 // that.
 func (l *lives) beforeBoot(ts int64) bool { return l.boot > 0 && ts < l.boot }
 
-// onRex is the Rex session skey names, when it is a Rex key.
-func (l *lives) onRex(skey string) (*rexLife, bool) {
-	if !strings.HasPrefix(skey, "rex-") {
-		return nil, false
-	}
+// life is the Rex session skey names.
+func (l *lives) life(skey string) *rexLife {
 	if l.rexes == nil {
 		l.rexes = map[string]*rexLife{}
 	}
@@ -56,7 +51,7 @@ func (l *lives) onRex(skey string) (*rexLife, bool) {
 		a.s, a.running, a.answered = l.rex.Keyed(l.e.RexDir(), skey)
 		l.rexes[skey] = a
 	}
-	return a, true
+	return a
 }
 
 // held: is a Rex session's file of ts held off, Rex not answering of it?
@@ -66,17 +61,14 @@ func (l *lives) held(a *rexLife, ts int64) bool { return !a.answered && !l.befor
 // running: does skey's session run, for a file of ts? While Rex does not
 // answer, it does (but for a file from before the machine started).
 func (l *lives) running(skey string, ts int64) bool {
-	a, ok := l.onRex(skey)
-	return ok && (a.running || l.held(a, ts))
+	a := l.life(skey)
+	return a.running || l.held(a, ts)
 }
 
 // madeAfter: is skey's session one made after ts, another life of it, the
 // one a file of ts knew having gone? (A name on two servers: the earlier.)
 func (l *lives) madeAfter(skey string, ts int64) bool {
-	a, ok := l.onRex(skey)
-	if !ok {
-		return false
-	}
+	a := l.life(skey)
 	made, known := a.s.Made()
 	return a.running && known && ts > 0 && made > ts
 }
@@ -85,10 +77,8 @@ func (l *lives) madeAfter(skey string, ts int64) bool {
 // agent exited, its thread to be started again or closed: the board's to
 // show, not to retire), or can that not be told?
 func (l *lives) kept(skey string, st agent.Record) bool {
-	a, ok := l.onRex(skey)
+	a := l.life(skey)
 	switch {
-	case !ok:
-		return false
 	case l.held(a, st.TS):
 		return true
 	case !a.running || !a.s.Has(st.Session):
@@ -102,18 +92,14 @@ func (l *lives) kept(skey string, st agent.Record) bool {
 	return a.listErr != nil || shown
 }
 
-// lost: did skey's session go since ts (epoch s), its agent having run in
+// lost: did an agent's session go since ts (epoch s), it having run in
 // life w of it (when its state says)? When the machine has started since
 // ts (no server outlives that, and one started since may have the old
 // one's pid); else as Rex says (rex.Answer.Lost), known false while Rex
 // does not answer (a thread taken for lost while it runs would be resumed
-// twice, and one taken for not lost forgotten). A key of another
-// multiplexer's never is.
-func (l *lives) lost(skey string, ts int64, w agent.Where) (lost, known bool) {
-	switch {
-	case !strings.HasPrefix(skey, "rex-"):
-		return false, true
-	case l.beforeBoot(ts):
+// twice, and one taken for not lost forgotten).
+func (l *lives) lost(ts int64, w agent.Where) (lost, known bool) {
+	if l.beforeBoot(ts) {
 		return true, true
 	}
 	return l.rex.Lost(w)
@@ -136,7 +122,7 @@ func (l *lives) lostCheck(f string) (lost, known bool) {
 	case "prompt_input_exit", "logout", "clear":
 		return false, true
 	}
-	return l.lost(KeyOfFile(f), s.TS, s.Where)
+	return l.lost(s.TS, s.Where)
 }
 
 // retire: the agent of state file f (pid) is gone: its thread lost with
@@ -153,7 +139,7 @@ func (l *lives) retire(f, pid string) {
 	case lost && l.e.Lose(f, pid):
 		return
 	}
-	if a, ok := l.onRex(KeyOfFile(f)); ok && a.running && files.Exists(strings.TrimSuffix(f, ".json")+".thread") {
+	if a := l.life(KeyOfFile(f)); a.running && files.Exists(strings.TrimSuffix(f, ".json")+".thread") {
 		a.s.CloseSession(PaneOfFile(f))
 	}
 	l.e.Forget(f, pid)
