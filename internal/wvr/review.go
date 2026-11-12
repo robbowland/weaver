@@ -287,28 +287,27 @@ func untilRewritten(c *exec.Cmd, moved func() bool) (bool, error) {
 }
 
 // reviewArgs are tuicr's arguments for the branch in dir as it is now: its
-// commits since it left base (git.ForkPoint), with what is not committed yet (`-r
-// FORK..HEAD -w`, FORK the fork point's SHA: git.ForkPoint); with no
-// commits of its own, what is not committed (`-w`); with no base, tuicr's
-// own choice of commit. nil with nothing to review: tuicr refuses a review
-// whose diff is empty ("No changes to review"), `-w` or not, so it is
-// judged by what the branch changes in all since its fork point, never by
-// whether it has commits (a commit and its revert change nothing).
+// commits since it left base, with what is not committed yet (`-r
+// FORK..HEAD -w`, FORK the fork point's SHA: git.ForkPoint), which Rob's
+// fork of tuicr opens on the work tree while the branch has no commits of
+// its own; with no base, what is not committed (`-w`), else tuicr's own
+// pick of a commit. nil with nothing at all, no commits since the fork
+// point and nothing uncommitted: the one review tuicr refuses ("No changes
+// to review").
 func reviewArgs(dir, base string) []string {
 	look := []string{"--theme", "micrographics", "--no-update-check"}
-	head, hasHead := git.Line(dir, "rev-parse", "--verify", "--quiet", "HEAD")
+	head, _ := git.Line(dir, "rev-parse", "--verify", "--quiet", "HEAD")
 	fork, hasBase := git.ForkPoint(dir, base)
+	uncommitted := dirty(dir)
 	switch {
-	case hasBase && !changedSince(dir, fork):
+	case !uncommitted && (head == "" || hasBase && head == fork):
 		return nil
-	case hasHead && hasBase && head != fork:
+	case hasBase:
 		return append([]string{"-r", fork + "..HEAD", "-w"}, look...)
-	case dirty(dir):
+	case uncommitted:
 		return append([]string{"-w"}, look...)
-	case hasHead && !hasBase:
-		return look
 	}
-	return nil
+	return look
 }
 
 // reviewBase is the branch agent's thread is reviewed against, as its
@@ -317,16 +316,6 @@ func reviewArgs(dir, base string) []string {
 func (e *Env) reviewBase(agent mux.PaneID) string {
 	th, _ := store.ReadThread(e.ThreadFile(agent))
 	return th.Base
-}
-
-// changedSince: does the work tree at dir differ from commit c, in a file
-// git tracks or one it does not (and does not ignore)?
-func changedSince(dir, c string) bool {
-	if !git.OK(dir, "diff", "--quiet", c, "--") {
-		return true
-	}
-	out, err := git.Output(dir, nil, "", "ls-files", "--others", "--exclude-standard")
-	return err == nil && out != ""
 }
 
 // dirty: has the work tree at dir changes not committed, or files git does

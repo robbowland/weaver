@@ -458,9 +458,8 @@ follows the agent's edits as it makes them:
 - **A fresh range:** `q` (or `:q`) starts the review again, so commits made since it
   opened join its list (tuicr reads its range once, as it starts).
 
-A branch that changes nothing yet says `no changes on this branch yet` (so
-does one whose commits undo each other), and the review starts as soon as
-there is an edit. A thread's branch is compared from where it left the
+A branch with no commits and no edits yet says `no changes on this branch
+yet`, and the review starts as soon as there is an edit. A thread's branch is compared from where it left the
 branch the thread started from (a pull request's: what it merges into),
 else the default branch of the `upstream` or `origin` remote, else `main`
 or `master`; a rebase or a merge of that branch moves where it left it,

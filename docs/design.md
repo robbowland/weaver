@@ -117,14 +117,14 @@ for them would drop a comment half typed. Each round it picks what to show
   `-r <fork>..HEAD -w`, the fork point as a SHA (`git.ForkPoint`: the merge
   base of HEAD and the review base, never the base's name, since tuicr
   diffs a range's two ends and with `main..HEAD` a file main gained after
-  the fork showed as deleted);
-- with no commits of its own, what is not committed (`-w`);
-- with no review base, tuicr's own choice of commit;
-- with nothing changed in all since the fork point (`changedSince`: the
-  work tree against it, files git does not track too), `no changes on this
-  branch yet`, looked at again every 2 s: tuicr refuses a review whose
-  diff is empty, `-w` or not, so a commit and its revert, or a change the
-  base got too and was merged back, show it though they are commits.
+  the fork showed as deleted). Rob's fork of tuicr opens this on the work
+  tree while the branch has no commits of its own, and opens one whose
+  commits change nothing in all (a commit and its revert) on its empty diff;
+- with no review base, what is not committed (`-w`), else tuicr's own
+  choice of commit;
+- with no commits since the fork point and nothing uncommitted (files git
+  does not track count), `no changes on this branch yet`, looked at again
+  every 2 s: the one review the fork refuses ("No changes to review").
 
 The review base is the thread's record's `base`, read again each round
 (weaver's store is its one source); when that is none or names no commit

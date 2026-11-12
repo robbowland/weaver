@@ -102,10 +102,11 @@ func TestLuaSettings(t *testing.T) {
 }
 
 // What the panel runs tuicr on, round after round: nothing on a branch
-// with nothing of its own (tuicr refuses an empty range), what is not
-// committed once there is some (an edit, or a file git does not track
-// yet), then the branch's commits since its fork point, by SHA, with what
-// is not committed, also once the base has moved on.
+// with nothing of its own (tuicr refuses it), else the branch's commits
+// since its fork point, by SHA, with what is not committed, which the fork
+// of tuicr opens on the work tree while there are no commits: an edit, a
+// commit, one reverted, the base moved on and merged back. With no base,
+// what is not committed, else tuicr's own pick.
 func TestReviewArgs(t *testing.T) {
 	d := t.TempDir()
 	git := func(args ...string) string {
@@ -116,12 +117,16 @@ func TestReviewArgs(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
+	write := func(f, s string) {
+		t.Helper()
+		if err := os.WriteFile(d+"/"+f, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	look := " --theme micrographics --no-update-check"
 	got := func() string { return strings.Join(reviewArgs(d, ""), " ") }
 	git("init", "-q", "-b", "main")
-	if err := os.WriteFile(d+"/a.txt", []byte("one\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	write("a.txt", "one\n")
 	git("add", ".")
 	git("commit", "-q", "-m", "base")
 	fork := git("rev-parse", "HEAD")
@@ -129,10 +134,8 @@ func TestReviewArgs(t *testing.T) {
 	if a := got(); a != "" {
 		t.Errorf("a new branch: %q, want nothing", a)
 	}
-	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if a := got(); a != "-w"+look {
+	write("new.txt", "new\n")
+	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
 		t.Errorf("an untracked file: %q", a)
 	}
 	git("add", ".")
@@ -143,32 +146,22 @@ func TestReviewArgs(t *testing.T) {
 	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
 		t.Errorf("a commit of its own: %q", a)
 	}
-	// Commits with no change in all (tuicr refuses a range whose diff is
-	// empty): reverted, then the change back, untracked.
 	git("revert", "--no-edit", "HEAD")
-	if a := got(); a != "" {
-		t.Errorf("a commit and its revert: %q, want nothing", a)
-	}
-	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	if a := got(); a != "-r "+fork+"..HEAD -w"+look {
-		t.Errorf("reverted, with a file git does not track: %q", a)
+		t.Errorf("a commit and its revert: %q", a)
 	}
-	// Its change in the base too (squashed in there), and the base merged
-	// back: commits of its own, nothing it changes.
-	git("add", ".")
-	git("commit", "-q", "-m", "new again")
-	git("switch", "-q", "main")
-	if err := os.WriteFile(d+"/new.txt", []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	git("add", ".")
-	git("commit", "-q", "-m", "squashed")
-	git("switch", "-q", "feat")
 	git("merge", "-q", "--no-edit", "main")
-	if a := got(); a != "" {
-		t.Errorf("its change in the base, merged back: %q, want nothing", a)
+	if a, want := got(), "-r "+git("rev-parse", "main")+"..HEAD -w"+look; a != want {
+		t.Errorf("the base merged in: %q, want %q", a, want)
+	}
+	// No base: the branch has no default to have left.
+	git("branch", "-q", "-m", "main", "trunk")
+	if a := got(); a != strings.TrimSpace(look) {
+		t.Errorf("no base: %q, want tuicr's own pick", a)
+	}
+	write("a.txt", "two\n")
+	if a := got(); a != "-w"+look {
+		t.Errorf("no base, an edit: %q", a)
 	}
 }
 

@@ -238,6 +238,16 @@ can supersede an earlier one, and says so.
   weaver's quieter look uses (`show_brand`, `section_style = "rule"`,
   `show_total_stat`, the theme's `file_header`). Upstream's tuicr is
   replaced by hand: both formulae install a `tuicr`.
+- 2026-11-12: The panel runs tuicr in one form whenever the branch has a
+  base, `-r FORK..HEAD -w`, superseding the entries on its special cases:
+  the fork opens it on the work tree while the branch has no commits of its
+  own (no `-w` alone), and on its empty diff when the branch's commits
+  change nothing in all (a commit and its revert), which upstream's refused.
+  It waits, saying so, only on what the fork still refuses: no commits
+  since the fork point and nothing uncommitted (tuicr 0.28.0-rb1 says
+  "Error: No changes to review"). A base merged into the branch needs no
+  rule of its own: the fork point moves with it, and the fork keeps the
+  merged base out of the diff.
 
 ## Holding threads
 
