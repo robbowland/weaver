@@ -412,7 +412,7 @@ func threadWorktree(repo, branch, base, from, note string) (string, bool, string
 		return "", false, base, false
 	}
 	var r struct{ Path, Action string }
-	json.Unmarshal(out, &r)
+	_ = json.Unmarshal(out, &r) // not JSON: no path, which is said next
 	if st, err := os.Stat(r.Path); r.Path == "" || err != nil || !st.IsDir() {
 		fmt.Fprintln(os.Stderr, "weaver: Worktrunk did not say where the worktree is")
 		return "", false, base, false

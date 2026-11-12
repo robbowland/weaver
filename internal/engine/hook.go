@@ -72,7 +72,8 @@ type hk struct {
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
 	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
-	rc           int
+
+	rc int
 }
 
 // Hook is `wvr hook [--async]`: returns the bell to ring (10 needs you,

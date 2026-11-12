@@ -208,7 +208,6 @@ func linFilter(s linear.Section) viewFilter {
 // words is what Linear's search finds for words as typed.
 func (linearSource) words(_ *Env, q string) viewFilter { return linFilter(linear.Words(q)) }
 
-
 func (linearSource) isID(q string) bool { return items.LinearID.MatchString(q) }
 
 // searched is the search's answer, if there is a search.
