@@ -127,7 +127,7 @@ func (e *Env) Review(args []string) error {
 	defer release()
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New("Rex would not list the panes")
+		return errors.New("could not list the panes: Rex did not answer")
 	}
 	if target == "" {
 		if target = e.focusedPane(); target == "" {

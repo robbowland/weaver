@@ -226,7 +226,7 @@ func (e *Env) view(name string, show bool) (mux.WindowID, error) {
 		Label: v.label, View: name, At: idx, Background: !show,
 	})
 	if err != nil {
-		return "", fmt.Errorf("Rex could not open the %s view", v.label)
+		return "", fmt.Errorf("could not open the %s view in Rex", v.label)
 	}
 	return id, nil
 }

@@ -136,7 +136,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	dir := store.Lost{State: st, Thread: th}.Dir()
 	if err := e.Mux().Respawn(p, e.agentSpawn(tok, dir)); err != nil {
 		os.RemoveAll(d)
-		return label, errors.New("Rex could not restart it")
+		return label, errors.New("could not restart it in Rex")
 	}
 	// On Rex the agent starts again in a pane put in its place.
 	e.settleWidths(p)

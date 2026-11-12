@@ -540,9 +540,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("Rex could not open the session for %s (its new worktree stays: %s)", name, dir)
+			return fmt.Errorf("could not open the session for %s in Rex (its new worktree stays: %s)", name, dir)
 		}
-		return fmt.Errorf("Rex could not open the session for %s", name)
+		return fmt.Errorf("could not open the session for %s in Rex", name)
 	}
 	e.rememberRepo(fm.Repo)
 	// The boards and the GITHUB view show it now, not at its agent's first
@@ -1081,7 +1081,7 @@ func (e *Env) Close(args []string) error {
 	}
 	panes, ok := e.Panes()
 	if !ok {
-		return errors.New("Rex would not list the panes")
+		return errors.New("could not list the panes: Rex did not answer")
 	}
 	byID := map[mux.PaneID]mux.Pane{}
 	for _, p := range panes {
@@ -1434,7 +1434,7 @@ func (e *Env) Quit(args []string) error {
 		}
 	}
 	if err := e.Mux().Quit(); err != nil {
-		return errors.New("Rex could not quit " + name)
+		return errors.New("could not quit " + name + " in Rex")
 	}
 	return nil
 }
