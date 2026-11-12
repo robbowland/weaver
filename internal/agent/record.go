@@ -68,6 +68,27 @@ type Where struct {
 	Session string `json:"rex_session,omitempty"`
 }
 
+// UnmarshalJSON reads r as encoding/json does, and its session by the
+// name weaver 0.12 wrote it under, tmux_session, when rex_session is not
+// there: read as no session, a 0.12 thread whose session went was
+// forgotten, not kept as lost. Upgrade from 0.12 only: it goes with the
+// back-compat cleanup.
+func (r *Record) UnmarshalJSON(b []byte) error {
+	type record Record // no methods: encoding/json's own decoding
+	var v struct {
+		record
+		Session012 string `json:"tmux_session"`
+	}
+	// jsonx's leniency here too: a field of another type reads as its zero
+	// value, and the rest of what holds the record (a lost record) reads on.
+	err := jsonx.Decode(b, &v)
+	*r = Record(v.record)
+	if r.Session == "" {
+		r.Session = v.Session012
+	}
+	return err
+}
+
 // Resumed is r as its conversation carries on in another process, in the
 // session life w, from now: what is the conversation's (its session,
 // turns, title, where it works, its tasks and files) kept, what was its

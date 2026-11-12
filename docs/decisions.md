@@ -193,6 +193,14 @@ can supersede an earlier one, and says so.
   forgotten rather than kept as lost, unless the machine restarted, which
   still counts as lost. Quitting with the old weaver before upgrading keeps
   every thread as lost, and those come back.
+- 2026-11-12: A state weaver 0.12 wrote still names its session, under
+  `tmux_session` (`agent.Record` reads it when `rex_session` is not there),
+  superseding the entry above. Its claim that quitting first keeps every
+  thread was wrong, found by carrying 0.12.2's threads to this build on a
+  throwaway server: 0.12.2's quit keeps its threads' records, not lost ones,
+  so read as no session they were forgotten, quit or crash alike, and the
+  sweep then removed their worktrees. Upgrade from 0.12 only: it goes with
+  the back-compat cleanup, once Rob runs this build.
 - 2026-11-11: `WEAVER_MUX=rex` is gone, superseding the Rex-alone entry's
   note on it (Rob asked for a rename; it had no use left): weaver's blocks
   and keys run only in sessions weaver made, which it knows by its record
