@@ -13,6 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/setup"
+	"golang.org/x/term"
 )
 
 // weight is how much weaver needs what a check checks.
@@ -297,7 +298,7 @@ func (e *Env) Fix(out io.Writer) error {
 			}
 		}
 	}
-	if cli.IsTTY(0) && cli.IsTTY(1) {
+	if term.IsTerminal(0) && term.IsTerminal(1) {
 		for _, c := range cs {
 			r, ok := c.remedy.(signIn)
 			if !ok {
@@ -331,7 +332,7 @@ func (e *Env) Fix(out io.Writer) error {
 
 // report prints the checks, and fails when weaver cannot work.
 func report(out io.Writer, cs []check) error {
-	colour := cli.IsTTY(1)
+	colour := term.IsTerminal(1)
 	paintIf := func(cell, c string) string {
 		if !colour {
 			return cell

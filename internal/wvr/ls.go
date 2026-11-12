@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/session"
+	"golang.org/x/term"
 )
 
 // FzfColors are the dashboards' fzf colours.
@@ -71,7 +71,7 @@ func (e *Env) Ls() error {
 // shift-tab went ("next", "prev"), else "".
 func (e *Env) ls(peek, at string) (string, error) {
 	home := os.Getenv("LS_HOME") != ""
-	if _, err := exec.LookPath("fzf"); err != nil || !cli.IsTTY(1) {
+	if _, err := exec.LookPath("fzf"); err != nil || !term.IsTerminal(1) {
 		fmt.Print(e.PlainRows())
 		return "", nil
 	}

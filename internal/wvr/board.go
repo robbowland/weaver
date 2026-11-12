@@ -16,7 +16,7 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // Glyphs and colours: every state is a task cell, a mark between brackets.
@@ -116,11 +116,11 @@ func ttySize() (int, int, bool) {
 		return 0, 0, false
 	}
 	defer f.Close()
-	ws, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ)
-	if err != nil || ws.Row == 0 || ws.Col == 0 {
+	cols, rows, err := term.GetSize(int(f.Fd()))
+	if err != nil || rows == 0 || cols == 0 {
 		return 0, 0, false
 	}
-	return int(ws.Row), int(ws.Col), true
+	return rows, cols, true
 }
 
 // lsSize is the dashboard's size, columns and lines:

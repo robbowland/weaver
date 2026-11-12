@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // A card's choices (close or keep, sign in or hide, ...), as buttons under
@@ -50,19 +51,15 @@ func choose(t *os.File, pad string, cs []choice, def int) int {
 // each time they are (a frame's edge, which clearing the line takes).
 func chooseIn(t *os.File, pad, right string, cs []choice, def int) int {
 	fd := int(t.Fd())
-	old, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
+	old, err := term.MakeRaw(fd)
 	if err != nil {
 		return -1
 	}
-	raw := *old
-	raw.Lflag &^= unix.ECHO | unix.ICANON
-	raw.Cc[unix.VMIN], raw.Cc[unix.VTIME] = 1, 0
-	bestEffort(unix.IoctlSetTermios(fd, unix.TIOCSETA, &raw))
 	// The buttons take clicks (SGR mouse reports), and the cursor hides.
 	fmt.Fprint(t, "\033[?1000h\033[?1006h\033[?25l")
 	defer func() {
 		fmt.Fprint(t, "\033[?1000l\033[?1006l\033[?25h\r\n")
-		bestEffort(unix.IoctlSetTermios(fd, unix.TIOCSETA, old))
+		bestEffort(term.Restore(fd, old))
 	}()
 	row := cursorRow(t)
 	at := def
@@ -135,8 +132,9 @@ read:
 				draw()
 			case s[0] == '\r' || s[0] == '\n':
 				return at
-			case s == "\033":
-				// esc alone (a sequence would have come with it).
+			case s == "\033", s[0] == 0x03:
+				// esc alone (a sequence would have come with it), or ctrl+c,
+				// which raw mode reads as a key.
 				for i, c := range cs {
 					if c.key == "esc" {
 						return i

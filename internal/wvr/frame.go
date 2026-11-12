@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/robbowland/weaver/internal/cli"
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // framed runs fn with what it writes to stderr, and what the commands it
@@ -22,7 +22,7 @@ import (
 // (frame.choose); off a terminal it gets none, and stderr is as it was.
 func framed(label string, fn func(*frame) error) error {
 	rows, cols, ok := ttySize()
-	if !ok || !cli.IsTTY(2) {
+	if !ok || !term.IsTerminal(2) {
 		return fn(nil)
 	}
 	kept, err := unix.Dup(2)

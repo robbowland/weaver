@@ -18,6 +18,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
+	"golang.org/x/term"
 )
 
 // Moving between agents: the board's jumps, Alt y (go home) and Alt 1
@@ -418,7 +419,7 @@ func (e *Env) Next() {
 		cs = append(cs, c{class, r.Since, r.Pane, l})
 	}
 	if len(cs) == 0 {
-		if cli.IsTTY(1) {
+		if term.IsTerminal(1) {
 			fmt.Println("weaver: no agent needs you")
 			time.Sleep(time.Second)
 		} else {

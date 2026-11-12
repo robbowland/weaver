@@ -23,7 +23,7 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // The new-thread form (`wvr new`, n on the board, Alt N): fzf with the
@@ -658,7 +658,7 @@ func (e *Env) New(args []string) error {
 		// In a popup (Alt N in a view), what went wrong stays on screen
 		// until a key: the popup would close with it.
 		dieItem := func(m string) error {
-			if cli.IsTTY(0) && cli.IsTTY(2) && t == "" {
+			if term.IsTerminal(0) && term.IsTerminal(2) && t == "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n\n%spress a key%s", CRed, m, COff, CGrey, COff)
 				readKey()
 				return cli.ErrSaid
@@ -683,11 +683,11 @@ func (e *Env) New(args []string) error {
 				}
 			}
 		}
-		if cli.IsTTY(2) {
+		if term.IsTerminal(2) {
 			fmt.Fprintf(os.Stderr, "%sweaver: reading %s…%s", CGrey, items.RefName(ref), COff)
 		}
 		x, err := items.Fetch(ref, start)
-		if cli.IsTTY(2) {
+		if term.IsTerminal(2) {
 			fmt.Fprint(os.Stderr, "\r\033[K")
 		}
 		if err != nil {
@@ -734,7 +734,7 @@ func (e *Env) New(args []string) error {
 		}
 		return e.threadCreate(t, fm, nofocus)
 	}
-	if _, err := exec.LookPath("fzf"); err != nil || !cli.IsTTY(0) || !cli.IsTTY(1) {
+	if _, err := exec.LookPath("fzf"); err != nil || !term.IsTerminal(0) || !term.IsTerminal(1) {
 		return errors.New(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
 	}
 	os.MkdirAll(e.StateDir, 0o755)
@@ -800,13 +800,8 @@ func readKey() byte {
 	}
 	defer t.Close()
 	fd := int(t.Fd())
-	old, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
-	if err == nil {
-		raw := *old
-		raw.Lflag &^= unix.ECHO | unix.ICANON
-		raw.Cc[unix.VMIN], raw.Cc[unix.VTIME] = 1, 0
-		unix.IoctlSetTermios(fd, unix.TIOCSETA, &raw)
-		defer unix.IoctlSetTermios(fd, unix.TIOCSETA, old)
+	if old, err := term.MakeRaw(fd); err == nil {
+		defer func() { bestEffort(term.Restore(fd, old)) }()
 	}
 	b, err := bufio.NewReader(t).ReadByte()
 	if err != nil {

@@ -3,7 +3,7 @@ package wvr
 import (
 	"strings"
 
-	"github.com/robbowland/weaver/internal/cli"
+	"golang.org/x/term"
 )
 
 // usageCol is where Usage's descriptions start.
@@ -12,7 +12,7 @@ const usageCol = 31
 // UsageHelp is Usage, in weaver's palette at a terminal: commands in ink, what
 // they do in grey, the internal ones faint.
 func UsageHelp() string {
-	if !cli.IsTTY(1) {
+	if !term.IsTerminal(1) {
 		return Usage
 	}
 	var b strings.Builder

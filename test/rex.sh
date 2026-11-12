@@ -220,6 +220,15 @@ ok "keys: in a popup, Alt j is the popup's" "$k|$(active)|$([ -n "$(popup)" ] &&
 	view | jq -c '.active_window_id as $a | .windows[] | {label, active: (.window_id == $a), f: .focused_block_id[-6:], layers: [.layers[] | {kind, b: [.blocks[].block_id[-6:]]}]}' | sed 's/^/  view: /'
 R api call session.close_layer "{\"session_id\":\"$SID\",\"layer_id\":\"$(popup)\"}" >/dev/null 2>&1
 waitfor '[ -z "$(popup)" ]' 50
+# A card reads its keys raw: ctrl+c is one of them, and leaves it as esc
+# would, taking nothing, with weaver's terminal put back (killed, it
+# would not be). Here Ctrl q's card, in a block of home's.
+QB=$(R run -s "$SID" --focus=false --shell=none --json -c "$AT" -- sh -c 'wvr quit; echo $? >"$1"; exec sleep 60' sh "$AT/quit.st" | jq -r '.block_ids[0]')
+waitfor 'R capture -s "$SID" -b "$QB" | grep -q "n keep"' 50
+R send-key -s "$SID" -b "$QB" ctrl+c
+waitfor '[ -s "$AT/quit.st" ]' 30
+ok "keys: ctrl+c leaves a card, taking nothing" "$(cat "$AT/quit.st" 2>/dev/null)|$([ "$(sid)" = "$SID" ] && echo home)" "130|home"
+R api call block.close "{\"session_id\":\"$SID\",\"block_id\":\"$QB\"}" >/dev/null 2>&1
 ok "new: its thread record, under the session's Rex key and the agent's number" \
 	"$(jq -r .num "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "1"
 

@@ -8,8 +8,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // Exit ends a command with status Code. Err, when set, is what main says,
@@ -38,12 +36,6 @@ var (
 	// ErrCancelled: you cancelled it (Esc in a form).
 	ErrCancelled = &Exit{Code: 130}
 )
-
-// IsTTY is whether fd is a terminal.
-func IsTTY(fd int) bool {
-	_, err := unix.IoctlGetTermios(fd, unix.TIOCGETA)
-	return err == nil
-}
 
 // EnvInt is $k as a whole number, if it is one.
 func EnvInt(k string) (int, bool) { return Atoi(os.Getenv(k)) }

@@ -30,7 +30,7 @@ import (
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // Threads: a task, its worktree and a window with its review and the agent
@@ -967,15 +967,15 @@ func cardPlace(t *os.File, rows int) string {
 // placeCard clears terminal t and places a card of rows lines a third of
 // the way down, centred: the left margin to print it at.
 func placeCard(t *os.File, rows int) string {
-	ws, err := unix.IoctlGetWinsize(int(t.Fd()), unix.TIOCGWINSZ)
+	cols, lines, err := term.GetSize(int(t.Fd()))
 	if err != nil {
 		return "  "
 	}
-	top := max((int(ws.Row)-rows)/3, 0)
+	top := max((lines-rows)/3, 0)
 	// Cursor moves, not newlines: nothing scrolls into the pane's history.
 	fmt.Fprintf(t, "\033[H\033[2J\033[%d;1H", top+1)
-	if ws.Col > 72 {
-		return strings.Repeat(" ", (int(ws.Col)-64)/2)
+	if cols > 72 {
+		return strings.Repeat(" ", (cols-64)/2)
 	}
 	return "  "
 }

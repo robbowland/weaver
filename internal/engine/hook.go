@@ -22,6 +22,7 @@ import (
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
+	"golang.org/x/term"
 )
 
 // The hook: one of Claude Code's events (its hook input on stdin) folded
@@ -463,7 +464,7 @@ func HookMain(e *session.Env, args []string) {
 			return
 		}
 	}
-	if e.MyPane == "" || e.Session == "" || cli.IsTTY(0) {
+	if e.MyPane == "" || e.Session == "" || term.IsTerminal(0) {
 		return
 	}
 	in, _ := io.ReadAll(os.Stdin)
