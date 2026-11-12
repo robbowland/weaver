@@ -21,7 +21,4 @@ func TestLenient(t *testing.T) {
 	if got := string(First([]byte("{\"a\":1}\n{\"b\":2}"))); got != `{"a":1}` {
 		t.Errorf("First: %s", got)
 	}
-	if got := Quote("a\"\x01\t<"); got != `"a\"\u0001\t<"` {
-		t.Errorf("Quote: %s", got)
-	}
 }

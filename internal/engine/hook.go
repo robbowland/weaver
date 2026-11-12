@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -169,7 +170,10 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	if in.ToolName != "" {
 		ti := "null"
 		if len(in.ToolInput) > 0 {
-			ti = jsonx.Canon(in.ToolInput)
+			// The hook's input is JSON: the decoder that gave it read it.
+			var c bytes.Buffer
+			_ = json.Compact(&c, in.ToolInput)
+			ti = c.String()
 		}
 		h.Key = oneline.Ctl(in.ToolName + ":" + oneline.Cut(ti, 300))
 	}

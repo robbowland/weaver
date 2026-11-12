@@ -1,13 +1,12 @@
-// Package jsonx reads the JSON weaver keeps and is given leniently, and
-// writes it as jq did: a member of an unexpected type reads as its zero
-// value, a number may come as a string, any value may stand for text.
+// Package jsonx reads the JSON weaver keeps and is given leniently: a
+// member of an unexpected type reads as its zero value, a number may come
+// as a string, any value may stand for text.
 package jsonx
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -30,8 +29,8 @@ func (n *Int) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Text is a member that is text, or another JSON value as its JSON
-// (jq's tostring); null or false is none.
+// Text is a member that is text, or another JSON value as its JSON,
+// compact; null or false is none.
 type Text string
 
 func (t *Text) UnmarshalJSON(b []byte) error {
@@ -42,7 +41,10 @@ func (t *Text) UnmarshalJSON(b []byte) error {
 	case v == "null" || v == "false":
 		*t = ""
 	default:
-		*t = Text(Canon(b))
+		// b is JSON: the decoder that gave it read it.
+		var c bytes.Buffer
+		_ = json.Compact(&c, b)
+		*t = Text(c.String())
 	}
 	return nil
 }
@@ -67,119 +69,6 @@ func First(b []byte) []byte {
 		return nil
 	}
 	return raw
-}
-
-// Canon is raw JSON as jq's tojson prints it: compact, keys in their order,
-// numbers as written. "" when raw is not JSON.
-func Canon(raw []byte) string {
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return ""
-	}
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	var b strings.Builder
-	if canonValue(d, &b) != nil {
-		return ""
-	}
-	return b.String()
-}
-
-func canonValue(d *json.Decoder, b *strings.Builder) error {
-	t, err := d.Token()
-	if err != nil {
-		return err
-	}
-	switch x := t.(type) {
-	case json.Delim:
-		switch x {
-		case '{':
-			b.WriteByte('{')
-			first := true
-			for d.More() {
-				k, err := d.Token()
-				if err != nil {
-					return err
-				}
-				if !first {
-					b.WriteByte(',')
-				}
-				first = false
-				b.WriteString(Quote(k.(string)))
-				b.WriteByte(':')
-				if err := canonValue(d, b); err != nil {
-					return err
-				}
-			}
-			if _, err := d.Token(); err != nil {
-				return err
-			}
-			b.WriteByte('}')
-		case '[':
-			b.WriteByte('[')
-			first := true
-			for d.More() {
-				if !first {
-					b.WriteByte(',')
-				}
-				first = false
-				if err := canonValue(d, b); err != nil {
-					return err
-				}
-			}
-			if _, err := d.Token(); err != nil {
-				return err
-			}
-			b.WriteByte(']')
-		}
-	case string:
-		b.WriteString(Quote(x))
-	case json.Number:
-		b.WriteString(x.String())
-	case bool:
-		if x {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
-	case nil:
-		b.WriteString("null")
-	}
-	return nil
-}
-
-// Quote is s as a JSON string, escaped as jq's tojson escapes it: \" \\ and
-// \b \f \n \r \t by name, other control characters and DEL as \u00XX, and
-// everything else as it is (no HTML escaping).
-func Quote(s string) string {
-	var b strings.Builder
-	b.Grow(len(s) + 2)
-	b.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '"':
-			b.WriteString(`\"`)
-		case '\\':
-			b.WriteString(`\\`)
-		case '\b':
-			b.WriteString(`\b`)
-		case '\f':
-			b.WriteString(`\f`)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		default:
-			if r < 0x20 || r == 0x7f {
-				fmt.Fprintf(&b, `\u%04x`, r)
-			} else {
-				b.WriteRune(r)
-			}
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
 }
 
 // NumberOr is n as a float, or d when it is not a number.

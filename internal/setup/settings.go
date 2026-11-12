@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
-
-	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // The agents' settings files, read and written member by member so that
@@ -76,7 +74,7 @@ func (o oobj) String() string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(jsonx.Quote(m.k))
+		b.WriteString(quote(m.k))
 		b.WriteByte(':')
 		var c bytes.Buffer
 		if json.Compact(&c, m.v) == nil {
@@ -87,6 +85,15 @@ func (o oobj) String() string {
 	}
 	b.WriteByte('}')
 	return b.String()
+}
+
+// quote is s as a JSON string, < > & as they are.
+func quote(s string) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s) // a string always encodes
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // rawArray is a JSON array's elements as written; nil when raw is not one.

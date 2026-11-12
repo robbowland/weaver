@@ -15,7 +15,6 @@ import (
 
 	weaver "github.com/robbowland/weaver"
 	"github.com/robbowland/weaver/internal/cli"
-	"github.com/robbowland/weaver/internal/jsonx"
 )
 
 // reOurs is a hook command of weaver's (wvr, or weaver and agentnav, its
@@ -273,7 +272,7 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 						case strings.HasPrefix(c, "wvr "):
 							c = bin + c[3:]
 						}
-						hs[i] = json.RawMessage(ho.set("command", jsonx.Quote(c)).String())
+						hs[i] = json.RawMessage(ho.set("command", quote(c)).String())
 					}
 				}
 			}
