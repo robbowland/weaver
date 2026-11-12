@@ -13,6 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
+	"github.com/robbowland/weaver/internal/hooks"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -123,21 +124,9 @@ func followBash(e *session.Env, h *hk) {
 	}
 	if files.Exists(h.sf) {
 		store.UpdateState(h.sf, func(st *agent.Record) {
-			st.Root, st.File = r, newest
-			var fs []string
-			for _, f := range st.Files {
-				if f != newest {
-					fs = append(fs, f)
-				}
-			}
-			fs = append(fs, newest)
-			if len(fs) > 200 {
-				fs = fs[len(fs)-200:]
-			}
-			st.Files = fs
+			st.Root, st.File, st.Files = r, newest, hooks.Files(st.Files, newest)
 		})
 	}
-	return
 }
 
 // followable are the files of paths that following can show: on disk, in
