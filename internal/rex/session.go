@@ -407,8 +407,9 @@ func (s Session) Respawn(p mux.PaneID, sp mux.Spawn) error {
 		// Still there: a pane of its own again, not one weaver cannot see.
 		s.ids().unretire(old)
 	}
-	if focused {
-		s.Focus(p)
+	// Its window's focus kept, behind you (restart runs out of sight).
+	if b, err := s.block(p); err == nil && focused {
+		s.focusBlock(b)
 	}
 	return nil
 }
@@ -509,18 +510,27 @@ func (s Session) Show(w mux.WindowID) {
 	}
 }
 
-// Focus focuses pane p, its window shown first (show) when it is not the
-// one shown already.
+// Focus takes you to pane p: its session and window shown in the app
+// (show), then the pane focused. Shown whether or not its window is the
+// session's active one: the app may show another session altogether, and
+// Rex says not which. For what you asked for (a jump, a new thread), never
+// for what goes on behind you, which focusBlock keeps to the server.
 func (s Session) Focus(p mux.PaneID) {
 	b, err := s.block(p)
 	if err != nil {
 		return
 	}
 	if v, err := s.view(); err == nil {
-		if w := v.windowOf(b); w != "" && w != v.Active {
+		if w := v.windowOf(b); w != "" {
 			s.show(w)
 		}
 	}
+	s.focusBlock(b)
+}
+
+// focusBlock focuses block b in its window, as the server keeps it; what
+// the app shows stays as it is.
+func (s Session) focusBlock(b string) {
 	_ = s.callS("session.focus_block", map[string]any{"block_id": b}, nil)
 }
 

@@ -818,7 +818,12 @@ over (`takeOver`): its id goes into their records.
   `OpenWindow` and `OpenSession` in the foreground ask the app (`rex do
   session.select` with the window: Remote Control on; with more than one
   app connected, which `rex do` cannot choose among, each app attached to
-  the session by name), else make it the server's active window. A window's width
+  the session by name), else make it the server's active window. `Focus`
+  asks whether or not the window is its session's active one (a thread's
+  only window always is): the app may show another session, and Rex says
+  not which. What goes on behind you never asks: a session opened in the
+  background, threads restored as weaver starts, `--no-focus`, and
+  `Respawn`, which keeps its window's focus on the server alone. A window's width
   is its zoomed block's while one is zoomed (`zoomed_block_id`), whatever
   that block's share of the layout. `SplitLeft` gives no pid, none being
   the program's yet (Rex runs a command through the login shell): `wvr

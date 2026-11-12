@@ -165,3 +165,52 @@ func TestFleetHomeAgain(t *testing.T) {
 		t.Errorf("inside the thread, home is %s, want %s", h.Home, home.ID)
 	}
 }
+
+// A focus you ask for (a new thread, a jump) shows its pane's session and
+// window in the app though that window is its session's only one, so
+// already active: the app may show another session, and Rex says not
+// which. What goes on behind you (a session opened in the background, an
+// agent started again in its pane) never asks the app.
+func TestFocusShowsItsSession(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	// rex as weaver runs it, each call logged.
+	bin, err := exec.LookPath(Bin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd := t.TempDir()
+	log := wd + "/rex.log"
+	wrap := "#!/bin/sh\necho \"$*\" >> '" + log + "'\nexec '" + bin + "' \"$@\"\n"
+	if err := os.WriteFile(wd+"/rex", []byte(wrap), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", wd)
+	calls := func() string { b, _ := os.ReadFile(log); return string(b) }
+
+	w, p, _, err := f.OpenSession("t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "t", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Respawn(p, mux.Spawn{Argv: sleep}); err != nil {
+		t.Fatal(err)
+	}
+	if c := calls(); strings.Contains(c, "session.select") {
+		t.Errorf("behind you, the app was asked to show:\n%s", c)
+	}
+	f.Focus(p)
+	s := f.of(string(p))
+	win, err := s.window(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "do session.select session_id=" + s.ID + " window_id=" + win; !strings.Contains(calls(), want) {
+		t.Errorf("focus: no %q in:\n%s", want, calls())
+	}
+}
