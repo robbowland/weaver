@@ -23,25 +23,28 @@ ok "a corrupt state file: the other agents are still listed" "$(rows)" "2"
 ok "...and the next event rewrites it" \
 	"$(hook 2 UserPromptSubmit "$T/repo" "" "again" && st 2 state)" "working"
 
-# --- locks (defect 10): a dead owner's lock is removed at once; a live one is
-# waited for, however long, and never stolen.
+# --- locks (defect 10): a lock file left behind (an older weaver's, a dead
+# holder's) holds nothing; one a live process holds is waited for, never
+# stolen, and is free the moment its holder dies.
 SF2="$SD/${SK}_2.json"
 sleep 0.2 &
 dead=$!
 wait $dead
 printf '%s\n' "$dead" >"$SF2.lock"
 t=$(ms /bin/bash -c "printf '%s' '{\"hook_event_name\":\"Stop\",\"cwd\":\"$T/repo\",\"session_id\":\"sid-2\"}' | $(pane_env 2) wvr hook >/dev/null")
-ok "a lock left by a dead hook is taken over at once" "$([ "$t" -lt 1000 ] && echo y)|$(st 2 state)" "y|done"
-live_pid
-printf '%s\n' "$LIVE_PID" >"$SF2.lock"
+ok "a lock file left behind holds nothing" "$([ "$t" -lt 1000 ] && echo y)|$(st 2 state)" "y|done"
+perl -MFcntl=:flock -e 'open(my $l, ">>", shift) or die; flock($l, LOCK_EX) or die; open(my $h, ">", shift) or die; close $h; sleep 30' \
+	"$SF2.lock" "$AT/held" &
+holder=$!
+for _ in $(seq 100); do [ -e "$AT/held" ] && break; sleep 0.05; done
 hook 2 UserPromptSubmit "$T/repo" "" "held" >/dev/null &
 waiter=$!
 sleep 1.2
-ok "a lock held by a live hook is waited for, not stolen" "$(st 2 state)|$(cat "$SF2.lock")" "done|$LIVE_PID"
-rm -f "$SF2.lock"
+ok "a lock held by a live process is waited for, not stolen" "$(st 2 state)" "done"
+kill -9 "$holder"
+wait "$holder" 2>/dev/null
 wait $waiter
-ok "...and the waiting hook goes ahead once it is released" "$(st 2 state)|$(st 2 prompt)" "working|held"
-kill "$LIVE_PID"
+ok "...and the waiting hook goes ahead once its holder dies" "$(st 2 state)|$(st 2 prompt)" "working|held"
 
 # --- racing hooks lose nothing: 12 edits at once all land in the file list
 for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
@@ -51,7 +54,7 @@ wait
 settle
 ok "12 concurrent edits: valid state, every file listed" \
 	"$(jq -r '.files | map(select(test("race"))) | length' "$SF2")" "12"
-ok "...and no lock or temp file left behind" "$(ls "$SD" | grep -c -E '\.lock$|\.tmp$')" "0"
+ok "...and no temp file left behind" "$(ls "$SD" | grep -c -E '\.tmp$')" "0"
 
 # --- a session nested in the pane's agent (claude -p, an SDK script) inherits
 # its pane ($REX_BLOCK), but must not take the pane over (defect 7)

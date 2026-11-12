@@ -1,9 +1,11 @@
 package session
 
 import (
+	"os"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // A helper (no thread, its pane in a thread's session) is its thread's,
@@ -41,5 +43,21 @@ func TestRollUp(t *testing.T) {
 	}
 	if rows[0].State != agent.StateDone {
 		t.Errorf("the thread's own row changed: %+v", rows[0])
+	}
+}
+
+// Forgetting an agent removes its files, and with them the locks they were
+// changed under: a lock file outlives its holder.
+func TestForgetTakesTheLocks(t *testing.T) {
+	dir := t.TempDir()
+	b := dir + "/rex-w_3"
+	if err := store.Write(b+".json", agent.Record{Pid: "42"}); err != nil {
+		t.Fatal(err)
+	}
+	store.Lock(b + ".json")()
+	store.Lock(b + ".thread")()
+	(&Env{StateDir: dir}).Forget(b+".json", "42")
+	if left, _ := os.ReadDir(dir); len(left) != 0 {
+		t.Errorf("left %v", left)
 	}
 }

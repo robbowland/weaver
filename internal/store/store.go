@@ -6,18 +6,16 @@ package store
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/oneline"
-	"github.com/robbowland/weaver/internal/process"
 )
 
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
@@ -193,55 +191,22 @@ func Update[T any](f string, change func(*T)) error {
 	return Write(f, v)
 }
 
-// lockStale is how old a lock is that no holder can still mean: one whose
-// pid a process started since has taken.
-const lockStale = 10 * time.Second
-
-// Lock serialises read-modify-write of file f: f.lock, created
-// exclusively, holding our pid. A lock whose holder is gone, or older than
-// any holder holds one, is taken over (renamed away first, so of two that
-// would take it one does); after ~2s of a live holder, none (on we go).
-// What it returns releases it: removes the lock if it is still ours.
+// Lock serialises read-modify-write of file f: an exclusive flock(2) on
+// f.lock, which the kernel lets go when its holder ends, however it ends.
+// After ~2s of a live holder, none (on we go). What it returns releases
+// it; the lock file stays for the next holder (removePaneFiles removes a
+// pane's with its files).
 func Lock(f string) (release func()) {
-	l := f + ".lock"
-	me := strconv.Itoa(os.Getpid())
-	for i := 1; ; i++ {
-		fh, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err == nil {
-			_, err = fh.WriteString(me + "\n")
-			if errors.Join(err, fh.Close()) == nil {
-				return func() {
-					if owner, _ := files.FirstLine(l); owner == me {
-						os.Remove(l)
-					}
-				}
-			}
-			os.Remove(l)
-		}
-		if st, err := os.Stat(l); err == nil {
-			owner, _ := files.FirstLine(l)
-			n, perr := strconv.Atoi(owner)
-			if perr != nil || !process.Alive(n) || time.Since(st.ModTime()) > lockStale {
-				// Not a writer's yet (half made), or its holder is gone.
-				if perr != nil && time.Since(st.ModTime()) < time.Second {
-					time.Sleep(20 * time.Millisecond)
-					continue
-				}
-				away := l + "." + me
-				if os.Rename(l, away) == nil {
-					if again, _ := files.FirstLine(away); again != owner {
-						// Not the one we judged: put it back, unless one is
-						// there already.
-						_ = os.Link(away, l)
-					}
-					os.Remove(away)
-				}
-				continue
-			}
-		}
-		if i >= 100 {
-			return func() {}
+	fh, err := os.OpenFile(f+".lock", os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return func() {}
+	}
+	for range 100 {
+		if syscall.Flock(int(fh.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
+			return func() { _ = fh.Close() }
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	_ = fh.Close()
+	return func() {}
 }
