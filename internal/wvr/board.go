@@ -419,11 +419,7 @@ func (e *Env) rows(plain bool) string {
 				fact = "no prompt yet"
 			}
 		}
-		w := git.WhereOf(a.Root)
-		where := w.Repo
-		if w.Branch != "" {
-			where += "/" + w.Branch
-		}
+		where := git.WhereOf(a.Root).Name()
 		// Needs you, done and working: longest first; idle: latest first.
 		k := since
 		if need == session.NeedNothing {
@@ -478,11 +474,7 @@ func (e *Env) rows(plain bool) string {
 			since, _ = strconv.ParseInt(l.Held, 10, 64)
 			g, fact, glyph, was = groupHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, grey, dim, off), "held"
 		}
-		w := git.WhereOf(l.Dir)
-		where := w.Repo
-		if w.Branch != "" {
-			where += "/" + w.Branch
-		}
+		where := git.WhereOf(l.Dir).Name()
 		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, 10000000000-since, len(rs)), pane: l.Sid,
 			glyph: glyph, lost: true, name: name, fact: fact, where: where,
 			age: age(now - since), root: l.Dir, label: name + " · " + where + " · " + was,

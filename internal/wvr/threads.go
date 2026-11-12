@@ -830,11 +830,7 @@ func (e *Env) Resume(args []string) error {
 		}
 		now := time.Now().Unix()
 		for _, r := range rows {
-			w := git.WhereOf(r.Dir)
-			wh := w.Repo
-			if w.Branch != "" {
-				wh += "/" + w.Branch
-			}
+			wh := git.WhereOf(r.Dir).Name()
 			lost, _ := strconv.ParseInt(r.Lost, 10, 64)
 			held := ""
 			if r.Held != "" {

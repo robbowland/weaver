@@ -177,12 +177,7 @@ func ThreadLabel(n int, text, root string) string {
 	if i := strings.IndexByte(text, '\n'); i >= 0 {
 		text = text[:i]
 	}
-	w := git.WhereOf(root)
-	label := padNum(n) + " " + strings.TrimRight(oneline.Fit(text, 30), " ") + " · " + w.Repo
-	if w.Branch != "" {
-		label += "/" + w.Branch
-	}
-	return label
+	return padNum(n) + " " + strings.TrimRight(oneline.Fit(text, 30), " ") + " · " + git.WhereOf(root).Name()
 }
 
 func padNum(n int) string {

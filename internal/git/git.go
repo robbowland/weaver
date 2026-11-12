@@ -237,6 +237,15 @@ func Output(dir string, env []string, stdin string, args ...string) (string, err
 // branch (or short commit), and its git directory.
 type Where struct{ Repo, Branch, GitDir string }
 
+// Name is the work tree as a row or a label names it: repo/branch, or the
+// repository alone when it has no branch to name.
+func (w Where) Name() string {
+	if w.Branch == "" {
+		return w.Repo
+	}
+	return w.Repo + "/" + w.Branch
+}
+
 // WhereOf is the work tree at root, read from its .git without running
 // git.
 func WhereOf(root string) Where {
