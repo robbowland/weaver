@@ -41,8 +41,8 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `cwd`, `root`, `start_cwd`, `project_root` | string | `root` is the repo or worktree it is really working in; `start_cwd` the directory Claude Code snaps its cwd back to (where it started, moved by the worktree tools), the baseline a move is measured from; `project_root` its repository, `-` when it has none |
 | `pending` | string | while it needs you for a tool: that call's key (name and input), so the tool's PostToolUse can be matched to it |
 | `marker`, `marked_root` | string | the Worktrunk marker weaver set, and the worktree it set it on |
-| `file` | string | the last file it edited |
-| `files` | [string] | absolute paths edited this session, most recent last, at most 200 |
+| `file` | string | the last file it edited with Edit or Write (or MultiEdit, NotebookEdit), or a subagent of it did; a Bash command's or an MCP tool's edits are not followed |
+| `files` | [string] | absolute paths edited so this session, most recent last, at most 200 |
 | `subagents` | [{id, type, since}] | subagents running now |
 | `tasks` | [{id, subject, done}] | its task list (TaskCreated, TaskCompleted), at most 30 |
 | `background`, `background_tasks` | int, string | background subagents it waits on at Stop |

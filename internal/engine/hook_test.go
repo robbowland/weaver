@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
-	"slices"
 	"strconv"
 	"testing"
 
@@ -35,19 +34,15 @@ func TestHookRecordsNoUnknownPid(t *testing.T) {
 	}
 }
 
-// What a sync hook hands its background run reaches
-// it: every exported field, the stored state's lists left behind, and so
-// the files a Bash call says it changed, which the background run follows.
-// What stays unexported is the foreground's alone: one more is a choice to
-// make here.
-func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
-	resp, _ := json.Marshal(map[string]any{"bashEditDiff": map[string]any{"changedFiles": []string{"/w/a.go", "/w/b.go"}}})
+// What a sync hook hands its background run reaches it: every exported
+// field, the stored state's lists left behind. What stays unexported is
+// the foreground's alone: one more is a choice to make here.
+func TestBackgroundRunGetsWhatItNeeds(t *testing.T) {
 	h := &hk{Pane: "5", Session: "s", Mode: "sync"}
 	h.Old.Files = []string{"/w/old.go"}
-	if !h.parse(hooks.Input{Event: "PostToolUse", SessionID: "conv", Cwd: "/w", ToolName: "Bash", ToolResponse: resp}, nil) {
+	if !h.parse(hooks.Input{Event: "PostToolUse", SessionID: "conv", Cwd: "/w", ToolName: "Edit", ToolInput: []byte(`{"file_path":"/w/a.go"}`)}, nil) {
 		t.Fatal("not parsed")
 	}
-	h.FollowBash = "1"
 	b, err := bgRun(h)
 	if err != nil {
 		t.Fatal(err)
@@ -56,25 +51,8 @@ func TestBackgroundRunGetsWhatItFollows(t *testing.T) {
 	if err := json.Unmarshal(b, got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.ChangedKnown || !slices.Equal(got.Changed, []string{"/w/a.go", "/w/b.go"}) || got.FollowBash != "1" {
-		t.Errorf("the files the call changed: %v %q, follow %q", got.ChangedKnown, got.Changed, got.FollowBash)
-	}
 	if got.Old.Files != nil {
 		t.Errorf("the stored state's lists went too: %q", got.Old.Files)
-	}
-	// Not followed, or more than the environment should carry: not handed
-	// on, and the background run asks git.
-	for _, c := range []struct {
-		follow string
-		n      int
-	}{{"", 2}, {"1", maxChangedHandedOn + 1}} {
-		x := *h
-		x.FollowBash, x.Changed = c.follow, make([]string, c.n)
-		b, err := bgRun(&x)
-		var y hk
-		if err != nil || json.Unmarshal(b, &y) != nil || y.ChangedKnown || y.Changed != nil {
-			t.Errorf("follow %q, %d files: handed on %v %d", c.follow, c.n, y.ChangedKnown, len(y.Changed))
-		}
 	}
 	want := map[string]bool{"sf": true, "rc": true}
 	rt := reflect.TypeOf(hk{})

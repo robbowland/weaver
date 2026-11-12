@@ -57,8 +57,6 @@ type hk struct {
 	// session's (sess).
 	Old  agent.Record
 	Same bool
-	// Paths are where a command or MCP tool may have changed files.
-	Paths []string
 	// The lists after the event, written in the foreground only.
 	Files     []string         `json:"-"`
 	Subagents []agent.Subagent `json:"-"`
@@ -74,13 +72,6 @@ type hk struct {
 	// until its PostToolUse), that one's tool_use_id, and the ids of the
 	// last tools that finished (an async PreToolUse may land after them).
 	ToolUseID, Doing, DoingID, DoneIDs, ODoing, ODoingID, ODoneIDs string
-	// FollowBash: the background run follows a Bash call's edits (a sync
-	// hook's, which must not wait on git).
-	FollowBash string
-	// The files the call says it changed, and whether it says: handed on
-	// to the background run, which follows them (FollowBash).
-	Changed      []string
-	ChangedKnown bool
 	rc           int
 }
 
@@ -213,8 +204,6 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.Files = hooks.Files(h.sess().Files, h.File)
 	h.Subagents = hooks.Subagents(h.sess().Subagents, in, h.Aid, h.Now)
 	h.Tasks = hooks.Tasks(h.sess().Tasks, in)
-	h.Paths = in.CommandPaths()
-	h.Changed, h.ChangedKnown = in.Changes()
 	return h.Event != ""
 }
 
@@ -389,25 +378,13 @@ func writeState(e *session.Env, h *hk) {
 	bestEffort(store.Write(h.sf, st))
 }
 
-// afterWrite: what a new session teaches its thread, following a Bash or
-// MCP edit (async), and the background work when there is some.
+// afterWrite: what a new session teaches its thread, and the background
+// work when there is some.
 func afterWrite(e *session.Env, h *hk) {
 	if h.Event == "SessionStart" {
 		e.ThreadLearns(h.Pane, h.Sid)
 	}
-	// Following a Bash or MCP edit needs git: here when this process runs in
-	// the background anyway (Claude Code's async hook), else in the
-	// background run, never while the agent waits on its hook.
-	async := h.Mode == "async"
-	if h.Event == "PostToolUse" && (h.Tool == "Bash" || strings.HasPrefix(h.Tool, "mcp__")) {
-		if async {
-			followBash(e, h)
-		} else {
-			h.FollowBash = "1"
-		}
-	}
-	// The background work, only when there is some.
-	if h.State != h.Old.State || h.Root != h.Old.Root || h.FollowBash != "" ||
+	if h.State != h.Old.State || h.Root != h.Old.Root ||
 		h.Waiting != h.Old.Waiting ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
 		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
@@ -436,21 +413,12 @@ func spawnBg(e *session.Env, h *hk) {
 
 // bgRun is h as the background run takes it ($WEAVER_BG, hookBg). The
 // stored state's lists stay behind: the background run has the new ones,
-// and its environment has room for so much. The files the call changed go
-// only for it to follow them (FollowBash), and only so many: more (a
-// formatter over a whole tree), and it asks git, as for a call that does
-// not say.
+// and its environment has room for so much.
 func bgRun(h *hk) ([]byte, error) {
 	bg := *h
 	bg.Old.Files, bg.Old.Tasks, bg.Old.Subagents = nil, nil, nil
-	if bg.FollowBash == "" || len(bg.Changed) > maxChangedHandedOn {
-		bg.Changed, bg.ChangedKnown = nil, false
-	}
 	return json.Marshal(&bg)
 }
-
-// maxChangedHandedOn is how many changed files go with a background run.
-const maxChangedHandedOn = 200
 
 // HookMain is `wvr hook [--async|--bg]`.
 func HookMain(e *session.Env, args []string) {

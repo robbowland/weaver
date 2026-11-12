@@ -56,6 +56,13 @@ can supersede an earlier one, and says so.
   else's touched, members kept in their order, a backup first. So a weaver
   installed as a package needs only `wvr setup`, and nothing of weaver
   needs jq but its tests.
+- 2026-11-12: A Bash command's or an MCP tool's edits are no longer
+  followed (Rob), superseding the entries on following them: Claude Code's
+  bashEditDiff, else git status since the pane's last Bash call, in the
+  repos the command named, and MCP tools whose names say they write. It
+  fed only the board's `editing <file>` and the card's `files`, which Edit
+  and Write feed from the hook's input with no machinery, as they feed the
+  agent's root. A Bash-made file no longer shows in either.
 
 ## Snapshots and reviews
 

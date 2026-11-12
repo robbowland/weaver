@@ -4,7 +4,6 @@ package hooks
 import (
 	"encoding/json"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -95,14 +94,6 @@ func AsyncGate(in Input, state agent.State) bool {
 			// The subagent it started, and what it was asked to do.
 			return true
 		}
-		if strings.HasPrefix(t, "mcp__") {
-			// *[Ww]rite*, *[Ee]dit*, ...: the word, its first letter either case.
-			for _, w := range []string{"Write", "Edit", "Replace", "Insert", "Create", "Patch", "Apply", "Rename", "Move", "Delete"} {
-				if strings.Contains(t, w) || strings.Contains(t, strings.ToLower(w[:1])+w[1:]) {
-					return true
-				}
-			}
-		}
 		return state != agent.StateWorking
 	case "PostToolBatch":
 		return state == agent.StateNeedsYou
@@ -111,7 +102,6 @@ func AsyncGate(in Input, state agent.State) bool {
 }
 
 var (
-	reCmdPath  = regexp.MustCompile("(?:^|[\\s=;&|(\"':])(/[^\\s\"';&|()<>`$*?:]+)")
 	reYours    = regexp.MustCompile(`^\s*(<agent-message|<task-notification|<teammate-message|<channel|Another Claude session sent a message)`)
 	reRejected = regexp.MustCompile(`doesn.t want to proceed with this tool use`)
 )
@@ -131,53 +121,6 @@ func (in Input) EditFile() string {
 		return s
 	}
 	return in.Cwd + "/" + s
-}
-
-// CommandPaths are the absolute paths a Bash command names (cd targets,
-// VAR=/path, arguments), or an MCP tool's input holds: where to look for
-// what it changed. At most 8, sorted.
-func (in Input) CommandPaths() []string {
-	var ps []string
-	switch {
-	case strings.HasPrefix(in.ToolName, "mcp__"):
-		var walk func(v any)
-		walk = func(v any) {
-			switch x := v.(type) {
-			case string:
-				if strings.HasPrefix(x, "/") {
-					ps = append(ps, oneline.Line(x))
-				}
-			case []any:
-				for _, y := range x {
-					walk(y)
-				}
-			case map[string]any:
-				for _, y := range x {
-					walk(y)
-				}
-			}
-		}
-		var v any
-		_ = json.Unmarshal(in.ToolInput, &v) // none: nothing to walk
-		walk(v)
-	case in.ToolName == "Bash":
-		for _, m := range reCmdPath.FindAllStringSubmatch(in.Tool().Command, -1) {
-			ps = append(ps, oneline.Line(m[1]))
-		}
-	default:
-		return nil
-	}
-	sort.Strings(ps)
-	var u []string
-	for i, p := range ps {
-		if i == 0 || p != ps[i-1] {
-			u = append(u, p)
-		}
-	}
-	if len(u) > 8 {
-		u = u[:8]
-	}
-	return u
 }
 
 // Summary is what a permission dialog asks about.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Subagents and other ways an agent works: subagent edits and their live list,
-# the main agent looking around its own checkout, Bash and MCP edits, cwd
-# changes, background work, and its task list: the engine's state.
+# the main agent looking around its own checkout, Bash and MCP edits (not
+# followed), cwd changes, background work, and its task list: the engine's state.
 . "$(dirname "$0")/../lib.sh"
 fresh
 
@@ -40,26 +40,16 @@ ok "a subagent's cwd is not the agent's" "$(st 0 cwd)" "$T/repo/src"
 ev CwdChanged "$T/repo-wt-a" ",\"old_cwd\":\"$T/repo\",\"new_cwd\":\"$T/repo-wt-a/src\""
 ok "CwdChanged into a worktree: the root moves there" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/repo-wt-a/src"
 
-# --- edits made through Bash are followed too
-ev PostToolUse "$T/repo" "$(bash_by sub-b "cd $T/repo-wt-b && git status")"
-sleep 0.1
+# --- an edit through Bash or an MCP tool is not followed: only Edit and
+# Write name the file they changed
 sed -i '' 's/line two/line two, by sed/' "$T/repo-wt-b/src/app.txt"
 ev PostToolUse "$T/repo" "$(bash_by sub-b "cd $T/repo-wt-b && sed -i '' 's/line two/line two, by sed/' src/app.txt")"
-ok "Bash edit: root and file follow it" "$(st 0 root)|$(st 0 file)" "$T/repo-wt-b|$T/repo-wt-b/src/app.txt"
-ok "...and the file joins the agent's files" "$(st 0 'files | map(select(endswith("repo-wt-b/src/app.txt"))) | length')" "1"
-ev PostToolUse "$T/repo" "$(bash_by sub-a "cd $T/repo-wt-a && git log -1")"
-ok "Bash that changes nothing: root stays" "$(st 0 root)" "$T/repo-wt-b"
+printf 'from mcp\n' >"$T/repo-wt-b/mcp-made.txt"
+ev PostToolUse "$T/repo" ",\"tool_name\":\"mcp__filesystem__write_file\",\"tool_input\":{\"path\":\"$T/repo-wt-b/mcp-made.txt\",\"content\":\"from mcp\"},\"tool_response\":{}"
 settle
-
-# --- MCP edit tools are followed (defect 11); MCP reads are not looked at
-sleep 0.1
-printf 'from mcp\n' >"$T/repo-wt-a/mcp-made.txt"
-ev PostToolUse "$T/repo" ",\"tool_name\":\"mcp__filesystem__write_file\",\"tool_input\":{\"path\":\"$T/repo-wt-a/mcp-made.txt\",\"content\":\"from mcp\"},\"tool_response\":{}"
-ok "an MCP write: root and file follow it" "$(st 0 root)|$(st 0 file)" "$T/repo-wt-a|$T/repo-wt-a/mcp-made.txt"
-printf 'sneaky\n' >"$T/repo-wt-b/sneaky.txt"
-ev PostToolUse "$T/repo" ',"tool_name":"mcp__filesystem__read_file","tool_input":{"path":"x"},"tool_response":{}'
-ok "an MCP read is not taken for an edit" "$(st 0 file)" "$T/repo-wt-a/mcp-made.txt"
-rm -f "$T/repo-wt-b/sneaky.txt" "$T/repo-wt-a/mcp-made.txt"
+ok "Bash and MCP edits: root and file stay" "$(st 0 root)|$(st 0 file)" "$T/repo-wt-a|$T/repo-wt-a/README.md"
+rm -f "$T/repo-wt-b/mcp-made.txt"
+git -C "$T/repo-wt-b" checkout -q -- src/app.txt
 
 # --- tasks
 ev TaskCreated "$T/repo" ',"task_id":"1","task_subject":"Write the parser"'
