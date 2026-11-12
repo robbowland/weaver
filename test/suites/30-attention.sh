@@ -189,19 +189,16 @@ hook 1 UserPromptSubmit "$T/repo-wt-b" "" "busy" >/dev/null
 ok "status: needs you, done and unseen, working" "$(wvr status)" "$G_NEED 1  $G_DONE 1  $G_WORK 1"
 
 # --- Worktrunk marker on the worktree really being edited (A edits worktree a)
-if command -v wt >/dev/null 2>&1; then
-	hook 0 UserPromptSubmit "$T/repo" "" "more work" >/dev/null
-	hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
-	settle
-	ok "working agent marks its real branch" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_WORK"
-	ok "...not the start directory's branch" "$(wt -C "$T/repo" config state marker get 2>/dev/null)" ""
-	hook 0 Stop "$T/repo" >/dev/null
-	settle
-	ok "done agent: marker says it is done" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_DONE"
-	hook 0 SessionEnd "$T/repo" >/dev/null
-	settle
-	ok "session end clears the marker" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" ""
-else
-	echo "SKIP Worktrunk markers: wt is not installed"
-fi
+ok "Worktrunk is installed, as weaver requires" "$(command -v wt >/dev/null && echo y)" "y"
+hook 0 UserPromptSubmit "$T/repo" "" "more work" >/dev/null
+hook 0 PostToolUse "$T/repo" "$T/repo-wt-a/src/app.txt"
+settle
+ok "working agent marks its real branch" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_WORK"
+ok "...not the start directory's branch" "$(wt -C "$T/repo" config state marker get 2>/dev/null)" ""
+hook 0 Stop "$T/repo" >/dev/null
+settle
+ok "done agent: marker says it is done" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" "$G_DONE"
+hook 0 SessionEnd "$T/repo" >/dev/null
+settle
+ok "session end clears the marker" "$(wt -C "$T/repo-wt-a" config state marker get 2>/dev/null)" ""
 done_suite
