@@ -233,6 +233,34 @@ func (e *Env) Preview(args []string) string {
 	if title != "" {
 		out = titleLine(title)
 	}
+	// The work item its thread started from.
+	from := ""
+	t, terr := store.ReadThread(e.ThreadFile(p))
+	if terr == nil {
+		from = itemLine(t)
+	}
+	s, err := store.ReadState(sf)
+	if sf == e.ThreadFile(p) {
+		// Its agent has not reported: the thread as it starts.
+		if terr != nil {
+			return out
+		}
+		s = agent.Record{State: agent.StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task}
+	} else if err != nil {
+		return out
+	}
+	// Its state as its row on the board says it (refined, starting or not
+	// reporting, exited), else as its record does: a look at the fleet,
+	// taken while git reads its worktree.
+	type rowOf struct {
+		r  session.Row
+		ok bool
+	}
+	row := make(chan rowOf, 1)
+	go func() {
+		r, _, ok := e.RowOf(p)
+		row <- rowOf{r, ok}
+	}()
 	l, _ := files.FirstLine(sf)
 	root := ""
 	if m := re.FindStringSubmatch(l); m != nil {
@@ -270,26 +298,9 @@ func (e *Env) Preview(args []string) string {
 			}
 		}
 	}
-	// The work item its thread started from.
-	from := ""
-	t, terr := store.ReadThread(e.ThreadFile(p))
-	if terr == nil {
-		from = itemLine(t)
-	}
-	s, err := store.ReadState(sf)
-	if sf == e.ThreadFile(p) {
-		// Its agent has not reported: the thread as it starts.
-		if terr != nil {
-			return out
-		}
-		s = agent.Record{State: agent.StateStarting, Since: json.Number(strconv.FormatInt(t.Created, 10)), Prompt: t.Task}
-	} else if err != nil {
-		return out
-	}
-	// Its state as its row on the board says it (refined, starting or not
-	// reporting, exited), else as its record does.
-	r, _, ok := e.RowOf(p)
-	if !ok {
+	got := <-row
+	r := got.r
+	if !got.ok {
 		r = rowOfRecord(s)
 	}
 	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared)
