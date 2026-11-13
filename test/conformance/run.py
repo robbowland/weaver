@@ -16,6 +16,7 @@ A case:
 
     {"about": "what it shows",
      "mkdirs": ["wt/.git"],                  directories under the case's own ($T), work trees and all
+     "env": {"WEAVER_BELL": "needs-you"},   the binary's environment besides
      "steps": [
        {"hook": "sync" | "async",            default: as claude-hooks.json routes it
         "event": {...},                      the hook's input: session_id, cwd, ... default from the case
@@ -122,6 +123,7 @@ def run_case(wvr, path):
             ev.update(expand(step["event"], at))
             mode = step.get("hook") or ("async" if ev["hook_event_name"] in ASYNC else "sync")
             e = dict(env)
+            e.update(case.get("env", {}))
             pid = {"agent": agent.pid, "other": other.pid}.get(step.get("pid", "agent"))
             if pid:
                 e["CLAUDE_PID"] = str(pid)

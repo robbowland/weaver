@@ -56,6 +56,7 @@ stdout (`{"terminalSequence":"\u0007"}` rings the bell).
 ```
 
 - `defaults` are merged into every event (these are the defaults).
+- `env`: more of the binary's environment (`WEAVER_BELL`, say).
 - `hook`: `sync` or `async`; else as claude-hooks.json routes the event.
 - `age`: the stored state made N seconds older first (its `since` and
   `ts`), for what depends on time (a late hook's window).

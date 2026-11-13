@@ -1,0 +1,47 @@
+{
+ "about": "WEAVER_BELL=needs-you: the bell rings when an agent needs you, never when it is done",
+ "env": {
+  "WEAVER_BELL": "needs-you"
+ },
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls"
+    }
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls"
+    },
+    "tool_response": {}
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "ok"
+   },
+   "expect": {
+    "state": "done"
+   },
+   "bell": false
+  }
+ ]
+}
