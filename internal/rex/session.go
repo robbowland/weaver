@@ -307,8 +307,80 @@ func (s Session) OpenWindow(w mux.NewWindow) (mux.WindowID, mux.PaneID, int, err
 // app has drawn it (asked it for a size). Rex sizes a terminal no app has
 // drawn at 80 columns (a window made behind you), so then, with an app
 // attached, its share of the width the app draws the session's windows
-// at, the active window's (snapshot.size); with none, its own.
+// at, the active window's (snapshot.size); with none, its own. One rex do
+// (drawnLua) asks all it takes; a Rex whose scripts cannot, call by call.
 func (s Session) drawnCols(p mux.PaneID) int {
+	b, err := s.block(p)
+	if err != nil {
+		return 0
+	}
+	d, err := s.drawn(b)
+	if err != nil && strings.Contains(err.Error(), "-e:") {
+		return s.drawnColsEach(p)
+	}
+	if len(d.Size.Desired) > 0 || !slices.ContainsFunc(d.Clients, client.app) || d.Snap == nil {
+		return d.Size.Columns
+	}
+	return d.Snap.colsOf(b, d.Size.Columns)
+}
+
+// drawnAnswer is what drawnLua says of a block.
+type drawnAnswer struct {
+	Size struct {
+		Columns int                         `json:"columns"`
+		Desired list[struct{ Columns int }] `json:"desired"`
+	} `json:"size"`
+	Clients list[client] `json:"clients"`
+	Snap    *snapshot    `json:"snap"`
+}
+
+func (s Session) drawn(b string) (drawnAnswer, error) {
+	var d drawnAnswer
+	err := do(s.ID, drawnScript, map[string]any{"block": b}, &d)
+	return d, err
+}
+
+// drawnLua is what drawnCols asks, in one: block rex.args.block's size;
+// unless an app has drawn it, the session's clients; and with an app among
+// them, a snapshot as snapshotLua's (its view and its terminals' sizes).
+const drawnLua = `
+local term = "` + terminal + `"
+local size, err = rex.block.call(term, "size", { block_id = rex.args.block })
+if size == nil then error(err, 0) end
+local out = { size = size }
+if #(size.desired or {}) > 0 then return out end
+local l, err = rex.session.list_clients{}
+if l == nil then error(err, 0) end
+out.clients = l.clients
+local app = false
+for _, c in ipairs(l.clients or {}) do
+  if c.info and c.info.kind == "app" and c.connection_state ~= "lost" then app = true end
+end
+if not app then return out end
+local view, err = rex.session.view{}
+if not view then error(err, 0) end
+local blocks = {}
+for _, w in ipairs(view.windows or {}) do
+  for _, layer in ipairs(w.layers or {}) do
+    if layer.kind == "tiled" then
+      for _, b in ipairs(layer.blocks or {}) do
+        if b.creator_name == term then
+          blocks[b.block_id] = { size = rex.block.call(term, "size", { block_id = b.block_id }) }
+        end
+      end
+    end
+  end
+end
+out.snap = { view = view, blocks = blocks }
+return out
+`
+
+// drawnScript is the script drawnCols runs: drawnLua (a test's stand-in).
+var drawnScript = drawnLua
+
+// drawnColsEach is drawnCols a call at a time: the size, the clients, the
+// snapshot.
+func (s Session) drawnColsEach(p mux.PaneID) int {
 	var sz struct {
 		Columns int                         `json:"columns"`
 		Desired list[struct{ Columns int }] `json:"desired"`
@@ -325,6 +397,12 @@ func (s Session) drawnCols(p mux.PaneID) int {
 	if err != nil {
 		return sz.Columns
 	}
+	return sn.colsOf(b, sz.Columns)
+}
+
+// colsOf is block b's share of the width of its window, as the snapshot
+// sizes it; else cols.
+func (sn snapshot) colsOf(b string, cols int) int {
 	for _, w := range sn.View.Windows {
 		if _, at := w.tiled(); len(at[b]) == 4 {
 			if c, _ := sn.size(w); c > 0 {
@@ -332,7 +410,7 @@ func (s Session) drawnCols(p mux.PaneID) int {
 			}
 		}
 	}
-	return sz.Columns
+	return cols
 }
 
 // SplitLeft opens a pane on the left of pane of. Rex starts the program
@@ -345,8 +423,14 @@ func (s Session) SplitLeft(of mux.PaneID, n mux.NewSplit) (mux.PaneID, error) {
 		return "", err
 	}
 	ratio := 0.8
-	if total := s.drawnCols(of); n.Cols > 0 && total > 0 {
-		ratio = min(max(float64(n.Cols)/float64(total), 0.05), 0.95)
+	if n.Cols > 0 {
+		total := n.Of
+		if total <= 0 {
+			total = s.drawnCols(of)
+		}
+		if total > 0 {
+			ratio = min(max(float64(n.Cols)/float64(total), 0.05), 0.95)
+		}
 	}
 	var out struct {
 		Blocks []string `json:"block_ids"`

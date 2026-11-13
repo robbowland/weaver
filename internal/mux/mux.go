@@ -83,10 +83,12 @@ type NewWindow struct {
 }
 
 // NewSplit is a pane to open on the left of another: Cols wide (0: most of
-// the window), titled Title. Background keeps the focus where it is.
+// the window), titled Title, of the Of columns the other has (0: asked of
+// the multiplexer). Background keeps the focus where it is.
 type NewSplit struct {
 	Spawn
 	Cols       int
+	Of         int
 	Title      string
 	Background bool
 }

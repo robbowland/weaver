@@ -118,10 +118,11 @@ func (e *Env) threadTab(tok, dir, name, label string, nofocus bool) (mux.WindowI
 	if err != nil {
 		return "", false
 	}
+	of := total
 	if total <= 0 {
 		total = 200
 	}
-	if !e.splitPanel(agentPane, dir, total) {
+	if !e.splitPanel(agentPane, dir, total, of) {
 		e.Mux().CloseSession(agentPane)
 		return "", false
 	}
@@ -136,11 +137,12 @@ func (e *Env) threadTab(tok, dir, name, label string, nofocus bool) (mux.WindowI
 
 // splitPanel opens the agent's review panel (`wvr _panel AGENT`) on the
 // left of agentPane, in dir, the agent keeping its width of the total
-// columns; bound to the agent before this returns.
-func (e *Env) splitPanel(agentPane mux.PaneID, dir string, total int) bool {
+// columns; bound to the agent before this returns. of is agentPane's
+// columns as its window was opened (0: not known).
+func (e *Env) splitPanel(agentPane mux.PaneID, dir string, total, of int) bool {
 	rp, err := e.Mux().SplitLeft(agentPane, mux.NewSplit{
 		Spawn: mux.Spawn{Argv: []string{e.Self, "_panel", string(agentPane)}, Dir: dir},
-		Cols:  max(total-agentCols(total)-1, 1), Title: panelTitle(dir), Background: true,
+		Cols:  max(total-agentCols(total)-1, 1), Of: of, Title: panelTitle(dir), Background: true,
 	})
 	if err != nil {
 		return false

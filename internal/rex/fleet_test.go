@@ -266,3 +266,48 @@ func TestFleetLook(t *testing.T) {
 		t.Error("a failed look gave panes")
 	}
 }
+
+// A pane's columns as drawn are asked in one call: its size, and with no
+// app attached (none is to a test's server) its own; with one, the
+// session's snapshot, which places it in its window (here the script
+// counts any client as an app). A Rex whose scripts fail asks call by
+// call, alike.
+func TestDrawnCols(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, p, cols, err := home.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "w", At: 1, Background: true})
+	if err != nil || cols != 80 {
+		t.Fatalf("a window's pane: %d columns (%v), want Rex's 80", cols, err)
+	}
+	left, err := home.SplitLeft(p, mux.NewSplit{Spawn: mux.Spawn{Argv: sleep}, Cols: 20, Of: 100, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := home.drawnCols(left); got != 80 {
+		t.Errorf("drawnCols with no app: %d, want its own 80", got)
+	}
+	defer func(s string) { drawnScript = s }(drawnScript)
+	drawnScript = `return rex.no_such_thing.at_all`
+	if got := home.drawnCols(left); got != 80 {
+		t.Errorf("drawnCols call by call: %d, want 80", got)
+	}
+	drawnScript = strings.Replace(drawnLua, `c.info.kind == "app"`, `true`, 1)
+	b, _ := home.block(left)
+	d, err := home.drawn(b)
+	if err != nil || d.Snap == nil || len(d.Clients) == 0 {
+		t.Fatalf("drawn with an app: %+v %v", d, err)
+	}
+	// Split at 0.2 of a window Rex draws each terminal of at 80: the
+	// window is 400 wide (80 / 0.2), the panel a fifth of it.
+	if got := d.Snap.colsOf(b, 0); got != 80 {
+		t.Errorf("colsOf from the snapshot: %d, want 80", got)
+	}
+	if _, ok := d.Snap.Blocks[b]; !ok {
+		t.Errorf("the snapshot's terminals: %+v, want %s among them", d.Snap.Blocks, b)
+	}
+}
