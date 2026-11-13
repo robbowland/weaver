@@ -218,20 +218,33 @@ func (r ids) named(name string) (string, bool) {
 }
 
 // keyed is the Rex session weaver made last whose name is keyed skey, and
-// that name.
-func (r ids) keyed(skey string) (string, string, bool) {
-	return r.latest(func(n string) bool { return Key(n) == skey })
+// that name, as server pid sees it (latestOn).
+func (r ids) keyed(skey string, server int) (string, string, bool) {
+	return r.latestOn(func(n string) bool { return Key(n) == skey }, server)
 }
 
 // latest is the home session weaver made last of a name that matches,
 // and its name.
 func (r ids) latest(match func(name string) bool) (string, string, bool) {
+	return r.latestOn(match, serverPID())
+}
+
+// latestOn is latest as server pid sees it: never a session another
+// server that runs made (two sharing weaver's state: its home is its
+// own); one of a server gone counts (Rex restarted: a husk to make
+// again). With no server known (0: Rex not answering), any.
+func (r ids) latestOn(match func(name string) bool, server int) (string, string, bool) {
 	var best, bestName string
 	at := -1.0
 	for _, id := range r.sessionIDs() {
-		if m, ok := r.session(id); ok && m.home == "" && match(m.name) && m.at > at {
-			best, bestName, at = id, m.name, m.at
+		m, ok := r.session(id)
+		if !ok || m.home != "" || !match(m.name) || m.at <= at {
+			continue
 		}
+		if server > 0 && m.server > 1 && m.server != server && process.Alive(m.server) {
+			continue
+		}
+		best, bestName, at = id, m.name, m.at
 	}
 	return best, bestName, best != ""
 }

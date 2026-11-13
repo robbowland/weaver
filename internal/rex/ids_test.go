@@ -20,10 +20,10 @@ func TestKeyed(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if id, name, ok := r.keyed(Key("work/api")); !ok || id != "session:new" || name != "work/api" {
+	if id, name, ok := r.keyed(Key("work/api"), 0); !ok || id != "session:new" || name != "work/api" {
 		t.Errorf("keyed: %q %q %v", id, name, ok)
 	}
-	if _, _, ok := r.keyed("rex-nothing"); ok {
+	if _, _, ok := r.keyed("rex-nothing", 0); ok {
 		t.Error("a key no session has was found")
 	}
 }
@@ -162,5 +162,34 @@ func TestPruneLeavesAnotherServers(t *testing.T) {
 	r.pruneOn(map[string]bool{}, os.Getpid())
 	if _, ok := r.session("session:other"); ok {
 		t.Error("a server's own gone session kept")
+	}
+}
+
+// A name's home is the one this server made (two sharing weaver's
+// state): never a later one another server that runs made; one a server
+// made that has gone still counts (Rex restarted, its husk).
+func TestLatestIsThisServers(t *testing.T) {
+	r := ids{t.TempDir()}
+	gone := exec.Command("/usr/bin/true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	const this = 1 // the server asking (no process's pid: only != the others matters)
+	now := time.Now()
+	if err := r.made("session:mine", "demo", now.Add(-time.Hour), 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.made("session:other", "demo", now, os.Getpid(), ""); err != nil {
+		t.Fatal(err)
+	}
+	all := func(string) bool { return true }
+	if id, _, _ := r.latestOn(all, this); id != "session:mine" {
+		t.Errorf("latest: %s, want this server's home, not one another server that runs made later", id)
+	}
+	if err := r.made("session:husk", "demo", now.Add(time.Minute), gone.Process.Pid, ""); err != nil {
+		t.Fatal(err)
+	}
+	if id, _, _ := r.latestOn(all, this); id != "session:husk" {
+		t.Errorf("latest: %s, want the husk of a server gone", id)
 	}
 }

@@ -135,7 +135,7 @@ func (a *Answer) Keyed(dir, skey string) (f Fleet, running, answered bool) {
 		return Fleet{}, false, false
 	}
 	r := ids{dir}
-	id, name, ok := r.keyed(skey)
+	id, name, ok := r.keyed(skey, a.serverPID())
 	if !ok {
 		name = strings.TrimPrefix(skey, "rex-")
 		id = "session:" + name
