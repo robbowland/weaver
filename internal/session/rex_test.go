@@ -267,3 +267,68 @@ func countRex(t *testing.T) func() int {
 		return n
 	}
 }
+
+// A thread's agent killed in a pane that runs on is the thread closed, its
+// session ended (retire), but only while its state still names that
+// agent: one started in its pane since (wvr restart's, whose state names
+// no pid till its pane takes the resume, or its first hook gives its own)
+// keeps the thread, its session and its files.
+func TestRetireRechecksItsAgent(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost"}
+	if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sleep := []string{"/bin/sleep", "600"}
+	s, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), s.ID
+	f := e.Mux()
+	_, p, _, err := f.OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, err := f.Panes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := PaneIn(ps, p)
+	life := agent.Where{Server: s.Life().Server, Session: q.Session}
+	n, _ := strconv.Atoi(string(p))
+	pane := jsonx.Int(n)
+	sf := e.StateFile(p)
+	if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: 1, Name: "t", Pane: &pane, SessionID: "conv"}); err != nil {
+		t.Fatal(err)
+	}
+	dead := strconv.Itoa(deadPid(t))
+	state := func(pid string) {
+		t.Helper()
+		if err := store.Write(sf, agent.Record{Pane: pane, Agent: agent.Claude, State: agent.StateIdle, TS: time.Now().Unix(),
+			SessionID: "conv", Pid: json.Number(pid), Where: life}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	running := func() bool {
+		ps, err := f.Panes()
+		_, ok := PaneIn(ps, p)
+		return err == nil && ok
+	}
+	// Judged on the dead agent's pid, retired after a new agent took the
+	// pane (its state names no pid): kept.
+	state("")
+	e.Retire(sf, dead)
+	if !running() || !files.Exists(sf) || !files.Exists(e.PaneFile(p, "thread")) {
+		t.Fatalf("a thread retired for an agent its pane no longer runs: session %v, state %v, record %v",
+			running(), files.Exists(sf), files.Exists(e.PaneFile(p, "thread")))
+	}
+	// Its state still naming the dead agent: the thread closed.
+	state(dead)
+	e.Retire(sf, dead)
+	if running() || files.Exists(sf) || files.Exists(e.PaneFile(p, "thread")) {
+		t.Errorf("a thread whose agent was killed in its pane: session %v, state %v, record %v",
+			running(), files.Exists(sf), files.Exists(e.PaneFile(p, "thread")))
+	}
+}

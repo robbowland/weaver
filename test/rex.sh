@@ -403,6 +403,25 @@ waitfor '[ -z "$(label "$T2")" ]' 50
 ok "a thread's window closed by hand: its session ends, helper and all, the thread gone, not lost" \
 	"$(label "$T2")|$(threads)|$([ -f "$SD/rex-${S}_$A2.thread" ] && echo kept)|$(held | wc -l | tr -d ' ')" "|$T||0"
 
+# --- R (wvr restart): the agent again in its pane, on its conversation.
+# Its old agent's pid stays in its state till the new one's pane takes the
+# resume, and a board refreshing meanwhile (wvr status, as a hook's push
+# has every board do) must not take that pid for an agent killed in a
+# pane that runs on: the thread closed, its session ended.
+T=$(threads)
+AGB=$(block_at "$T" 1 1)
+AG=$(num "$AGB")
+waitfor '[ -f "$AT/pid.${AGB#block:}" ]' 50
+APID=$(cat "$AT/pid.${AGB#block:}")
+jq -nc --argjson p "$AG" --argjson pid "$APID" --argjson now "$(date +%s)" --argjson srv "$(R api call server.status '{}' | jq .pid)" --arg t "$T" \
+	'{pane: $p, agent: "claude", state: "idle", ts: $now, since: $now, seen: true, session_id: "conv-restart", pid: $pid, server: $srv, rex_session: $t}' >"$SD/rex-${S}_$AG.json"
+REX_SESSION=$SID wvr restart --force "$AG" >"$AT/restart-agent.out" 2>&1
+for _ in 1 2 3 4 5 6 7 8 9 10; do REX_SESSION=$SID wvr status >/dev/null 2>&1; sleep 0.1; done
+NB=$(head -n 1 "$SD/rex/n/$AG")
+waitfor '[ -f "$AT/args.${NB#block:}" ]' 50
+ok "restart: the agent again in its pane on its conversation, its thread and session kept through a board's refresh" \
+	"$(grep -c restarted "$AT/restart-agent.out")|$(threads | wc -l | tr -d ' ')|$([ -f "$SD/rex-${S}_$AG.thread" ] && echo thread)|$(tr '\n' ' ' <"$AT/args.${NB#block:}" 2>/dev/null)" \
+	"1|1|thread|--resume conv-restart " || sed 's/^/  restart: /' "$AT/restart-agent.out"
 # --- quit: the sessions end, the thread kept
 T=$(threads)
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1

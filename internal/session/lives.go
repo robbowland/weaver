@@ -140,7 +140,10 @@ func (l *lives) retire(f, pid string) {
 		return
 	}
 	if a := l.life(KeyOfFile(f)); a.running && files.Exists(strings.TrimSuffix(f, ".json")+".thread") {
-		a.s.CloseSession(PaneOfFile(f))
+		// Only while its state still names that agent: one started in its
+		// pane since (a restart, a resume) is the thread's.
+		l.e.forget(f, pid, func() { a.s.CloseSession(PaneOfFile(f)) })
+		return
 	}
 	l.e.Forget(f, pid)
 }

@@ -494,13 +494,20 @@ func (e *Env) Hold(f, note string) bool {
 
 // Forget removes the files of the agent whose state file is f; only if
 // its pid is still pid when we hold its lock.
-func (e *Env) Forget(f, pid string) {
+func (e *Env) Forget(f, pid string) { e.forget(f, pid, nil) }
+
+// forget is Forget, first doing end (when not nil) under the lock, once
+// the pid is known to be still pid.
+func (e *Env) forget(f, pid string, end func()) {
 	if !files.Exists(f) {
 		return
 	}
 	defer store.Lock(f)()
 	if Peek(f).Pid != pid {
 		return
+	}
+	if end != nil {
+		end()
 	}
 	removePaneFiles(strings.TrimSuffix(f, ".json"))
 }
