@@ -517,8 +517,11 @@ func (e *Env) Restarting(f string) {
 // (.closing), which ForgetClosed then removes with the rest.
 func (e *Env) Closing(f string) {
 	b := strings.TrimSuffix(f, ".json")
-	if files.Exists(b + ".thread") {
-		_ = os.Rename(b+".thread", b+".closing") // none to set aside: none to keep
+	if files.Exists(b + ".thread") && os.Rename(b+".thread", b+".closing") == nil {
+		// Set aside now: gc's day for one a close cut short counts from
+		// here, not from when the record was written.
+		now := time.Now()
+		_ = os.Chtimes(b+".closing", now, now) // dated as it was: gone a day early at worst
 	}
 }
 
