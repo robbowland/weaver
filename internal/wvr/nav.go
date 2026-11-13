@@ -268,7 +268,7 @@ func (e *Env) boardOn(w mux.WindowID) {
 // Pos is `wvr _pos PANE`, in a board's fzf: the action that puts its
 // cursor on PANE's row (nothing when it has none).
 func (e *Env) Pos(pane string) string {
-	if i := rowOf(e.Rows(), "a"+pane); i > 0 {
+	if i := rowOf(e.Rows(""), "a"+pane); i > 0 {
 		return "pos(" + strconv.Itoa(i) + ")\n"
 	}
 	return ""

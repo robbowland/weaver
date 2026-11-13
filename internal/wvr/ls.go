@@ -172,7 +172,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			}
 		}
 		os.Setenv("FZF_SOCK", sock)
-		rows := e.Rows()
+		rows := e.Rows("")
 		items := strings.Count(rows, "\n")
 		if items == 0 {
 			os.Setenv("LS_EMPTY", "1")

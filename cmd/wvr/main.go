@@ -171,11 +171,11 @@ var commands = map[string]command{
 	"hook": {run: done(func(e *wvr.Env, args []string) { engine.HookMain(e.Env, args) })},
 
 	// The board's fzf, its preview and views.
-	"_rows": {session: true, run: prints(func(e *wvr.Env, _ []string) string {
+	"_rows": {session: true, run: prints(func(e *wvr.Env, args []string) string {
 		if os.Getenv("LS_MODE") == "plain" {
 			return e.PlainRows()
 		}
-		return e.Rows()
+		return e.Rows(arg(args, 0))
 	})},
 	"_refresh": {session: true, run: prints(func(e *wvr.Env, _ []string) string { return e.Refresh() })},
 	"_preview": {session: true, run: prints((*wvr.Env).Preview)},

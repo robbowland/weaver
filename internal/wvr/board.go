@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
@@ -315,20 +316,63 @@ func onBoard(agents []session.Row, local string) []session.Row {
 
 // Rows is the dashboard's lines for fzf: one TAB-separated item per line,
 // id pane tab prev next label display, with the border's label, the header
-// and the 1-9 keys next to $FZF_SOCK.
-func (e *Env) Rows() string { return keepRows(sockBase(), e.rows(false)) }
+// and the 1-9 keys next to $FZF_SOCK. With token, the reload a refresh
+// asked for (Refresh), the rows that refresh made, when they are still
+// the ones it kept for that token (takeNext): made a moment ago, their
+// side files written with them, they need no second look at the fleet.
+func (e *Env) Rows(token string) string {
+	base := sockBase()
+	if rows, ok := takeNext(base, token); ok {
+		return keepRows(base, rows)
+	}
+	return keepRows(base, e.rows(false))
+}
 
 // Refresh is what the board does as threads change (`_refresh`, which
 // session.pushStatus posts): nothing while you read a card you scrolled
 // (cardHeld); else its rows again if they changed, else its chrome alone.
 func (e *Env) Refresh() string {
-	switch {
-	case cardHeld():
+	if cardHeld() {
 		return ""
-	case rowsChanged(sockBase(), e.rows(false)):
-		return "reload-sync(COLOR=1 " + session.Quote(e.Self) + " _rows)\n"
+	}
+	base := sockBase()
+	if rows := e.rows(false); rowsChanged(base, rows) {
+		return "reload-sync(COLOR=1 " + session.Quote(e.Self) + " _rows" + keepNext(base, rows) + ")\n"
 	}
 	return e.Chrome()
+}
+
+// keepNext keeps rows a refresh made for the reload it asks for (base.next:
+// a token, then the rows): " TOKEN", the reload's argument, or "" when
+// they could not be kept (the reload makes its own).
+func keepNext(base, rows string) string {
+	if base == "" {
+		return ""
+	}
+	token := strconv.FormatInt(time.Now().UnixNano(), 36)
+	if files.WriteAtomic(base+".next", []byte(token+"\n"+rows)) != nil {
+		return ""
+	}
+	return " " + token
+}
+
+// takeNext is the rows kept for token (keepNext), taken: false when there
+// is no token, or the rows kept are another's (a later refresh's, whose
+// own reload takes them; this one makes its own).
+func takeNext(base, token string) (string, bool) {
+	if base == "" || token == "" {
+		return "", false
+	}
+	b, err := os.ReadFile(base + ".next")
+	if err != nil {
+		return "", false
+	}
+	t, rows, ok := strings.Cut(string(b), "\n")
+	if !ok || t != token {
+		return "", false
+	}
+	os.Remove(base + ".next")
+	return rows, true
 }
 
 // PlainRows is the board as text, $COLUMNS wide (`wvr ls | cat`).

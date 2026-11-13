@@ -94,7 +94,7 @@ func (e *Env) pushStatus(labels bool) {
 // base: they go with it.
 func BoardFiles(base string) []string {
 	return []string{base + ".sock", base + ".keys", base + ".view", base + ".title", base + ".label", base + ".room",
-		base + ".shown", base + ".tight", base + ".vp", base + ".rows", base + ".holding", base + ".heldopen"}
+		base + ".shown", base + ".tight", base + ".vp", base + ".rows", base + ".next", base + ".holding", base + ".heldopen"}
 }
 
 // FzfPost sends actions to the fzf listening on unix socket s.

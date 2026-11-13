@@ -3,6 +3,7 @@ package wvr
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/robbowland/weaver/internal/agent"
@@ -154,5 +155,44 @@ func TestStateWord(t *testing.T) {
 		if got := stateWord(c.r, now); got != c.want {
 			t.Errorf("stateWord(%+v) = %q, want %q", c.r, got, c.want)
 		}
+	}
+}
+
+// A refresh whose rows changed asks for a reload that takes the rows it
+// made, by its token, rather than looking at the fleet again; a reload
+// asked for otherwise, or by another token, makes its own.
+func TestRefreshKeepsItsRows(t *testing.T) {
+	d := t.TempDir()
+	t.Setenv("FZF_SOCK", d+"/b.sock")
+	t.Setenv("FZF_INPUT_LABEL", "")
+	t.Setenv("WEAVER_VIEWS", "")
+	e := &Env{&session.Env{StateDir: d + "/state", SKey: "rex-w", Self: "/bin/wvr"}}
+	act := e.Refresh()
+	tok, ok := strings.CutPrefix(strings.TrimSpace(act), "reload-sync(COLOR=1 /bin/wvr _rows ")
+	tok, ok2 := strings.CutSuffix(tok, ")")
+	if !ok || !ok2 || tok == "" || strings.ContainsAny(tok, " '\"$;") {
+		t.Fatalf("refresh: %q, want a reload of _rows with a token", act)
+	}
+	// The rows it kept (stood in for, to tell them from rows made anew).
+	if err := os.WriteFile(d+"/b.next", []byte(tok+"\nKEPT\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Rows("other"); got == "KEPT\n" {
+		t.Error("another token took the kept rows")
+	}
+	if got := e.Rows(tok); got != "KEPT\n" {
+		t.Errorf("the refresh's reload: %q, want the rows it kept", got)
+	}
+	if got, _ := os.ReadFile(d + "/b.rows"); string(got) != "KEPT\n" {
+		t.Errorf(".rows %q: the rows loaded are kept for the next refresh", got)
+	}
+	if files.Exists(d + "/b.next") {
+		t.Error("kept rows not taken")
+	}
+	if got := e.Rows(tok); got == "KEPT\n" {
+		t.Error("kept rows taken twice")
+	}
+	if act := e.Refresh(); strings.Contains(act, "reload") {
+		t.Errorf("refresh with rows unchanged: %q", act)
 	}
 }
