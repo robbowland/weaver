@@ -583,6 +583,7 @@ Environment variables change weaver's defaults.
 | `LINEAR_API_KEY` | unset | The Linear API key to use instead of the one `wvr linear login` keeps in the Keychain |
 | `WEAVER_SELF_SETUP` | `1` | `0`: `wvr` leaves its hooks, tuicr's files and its skill alone as it starts (`wvr setup` still sets them up) |
 | `WEAVER_DEBUG` | unset | Set: write what the hooks' background runs say (their errors) to `~/.local/state/weaver/hook.log` |
+| `WEAVER_REX_WIRE` | `1` | `0`: talk to Rex through the `rex` command alone, never its control connection (slower; for telling the two apart) |
 
 ## Development
 

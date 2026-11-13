@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/rex"
 )
 
 // viewAbout is what a view shows, for its setup screen.
@@ -101,5 +102,6 @@ func (e *Env) becomeView(name string) error {
 	if err != nil {
 		return err
 	}
+	rex.Close()
 	return fmt.Errorf("%s: %w", v.argv[0], syscall.Exec(p, v.argv, append(os.Environ(), v.env...)))
 }

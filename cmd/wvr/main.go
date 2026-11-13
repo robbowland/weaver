@@ -13,6 +13,7 @@ import (
 
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/engine"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/setup"
 	"github.com/robbowland/weaver/internal/wvr"
 )
@@ -48,6 +49,7 @@ func main() {
 // exit ends wvr as err says: nothing, the usage, or what went wrong (said
 // once, here, unless the command has said it already).
 func exit(err error) {
+	rex.Close()
 	var x *cli.Exit
 	switch {
 	case err == nil:

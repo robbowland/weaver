@@ -6,11 +6,22 @@ description: Use when changing, debugging or QA-ing weaver on Rex (the Superlogi
 # weaver on Rex
 
 Rex (Superlogical, beta; verified on Rex Beta 0.1.0 build 1696, API
-revision 8) is server > session > window ("tab") > block (pane). weaver
-drives it through the `rex` CLI: `rex api call METHOD JSON` (~20 ms each),
-`rex do` (a Lua snapshot, ~25 ms; app actions), and Lua in the server's
-config (weaver.lua, written from config/rex.lua). Read docs/design.md's
-Rex section with this.
+revision 8; the control connection on build 1925, revision 12) is server >
+session > window ("tab") > block (pane). weaver drives it over the
+server's control connection (internal/rex/wire.go: the WebSocket the
+server documents at `curl --unix-socket SOCK http://x/llms.txt`, ~0.2 ms a
+call), else the `rex` CLI: `rex api call METHOD JSON` (~15-20 ms each),
+`rex do` (a Lua snapshot, ~25 ms; app actions, always the CLI's), and Lua
+in the server's config (weaver.lua, written from config/rex.lua).
+`WEAVER_REX_WIRE=0` forces the CLI (tests that count or fake `rex`
+processes need it). Read docs/design.md's Rex section with this.
+
+Control-connection traps (verified): a call naming a session needs the
+connection attached to it first (`conflict` otherwise; wireBatch attaches);
+a block a connection makes is owned by it, so its terminal takes no size
+from the app until given up (wireCall disowns after every making call); a
+connection that goes without a close message stays a client for 60 s
+(`rex.Close()` before exit and exec).
 
 ## What Rex does that bit weaver (all verified; keep them true)
 

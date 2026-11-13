@@ -314,6 +314,10 @@ func (s Session) drawnCols(p mux.PaneID) int {
 	if err != nil {
 		return 0
 	}
+	// Over the control connection each call is a fraction of a millisecond.
+	if wireReady() {
+		return s.drawnColsEach(p)
+	}
 	d, err := s.drawn(b)
 	if err != nil && strings.Contains(err.Error(), "-e:") {
 		return s.drawnColsEach(p)

@@ -142,6 +142,10 @@ as_pane 0 wvr ls >/dev/null
 ok "a full pane list: the closed pane's agent is cleaned up" "$([ -f "$SD/${SK}_77.json" ] && echo kept || echo gone)" "gone"
 
 # --- paths with spaces and unicode
+# (Pane 2's last agent, above, was killed: its state goes first. Left, any
+# look at the rows retires it, the background run's of the next hook too,
+# racing the checks below.)
+rm -f "$SD/${SK}_2.json"
 W="$T/wt é space"
 git -C "$T/repo" worktree add -q -b odd-path "$W" 2>/dev/null
 printf 'x\n' >"$W/naïve file.txt"

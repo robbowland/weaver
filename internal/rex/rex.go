@@ -76,6 +76,9 @@ func KeysLoaded() bool {
 // ReloadConfig has the Rex server read its configuration again, and every
 // client fetch its keys again.
 func ReloadConfig() error {
+	if err := wireCall("server.config_reload", map[string]any{}, nil); !errors.Is(err, errNoWire) {
+		return err
+	}
 	_, err := run("config", "reload")
 	return err
 }
@@ -102,8 +105,12 @@ func run(args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// call calls API method with in, its result into out (when not nil).
+// call calls API method with in, its result into out (when not nil): over
+// the control connection (wireCall), else through the rex command.
 func call(method string, in map[string]any, out any) error {
+	if err := wireCall(method, in, out); !errors.Is(err, errNoWire) {
+		return err
+	}
 	b, err := json.Marshal(in)
 	if err != nil {
 		return err

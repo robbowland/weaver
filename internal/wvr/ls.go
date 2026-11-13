@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"golang.org/x/term"
 )
@@ -141,10 +142,12 @@ func (e *Env) ls(peek, at string) (string, error) {
 			case syscall.SIGHUP:
 				clean()
 				os.Remove(base + ".born")
+				rex.Close()
 				os.Exit(129)
 			case syscall.SIGTERM:
 				clean()
 				os.Remove(base + ".born")
+				rex.Close()
 				os.Exit(143)
 			}
 			// ctrl-c is fzf's (it ends with 130); the board carries on.
@@ -265,6 +268,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			// the board starts again in it, whose keys know its rows.
 			if next, ok := e.successor(base + ".born"); ok {
 				os.Remove(base + ".born")
+				rex.Close()
 				syscall.Exec(next, []string{next, "ls"}, os.Environ())
 			}
 			time.Sleep(200 * time.Millisecond)
@@ -329,6 +333,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		}
 		bestEffort(exec.Command(e.Self, "_goto", pane, tab).Run())
 		if key == "ctrl-e" {
+			rex.Close()
 			syscall.Exec(e.Self, []string{e.Self, "review", pane}, os.Environ())
 		}
 		return "", nil

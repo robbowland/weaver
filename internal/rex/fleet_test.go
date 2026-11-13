@@ -106,6 +106,8 @@ func TestFleetQuit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_BIN_DIR", wd)
+	// Through the rex command, which the wrapper stands in for.
+	t.Setenv("WEAVER_REX_WIRE", "0")
 
 	if err := os.WriteFile(mark, nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -255,6 +257,13 @@ func TestFleetLook(t *testing.T) {
 	if err != nil || len(ws) != 3 {
 		t.Errorf("windows in one look: %+v %v", ws, err)
 	}
+	// Through the rex command: one rex do, alike; and, its scripts
+	// failing, session by session.
+	t.Setenv("WEAVER_REX_WIRE", "0")
+	lua, err := f.Panes()
+	if err != nil || names(lua) != names(one) {
+		t.Errorf("panes through the rex command: %s (%v), want %s", names(lua), err, names(one))
+	}
 	defer func(s string) { fleetScript = s }(fleetScript)
 	fleetScript = `return rex.no_such_thing.at_all`
 	each, err := f.Panes()
@@ -292,6 +301,11 @@ func TestDrawnCols(t *testing.T) {
 		t.Errorf("drawnCols with no app: %d, want its own 80", got)
 	}
 	defer func(s string) { drawnScript = s }(drawnScript)
+	// Through the rex command: one rex do (drawnLua).
+	t.Setenv("WEAVER_REX_WIRE", "0")
+	if got := home.drawnCols(left); got != 80 {
+		t.Errorf("drawnCols through the rex command: %d, want its own 80", got)
+	}
 	drawnScript = `return rex.no_such_thing.at_all`
 	if got := home.drawnCols(left); got != 80 {
 		t.Errorf("drawnCols call by call: %d, want 80", got)
@@ -328,6 +342,7 @@ func TestFleetLookBlockGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func(s string) { fleetScript = s }(fleetScript)
+	t.Setenv("WEAVER_REX_WIRE", "0")
 	const at = "local function look(sid, view)\n  local blocks = {}\n"
 	if !strings.Contains(fleetLua, at) {
 		t.Fatal("fleetLua's look has moved: the test's stand-in needs it")

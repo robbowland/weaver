@@ -684,7 +684,8 @@ func message(t *testing.T, s Session) string {
 				}
 				lines := strings.Split(strings.TrimRight(f.Content, "\n"), "\n")
 				shown := strings.Join(lines[max(len(lines)-sz.Rows, 0):], "\n")
-				if strings.TrimSpace(shown) != b.Label {
+				// Nothing yet: its program has not printed (the caller waits).
+				if x := strings.TrimSpace(shown); x != "" && x != b.Label {
 					t.Errorf("the message shows %q, its label (the app's heading) is %q", shown, b.Label)
 				}
 				return shown

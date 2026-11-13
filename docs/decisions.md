@@ -1001,6 +1001,22 @@ can supersede an earlier one, and says so.
   `rex.call` or `rex.session.attach` (a script error, `-e:<line>:`) is
   looked at session by session as before.
 
+- 2026-11-13: weaver speaks Rex's control connection itself rather than
+  through the rex command. The server documents it (`GET /llms.txt` on its
+  socket: a WebSocket, `rex.control.v1`, revisions negotiated in the hello,
+  each later revision translated for older clients), so it is a contract,
+  not the CLI's internals. A call through the rex command was a process of
+  a 42 MB binary, 15 to 20 ms; over the connection 0.2 ms, after 0.7 ms to
+  open it once per wvr. With nine threads (median of 20): `_rows` 31.2 to
+  12.8 ms, `_preview` 32.2 to 12.5 ms, `status` 30.6 to 12.4 ms, about 5 ms
+  of each the process starting; the same rows and card byte for byte. The
+  client is weaver's own (RFC 6455's client half for one local socket:
+  masked text frames out, pings answered, fragments joined), no library.
+  What the connection makes it owns, so it gives that up at once (the rex
+  command's connection ended with its call, which did the same). The rex
+  command stays where there is no Unix socket, for the app's actions and
+  popups, and behind `WEAVER_REX_WIRE=0`.
+
 ## Code
 
 - 2026-10-16: An audit against Go's module layout guide, Google's and

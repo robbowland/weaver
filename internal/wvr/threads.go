@@ -589,6 +589,7 @@ func (e *Env) AgentPane(tok string) error {
 		if err != nil {
 			return &cli.Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}
 		}
+		rex.Close()
 		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, append(w, args...), os.Environ()))
 	}
 	if tok != "" && pane != "" && files.Exists(d+"/task") {

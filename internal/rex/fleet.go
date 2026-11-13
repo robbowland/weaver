@@ -145,6 +145,9 @@ func (f Fleet) Quit() error {
 // script's own, "-e:<line>: ...") is looked at session by session.
 func (f Fleet) look(full bool) ([]Session, map[string]snapshot, error) {
 	ts := f.Home.ids().threads(f.Home.ID)
+	if wireReady() {
+		return f.lookWire(ts, full)
+	}
 	var out struct {
 		Live  list[string]        `json:"live"`
 		Snaps map[string]snapshot `json:"snaps"`
@@ -163,6 +166,33 @@ func (f Fleet) look(full bool) ([]Session, map[string]snapshot, error) {
 		}
 	}
 	return ss, out.Snaps, nil
+}
+
+// lookWire is look over the control connection: the sessions Rex runs,
+// then home's and its running threads' snapshots (lookWire), a thread gone
+// since the list left out.
+func (f Fleet) lookWire(ts []string, full bool) ([]Session, map[string]snapshot, error) {
+	live, err := sessions()
+	if err != nil {
+		return nil, nil, err
+	}
+	sids := []string{f.Home.ID}
+	for _, id := range ts {
+		if live[id] && id != f.Home.ID {
+			sids = append(sids, id)
+		}
+	}
+	m, err := lookWire(sids, full, func(sid string) bool { return sid != f.Home.ID })
+	if err != nil {
+		return nil, nil, err
+	}
+	ss := []Session{f.Home}
+	for _, id := range sids[1:] {
+		if _, ok := m[id]; ok {
+			ss = append(ss, f.in(id))
+		}
+	}
+	return ss, m, nil
 }
 
 // lookEach is look, a call for the sessions and one for each.

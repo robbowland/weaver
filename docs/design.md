@@ -803,12 +803,25 @@ over (`takeOver`): its id goes into their records.
   server runs, or when the session is no longer on it; not known when a call
   that takes fails, when weaver takes nothing for lost (see [Lost
   threads](#lost-threads)).
-- **Calls:** each look at the session is one `rex do` (its view, and each
-  terminal's size, with `Panes` its directory and processes too); a look at
-  the whole fleet (`Fleet.Panes`, `Fleet.Windows`) is one too, against
-  home, which lists the sessions Rex runs and attaches to each thread's to
-  look at it (`fleetLua`; a Rex whose scripts cannot, session by session);
-  every other method one `rex api call`. A pane's environment goes through
+- **Calls:** over the server's control connection (`wire.go`): the
+  WebSocket at `/api/control` on its Unix socket, `rex.control.v1`, which
+  the server documents at `GET /llms.txt`. One connection per wvr, opened
+  at its first call (hello at revision 12, oldest 8) and closed, with a
+  close message, before it exits or execs (a client gone without one is
+  kept a minute); one idle 20 s is opened again. A call naming a session
+  attaches the connection to it first; blocks a call makes are given up
+  (`session.disown_block`), since a terminal takes its size from its owner
+  and weaver asks none. Calls that do not depend on each other go at once
+  (`wireBatch`): a look at the fleet is the sessions' list, their views,
+  then every terminal's size (with `Panes` its directory and processes
+  too). A Rex error reads as the rex command's (`method: rex: message
+  (status=N code=C)`). Where there is no Unix socket to the server (a
+  host's address, none), its handshake is refused, or
+  `WEAVER_REX_WIRE=0`, the rex command as before: each look one `rex do`
+  (its view and terminals; the fleet's, `fleetLua`, against home), every
+  other method one `rex api call`. The app's actions (`rex do
+  session.select`) and a popup's `rex wait` are always the rex
+  command's. A pane's environment goes through
   `env(1)`, Rex setting none: `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay

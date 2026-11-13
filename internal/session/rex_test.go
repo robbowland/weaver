@@ -112,6 +112,9 @@ func TestRexLostAndGC(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_BIN_DIR", dir+"/bin")
+	// Counted as the rex command's calls (over the control connection
+	// there is no process to count; the looks are the same).
+	t.Setenv("WEAVER_REX_WIRE", "0")
 
 	// Running: agents that died in its panes are left; one whose pane has
 	// gone is forgotten, not lost; a thread that has not reported, or
@@ -260,6 +263,9 @@ func countRex(t *testing.T) func() int {
 		t.Fatal(err)
 	}
 	t.Setenv("REX_BIN_DIR", d)
+	// Counted as the rex command's calls (over the control connection
+	// there is no process to count; the looks are the same).
+	t.Setenv("WEAVER_REX_WIRE", "0")
 	return func() int {
 		b, _ := os.ReadFile(log)
 		n := strings.Count(string(b), "\n")

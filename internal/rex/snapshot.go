@@ -3,6 +3,7 @@ package rex
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/url"
 	"strconv"
@@ -182,6 +183,9 @@ type snapshot struct {
 }
 
 func (s Session) snapshot(full bool) (snapshot, error) {
+	if m, err := lookWire([]string{s.ID}, full, nil); !errors.Is(err, errNoWire) {
+		return m[s.ID], err
+	}
 	var sn snapshot
 	err := do(s.ID, snapshotLua, map[string]any{"full": full}, &sn)
 	return sn, err

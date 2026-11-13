@@ -18,6 +18,7 @@ import (
 	"github.com/robbowland/weaver/internal/markdown"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -985,6 +986,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		<-sig
 		os.Remove(sock)
 		os.Remove(sock + ".born")
+		rex.Close()
 		os.Exit(129)
 	}()
 	// The view outlives installs of weaver (installs.go): when it started
@@ -1109,6 +1111,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		if next, ok := e.successor(sock + ".born"); ok {
 			os.Remove(sock)
 			os.Remove(sock + ".born")
+			rex.Close()
 			return "", syscall.Exec(next, []string{next, "_items", src.name()}, os.Environ())
 		}
 		time.Sleep(200 * time.Millisecond)
