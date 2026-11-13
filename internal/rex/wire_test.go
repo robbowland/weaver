@@ -1,10 +1,16 @@
 package rex
 
 import (
+	"bufio"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -222,5 +228,84 @@ func TestReloadConfigSaysItsErrors(t *testing.T) {
 		if err := ReloadConfig(); err == nil || !strings.Contains(err.Error(), "errors") {
 			t.Errorf("WEAVER_REX_WIRE=%s, a configuration that does not load: %v", wire, err)
 		}
+	}
+}
+
+// A server that welcomes weaver at a control API revision older than the
+// shapes weaver reads refuses it: the rex command for that server, for the
+// rest of the process, not asked again at every call.
+func TestWireRefusesAnOldRevision(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "wvr-o")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	sock := dir + "/s.sock"
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	var dials atomic.Int32
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			dials.Add(1)
+			go func() {
+				defer c.Close()
+				r := bufio.NewReader(c)
+				key := ""
+				for {
+					line, err := r.ReadString('\n')
+					if err != nil {
+						return
+					}
+					if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(k, "Sec-WebSocket-Key") {
+						key = strings.TrimSpace(v)
+					}
+					if line == "\r\n" {
+						break
+					}
+				}
+				sum := sha1.Sum([]byte(key + wsGUID))
+				fmt.Fprintf(c, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\nSec-WebSocket-Protocol: rex.control.v1\r\n\r\n",
+					base64.StdEncoding.EncodeToString(sum[:]))
+				w := &wire{c: c, r: r}
+				_, _ = w.message() // its hello
+				msg, _ := json.Marshal(map[string]any{"type": "welcome", "protocol": "rex.control.v1", "api_revision": 3, "limits": map[string]any{"max_message_bytes": 65536}})
+				// A server's frames are not masked.
+				_, _ = c.Write(append([]byte{0x81, byte(len(msg))}, msg...))
+				_, _ = r.ReadByte()
+			}()
+		}
+	}()
+	t.Setenv("REX_SERVER", "unix://"+sock)
+	if _, err := wireDial(sock); err == nil {
+		t.Fatal("a server at revision 3: dialled")
+	} else if _, ok := err.(*wireRefused); !ok {
+		t.Errorf("a server at revision 3: %v, want refused", err)
+	}
+	for range 3 {
+		if wireReady() {
+			t.Fatal("a control connection to a server at revision 3")
+		}
+	}
+	if n := dials.Load(); n > 2 {
+		t.Errorf("dialled %d times, want the refusal kept", n)
+	}
+}
+
+// Close waits for a call in flight a moment, never as long as a Rex that
+// hangs would keep it: a signal's exit is not held up.
+func TestCloseDoesNotWaitOnAHungCall(t *testing.T) {
+	wireMu.Lock()
+	defer wireMu.Unlock()
+	start := time.Now()
+	Close()
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("Close took %v with a call in flight", took)
 	}
 }

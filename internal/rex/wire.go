@@ -158,14 +158,21 @@ func wireBatch(reqs []wireReq) ([]json.RawMessage, []error, error) {
 		// new one.
 		res, errs, err = wireBatchOn(reqs)
 	}
-	if wireNow != nil {
-		if wireTimer == nil {
-			wireTimer = time.AfterFunc(wireIdle, wireIdleClose)
-		} else {
-			wireTimer.Reset(wireIdle)
-		}
-	}
+	wireArm()
 	return res, errs, err
+}
+
+// wireArm has an open connection closed once idle wireIdle (wireIdleClose),
+// from its last use; with wireMu held.
+func wireArm() {
+	if wireNow == nil {
+		return
+	}
+	if wireTimer == nil {
+		wireTimer = time.AfterFunc(wireIdle, wireIdleClose)
+	} else {
+		wireTimer.Reset(wireIdle)
+	}
 }
 
 // wireGone: a kept connection was found closed as a batch was first sent
@@ -295,8 +302,17 @@ func (e *wireRefused) Error() string { return "rex: " + e.why }
 // Close ends wvr's control connection, if it has one, with a close
 // message: the server forgets its client at once (one that goes without
 // is kept a minute, attached to its sessions). Before wvr exits or execs.
+// A call in flight holds the connection: Close waits for it 200 ms at
+// most (a signal's exit must not wait on a Rex that hangs), then leaves
+// the connection to end with the process, a client the server drops a
+// minute on.
 func Close() {
-	wireMu.Lock()
+	for deadline := time.Now().Add(200 * time.Millisecond); !wireMu.TryLock(); {
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	defer wireMu.Unlock()
 	if wireNow != nil {
 		wireNow.close()
@@ -339,6 +355,12 @@ func wireDialAs(path, kind string) (*wire, error) {
 	w := &wire{ep: path, c: c, r: bufio.NewReaderSize(c, 64<<10), attached: map[string]bool{}, used: time.Now(), fresh: true, kind: kind}
 	if err := w.handshake(); err != nil {
 		_ = c.Close()
+		// The server answered, but not as weaver's calls need: the rex
+		// command, for the rest of this process.
+		var refused *wireRefused
+		if !errors.As(err, &refused) {
+			err = &wireRefused{err.Error()}
+		}
 		return nil, err
 	}
 	return w, nil
@@ -399,9 +421,15 @@ func (w *wire) handshake() error {
 	var wel struct {
 		Type     string `json:"type"`
 		Protocol string `json:"protocol"`
+		Revision int    `json:"api_revision"`
 	}
 	if json.Unmarshal(b, &wel) != nil || wel.Type != "welcome" || wel.Protocol != "rex.control.v1" {
 		return &wireRefused{"no welcome"}
+	}
+	// A server older than api_min_revision picks its own newest, which may
+	// be older than the shapes weaver reads.
+	if wel.Revision < wireMinRevision {
+		return &wireRefused{"control API revision " + strconv.Itoa(wel.Revision) + ", older than weaver reads"}
 	}
 	return nil
 }
@@ -542,7 +570,7 @@ func (w *wire) message() ([]byte, error) {
 			l = binary.BigEndian.Uint64(x[:])
 		}
 		if l > wireMaxMessage || uint64(msg.Len())+l > wireMaxMessage {
-			return nil, errors.New("rex: message too large")
+			return nil, errors.New("message too large")
 		}
 		var mask [4]byte
 		if masked {
@@ -561,7 +589,7 @@ func (w *wire) message() ([]byte, error) {
 		}
 		switch op {
 		case 0x8:
-			return nil, errors.New("rex: connection closed by the server")
+			return nil, errors.New("connection closed by the server")
 		case 0x9:
 			if err := w.frame(0xa, p); err != nil {
 				return nil, err

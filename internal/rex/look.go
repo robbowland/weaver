@@ -94,5 +94,6 @@ func wireReady() bool {
 	wireMu.Lock()
 	defer wireMu.Unlock()
 	_, err := wireGet()
+	wireArm()
 	return err == nil
 }

@@ -696,7 +696,10 @@ func (s Session) showInAppWire(id string) (ok bool, err error) {
 		args["window_id"] = id
 	}
 	perform := func(c string) error {
-		return call("client.perform", map[string]any{"client_id": c, "action": "session.select", "args": args, "origin": "cli"}, nil)
+		// The app's answer within 5 s, Rex's to say (code=timeout), well
+		// before the call's own deadline (wireTimeout) would end the
+		// connection with nothing said.
+		return call("client.perform", map[string]any{"client_id": c, "action": "session.select", "args": args, "origin": "cli", "timeout_ms": 5000}, nil)
 	}
 	var l struct {
 		Clients []client `json:"clients"`
