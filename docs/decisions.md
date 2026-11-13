@@ -1017,6 +1017,23 @@ can supersede an earlier one, and says so.
   command stays where there is no Unix socket, for the app's actions and
   popups, and behind `WEAVER_REX_WIRE=0`.
 
+- 2026-11-13: weaver stays Go: Rust would not make it faster where it
+  is slow (asked: "would rewriting it in Rust add any value?"). A
+  process's floor, median of 200 on an idle M-series Mac: C 1.22 ms, Rust
+  1.34 ms, Go 1.76 ms, `wvr version` 3.5 ms (its 13 MB binary and 0.7 ms
+  of package inits, goldmark's most of it; stripped, the same). So a Rust
+  wvr would start at most ~2 ms sooner, per hook and per key. What was
+  slow was what weaver waited on: the rex command at 15-20 ms a call and
+  several calls an operation (now its control connection, 0.2 ms), git
+  run three times a second per review panel (now when refs move), and
+  fzf. After those, a look at nine threads' sessions is ~6 ms in process,
+  most of it Rex answering, which no language on weaver's side changes. A
+  rewrite would be 25 000 lines and every Rex behaviour the rex skill
+  lists verified again. If one is ever wanted, what tests weaver from
+  outside carries over unchanged: the hook engine's conformance cases
+  (test/conformance: events in, state out, any binary) and the suites
+  that drive `wvr` against a throwaway Rex (test/hooks.sh, test/rex.sh).
+
 ## Code
 
 - 2026-10-16: An audit against Go's module layout guide, Google's and
