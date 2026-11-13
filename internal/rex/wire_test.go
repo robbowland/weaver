@@ -201,3 +201,26 @@ func TestSayQuicklyAgain(t *testing.T) {
 		}
 	}
 }
+
+// A configuration that does not load is said to have errors, over the
+// control connection as through the rex command.
+func TestReloadConfigSaysItsErrors(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "wvr-c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	rextest.ServerAt(t, Bin(), dir)
+	if err := ReloadConfig(); err != nil {
+		t.Fatalf("a configuration that loads: %v", err)
+	}
+	if err := os.WriteFile(dir+"/init.lua", []byte("this is not lua\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, wire := range []string{"1", "0"} {
+		t.Setenv("WEAVER_REX_WIRE", wire)
+		if err := ReloadConfig(); err == nil || !strings.Contains(err.Error(), "errors") {
+			t.Errorf("WEAVER_REX_WIRE=%s, a configuration that does not load: %v", wire, err)
+		}
+	}
+}

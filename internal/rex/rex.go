@@ -75,9 +75,27 @@ func KeysLoaded() bool {
 
 // ReloadConfig has the Rex server read its configuration again, and every
 // client fetch its keys again.
+// A configuration that does not load is no failed call over the control
+// connection: the reload answers with its diagnostics, an error among them
+// (rex config reload says "the configuration has errors").
 func ReloadConfig() error {
-	if err := wireCall("server.config_reload", map[string]any{}, nil); !errors.Is(err, errNoWire) {
-		return err
+	var out struct {
+		Diagnostics []struct {
+			Severity string `json:"severity"`
+			Source   string `json:"source"`
+			Message  string `json:"message"`
+		} `json:"diagnostics"`
+	}
+	if err := wireCall("server.config_reload", map[string]any{}, &out); !errors.Is(err, errNoWire) {
+		if err != nil {
+			return err
+		}
+		for _, d := range out.Diagnostics {
+			if d.Severity == "error" {
+				return fmt.Errorf("rex: the configuration has errors: %s: %s", d.Source, d.Message)
+			}
+		}
+		return nil
 	}
 	_, err := run("config", "reload")
 	return err
