@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,9 @@ type Event struct {
 	Key, Waiting, Cmd, ToolUseID string
 	// Esc on a tool (is_interrupt); a rejected dialog.
 	Interrupt, Rejected bool
+	// PostToolBatch's calls, each as Key says one: the batch that has
+	// resolved. None from a Claude Code that does not say.
+	Batch []string
 	// Stop's background subagents: how many, and what they do.
 	Background      int
 	BackgroundTasks string
@@ -39,6 +43,11 @@ type Change struct {
 	Next Record
 	Bell int
 }
+
+// PendingStopFailure is what an agent stopped by an API error waits on
+// (StopFailure's pending): no call of its turn, so no late hook of its
+// turn's calls ends the wait, which only you end, prompting again.
+const PendingStopFailure = "StopFailure"
 
 // lateWindow is how long (s) after a turn ends an async hook of that turn
 // may still land: Claude Code runs them in the background, a second or
@@ -132,10 +141,15 @@ func Transition(old, sess Record, ev Event) Change {
 			n.DoneIDs = strings.Join(ids, " ")
 		}
 		n.State = StateWorking
-		if ev.Name == "PostToolUseFailure" && ev.Interrupt {
+		if ev.Name == "PostToolUseFailure" && ev.Interrupt && otherTurn(ev, sess) {
+			// Esc in the turn before, landing late: this one works on.
+			n.State = old.State
+		} else if ev.Name == "PostToolUseFailure" && ev.Interrupt {
 			n.State = StateInterrupted
-		} else if old.State == StateNeedsYou && old.Pending != "" && ev.Key != old.Pending {
-			// Another tool finished while one still waits for you.
+		} else if old.State == StateNeedsYou && ev.Key != old.Pending {
+			// Another tool finished while one still waits for you, or a
+			// dialog of no call it knows (an MCP server's, a teammate's,
+			// an API error's): its own answer, or the batch's end, ends it.
 			n.State = StateNeedsYou
 		} else {
 			// A late async hook must not undo a Stop or an interrupt: one of
@@ -158,8 +172,19 @@ func Transition(old, sess Record, ev Event) Change {
 			}
 		}
 	case "PostToolBatch":
-		// Every call in the batch has resolved: the dialog has been answered.
-		if old.State == StateNeedsYou {
+		// Every call in the batch has resolved: the dialog has been
+		// answered, when its call was among them (a batch before it,
+		// landing late, or another agent's, is not its answer). One that
+		// does not say its calls answers any.
+		answered := false
+		switch {
+		case old.State != StateNeedsYou, old.Pending == PendingStopFailure:
+		case old.Pending == "", len(ev.Batch) == 0:
+			answered = true
+		default:
+			answered = slices.Contains(ev.Batch, old.Pending)
+		}
+		if answered {
 			if ev.Rejected {
 				n.State = StateInterrupted
 			} else {
@@ -167,7 +192,7 @@ func Transition(old, sess Record, ev Event) Change {
 			}
 		}
 	case "StopFailure":
-		n.State, n.Waiting, n.Pending = StateNeedsYou, ev.Waiting, ""
+		n.State, n.Waiting, n.Pending = StateNeedsYou, ev.Waiting, PendingStopFailure
 	case "Stop":
 		// Not done while background subagents work on: their reports wake it.
 		n.Background, n.BackgroundTasks = ev.Background, ev.BackgroundTasks
@@ -225,9 +250,11 @@ func Transition(old, sess Record, ev Event) Change {
 	if n.Title == "" {
 		n.Title = sess.Title
 	}
-	n.PromptID = ev.PromptID
-	if n.PromptID == "" {
-		n.PromptID = sess.PromptID
+	// A turn's prompt_id is its prompt's; an event's only while none is
+	// known (a late one of the turn before never takes it back).
+	n.PromptID = sess.PromptID
+	if ev.PromptID != "" && (ev.Name == "UserPromptSubmit" || n.PromptID == "") {
+		n.PromptID = ev.PromptID
 	}
 	n.Transcript = ev.Transcript
 	if n.Transcript == "" {
@@ -238,6 +265,13 @@ func Transition(old, sess Record, ev Event) Change {
 		n.Marker = n.State.Cell()
 	}
 	return Change{n, bell}
+}
+
+// otherTurn: is ev of a turn other than the one sess is on (its
+// prompt_id another)? Only a prompt starts a turn, so one of another is
+// of a turn before, landing late.
+func otherTurn(ev Event, sess Record) bool {
+	return ev.PromptID != "" && sess.PromptID != "" && ev.PromptID != sess.PromptID
 }
 
 // numberOf is epoch seconds as a JSON number.

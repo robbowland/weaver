@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -52,6 +51,7 @@ type hk struct {
 	Source, TitleNew, PromptID, Transcript          string
 	NewCwd, Err, Cmd, EndNew                        string
 	Interrupt, Rejected                             bool
+	Batch                                           []string `json:"-"`
 
 	// Old is the stored state, of whichever session; Same says it is this
 	// session's (sess).
@@ -123,7 +123,7 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 	}
 	release := store.Lock(h.sf)
 	st, _ := os.ReadFile(h.sf)
-	if !h.parse(ev, st) {
+	if !h.parse(ev, st) || mode == "async" && h.otherConversation(me) {
 		release()
 		return 0
 	}
@@ -161,14 +161,10 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	}
 	h.WaitingNew = oneline.Ctl(oneline.Squash(w, 100))
 	if in.ToolName != "" {
-		ti := "null"
-		if len(in.ToolInput) > 0 {
-			// The hook's input is JSON: the decoder that gave it read it.
-			var c bytes.Buffer
-			_ = json.Compact(&c, in.ToolInput)
-			ti = c.String()
-		}
-		h.Key = oneline.Ctl(in.ToolName + ":" + oneline.Cut(ti, 300))
+		h.Key = hooks.CallKey(in.ToolName, in.ToolInput)
+	}
+	if in.Event == "PostToolBatch" {
+		h.Batch = in.BatchKeys()
 	}
 	h.LastNew = oneline.Ctl(oneline.Squash(in.LastMessage, 400))
 	h.Atype = oneline.Ctl(oneline.Squash(in.AgentType, 40))
@@ -321,7 +317,7 @@ func (h *hk) run(e *session.Env, me string) {
 	}
 
 	ch := agent.Transition(h.Old, h.sess(), agent.Event{Name: h.Event, Async: h.Mode == "async", Source: h.Source, Ntype: h.Ntype,
-		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt, Rejected: h.Rejected,
+		Key: h.Key, Waiting: h.WaitingNew, Cmd: h.Cmd, ToolUseID: h.ToolUseID, Interrupt: h.Interrupt, Rejected: h.Rejected, Batch: h.Batch,
 		Background: h.BgNew, BackgroundTasks: h.BgdescNew, Prompt: h.Prompt, File: h.EvFile, PromptID: h.PromptID,
 		Title: h.TitleNew, Transcript: h.Transcript, LastMessage: h.LastNew, EndReason: h.EndNew, Now: h.Now})
 	n := ch.Next
@@ -341,6 +337,16 @@ func (h *hk) run(e *session.Env, me string) {
 }
 
 func (h *hk) oPid() string { return string(h.Old.Pid) }
+
+// otherConversation: is the event of a conversation other than the one
+// the pane's agent (me, when known) is on? An async hook may land late,
+// after the agent has moved on (/clear, /resume, a background subagent of
+// the conversation before still at work): its event is not this one's.
+// A sync hook never lands late, and a new agent's first event is one
+// (SessionStart), so only those move the state to another conversation.
+func (h *hk) otherConversation(me string) bool {
+	return h.Sid != "" && h.Old.SessionID != "" && h.Sid != h.Old.SessionID && (me == "" || me == h.oPid())
+}
 
 // yourPrompt: is the event a prompt of yours, which starts a turn?
 func (h *hk) yourPrompt() bool { return h.Event == "UserPromptSubmit" && h.Prompt != "" }

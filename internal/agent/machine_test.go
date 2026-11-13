@@ -42,6 +42,8 @@ func TestTransition(t *testing.T) {
 		{"stop with background subagents: still working", st(StateWorking), true,
 			Event{Name: "Stop", Background: 2, BackgroundTasks: "a; b"}, StateWorking, 0, "", true},
 		{"stop failing: needs you", st(StateWorking), true, Event{Name: "StopFailure", Waiting: "error: overloaded"}, StateNeedsYou, 10, "error: overloaded", false},
+		{"...and no late tool of its turn ends that", Transition(st(StateWorking), st(StateWorking), Event{Name: "StopFailure", Waiting: "error: overloaded", Now: 990}).Next, true,
+			Event{Name: "PostToolUse", Key: "Read:x"}, StateNeedsYou, 0, "error: overloaded", true},
 		{"quiet a minute while working: Esc stopped it", st(StateWorking), true,
 			Event{Name: "Notification", Ntype: "idle_prompt"}, StateInterrupted, 0, "", false},
 		{"...unless background work is pending", st(StateWorking, func(a *Record) { a.Background = 1 }), true,
@@ -49,6 +51,10 @@ func TestTransition(t *testing.T) {
 		{"...and with no state yet: done", Record{}, false, Event{Name: "Notification", Ntype: "idle_prompt"}, StateDone, 11, "", false},
 		{"another tool finishes while one waits on you", st(StateNeedsYou, waiting("Bash: rm", "Bash:rm")), true,
 			Event{Name: "PostToolUse", Key: "Read:x"}, StateNeedsYou, 0, "Bash: rm", true},
+		{"a tool finishes while an MCP server's dialog waits: still needs you", st(StateNeedsYou, waiting("input wanted", "")), true,
+			Event{Name: "PostToolUse", Key: "Read:x"}, StateNeedsYou, 0, "input wanted", true},
+		{"...its answer: working", st(StateNeedsYou, waiting("input wanted", "")), true,
+			Event{Name: "Notification", Ntype: "elicitation_response"}, StateWorking, 0, "", false},
 		{"the dialog's own tool finishes: working", st(StateNeedsYou, waiting("Bash: rm", "Bash:rm")), true,
 			Event{Name: "PostToolUse", Key: "Bash:rm"}, StateWorking, 0, "", false},
 		{"Esc on a tool: interrupted", st(StateWorking), true,
@@ -62,6 +68,18 @@ func TestTransition(t *testing.T) {
 		{"a tool event of a new turn: working", st(StateDone, func(a *Record) { a.PromptID = "p1" }), true,
 			Event{Name: "PostToolUse", PromptID: "p2", Now: now}, StateWorking, 0, "", false},
 		{"the batch answered", st(StateNeedsYou, waiting("w", "k")), true, Event{Name: "PostToolBatch"}, StateWorking, 0, "", false},
+		{"the batch with the dialog's call: answered", st(StateNeedsYou, waiting("Bash: rm", "Bash:rm")), true,
+			Event{Name: "PostToolBatch", Batch: []string{"Read:x", "Bash:rm"}}, StateWorking, 0, "", false},
+		{"a batch without the dialog's call (one before it, late; another agent's): still needs you", st(StateNeedsYou, waiting("Bash: rm", "Bash:rm")), true,
+			Event{Name: "PostToolBatch", Batch: []string{"Read:x"}}, StateNeedsYou, 0, "Bash: rm", true},
+		{"an API error's wait outlasts a late tool of its turn", st(StateNeedsYou, waiting("error: overloaded", PendingStopFailure)), true,
+			Event{Name: "PostToolUse", Key: "Read:x"}, StateNeedsYou, 0, "error: overloaded", true},
+		{"...and a late batch of it", st(StateNeedsYou, waiting("error: overloaded", PendingStopFailure)), true,
+			Event{Name: "PostToolBatch", Batch: []string{"Read:x"}}, StateNeedsYou, 0, "error: overloaded", true},
+		{"...till you prompt again", st(StateNeedsYou, waiting("error: overloaded", PendingStopFailure)), true,
+			Event{Name: "UserPromptSubmit", Prompt: "retry"}, StateWorking, 0, "", false},
+		{"a late interrupt of the turn before does not stop the next", st(StateWorking, func(a *Record) { a.PromptID = "p2" }), true,
+			Event{Name: "PostToolUseFailure", Interrupt: true, PromptID: "p1"}, StateWorking, 0, "", true},
 		{"the batch rejected", st(StateNeedsYou, waiting("w", "k")), true, Event{Name: "PostToolBatch", Rejected: true}, StateInterrupted, 0, "", false},
 		{"compaction carries on as it was", st(StateWorking), true, Event{Name: "SessionStart", Source: "compact"}, StateWorking, 0, "", true},
 		{"a new start: idle", st(StateDone), true, Event{Name: "SessionStart", Source: "startup"}, StateIdle, 0, "", false},
@@ -89,6 +107,22 @@ func TestTransition(t *testing.T) {
 		if (n.State == StateEnded) != (n.Marker == "") {
 			t.Errorf("%s: marker %q for %s", c.name, n.Marker, n.State)
 		}
+	}
+}
+
+// A turn's prompt_id is its prompt's: a late event of the turn before
+// never takes it back.
+func TestTransitionPromptID(t *testing.T) {
+	n := Transition(Record{State: StateWorking, PromptID: "p1"}, Record{State: StateWorking, PromptID: "p1"},
+		Event{Name: "UserPromptSubmit", Prompt: "next", PromptID: "p2", Now: 1000}).Next
+	if n.PromptID != "p2" {
+		t.Fatalf("a prompt's prompt_id: %q", n.PromptID)
+	}
+	if late := Transition(n, n, Event{Name: "PostToolUse", PromptID: "p1", Now: 1001}).Next; late.PromptID != "p2" {
+		t.Errorf("a late tool event of the turn before: prompt_id %q, want p2", late.PromptID)
+	}
+	if first := Transition(Record{}, Record{}, Event{Name: "PostToolUse", PromptID: "p9", Now: 1001}).Next; first.PromptID != "p9" {
+		t.Errorf("none known: the event's, %q", first.PromptID)
 	}
 }
 

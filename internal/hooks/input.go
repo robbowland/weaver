@@ -2,6 +2,7 @@
 package hooks
 
 import (
+	"bytes"
 	"encoding/json"
 	"regexp"
 	"strconv"
@@ -38,7 +39,9 @@ type Input struct {
 	Interrupt    bool            `json:"is_interrupt"` // PostToolUseFailure
 	// PostToolBatch's calls.
 	ToolCalls []struct {
-		Response jsonx.Text `json:"tool_response"`
+		ToolName  string          `json:"tool_name"`
+		ToolInput json.RawMessage `json:"tool_input"`
+		Response  jsonx.Text      `json:"tool_response"`
 	} `json:"tool_calls"`
 	// Notification's.
 	Ntype   string `json:"notification_type"`
@@ -79,6 +82,30 @@ func (t ToolInput) path() string {
 		return t.FilePath
 	}
 	return t.NotebookPath
+}
+
+// CallKey is a tool call as the state keys it (pending, a batch's calls):
+// its name and its input, compacted, cut to 300 characters.
+func CallKey(name string, input json.RawMessage) string {
+	ti := "null"
+	if len(input) > 0 {
+		// The hook's input is JSON: the decoder that gave it read it.
+		var c bytes.Buffer
+		_ = json.Compact(&c, input)
+		ti = c.String()
+	}
+	return oneline.Ctl(name + ":" + oneline.Cut(ti, 300))
+}
+
+// BatchKeys are PostToolBatch's calls, each as CallKey says it.
+func (in Input) BatchKeys() []string {
+	var ks []string
+	for _, c := range in.ToolCalls {
+		if c.ToolName != "" {
+			ks = append(ks, CallKey(c.ToolName, c.ToolInput))
+		}
+	}
+	return ks
 }
 
 // AsyncGate: the async hook runs after every tool call; most of them change

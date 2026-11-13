@@ -70,3 +70,55 @@ func TestBackgroundRunGetsWhatItNeeds(t *testing.T) {
 		}
 	}
 }
+
+// Events as Claude Code sends them, through the hook: what the state then
+// says. me is the agent's pid (CLAUDE_PID).
+func hookEnv(t *testing.T) *session.Env {
+	t.Helper()
+	rextest.NoRex(t)
+	dir := t.TempDir()
+	return &session.Env{StateDir: dir + "/state", ClaudeDir: dir + "/claude", SockDir: dir + "/sock",
+		Session: "s", SKey: "rex-s", Self: "/usr/bin/true"}
+}
+
+func hookJSON(t *testing.T, e *session.Env, mode, js string) {
+	t.Helper()
+	Hook(e, []byte(js), mode, "5", strconv.Itoa(os.Getpid()))
+}
+
+// A batch that resolved without the call a dialog waits on (a batch
+// before it, landing late) leaves the dialog waiting; its own answers it.
+func TestHookBatchAnswersItsDialog(t *testing.T) {
+	e := hookEnv(t)
+	hookJSON(t, e, "sync", `{"hook_event_name":"SessionStart","session_id":"c","cwd":"/","source":"startup"}`)
+	hookJSON(t, e, "sync", `{"hook_event_name":"UserPromptSubmit","session_id":"c","cwd":"/","prompt":"go"}`)
+	hookJSON(t, e, "sync", `{"hook_event_name":"PermissionRequest","session_id":"c","cwd":"/","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`)
+	hookJSON(t, e, "async", `{"hook_event_name":"PostToolBatch","session_id":"c","cwd":"/","tool_calls":[{"tool_name":"Read","tool_input":{"file_path":"/a"},"tool_use_id":"t1","tool_response":"x"}]}`)
+	if st, _ := store.ReadState(e.StateFile("5")); st.State != "needs-you" {
+		t.Errorf("after another batch: %s, want needs-you", st.State)
+	}
+	hookJSON(t, e, "async", `{"hook_event_name":"PostToolBatch","session_id":"c","cwd":"/","tool_calls":[{"tool_name":"Bash","tool_input":{"command": "rm -rf build"},"tool_use_id":"t2","tool_response":"ok"}]}`)
+	if st, _ := store.ReadState(e.StateFile("5")); st.State != "working" {
+		t.Errorf("after its own batch: %s, want working", st.State)
+	}
+}
+
+// After /clear, a late async event of the conversation before (a
+// background subagent of it) changes nothing of the new one's state.
+func TestHookLateEventOfTheConversationBefore(t *testing.T) {
+	e := hookEnv(t)
+	hookJSON(t, e, "sync", `{"hook_event_name":"SessionStart","session_id":"old","cwd":"/","source":"startup"}`)
+	hookJSON(t, e, "sync", `{"hook_event_name":"UserPromptSubmit","session_id":"old","cwd":"/","prompt":"go"}`)
+	hookJSON(t, e, "sync", `{"hook_event_name":"SessionEnd","session_id":"old","cwd":"/","reason":"clear"}`)
+	hookJSON(t, e, "sync", `{"hook_event_name":"SessionStart","session_id":"new","cwd":"/","source":"clear"}`)
+	hookJSON(t, e, "async", `{"hook_event_name":"PostToolUse","session_id":"old","cwd":"/","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"t1"}`)
+	st, _ := store.ReadState(e.StateFile("5"))
+	if st.SessionID != "new" || st.State != "idle" {
+		t.Errorf("after a late event of the old conversation: %s on %q, want idle on new", st.State, st.SessionID)
+	}
+	// The new conversation's own events go on as ever.
+	hookJSON(t, e, "sync", `{"hook_event_name":"UserPromptSubmit","session_id":"new","cwd":"/","prompt":"again"}`)
+	if st, _ := store.ReadState(e.StateFile("5")); st.State != "working" || st.Turn != 1 {
+		t.Errorf("its own prompt: %s turn %d, want working turn 1", st.State, st.Turn)
+	}
+}

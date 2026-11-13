@@ -39,7 +39,7 @@ Readers must ignore fields they don't know and tolerate missing ones.
 | `turn` | int | +1 on each prompt of yours (not on subagent reports or task notifications) |
 | `prompt`, `waiting`, `last_message` | string | your last prompt; what it waits on; its last reply |
 | `cwd`, `root`, `start_cwd`, `project_root` | string | `root` is the repo or worktree it is really working in; `start_cwd` the directory Claude Code snaps its cwd back to (where it started, moved by the worktree tools), the baseline a move is measured from; `project_root` its repository, `-` when it has none |
-| `pending` | string | while it needs you for a tool: that call's key (name and input), so the tool's PostToolUse can be matched to it |
+| `pending` | string | while it needs you for a tool: that call's key (name and input), so the tool's PostToolUse, or the PostToolBatch listing it, can be matched to it; `StopFailure` while an API error stopped it (no late hook of its turn ends that wait, only your next prompt) |
 | `marker`, `marked_root` | string | the Worktrunk marker weaver set, and the worktree it set it on |
 | `file` | string | the last file it edited with Edit or Write (or MultiEdit, NotebookEdit), or a subagent of it did; a Bash command's or an MCP tool's edits are not followed |
 | `files` | [string] | absolute paths edited so this session, most recent last, at most 200 |
