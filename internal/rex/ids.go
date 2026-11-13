@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/process"
 )
 
 // ids is weaver's numbers for Rex's blocks and windows. Weaver's files and
@@ -262,12 +263,22 @@ func (r ids) threads(home string) []string {
 // prune forgets the sessions weaver made that Rex no longer runs (live):
 // a husk ended, an old home, a thread's closed. Not one made in the last
 // minute, which Rex may not list yet.
-func (r ids) prune(live map[string]bool) {
+func (r ids) prune(live map[string]bool) { r.pruneOn(live, serverPID()) }
+
+// pruneOn is prune by server pid (live: the sessions it runs): never a
+// record of a session another server runs (one sharing weaver's state),
+// which this one's list does not have, while that server lives.
+func (r ids) pruneOn(live map[string]bool, server int) {
 	before := float64(time.Now().Add(-time.Minute).UnixMilli()) / 1000
 	for _, id := range r.sessionIDs() {
-		if m, ok := r.session(id); ok && !live[id] && m.at < before {
-			os.Remove(r.path("sessions", fileName(id)))
+		m, ok := r.session(id)
+		if !ok || live[id] || m.at >= before {
+			continue
 		}
+		if m.server > 1 && m.server != server && process.Alive(m.server) {
+			continue
+		}
+		os.Remove(r.path("sessions", fileName(id)))
 	}
 }
 

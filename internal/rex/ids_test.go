@@ -3,6 +3,7 @@ package rex
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 )
@@ -132,5 +133,34 @@ func TestIDsSkipRecordsBeingWritten(t *testing.T) {
 	r.prune(map[string]bool{"session:a": true})
 	if _, err := os.Stat(tmp); err != nil {
 		t.Errorf("a record being written, pruned: %v", err)
+	}
+}
+
+// A session another Rex server runs (two sharing weaver's state) is that
+// one's to say of: pruned by neither but the server it was made on, or
+// once that server has gone.
+func TestPruneLeavesAnotherServers(t *testing.T) {
+	r := ids{t.TempDir()}
+	old := time.Now().Add(-2 * time.Minute)
+	gone := exec.Command("/usr/bin/true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	for id, server := range map[string]int{"session:other": os.Getpid(), "session:dead": gone.Process.Pid, "session:unknown": 0} {
+		if err := r.made(id, "w", old, server, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A server none of them was made on, pruning.
+	r.pruneOn(map[string]bool{}, 1)
+	for id, kept := range map[string]bool{"session:other": true, "session:dead": false, "session:unknown": false} {
+		if _, ok := r.session(id); ok != kept {
+			t.Errorf("%s kept %v, want %v", id, ok, kept)
+		}
+	}
+	// The server it was made on, pruning: its own record goes.
+	r.pruneOn(map[string]bool{}, os.Getpid())
+	if _, ok := r.session("session:other"); ok {
+		t.Error("a server's own gone session kept")
 	}
 }
