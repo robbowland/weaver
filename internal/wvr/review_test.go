@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/session"
@@ -198,5 +199,31 @@ func TestReviewAgainstThreadBase(t *testing.T) {
 	}
 	if a := strings.Join(reviewArgs(d, e.reviewBase("5")), " "); !strings.HasPrefix(a, "-r "+fork+"..HEAD ") {
 		t.Errorf("a thread off release/2.0: %q, want from %s", a, fork)
+	}
+}
+
+// A review whose range was rewritten is run again, but never under the
+// nvim its e opened: that waits for nvim to end (its edits saved, or
+// not, as you choose), then the review goes.
+func TestUntilRewrittenWaitsForNvim(t *testing.T) {
+	d := t.TempDir()
+	// A program the kernel names nvim (a link would be named for what it
+	// points to).
+	b, err := os.ReadFile("/bin/sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(d+"/nvim", b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// tuicr, with nvim open on top (its e): nvim ends a moment on.
+	c := exec.Command("/bin/sh", "-c", `"$0"/nvim 2.5; exec /bin/sleep 60`, d)
+	start := time.Now()
+	ended, _ := untilRewritten(c, func() bool { return true })
+	if !ended {
+		t.Fatal("not ended for a rewrite")
+	}
+	if waited := time.Since(start); waited < 2*time.Second {
+		t.Errorf("ended %v in, under the nvim that runs 2.5 s", waited.Round(100*time.Millisecond))
 	}
 }

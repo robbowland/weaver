@@ -17,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -263,7 +264,9 @@ func (s span) rewritten(dir string, now span) bool {
 
 // untilRewritten runs c until it ends, looking every second whether its
 // range was rewritten (moved), and ending it when it was: whether it was
-// ended for that, and how it ended.
+// ended for that, and how it ended. Never while an nvim runs under it
+// (tuicr's e): ended, tuicr would leave it reading the terminal beside
+// the next tuicr, its edits unsaved; the end waits for it.
 func untilRewritten(c *exec.Cmd, moved func() bool) (bool, error) {
 	if err := c.Start(); err != nil {
 		return false, err
@@ -278,7 +281,7 @@ func untilRewritten(c *exec.Cmd, moved func() bool) (bool, error) {
 		case err := <-done:
 			return ended, err
 		case <-tick.C:
-			if moved() {
+			if moved() && !process.Runs(c.Process.Pid, "nvim") {
 				ended = true
 				_ = c.Process.Signal(syscall.SIGTERM)
 			}
