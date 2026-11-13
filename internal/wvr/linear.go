@@ -13,6 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/linear"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/store"
 	"golang.org/x/term"
@@ -253,6 +254,15 @@ func linFact(it linear.Issue) string {
 	return CDim + strings.ToLower(it.State.Name) + COff
 }
 
+// shownPerson is a copy of p with its names on one line each.
+func shownPerson(p *linear.Person) *linear.Person {
+	if p == nil {
+		return nil
+	}
+	c := linear.Person{Name: oneline.Line(p.Name), DisplayName: oneline.Line(p.DisplayName)}
+	return &c
+}
+
 func who(p *linear.Person) string {
 	switch {
 	case p == nil:
@@ -263,8 +273,12 @@ func who(p *linear.Person) string {
 	return p.Name
 }
 
-// linItem is a Linear issue as the view shows it.
+// linItem is a Linear issue as the view shows it: what Linear says on one
+// line each, as GitHub's (shownGH).
 func linItem(it linear.Issue) viewItem {
+	it.State.Name, it.Team.Name, it.Project = oneline.Line(it.State.Name), oneline.Line(it.Team.Name), oneline.Line(it.Project)
+	it.Labels = lines(it.Labels)
+	it.Assignee, it.Creator = shownPerson(it.Assignee), shownPerson(it.Creator)
 	v := viewItem{
 		ref:     it.Identifier,
 		title:   untick(it.Title),

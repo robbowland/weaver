@@ -13,6 +13,7 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/github"
 	"github.com/robbowland/weaver/internal/items"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/page"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -339,8 +340,10 @@ func (e *Env) knownRepos(c ghCache) []string {
 	return rs
 }
 
-// ghItem is a pull request or issue as the view shows it.
+// ghItem is a pull request or issue as the view shows it. What GitHub
+// says is shown on one line, its control characters as spaces (shownGH).
 func ghItem(it github.Item) viewItem {
+	it = shownGH(it)
 	state := strings.ToLower(it.State)
 	if it.Draft {
 		state = "draft"
@@ -411,6 +414,28 @@ func ghItem(it github.Item) viewItem {
 		f("comments", strconv.Itoa(it.Comments), CGrey, 1)
 	}
 	return v
+}
+
+// shownGH is it with the text it shows as one line each (oneline.Line): a
+// label, a check's name or a login with a TAB or newline would split a
+// view's row (fzf's fields, so keys act on another item), and an ESC
+// reach the terminal. Its title and body have their own (untick,
+// markdown); what names it (repo, number, branch) git and GitHub keep
+// clean.
+func shownGH(it github.Item) github.Item {
+	it.State, it.Author, it.Review = oneline.Line(it.State), oneline.Line(it.Author), oneline.Line(it.Review)
+	it.Labels, it.Assignees = lines(it.Labels), lines(it.Assignees)
+	it.Requested, it.FailingChecks = lines(it.Requested), lines(it.FailingChecks)
+	return it
+}
+
+// lines is each of ls as one line (oneline.Line).
+func lines(ls []string) []string {
+	out := make([]string, len(ls))
+	for i, l := range ls {
+		out[i] = oneline.Line(l)
+	}
+	return out
 }
 
 // ghFact is the one thing to know about an item, coloured as a signal.

@@ -41,12 +41,13 @@ func Cut(s string, n int) string {
 	return string(r[:n])
 }
 
-// Line is s with runs of control characters (and DEL) as one space.
+// Line is s with runs of control characters (C0, DEL and C1, which some
+// terminals take as ESC's sequences) as one space.
 func Line(s string) string {
 	var b strings.Builder
 	c := false
 	for _, r := range s {
-		if r < 0x20 || r == 0x7f {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
 			if !c {
 				b.WriteByte(' ')
 			}
