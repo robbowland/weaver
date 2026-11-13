@@ -125,10 +125,8 @@ func (e *Env) fetchStart(repo, sf string) {
 	if os.MkdirAll(filepath.Dir(f), 0o755) != nil {
 		return
 	}
-	if p, err := files.FirstLine(f + ".pid"); err == nil {
-		if n, ok := cli.Atoi(p); ok && process.Alive(n) {
-			return
-		}
+	if _, ok := fetchRuns(f); ok {
+		return
 	}
 	if rc, err := files.FirstLine(f + ".rc"); err == nil && rc == "0" {
 		if st, err := os.Stat(f + ".rc"); err == nil && time.Since(st.ModTime()) < time.Minute {
@@ -145,9 +143,24 @@ func (e *Env) fetchStart(repo, sf string) {
 	c := exec.Command(e.Self, "_fetch", repo, rm, f, sf)
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if c.Start() == nil {
-		bestEffort(os.WriteFile(f+".pid", []byte(strconv.Itoa(c.Process.Pid)+"\n"), 0o644))
+		// Its pid, and when it started: a pid taken again by another
+		// process (this fetch killed, the machine shut down) is no fetch.
+		pid := c.Process.Pid
+		bestEffort(os.WriteFile(f+".pid", []byte(strconv.Itoa(pid)+"\n"+process.Starts([]int{pid})[pid]+"\n"), 0o644))
 		bestEffort(c.Process.Release())
 	}
+}
+
+// fetchRuns is the pid of the fetch whose files are f.*, while it runs:
+// the process its .pid names, started when it says (process.StillRuns).
+func fetchRuns(f string) (int, bool) {
+	b, err := os.ReadFile(f + ".pid")
+	if err != nil {
+		return 0, false
+	}
+	pid, start, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
+	n, ok := cli.Atoi(pid)
+	return n, ok && n > 1 && process.StillRuns(pid, strings.TrimSpace(start), nil)
 }
 
 // Fetch is `wvr _fetch REPO REMOTE FETCHF [FORM]`: the fetch itself.
@@ -454,7 +467,7 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, c string)) {
 		}
 		f := e.fetchFile(fm.Repo)
 		rc, _ := files.FirstLine(f + ".rc")
-		pid, _ := files.FirstLine(f + ".pid")
+		_, fetching := fetchRuns(f)
 		switch {
 		case rc == "0":
 			note = "fetched"
@@ -463,10 +476,8 @@ func (e *Env) baseRow(fm form, m git.Refs, add func(id, l, c string)) {
 			if v == "" {
 				v = "the default branch"
 			}
-		case pid != "":
-			if n, ok := cli.Atoi(pid); ok && process.Alive(n) {
-				note = "fetching…"
-			}
+		case fetching:
+			note = "fetching…"
 		}
 	}
 	c := v

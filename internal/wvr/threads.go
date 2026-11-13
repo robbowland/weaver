@@ -188,14 +188,12 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	e.fetchStart(repo, "")
 	f := e.fetchFile(repo)
 	said := false
-	pid := ""
 	start := time.Now()
 	for time.Since(start) < wait {
 		if files.Exists(f + ".rc") {
 			break
 		}
-		pid, _ = files.FirstLine(f + ".pid")
-		if n, ok := cli.Atoi(pid); !ok || !process.Alive(n) {
+		if _, ok := fetchRuns(f); !ok {
 			break
 		}
 		if !said && time.Since(start) >= 300*time.Millisecond {
@@ -208,9 +206,10 @@ func (e *Env) fetchWait(repo string, wait time.Duration) fetchResult {
 	case "0":
 		return fetchDone
 	case "":
-		// Its group (a pid of 1 or less names none: kill(-1) is every
-		// process).
-		if n, ok := cli.Atoi(pid); ok && n > 1 {
+		// Its group, while it is still the fetch (fetchRuns: never a pid
+		// another process has taken since, nor 1 or less, which names
+		// none: kill(-1) is every process).
+		if n, ok := fetchRuns(f); ok {
 			bestEffort(syscall.Kill(-n, syscall.SIGTERM))
 		}
 		os.Remove(f + ".pid")
