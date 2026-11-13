@@ -1,0 +1,91 @@
+{
+ "about": "a Stop with background subagents works on (a background shell is no subagent), through the idle reminder; their last report's Stop is done",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "implement both features"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SubagentStart",
+    "agent_id": "x1",
+    "agent_type": "general-purpose"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "background_tasks": [
+     {
+      "id": "x1",
+      "type": "subagent",
+      "status": "running",
+      "description": "Implement feature A"
+     },
+     {
+      "id": "x2",
+      "type": "shell",
+      "status": "running",
+      "description": "npm run dev"
+     }
+    ]
+   },
+   "expect": {
+    "state": "working",
+    "background": 1,
+    "background_tasks": "Implement feature A",
+    "subagents": {
+     "len": 1
+    }
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "idle_prompt",
+    "message": "Claude is waiting for your input"
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "<agent-message from=\"x1\"> [Subagent hand-back] done"
+   },
+   "expect": {
+    "turn": 1
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "background_tasks": []
+   },
+   "expect": {
+    "state": "done",
+    "background": 0,
+    "subagents": {
+     "len": 0
+    }
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "and add tests",
+    "session_title": "Both features"
+   },
+   "expect": {
+    "prompt": "and add tests",
+    "turn": 2,
+    "title": "Both features"
+   }
+  }
+ ]
+}
