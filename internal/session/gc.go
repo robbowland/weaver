@@ -44,7 +44,7 @@ func (e *Env) gcAgents() {
 				l.retire(f, pid)
 				continue
 			}
-		case l.madeAfter(skey, ts), !l.running(skey, ts) && now-ts > 3600:
+		case l.madeAfter(f, ts), !l.running(skey, ts) && now-ts > 3600:
 			l.retire(f, "")
 			continue
 		}
@@ -78,7 +78,7 @@ func (e *Env) gcAgents() {
 		}
 		skey := KeyOfFile(f)
 		fi, err := os.Stat(f)
-		if err == nil && (!l.running(skey, fi.ModTime().Unix()) || l.madeAfter(skey, fi.ModTime().Unix())) {
+		if err == nil && (!l.running(skey, fi.ModTime().Unix()) || l.madeAfter(f, fi.ModTime().Unix())) {
 			e.LoseThread(f)
 		}
 	}

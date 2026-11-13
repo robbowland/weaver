@@ -3,6 +3,7 @@ package rex
 import (
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -110,19 +111,23 @@ func (a *Answer) Lost(w agent.Where) (lost, known bool) {
 // Keyed is the session whose files are keyed skey (Key of its name), with
 // its threads' sessions: one weaver made of a name with that key, else the
 // one whose id the key holds (a session weaver did not make is named by
-// its id); whether it runs, and whether Rex answered at all. By key, not
+// its id); whether it runs, and whether Rex answered at all. It runs while
+// home or one of its threads' sessions does: home closed on its own leaves
+// its threads running, for a home made again to take over. By key, not
 // by a name taken back out of it: Key turns a name's / into _.
 func (a *Answer) Keyed(dir, skey string) (f Fleet, running, answered bool) {
 	live := a.sessions()
 	if live == nil {
 		return Fleet{}, false, false
 	}
-	id, name, ok := ids{dir}.keyed(skey)
+	r := ids{dir}
+	id, name, ok := r.keyed(skey)
 	if !ok {
 		name = strings.TrimPrefix(skey, "rex-")
 		id = "session:" + name
 	}
-	if live[id] {
+	running = live[id] || slices.ContainsFunc(r.threads(id), func(t string) bool { return live[t] })
+	if running {
 		return Fleet{Home: Session{ID: id, Name: name, Dir: dir}, live: live}, true, true
 	}
 	return Fleet{}, false, true

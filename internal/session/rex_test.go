@@ -332,3 +332,82 @@ func TestRetireRechecksItsAgent(t *testing.T) {
 			running(), files.Exists(sf), files.Exists(e.PaneFile(p, "thread")))
 	}
 }
+
+// Home closed on its own, its threads' sessions running on: their threads
+// stay what they are, neither forgotten (an agent that exited in a pane
+// kept, its session running) nor lost (one whose agent never reported),
+// for a home made again to take them over.
+func TestGCWithHomeClosedAlone(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock"}
+	for _, d := range []string{e.StateDir, e.LostDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), home.ID
+	f := e.Mux()
+	var ps []mux.PaneID
+	for range 2 {
+		_, p, _, err := f.OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ps = append(ps, p)
+	}
+	panes, err := f.Panes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := PaneIn(panes, ps[0])
+	life := agent.Where{Server: home.Life().Server, Session: q.Session}
+	for i, p := range ps {
+		n, _ := strconv.Atoi(string(p))
+		pane := jsonx.Int(n)
+		if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: i + 1, Name: "t", Pane: &pane, SessionID: "conv-" + string(p)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The first's agent has exited (dead), its pane kept; the second's
+	// never reported.
+	n, _ := strconv.Atoi(string(ps[0]))
+	if err := store.Write(e.StateFile(ps[0]), agent.Record{Pane: jsonx.Int(n), Agent: agent.Claude, State: agent.StateIdle,
+		TS: time.Now().Unix(), SessionID: "conv-" + string(ps[0]), Pid: json.Number(strconv.Itoa(deadPid(t))), Where: life}); err != nil {
+		t.Fatal(err)
+	}
+	if err := home.Quit(); err != nil {
+		t.Fatal(err)
+	}
+	e.GC()
+	for _, p := range ps {
+		if !files.Exists(e.PaneFile(p, "thread")) {
+			t.Errorf("thread of pane %s: forgotten or lost, its session running", p)
+		}
+	}
+	if ls, _ := os.ReadDir(e.LostDir); len(ls) != 0 {
+		t.Errorf("%d threads lost, their sessions running", len(ls))
+	}
+	// A home made again takes them over (rex.Start): made after their
+	// files, but their sessions were not.
+	time.Sleep(1100 * time.Millisecond)
+	again, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RexID = again.ID
+	e.GC()
+	for _, p := range ps {
+		if !files.Exists(e.PaneFile(p, "thread")) {
+			t.Errorf("thread of pane %s, taken over by a home made again: forgotten or lost", p)
+		}
+	}
+	if ls, _ := os.ReadDir(e.LostDir); len(ls) != 0 {
+		t.Errorf("%d threads lost once taken over, their sessions running", len(ls))
+	}
+}

@@ -65,11 +65,14 @@ func (l *lives) running(skey string, ts int64) bool {
 	return a.running || l.held(a, ts)
 }
 
-// madeAfter: is skey's session one made after ts, another life of it, the
-// one a file of ts knew having gone? (A name on two servers: the earlier.)
-func (l *lives) madeAfter(skey string, ts int64) bool {
-	a := l.life(skey)
-	made, known := a.s.Made()
+// madeAfter: is the session per-pane file f's pane is in one made after
+// ts, another life of it, the one a file of ts knew having gone? (A name
+// on two servers: the earlier.) Its pane's own session, home's or its
+// thread's: a home made again after the files of the threads it took
+// over is no other life of theirs.
+func (l *lives) madeAfter(f string, ts int64) bool {
+	a := l.life(KeyOfFile(f))
+	made, known := a.s.MadeOf(string(PaneOfFile(f)))
 	return a.running && known && ts > 0 && made > ts
 }
 
