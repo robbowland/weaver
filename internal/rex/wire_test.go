@@ -181,3 +181,23 @@ func TestShowInAppOverWire(t *testing.T) {
 		t.Errorf("the app refusing: %v, want Remote Control's refusal", err)
 	}
 }
+
+// A message said a moment after another (alt+1 pressed twice) replaces it
+// without waiting on Rex: Rex closes a terminal still starting its program
+// only after a second.
+func TestSayQuicklyAgain(t *testing.T) {
+	server(t)
+	s, err := Start(t.TempDir(), "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gap := range []time.Duration{0, 10, 20, 30, 40} {
+		s.Say(2000, "the first")
+		time.Sleep(gap * time.Millisecond)
+		start := time.Now()
+		s.Say(2000, "the second")
+		if took := time.Since(start); took > 600*time.Millisecond {
+			t.Errorf("the second message, %d ms after the first: took %v", gap, took.Round(10*time.Millisecond))
+		}
+	}
+}

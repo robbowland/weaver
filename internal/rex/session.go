@@ -790,6 +790,15 @@ func (s Session) Say(ms int, text string) {
 	}
 	said := fileName(s.ID)
 	if old := s.ids().noted("said", said); old != "" {
+		// Rex closes a terminal whose program is still starting only
+		// after a second (one made less than ~50 ms ago: a message said a
+		// moment before, alt+1 pressed twice): one that young is let
+		// start first.
+		if st, err := os.Stat(s.ids().path("said", said)); err == nil {
+			if young := sayStarts - time.Since(st.ModTime()); young > 0 {
+				time.Sleep(young)
+			}
+		}
 		_ = s.callS("block.close", map[string]any{"block_id": old}, nil)
 	}
 	text = ansi.Truncate(text, max(cols-2, 1), "…")
@@ -807,6 +816,12 @@ func (s Session) Say(ms int, text string) {
 		_ = s.ids().note("said", said, out.Blocks[0])
 	}
 }
+
+// sayStarts is how long a message's terminal is given to start its
+// program before it is closed: Rex closes one still starting only after
+// a second (measured: closed at once, ~20 ms after it was made, 1.003 s;
+// 50 ms after, 1 ms).
+const sayStarts = 150 * time.Millisecond
 
 // Popup opens argv in a floating layer over the active window, sized by
 // size from the window's columns and lines; the command waits for it to
