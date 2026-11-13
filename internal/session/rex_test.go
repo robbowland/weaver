@@ -193,3 +193,77 @@ func TestRexLostAndGC(t *testing.T) {
 		check("no answer, from before the machine started", p, false, true)
 	}
 }
+
+// A thread's window is labelled from its row, once: a label already
+// right is left (no call), one that is not is put right, from the one look
+// at the panes the rows took.
+func TestThreadTabLabels(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock"}
+	if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sleep := []string{"/bin/sleep", "600"}
+	s, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), s.ID
+	f := e.Mux()
+	_, p, _, err := f.OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _ := strconv.Atoi(string(p))
+	pane := jsonx.Int(n)
+	if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: 3, Task: "say hello", Worktree: dir + "/repo", Pane: &pane, Created: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	label := func() string {
+		ps, _ := f.Panes()
+		q, _ := PaneIn(ps, p)
+		return q.WindowName
+	}
+	want := ThreadLabel(3, "say hello", dir+"/repo")
+	e.PushStatusAndLabels()
+	if l := label(); l != want {
+		t.Fatalf("label %q, want %q", l, want)
+	}
+	// Right already: left as it is, so a label set behind weaver's back
+	// to the same text is not set again (nothing to tell apart but that
+	// it costs no call, which the rows' one look allows).
+	rows, _ := e.AgentRows()
+	if len(rows) != 1 || rows[0].WindowName != want {
+		t.Fatalf("rows: %+v", rows)
+	}
+	calls := countRex(t)
+	e.PushStatusAndLabels()
+	if n := calls(); n != 1 {
+		t.Errorf("a push with every label right took %d calls to rex, want 1 (the one look)", n)
+	}
+	f.Label(rows[0].Window, "renamed by hand")
+	e.PushStatusAndLabels()
+	if l := label(); l != want {
+		t.Errorf("label %q once renamed, want %q again", l, want)
+	}
+}
+
+// countRex has rex run through a stand-in that counts its runs: what the
+// returned func says, from then on.
+func countRex(t *testing.T) func() int {
+	t.Helper()
+	d := t.TempDir()
+	log := filepath.Join(d, "calls")
+	sh := "#!/bin/sh\necho >>'" + log + "'\nexec '" + rex.Bin() + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(d, "rex"), []byte(sh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", d)
+	return func() int {
+		b, _ := os.ReadFile(log)
+		n := strings.Count(string(b), "\n")
+		_ = os.Remove(log)
+		return n
+	}
+}

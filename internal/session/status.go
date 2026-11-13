@@ -144,14 +144,10 @@ func (e *Env) MarkSeen(p mux.PaneID) {
 }
 
 // threadTabLabels: a thread's first window is labelled "<num> <name> ·
-// <repo>/<branch>"; renamed only when that is not its label already.
+// <repo>/<branch>"; renamed only when that is not its label already, as
+// its row read it (Row.WindowName: rows read the panes, and their windows'
+// labels, once).
 func (e *Env) threadTabLabels(rows []Row) {
-	panes, _ := e.Panes()
-	names := map[string]bool{}
-	for _, p := range panes {
-		n := strings.NewReplacer("\t", " ", "\n", " ").Replace(p.WindowName)
-		names[string(p.Window)+"\t"+n] = true
-	}
 	for _, r := range rows {
 		if r.Pane == "" || r.Tnum == 0 {
 			continue
@@ -164,7 +160,7 @@ func (e *Env) threadTabLabels(rows []Row) {
 			l = r.Prompt
 		}
 		label := ThreadLabel(r.Tnum, l, r.Root)
-		if names[string(r.Window)+"\t"+label] {
+		if r.WindowName == label {
 			continue
 		}
 		e.Mux().Label(r.Window, label)
