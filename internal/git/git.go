@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -202,6 +203,82 @@ func WorkTree(dir string) (string, bool) {
 	}
 }
 
+// gitDirs are the git directory of the work tree at root and its
+// repository's (common) one, read from its .git without running git: one
+// directory for a main checkout; a linked worktree's own, and the
+// repository's its commondir names. False when root has no .git.
+func gitDirs(root string) (gd, common string, ok bool) {
+	st, err := os.Stat(root + "/.git")
+	switch {
+	case err != nil:
+		return "", "", false
+	case st.IsDir():
+		return root + "/.git", root + "/.git", true
+	case !st.Mode().IsRegular():
+		return "", "", false
+	}
+	l, _ := files.FirstLine(root + "/.git")
+	gd = strings.TrimPrefix(l, "gitdir: ")
+	if !strings.HasPrefix(gd, "/") {
+		gd = root + "/" + gd
+	}
+	common = gd
+	if files.Exists(gd + "/commondir") {
+		l, _ := files.FirstLine(gd + "/commondir")
+		switch {
+		case strings.HasPrefix(l, "/"):
+			common = l
+		case l != "":
+			common = gd + "/" + l
+		}
+	}
+	return gd, common, true
+}
+
+// Stamp is what the range of the branch in dir is worked out from, as its
+// git files say it without running git: its HEAD, the commit that names
+// (a loose ref), the repository's packed refs, and the directories its
+// branches' and remotes' refs are written in (git writes a ref by renaming
+// a lock over it, which changes its directory). The same twice: its HEAD
+// and those refs are as they were. A ref nested under a directory of its
+// own (feature/x) shows only in that directory, so a caller looks again
+// now and then all the same. "" outside a work tree.
+func Stamp(dir string) string {
+	root, ok := WorkTree(dir)
+	if !ok {
+		return ""
+	}
+	gd, common, ok := gitDirs(root)
+	if !ok {
+		return ""
+	}
+	var b strings.Builder
+	stat := func(p string) {
+		if st, err := os.Stat(p); err == nil {
+			b.WriteString(strconv.FormatInt(st.ModTime().UnixNano(), 36) + ":" + strconv.FormatInt(st.Size(), 36))
+		}
+		b.WriteByte(';')
+	}
+	head, _ := files.FirstLine(gd + "/HEAD")
+	b.WriteString(head + ";")
+	if ref, ok := strings.CutPrefix(head, "ref: "); ok {
+		sha, _ := files.FirstLine(common + "/" + ref)
+		b.WriteString(sha + ";")
+		stat(filepath.Dir(common + "/" + ref))
+	}
+	stat(common + "/packed-refs")
+	stat(common + "/refs/heads")
+	stat(common + "/refs/remotes")
+	if ents, err := os.ReadDir(common + "/refs/remotes"); err == nil {
+		for _, d := range ents {
+			if d.IsDir() {
+				stat(common + "/refs/remotes/" + d.Name())
+			}
+		}
+	}
+	return b.String()
+}
+
 // FileWorkTree is the work tree holding a file that may not exist yet, in
 // directories that may not exist yet.
 func FileWorkTree(f string) (string, bool) {
@@ -250,27 +327,8 @@ func (w Where) Name() string {
 // git.
 func WhereOf(root string) Where {
 	w := Where{Repo: root[strings.LastIndexByte(root, '/')+1:]}
-	var gd, common string
-	if st, err := os.Stat(root + "/.git"); err == nil && st.IsDir() {
-		gd = root + "/.git"
-		common = gd
-	} else if err == nil && st.Mode().IsRegular() {
-		l, _ := files.FirstLine(root + "/.git")
-		gd = strings.TrimPrefix(l, "gitdir: ")
-		if !strings.HasPrefix(gd, "/") {
-			gd = root + "/" + gd
-		}
-		common = gd
-		if files.Exists(gd + "/commondir") {
-			l, _ := files.FirstLine(gd + "/commondir")
-			switch {
-			case strings.HasPrefix(l, "/"):
-				common = l
-			case l != "":
-				common = gd + "/" + l
-			}
-		}
-	} else {
+	gd, common, ok := gitDirs(root)
+	if !ok {
 		return w
 	}
 	up := 0

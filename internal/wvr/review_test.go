@@ -227,3 +227,38 @@ func TestUntilRewrittenWaitsForNvim(t *testing.T) {
 		t.Errorf("ended %v in, under the nvim that runs 2.5 s", waited.Round(100*time.Millisecond))
 	}
 }
+
+// The panel's look at a rewrite runs git only when HEAD or the refs it
+// is worked out from have changed (and every tenth look all the same):
+// it sees an amend at its next look, and runs nothing while nothing moves.
+func TestRewriteCheckLooksWhenRefsMove(t *testing.T) {
+	d, _ := filepath.EvalSymlinks(t.TempDir())
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("commit", "-q", "--allow-empty", "-m", "init")
+	run("update-ref", "refs/remotes/origin/main", "HEAD")
+	run("switch", "-q", "-c", "feat")
+	run("commit", "-q", "--allow-empty", "-m", "mine")
+	base := func() string { return "origin/main" }
+	moved := rewriteCheck(d, base, spanOf(d, "origin/main"))
+	// git off PATH: a look that runs it would take the range for gone.
+	path := os.Getenv("PATH")
+	t.Setenv("PATH", t.TempDir())
+	for i := 1; i < 10; i++ {
+		if moved() {
+			t.Fatalf("look %d, nothing moved: it ran git", i)
+		}
+	}
+	t.Setenv("PATH", path)
+	time.Sleep(15 * time.Millisecond)
+	run("commit", "-q", "--amend", "--allow-empty", "-m", "mine, amended")
+	if !moved() {
+		t.Error("an amend: not seen at the next look")
+	}
+}

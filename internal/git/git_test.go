@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWorkTree(t *testing.T) {
@@ -180,5 +181,58 @@ func TestForkPoint(t *testing.T) {
 	git("branch", "-q", "-D", "main")
 	if got, ok := ForkPoint(d, "rel"); ok {
 		t.Errorf("no base, no default: ForkPoint = %q, want none", got)
+	}
+}
+
+// A branch's stamp moves with what its range is worked out from (its
+// HEAD: a commit, an amend, a reset, a switch; its base: a fetch, refs
+// packed) and with nothing else (an edit, a look), in a main checkout and
+// a linked worktree alike.
+func TestStamp(t *testing.T) {
+	d, _ := filepath.EvalSymlinks(t.TempDir())
+	run := func(dir string, args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	repo, wt := filepath.Join(d, "repo"), filepath.Join(d, "wt")
+	run(d, "init", "-q", "-b", "main", repo)
+	run(repo, "commit", "-q", "--allow-empty", "-m", "init")
+	run(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+	run(repo, "worktree", "add", "-q", "-b", "feat", wt)
+	for _, dir := range []string{repo, wt} {
+		last := Stamp(dir)
+		if last == "" {
+			t.Fatalf("%s: no stamp", dir)
+		}
+		// Ref writes within a second of each other differ by more than a
+		// mtime: give each its own.
+		step := func(what string, moves bool, f func()) {
+			t.Helper()
+			time.Sleep(15 * time.Millisecond)
+			f()
+			now := Stamp(dir)
+			if (now != last) != moves {
+				t.Errorf("%s, %s: moved %v, want %v", filepath.Base(dir), what, now != last, moves)
+			}
+			last = now
+		}
+		step("an edit", false, func() { _ = os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644) })
+		step("a look", false, func() { run(dir, "status", "--porcelain") })
+		step("a commit", true, func() { run(dir, "commit", "-q", "--allow-empty", "-m", "c") })
+		step("an amend", true, func() { run(dir, "commit", "-q", "--amend", "--allow-empty", "-m", "c2") })
+		step("a reset", true, func() { run(dir, "reset", "-q", "--hard", "HEAD~1") })
+		step("its base fetched", true, func() { run(dir, "update-ref", "refs/remotes/origin/main", "HEAD") })
+		step("refs packed", true, func() { run(dir, "pack-refs", "--all") })
+		step("a commit, refs packed", true, func() { run(dir, "commit", "-q", "--allow-empty", "-m", "c3") })
+	}
+	run(wt, "switch", "-q", "-c", "other")
+	if Stamp(wt) == Stamp(repo) {
+		t.Error("two branches, one stamp")
+	}
+	if Stamp(d) != "" {
+		t.Error("a stamp outside a work tree")
 	}
 }

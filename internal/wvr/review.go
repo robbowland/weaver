@@ -218,7 +218,7 @@ func (e *Env) Panel(args []string) error {
 		c.Dir, c.Env, c.Stdin, c.Stdout, c.Stderr = dir, env, os.Stdin, os.Stdout, os.Stderr
 		signal.Notify(sig, os.Interrupt, syscall.SIGQUIT)
 		start := time.Now()
-		ended, err := untilRewritten(c, func() bool { return was.rewritten(dir, spanOf(dir, e.reviewBase(a))) })
+		ended, err := untilRewritten(c, rewriteCheck(dir, func() string { return e.reviewBase(a) }, was))
 		signal.Stop(sig)
 		if ended {
 			// Out of tuicr's screen, the terminal as it was, and at once
@@ -260,6 +260,25 @@ func (s span) rewritten(dir string, now span) bool {
 		return true
 	}
 	return now.head != s.head && !git.OK(dir, "merge-base", "--is-ancestor", s.head, now.head)
+}
+
+// rewriteCheck is untilRewritten's look, once a second, at whether the
+// range was rewritten since was: worked out with git (span.rewritten)
+// only when the files it is worked out from have changed (git.Stamp, and
+// the thread's base), or every tenth look all the same (a ref nested in
+// a directory of its own that the stamp does not see). A panel per thread
+// ran three gits a second, every second, each one's review open.
+func rewriteCheck(dir string, base func() string, was span) func() bool {
+	stamp, b, looks := git.Stamp(dir), base(), 0
+	return func() bool {
+		looks++
+		now, nb := git.Stamp(dir), base()
+		if now == stamp && nb == b && now != "" && looks%10 != 0 {
+			return false
+		}
+		stamp, b = now, nb
+		return was.rewritten(dir, spanOf(dir, nb))
+	}
 }
 
 // untilRewritten runs c until it ends, looking every second whether its
