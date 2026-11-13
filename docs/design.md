@@ -823,9 +823,11 @@ over (`takeOver`): its id goes into their records.
   host's address, none), its handshake is refused, or
   `WEAVER_REX_WIRE=0`, the rex command as before: each look one `rex do`
   (its view and terminals; the fleet's, `fleetLua`, against home), every
-  other method one `rex api call`. The app's actions (`rex do
-  session.select`) and a popup's `rex wait` are always the rex
-  command's. A pane's environment goes through
+  other method one `rex api call`. The app's actions go over the
+  connection as `rex do` asks them (`client.perform` of the app's
+  `session.select`, `origin` cli, the arguments as `rex do`'s key=value
+  pairs give them: verified against a client of kind app, which `rex do`
+  asked the same); a popup's `rex wait` is always the rex command's. A pane's environment goes through
   `env(1)`, Rex setting none: `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay

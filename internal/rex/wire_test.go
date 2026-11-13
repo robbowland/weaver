@@ -1,7 +1,9 @@
 package rex
 
 import (
+	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -83,5 +85,99 @@ func TestWire(t *testing.T) {
 	t.Setenv("WEAVER_REX_WIRE", "0")
 	if wireReady() {
 		t.Error("WEAVER_REX_WIRE=0: a control connection all the same")
+	}
+}
+
+// fakeApp is a client of kind app on the server at socket path: it
+// attaches to session sid, and answers each action asked of it (what it
+// was asked goes to asked), refusing them as the Rex app does without
+// Remote Control when refuse.
+func fakeApp(t *testing.T, path, sid string, refuse bool, asked chan<- map[string]any) {
+	t.Helper()
+	w, err := wireDialAs(path, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.close)
+	if err := w.send(map[string]any{"type": "request", "id": "a", "method": "session.attach", "payload": map[string]any{"session_id": sid}}); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for i := 0; ; i++ {
+			b, err := w.message()
+			if err != nil {
+				return
+			}
+			var m struct {
+				Type    string `json:"type"`
+				Payload struct {
+					Type    string         `json:"type"`
+					Payload map[string]any `json:"payload"`
+				} `json:"payload"`
+			}
+			if json.Unmarshal(b, &m) != nil || m.Type != "event" || m.Payload.Type != "client_perform_requested" {
+				continue
+			}
+			p := m.Payload.Payload
+			asked <- p
+			reply := map[string]any{"call_id": p["call_id"], "result": nil}
+			if refuse {
+				reply = map[string]any{"call_id": p["call_id"], "error": map[string]any{"code": "refused",
+					"message": "Rex.app is not accepting actions. Turn on Remote Control in Rex's settings."}}
+			}
+			_ = w.send(map[string]any{"type": "request", "id": "r" + strconv.Itoa(i), "method": "client.reply", "payload": reply})
+		}
+	}()
+	// Attached, before the test asks it anything.
+	time.Sleep(100 * time.Millisecond)
+}
+
+// A window is shown in the app over the control connection as rex do asks
+// it (client.perform of session.select with the session and window): the
+// one app connected; with two, each attached to the session; refused for
+// want of Remote Control, said so.
+func TestShowInAppOverWire(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "wvr-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	rextest.ServerAt(t, Bin(), dir)
+	s, err := Start(dir, "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.showInApp("window:w"); err == nil || remoteOff(err) {
+		t.Errorf("no app: %v, want an error, not Remote Control's", err)
+	}
+	path := wireEndpoint()
+	asked := make(chan map[string]any, 4)
+	fakeApp(t, path, s.ID, false, asked)
+	if err := s.showInApp("window:w"); err != nil {
+		t.Fatalf("one app: %v", err)
+	}
+	p := <-asked
+	a, _ := p["args"].(map[string]any)
+	if p["action"] != "session.select" || a["session_id"] != s.ID || a["window_id"] != "window:w" || p["origin"] != "cli" {
+		t.Errorf("the app was asked %+v, want session.select of the session and window, as rex do asks", p)
+	}
+	// Two apps, one refusing: shown by the other.
+	fakeApp(t, path, s.ID, true, asked)
+	if err := s.showInApp(""); err != nil {
+		t.Errorf("two apps, one showing it: %v", err)
+	}
+	for range 2 {
+		<-asked
+	}
+	// Both refusing: why.
+	Close()
+	rextest.ServerAt(t, Bin(), "")
+	s2, err := Start(t.TempDir(), "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeApp(t, wireEndpoint(), s2.ID, true, asked)
+	if err := s2.showInApp(""); !remoteOff(err) {
+		t.Errorf("the app refusing: %v, want Remote Control's refusal", err)
 	}
 }

@@ -649,6 +649,9 @@ func (s Session) show(id string) {
 // names one): with more (two Macs on one server, say) each app attached to
 // the session is asked by name (-C), and it is shown when one took it.
 func (s Session) showInApp(id string) error {
+	if err, ok := s.showInAppWire(id); ok {
+		return err
+	}
 	args := []string{"do", "session.select", "session_id=" + s.ID}
 	if id != "" {
 		args = append(args, "window_id="+id)
@@ -678,6 +681,60 @@ func (s Session) showInApp(id string) error {
 		return nil
 	}
 	return err
+}
+
+// showInAppWire is showInApp over the control connection, asking as rex
+// do does (client.perform of the app's session.select, its arguments as
+// rex do's key=value pairs give them): the one app connected; with more,
+// each app attached to the session. Not ok when there is no connection.
+func (s Session) showInAppWire(id string) (err error, ok bool) {
+	if !wireReady() {
+		return nil, false
+	}
+	args := map[string]any{"session_id": s.ID}
+	if id != "" {
+		args["window_id"] = id
+	}
+	perform := func(c string) error {
+		return call("client.perform", map[string]any{"client_id": c, "action": "session.select", "args": args, "origin": "cli"}, nil)
+	}
+	var l struct {
+		Clients []client `json:"clients"`
+	}
+	if err := call("client.list", map[string]any{}, &l); err != nil {
+		return err, true
+	}
+	var apps []string
+	for _, c := range l.Clients {
+		if c.app() && c.ID != "" {
+			apps = append(apps, c.ID)
+		}
+	}
+	switch len(apps) {
+	case 0:
+		return errors.New("rex: no app is connected"), true
+	case 1:
+		return perform(apps[0]), true
+	}
+	err = errors.New("rex: more than one app is connected, and none attached to the session showed it")
+	if s.callS("session.list_clients", nil, &l) != nil {
+		return err, true
+	}
+	shown := false
+	for _, c := range l.Clients {
+		if !c.app() || c.ID == "" {
+			continue
+		}
+		if e := perform(c.ID); e == nil {
+			shown = true
+		} else if remoteOff(e) {
+			err = e // why it was not shown: said (show)
+		}
+	}
+	if shown {
+		return nil, true
+	}
+	return err, true
 }
 
 // remoteOff: is err an app's refusal for want of Remote Control?

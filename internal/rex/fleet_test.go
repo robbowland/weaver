@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/robbowland/weaver/internal/mux"
 )
@@ -200,6 +201,34 @@ func TestFocusShowsItsSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s := f.of(string(p))
+	win, err := s.window(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Over the control connection, an app connected (as the Rex app is).
+	asked := make(chan map[string]any, 8)
+	fakeApp(t, wireEndpoint(), s.ID, false, asked)
+	if err := f.Respawn(p, mux.Spawn{Argv: sleep}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case a := <-asked:
+		t.Errorf("behind you, the app was asked %+v", a)
+	case <-time.After(200 * time.Millisecond):
+	}
+	f.Focus(p)
+	select {
+	case a := <-asked:
+		if args, _ := a["args"].(map[string]any); a["action"] != "session.select" || args["session_id"] != s.ID || args["window_id"] != win {
+			t.Errorf("focus: the app was asked %+v, want its session and window shown", a)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("focus: the app was not asked to show it")
+	}
+
+	// Through the rex command, alike.
+	t.Setenv("WEAVER_REX_WIRE", "0")
 	if err := f.Respawn(p, mux.Spawn{Argv: sleep}); err != nil {
 		t.Fatal(err)
 	}
@@ -207,11 +236,6 @@ func TestFocusShowsItsSession(t *testing.T) {
 		t.Errorf("behind you, the app was asked to show:\n%s", c)
 	}
 	f.Focus(p)
-	s := f.of(string(p))
-	win, err := s.window(w)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if want := "do session.select session_id=" + s.ID + " window_id=" + win; !strings.Contains(calls(), want) {
 		t.Errorf("focus: no %q in:\n%s", want, calls())
 	}

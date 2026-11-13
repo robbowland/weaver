@@ -70,6 +70,7 @@ type wire struct {
 	used     time.Time
 	fresh    bool // opened for the call now being made
 	sent     bool // a request has been sent on it during this batch
+	kind     string
 }
 
 var (
@@ -327,12 +328,15 @@ func wireEndpoint() string {
 
 // wireDial opens the control connection at Unix socket path: the
 // WebSocket handshake, then hello and welcome.
-func wireDial(path string) (*wire, error) {
+func wireDial(path string) (*wire, error) { return wireDialAs(path, "cli") }
+
+// wireDialAs is wireDial as a client of kind (cli; a test's app).
+func wireDialAs(path, kind string) (*wire, error) {
 	c, err := net.DialTimeout("unix", path, 2*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	w := &wire{ep: path, c: c, r: bufio.NewReaderSize(c, 64<<10), attached: map[string]bool{}, used: time.Now(), fresh: true}
+	w := &wire{ep: path, c: c, r: bufio.NewReaderSize(c, 64<<10), attached: map[string]bool{}, used: time.Now(), fresh: true, kind: kind}
 	if err := w.handshake(); err != nil {
 		_ = c.Close()
 		return nil, err
@@ -384,7 +388,7 @@ func (w *wire) handshake() error {
 		return &wireRefused{"not a rex.control.v1 connection"}
 	}
 	hello := map[string]any{"type": "hello", "api_revision": wireRevision, "api_min_revision": wireMinRevision,
-		"client": map[string]any{"kind": "cli", "name": "weaver"}}
+		"client": map[string]any{"kind": w.kind, "name": "weaver"}}
 	if err := w.send(hello); err != nil {
 		return err
 	}

@@ -11,7 +11,8 @@ session > window ("tab") > block (pane). weaver drives it over the
 server's control connection (internal/rex/wire.go: the WebSocket the
 server documents at `curl --unix-socket SOCK http://x/llms.txt`, ~0.2 ms a
 call), else the `rex` CLI: `rex api call METHOD JSON` (~15-20 ms each),
-`rex do` (a Lua snapshot, ~25 ms; app actions, always the CLI's), and Lua
+`rex do` (a Lua snapshot, ~25 ms; app actions, which over the
+connection are `client.perform`, as `rex do` sends them), and Lua
 in the server's config (weaver.lua, written from config/rex.lua).
 `WEAVER_REX_WIRE=0` forces the CLI (tests that count or fake `rex`
 processes need it). Read docs/design.md's Rex section with this.
