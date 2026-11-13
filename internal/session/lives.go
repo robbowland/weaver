@@ -136,7 +136,10 @@ func (l *lives) retire(f, pid string) {
 	switch {
 	case !known:
 		return
-	case lost && l.e.Lose(f, pid):
+	case lost:
+		// Kept as lost; when that fails (its record not written), its
+		// files stay for a later look, never forgotten for want of one.
+		l.e.Lose(f, pid)
 		return
 	}
 	if a := l.life(KeyOfFile(f)); a.running && files.Exists(strings.TrimSuffix(f, ".json")+".thread") {
