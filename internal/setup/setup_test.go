@@ -244,15 +244,15 @@ func TestPlanRefusesWhatItCannotKeep(t *testing.T) {
 // backup a file of its own, two in one second too.
 func TestApplyIsAtomicAndBacksUpEach(t *testing.T) {
 	dir := t.TempDir()
-	real := filepath.Join(dir, "dotfiles", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(real), 0o755); err != nil {
+	target := filepath.Join(dir, "dotfiles", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(real, []byte(`{"model":"x"}`+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(target, []byte(`{"model":"x"}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(dir, "settings.json")
-	if err := os.Symlink(real, link); err != nil {
+	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
 	ch, err := Plan(Config{Label: "c", File: link, Hooks: "config/claude-hooks.json"}, "/bin/wvr")
@@ -276,14 +276,14 @@ func TestApplyIsAtomicAndBacksUpEach(t *testing.T) {
 	if st, err := os.Lstat(link); err != nil || st.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("the link: %v %v, want a link still", st, err)
 	}
-	st, err := os.Stat(real)
+	st, err := os.Stat(target)
 	if err != nil || st.Mode().Perm() != 0o600 {
 		t.Errorf("the file linked to: %v %v, want its mode 0600 kept", st, err)
 	}
-	if b, _ := os.ReadFile(real); !strings.Contains(string(b), `"model": "x"`) || !strings.Contains(string(b), "/bin/wvr") {
+	if b, _ := os.ReadFile(target); !strings.Contains(string(b), `"model": "x"`) || !strings.Contains(string(b), "/bin/wvr") {
 		t.Errorf("the file linked to: %s", b)
 	}
-	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(real), "*.tmp*")); len(left) > 0 {
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(target), "*.tmp*")); len(left) > 0 {
 		t.Errorf("left beside it: %q", left)
 	}
 }
