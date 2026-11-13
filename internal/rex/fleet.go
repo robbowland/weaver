@@ -105,10 +105,17 @@ func each[T any](ss []Session, of func(Session) ([]T, error)) ([]T, error) {
 // Made is when home was made, epoch seconds.
 func (f Fleet) Made() (int64, bool) { return f.Home.Made() }
 
-// MadeOf is when the session pane or window n is in was made: home's, or
-// its thread's (a thread's session taken over by a home made again keeps
-// when it was made).
-func (f Fleet) MadeOf(n string) (int64, bool) { return f.of(n).Made() }
+// MadeOf is when the session pane or window n is in was made: its
+// thread's while that runs (a thread's session taken over by a home made
+// again keeps when it was made); else home's, the life of the fleet that
+// runs now (a thread whose session has gone, with home, is of an earlier
+// one).
+func (f Fleet) MadeOf(n string) (int64, bool) {
+	if s := f.of(n); s.ID != f.Home.ID && f.live[s.ID] {
+		return s.Made()
+	}
+	return f.Home.Made()
+}
 
 // Running: does home run?
 func (f Fleet) Running() bool { return f.Home.Running() }

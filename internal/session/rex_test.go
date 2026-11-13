@@ -464,3 +464,48 @@ func TestExitedThreadOnQuit(t *testing.T) {
 		}
 	}
 }
+
+// A thread whose agent never reported (a record, no state) goes with its
+// session as any thread: quit, then weaver started again, its first gc
+// keeps it as lost, to be brought back; its session is no more, so a home
+// made since is the life that counts.
+func TestQuitKeepsAThreadThatNeverReported(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost"}
+	for _, d := range []string{e.StateDir, e.LostDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), home.ID
+	_, p, _, err := e.Mux().OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _ := strconv.Atoi(string(p))
+	pane := jsonx.Int(n)
+	tf := e.PaneFile(p, "thread")
+	if err := store.Write(tf, store.Thread{Num: 1, Name: "t", Pane: &pane, Created: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	// (Written after its session was made, as wvr new writes it.)
+	time.Sleep(1100 * time.Millisecond)
+	if err := e.Mux().Quit(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RexID = again.ID
+	e.GC()
+	if ls, _ := os.ReadDir(e.LostDir); len(ls) != 1 || files.Exists(tf) {
+		t.Errorf("quit and started again: %d lost records, record still there %v; want it kept as lost", len(ls), files.Exists(tf))
+	}
+}
