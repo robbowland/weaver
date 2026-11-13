@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,9 +120,15 @@ func Plan(c Config, bin string) (Change, error) {
 	}
 	ch := Change{label: c.Label, file: c.File}
 	ch.old, err = os.ReadFile(c.File)
-	ch.existed = err == nil
-	if !ch.existed {
+	switch {
+	case err == nil:
+		ch.existed = true
+	case errors.Is(err, fs.ErrNotExist):
 		ch.old = []byte("{}")
+	default:
+		// There, but not to be read (its permissions, a disk's error): never
+		// taken for none, which would write weaver's hooks alone over it.
+		return Change{}, fmt.Errorf("cannot read %s: %v", c.File, err)
 	}
 	if ch.new, err = mergeHooks(ch.old, add, bin); err != nil {
 		return Change{}, fmt.Errorf("cannot parse %s: %v", c.File, err)
@@ -163,19 +171,38 @@ func (ch Change) Show(out io.Writer) {
 }
 
 // Apply writes the change, the file backed up first (to its name and
-// .bak.ts) when it was there; the backup's name, or "".
+// .bak.ts, -2 and on when that is taken) when it was there; the backup's
+// name, or "". Whole or not at all: written beside the file it is (a link
+// followed, so a linked settings file stays a link) and renamed over it,
+// its mode kept, so a full disk, a crash or Claude Code reading it as it
+// changes never sees it half written.
 func (ch Change) Apply(ts string) (string, error) {
+	target, mode := ch.file, os.FileMode(0o644)
 	backup := ""
 	if ch.existed {
-		backup = ch.file + ".bak." + ts
-		if err := copyFile(ch.file, backup); err != nil {
+		if t, err := filepath.EvalSymlinks(ch.file); err == nil {
+			target = t
+		}
+		st, err := os.Stat(target)
+		if err != nil {
+			return "", fmt.Errorf("cannot read %s; not changing it", ch.file)
+		}
+		mode = st.Mode().Perm()
+		if backup, err = backUp(target, ch.file+".bak."+ts, mode); err != nil {
 			return "", fmt.Errorf("cannot back up %s; not changing it", ch.file)
 		}
 	} else if err := os.MkdirAll(filepath.Dir(ch.file), 0o755); err != nil {
 		return "", fmt.Errorf("cannot create %s", filepath.Dir(ch.file))
 	}
-	// Through the file, so a linked settings file stays a link.
-	if err := os.WriteFile(ch.file, ch.new, 0o644); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".tmp")
+	if err != nil {
+		return backup, fmt.Errorf("cannot write %s (backup: %s)", ch.file, backup)
+	}
+	_, werr := tmp.Write(ch.new)
+	serr := tmp.Sync()
+	cerr := tmp.Close()
+	if werr != nil || serr != nil || cerr != nil || os.Chmod(tmp.Name(), mode) != nil || os.Rename(tmp.Name(), target) != nil {
+		os.Remove(tmp.Name())
 		return backup, fmt.Errorf("cannot write %s (backup: %s)", ch.file, backup)
 	}
 	return backup, nil
@@ -183,16 +210,34 @@ func (ch Change) Apply(ts string) (string, error) {
 
 func Timestamp() string { return time.Now().Format("20060102-150405") }
 
-func copyFile(from, to string) error {
+// backUp copies file from to a backup named as given, or with -2, -3, ...
+// after it when that is taken (two setups in one second): never over
+// another backup. The backup's name.
+func backUp(from, name string, mode os.FileMode) (string, error) {
 	b, err := os.ReadFile(from)
 	if err != nil {
-		return err
+		return "", err
 	}
-	st, err := os.Stat(from)
-	if err != nil {
-		return err
+	for i := 1; i < 100; i++ {
+		to := name
+		if i > 1 {
+			to = name + "-" + strconv.Itoa(i)
+		}
+		f, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, werr := f.Write(b)
+		if cerr := f.Close(); werr != nil || cerr != nil {
+			os.Remove(to)
+			return "", errors.Join(werr, cerr)
+		}
+		return to, nil
 	}
-	return os.WriteFile(to, b, st.Mode().Perm())
+	return "", errors.New("no backup name free")
 }
 
 // mergeHooks is settings with every weaver hook (whatever its form: "wvr

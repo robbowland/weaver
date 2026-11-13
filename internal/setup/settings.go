@@ -41,8 +41,10 @@ func parseOobj(raw []byte) (oobj, bool) {
 	if _, err := d.Token(); err != nil {
 		return nil, false
 	}
+	// Nothing after it but white space: anything more (a stray brace from
+	// a hand edit, a second object) would be dropped by rewriting it.
 	if _, err := d.Token(); err != io.EOF {
-		return o, true
+		return nil, false
 	}
 	return o, true
 }

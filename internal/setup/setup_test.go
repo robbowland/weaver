@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -209,5 +210,80 @@ func TestMergeHooksKnowsWeaversOwn(t *testing.T) {
 	}
 	if n := strings.Count(s, bin); n != strings.Count(string(add), `"wvr"`) {
 		t.Errorf("weaver's hooks: %d, want one each", n)
+	}
+}
+
+// Settings that are not one JSON object, all of it (a stray brace from a
+// hand edit, two objects), or that are there but cannot be read, are
+// refused, never rewritten with what weaver could make of them.
+func TestPlanRefusesWhatItCannotKeep(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"trailing": "{\"model\":\"x\",\"env\":{\"A\":\"1\"}},\n \"oops\":1}\n",
+		"two":      "{\"model\":\"x\"}\n{\"permissions\":{\"allow\":[\"Bash\"]}}\n",
+	} {
+		f := filepath.Join(dir, name+".json")
+		if err := os.WriteFile(f, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Plan(Config{Label: "c", File: f, Hooks: "config/claude-hooks.json"}, "/bin/wvr"); err == nil {
+			t.Errorf("%s: planned a change", name)
+		}
+	}
+	unreadable := filepath.Join(dir, "unreadable.json")
+	if err := os.WriteFile(unreadable, []byte(`{"model":"x"}`), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Plan(Config{Label: "c", File: unreadable, Hooks: "config/claude-hooks.json"}, "/bin/wvr"); err == nil {
+		t.Error("a file there but unreadable: planned a change, as if it were not there")
+	}
+}
+
+// A change is written whole or not at all (a file beside it, renamed
+// over it), through a link to the file it links to, its mode kept; each
+// backup a file of its own, two in one second too.
+func TestApplyIsAtomicAndBacksUpEach(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "dotfiles", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(real), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(real, []byte(`{"model":"x"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "settings.json")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	ch, err := Plan(Config{Label: "c", File: link, Hooks: "config/claude-hooks.json"}, "/bin/wvr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b1, err := ch.Apply("20261113-020000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b2, err := ch.Apply("20261113-020000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b1 == b2 {
+		t.Errorf("two backups in one second, one file: %s", b1)
+	}
+	if b, _ := os.ReadFile(b1); string(b) != `{"model":"x"}`+"\n" {
+		t.Errorf("the first backup: %q, want the file as it was", b)
+	}
+	if st, err := os.Lstat(link); err != nil || st.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the link: %v %v, want a link still", st, err)
+	}
+	st, err := os.Stat(real)
+	if err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("the file linked to: %v %v, want its mode 0600 kept", st, err)
+	}
+	if b, _ := os.ReadFile(real); !strings.Contains(string(b), `"model": "x"`) || !strings.Contains(string(b), "/bin/wvr") {
+		t.Errorf("the file linked to: %s", b)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(real), "*.tmp*")); len(left) > 0 {
+		t.Errorf("left beside it: %q", left)
 	}
 }
