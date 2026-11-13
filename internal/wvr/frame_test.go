@@ -37,3 +37,23 @@ func TestFrameScreen(t *testing.T) {
 		t.Errorf("the colour cut by a read: %q", rows[3])
 	}
 }
+
+// An OSC cut in two by a read (a link from Worktrunk or git, weaver's own
+// frame mark) is held till it ends, never shown as text: as a CSI is.
+func TestFrameHoldsACutOSC(t *testing.T) {
+	f := &frame{w: 40, h: 6, label: " x ", marks: make(chan struct{}, 1)}
+	f.take("see \x1b]8;;https://exa")
+	f.take("mple.com\x07here\x1b]8;;\x07 done\n")
+	f.take(frameMark[:5])
+	f.take(frameMark[5:] + "after\n")
+	rows, _ := f.screen()
+	got := ansi.Strip(strings.Join(rows, "\n"))
+	if strings.Contains(got, "8;;") || strings.Contains(got, "weaver-frame") || !strings.Contains(got, "see here done") || !strings.Contains(got, "after") {
+		t.Errorf("shows:\n%s", got)
+	}
+	select {
+	case <-f.marks:
+	default:
+		t.Error("the frame mark cut in two was not seen")
+	}
+}

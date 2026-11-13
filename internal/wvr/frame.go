@@ -81,8 +81,10 @@ type frame struct {
 }
 
 var (
-	// reEsc is a terminal escape: CSI, OSC, or one of two characters.
-	reEsc = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])`)
+	// reEsc is a terminal escape: CSI; a string (OSC, DCS, SOS, PM, APC)
+	// to its terminator; or one of two characters, none of which starts a
+	// string (else one cut by a read would pass for whole).
+	reEsc = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|[@-OQ-WYZ\\])`)
 	// frameMark, written to stderr, comes back once all before it is in
 	// the frame (flush).
 	frameMark = "\x1b]weaver-frame\x07"
