@@ -3,10 +3,12 @@ package session
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex/rextest"
 )
@@ -103,5 +105,33 @@ func TestExitedThreadLasts(t *testing.T) {
 		if ls, _ := os.ReadDir(e.LostDir); len(ls) != c.want {
 			t.Errorf("%s: %d lost records, want %d", c.name, len(ls), c.want)
 		}
+	}
+}
+
+// A thread whose agent ended long ago, being started again (wvr restart),
+// is not gc's to forget while its pane's new agent starts.
+func TestRestartingIsNotForgotten(t *testing.T) {
+	rextest.NoRex(t)
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SKey: "rex-s"}
+	if err := os.MkdirAll(e.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sf, tf := e.StateFile("3"), e.PaneFile("3", "thread")
+	if err := os.WriteFile(tf, []byte(`{"num":1,"name":"t","session_id":"conv"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := exec.Command("/usr/bin/true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sf, []byte(fmt.Sprintf(`{"pane":3,"agent":"claude","state":"ended","ts":%d,"session_id":"conv","pid":%d,"end_reason":"prompt_input_exit"}`+"\n",
+		time.Now().Unix()-7200, gone.Process.Pid)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.Restarting(sf)
+	e.gcAgents()
+	if !files.Exists(sf) || !files.Exists(tf) {
+		t.Errorf("being started again: state %v, record %v; want both kept", files.Exists(sf), files.Exists(tf))
 	}
 }

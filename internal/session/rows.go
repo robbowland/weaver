@@ -502,6 +502,16 @@ func (e *Env) Hold(f, note string) bool {
 // its pid is still pid when we hold its lock.
 func (e *Env) Forget(f, pid string) { e.forget(f, pid, nil) }
 
+// Restarting has the state file f of an agent being started again in its
+// pane name no agent, as of now, till the pane's new agent writes its
+// own: a look at the rows would take the old agent's pid, dead in a pane
+// that runs on, for one killed there, its thread closed (retire); and gc
+// would take an agent that ended an hour ago, its pid gone, for one to
+// forget.
+func (e *Env) Restarting(f string) {
+	store.UpdateState(f, func(r *agent.Record) { r.Pid, r.ProcStart, r.TS = "", "", time.Now().Unix() })
+}
+
 // Closing takes the agent whose state file is f out of what a look at the
 // rows keeps as lost, as it is closed: its thread record set aside
 // (.closing), which ForgetClosed then removes with the rest.

@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
@@ -135,11 +134,7 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	// Its agent is no longer the one its state names: that one ends with
-	// its block, and till the pane's new `wvr _agent` writes the resumed
-	// state, a look at the rows would take its pid, dead in a pane that
-	// runs on, for an agent killed there, its thread closed (retire).
-	store.UpdateState(e.StateFile(p), func(r *agent.Record) { r.Pid, r.ProcStart = "", "" })
+	e.Restarting(e.StateFile(p))
 	if err := e.Mux().Respawn(p, e.agentSpawn(tok, dir)); err != nil {
 		os.RemoveAll(d)
 		return label, errors.New("could not restart it in Rex")
