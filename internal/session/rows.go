@@ -550,8 +550,8 @@ func (e *Env) forget(f, pid string, end func()) {
 
 // removePaneFiles removes the files weaver keeps for the agent in a pane,
 // b their path without extension (<skey>_<pane>): its state, thread record,
-// review panel binding, and the locks of the state, the record and the
-// panel's opening.
+// review panel binding, the record set aside while it closes, and the
+// locks of the state, the record and the panel's opening.
 func removePaneFiles(b string) {
 	for _, x := range []string{".json", ".panel", ".thread", ".closing", ".json.lock", ".thread.lock", ".opening.lock"} {
 		os.Remove(b + x)
