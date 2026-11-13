@@ -601,6 +601,10 @@ python3 and Rex:
 
 - `go vet` and `go test`, including the contract between the Go half and
   the design doc (the states);
+- `test/conformance/run.py`: the hook engine by its contract alone,
+  Claude Code's events in and the state file out, as JSON cases any build
+  of weaver must pass (`--wvr PATH` for another); no Rex, about a second
+  ([its README](../test/conformance/README.md));
 - `test/hooks.sh`: the suites in `test/suites/`: the hooks' latency, their
   state machine and its robustness, `alt+1`, the counts, subagents,
   the installer and the board's
