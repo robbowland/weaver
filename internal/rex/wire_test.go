@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/rex/rextest"
@@ -61,6 +62,23 @@ func TestWire(t *testing.T) {
 	Close()
 	if err := wireCall("server.status", map[string]any{}, nil); err != nil {
 		t.Errorf("after Close: %v", err)
+	}
+	// Idle, it is closed (the server forgets its client at once), and the
+	// next call opens another.
+	defer func(d time.Duration) { wireIdle = d }(wireIdle)
+	wireIdle = 100 * time.Millisecond
+	if err := wireCall("server.status", map[string]any{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	wireMu.Lock()
+	idle := wireNow
+	wireMu.Unlock()
+	if idle != nil {
+		t.Error("an idle connection kept open")
+	}
+	if err := wireCall("server.status", map[string]any{}, nil); err != nil {
+		t.Errorf("after an idle close: %v", err)
 	}
 	t.Setenv("WEAVER_REX_WIRE", "0")
 	if wireReady() {

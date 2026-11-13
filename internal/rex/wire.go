@@ -40,11 +40,25 @@ const (
 // wireTimeout bounds each call, as the rex command's --timeout does.
 var wireTimeout = 10 * time.Second
 
-// wireIdle is how long a connection may sit unused before the next call
-// opens a new one: while idle it answers no pings and drains no events,
-// so after minutes of it (a board or a panel waiting) the server may have
-// closed it.
-const wireIdle = 20 * time.Second
+// wireIdle is how long a connection is kept unused: then it is closed
+// (wireIdleClose), and the next call opens a new one. While idle it
+// answers no pings and reads no events, so a process that waits long (a
+// board in its fzf) would otherwise stay the server's client, attached to
+// every session, till its pings went unanswered (minutes).
+var wireIdle = 20 * time.Second
+
+// wireTimer closes the connection once it has been idle wireIdle.
+var wireTimer *time.Timer
+
+// wireIdleClose closes the connection when it has been idle wireIdle.
+func wireIdleClose() {
+	wireMu.Lock()
+	defer wireMu.Unlock()
+	if w := wireNow; w != nil && time.Since(w.used) >= wireIdle {
+		w.close()
+		wireNow = nil
+	}
+}
 
 // wire is one control connection, to the server at Unix socket ep.
 type wire struct {
@@ -142,6 +156,13 @@ func wireBatch(reqs []wireReq) ([]json.RawMessage, []error, error) {
 		// connection): nothing of the batch reached it. Once more, on a
 		// new one.
 		res, errs, err = wireBatchOn(reqs)
+	}
+	if wireNow != nil {
+		if wireTimer == nil {
+			wireTimer = time.AfterFunc(wireIdle, wireIdleClose)
+		} else {
+			wireTimer.Reset(wireIdle)
+		}
 	}
 	return res, errs, err
 }
