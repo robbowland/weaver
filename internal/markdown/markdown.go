@@ -157,6 +157,9 @@ func (r *renderer) blocks(n ast.Node, w int) []string {
 }
 
 func (r *renderer) block(n ast.Node, w int) []string {
+	// Nested deeper than the width (quotes in quotes, lists in lists):
+	// one column left, never none or less.
+	w = max(w, 1)
 	st := r.st
 	switch n := n.(type) {
 	case *ast.Paragraph, *ast.TextBlock:

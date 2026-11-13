@@ -117,3 +117,25 @@ func TestRenderInert(t *testing.T) {
 		}
 	}
 }
+
+// Nesting deeper than the width leaves no room, never a negative one: a
+// description of quotes in quotes renders, never panics.
+func TestRenderDeepNesting(t *testing.T) {
+	for _, src := range []string{
+		strings.Repeat(">", 60) + " ---\n",
+		strings.Repeat(">", 60) + " ## x\n",
+		strings.Repeat(">", 60) + " > [!NOTE]\n" + strings.Repeat(">", 60) + " > hi\n",
+		strings.Repeat("  ", 40) + "- " + strings.Repeat("- ", 40) + "x\n",
+	} {
+		for _, w := range []int{20, 70} {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Errorf("width %d, %q: %v", w, src[:20], r)
+					}
+				}()
+				Render(src, w, Style{})
+			}()
+		}
+	}
+}
