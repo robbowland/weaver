@@ -57,6 +57,15 @@ func FromEnv(dir string) Here {
 	return h
 }
 
+// StillNames: does weaver's number pane still name Rex's block (its
+// numbers kept in dir)? Not once a block took its place (Respawn: an agent
+// started again in its pane), which a late hook of the old one must not
+// write over.
+func StillNames(dir string, pane mux.PaneID, block string) bool {
+	id, ok := ids{dir}.id(string(pane))
+	return ok && id == block
+}
+
 // Answer is what the Rex server $REX_SERVER names says of its sessions,
 // each thing asked once, when first needed: its pid, then the sessions it
 // runs. Every file one pass looks at (a gc run, the board's rows) is

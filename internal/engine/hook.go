@@ -19,6 +19,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 	"golang.org/x/term"
@@ -122,6 +123,12 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 		return 0
 	}
 	release := store.Lock(h.sf)
+	// Its pane started another agent since it was told its number (wvr
+	// restart: its block replaced): its state is the new agent's now.
+	if b := os.Getenv("REX_BLOCK"); b != "" && !rex.StillNames(e.RexDir(), pane, b) {
+		release()
+		return 0
+	}
 	st, _ := os.ReadFile(h.sf)
 	if !h.parse(ev, st) || mode == "async" && h.otherConversation(me) {
 		release()

@@ -122,3 +122,29 @@ func TestHookLateEventOfTheConversationBefore(t *testing.T) {
 		t.Errorf("its own prompt: %s turn %d, want working turn 1", st.State, st.Turn)
 	}
 }
+
+// A hook of an agent whose pane has since started another (wvr restart:
+// a block in its place, weaver's number moved to it) writes nothing over
+// the new agent's state.
+func TestHookOfAReplacedBlock(t *testing.T) {
+	e := hookEnv(t)
+	rd := e.RexDir()
+	for _, d := range []string{rd + "/n", rd + "/u"} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Pane 5 names the new block.
+	if err := os.WriteFile(rd+"/n/5", []byte("block:new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BLOCK", "block:new")
+	hookJSON(t, e, "sync", `{"hook_event_name":"SessionStart","session_id":"c","cwd":"/","source":"resume"}`)
+	before, _ := os.ReadFile(e.StateFile("5"))
+	// The old agent's late hook, from its old block.
+	t.Setenv("REX_BLOCK", "block:old")
+	hookJSON(t, e, "sync", `{"hook_event_name":"UserPromptSubmit","session_id":"old","cwd":"/","prompt":"late"}`)
+	if after, _ := os.ReadFile(e.StateFile("5")); string(after) != string(before) {
+		t.Errorf("a replaced block's hook wrote over the state:\n%s\nwas\n%s", after, before)
+	}
+}
