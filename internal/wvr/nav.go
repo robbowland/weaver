@@ -266,9 +266,20 @@ func (e *Env) boardOn(w mux.WindowID) {
 }
 
 // Pos is `wvr _pos PANE`, in a board's fzf: the action that puts its
-// cursor on PANE's row (nothing when it has none).
+// cursor on PANE's row (nothing when it has none), among the rows the
+// board shows, as it last loaded them (keepRows): pos counts its own
+// lines, and rows made anew would rewrite its keys, and what its refresh
+// compares with, for rows not on screen.
 func (e *Env) Pos(pane string) string {
-	if i := rowOf(e.Rows(""), "a"+pane); i > 0 {
+	base := sockBase()
+	if base == "" {
+		return ""
+	}
+	shown, err := os.ReadFile(base + ".rows")
+	if err != nil {
+		return ""
+	}
+	if i := rowOf(string(shown), "a"+pane); i > 0 {
 		return "pos(" + strconv.Itoa(i) + ")\n"
 	}
 	return ""
