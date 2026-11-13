@@ -342,6 +342,10 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 			if n, ok := cli.Atoi(l); ok {
 				t = int64(n)
 			}
+		} else if st, err := os.Stat(d); err == nil {
+			// Taken by a press that never said when (killed between the
+			// two): when its directory was made.
+			t = st.ModTime().Unix()
 		}
 		if now-t > 10 {
 			os.RemoveAll(d)
