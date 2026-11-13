@@ -345,8 +345,7 @@ func (s Session) drawn(b string) (drawnAnswer, error) {
 // them, a snapshot as snapshotLua's (its view and its terminals' sizes).
 const drawnLua = `
 local term = "` + terminal + `"
-local size, err = rex.block.call(term, "size", { block_id = rex.args.block })
-if size == nil then error(err, 0) end
+local size = rex.block.call(term, "size", { block_id = rex.args.block }) or {}
 local out = { size = size }
 if #(size.desired or {}) > 0 then return out end
 local l, err = rex.session.list_clients{}

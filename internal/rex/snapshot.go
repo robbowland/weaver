@@ -44,8 +44,11 @@ return { view = view, blocks = blocks }
 // sessions Rex runs, and a snapshot (as snapshotLua's) of home and of each
 // session of rex.args.threads that runs. A script's connection reaches a
 // session other than its own once it attaches to it; a terminal's methods
-// are then called by session (block.method). A Rex call that fails fails
-// the look (error at level 0: no position, unlike a script's own error).
+// are then called by session (block.method). A terminal's method that
+// fails (its block gone since the view) answers nothing, as in
+// snapshotLua; a session gone since the list is not looked at, as one not
+// listed; any other Rex call that fails fails the look (error at level 0:
+// no position, unlike a script's own error).
 const fleetLua = `
 local term = "` + terminal + `"
 local list, err = rex.call("session.list", {})
@@ -53,9 +56,7 @@ if not list then error(err, 0) end
 local live = {}
 for _, s in ipairs(list.sessions or {}) do live[s.session_id] = true end
 local function method(sid, b, m)
-  local r, err = rex.call("block.method", { session_id = sid, block_id = b, method = m })
-  if r == nil then error(err, 0) end
-  return r
+  return (rex.call("block.method", { session_id = sid, block_id = b, method = m }))
 end
 local function look(sid, view)
   local blocks = {}
@@ -84,8 +85,13 @@ snaps[rex.session_id] = look(rex.session_id, view)
 for _, sid in ipairs(rex.args.threads or {}) do
   if live[sid] and not snaps[sid] then
     local a, err = rex.session.attach{ session_id = sid }
-    if not a then error(err, 0) end
-    snaps[sid] = look(sid, a.view)
+    if a then
+      snaps[sid] = look(sid, a.view)
+    elseif tostring(err):find("code=session_not_found", 1, true) then
+      live[sid] = nil
+    else
+      error(err, 0)
+    end
   end
 end
 local ids = {}

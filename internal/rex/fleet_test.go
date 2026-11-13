@@ -311,3 +311,35 @@ func TestDrawnCols(t *testing.T) {
 		t.Errorf("the snapshot's terminals: %+v, want %s among them", d.Snap.Blocks, b)
 	}
 }
+
+// A block that goes while the fleet is looked at (closed between the view
+// and its terminal's methods: a respawn, a panel closed) fails nothing:
+// its methods answer nothing, as a snapshot of the session takes it.
+func TestFleetLookBlockGone(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	if _, _, _, err := f.OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer func(s string) { fleetScript = s }(fleetScript)
+	const at = "local function look(sid, view)\n  local blocks = {}\n"
+	if !strings.Contains(fleetLua, at) {
+		t.Fatal("fleetLua's look has moved: the test's stand-in needs it")
+	}
+	fleetScript = strings.Replace(fleetLua, at, at+`  local w = (view.windows or {})[1]
+  if w then table.insert(w.layers[1].blocks, { block_id = "block:01a1d24b-d314-742e-bd20-ec3db53be037", creator_name = term }) end
+`, 1)
+	ps, err := f.Panes()
+	if err != nil {
+		t.Fatalf("a look with a block gone: %v", err)
+	}
+	if len(ps) < 2 {
+		t.Errorf("panes: %+v, want home's and the thread's still", ps)
+	}
+}
