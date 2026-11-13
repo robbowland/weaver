@@ -373,7 +373,10 @@ if [ "$(sid)" != "$OLD" ]; then
 	echo "SKIP restart: this Rex did not bring the session back"
 else
 	rm -f "$AT"/args.*
-	wvr >"$AT/restart.out" 2>&1
+	# wvr typed in a terminal of what Rex brought back of the thread's
+	# session: its end, last, is this wvr's (SIGHUP), so everything else
+	# of what came back must have ended first.
+	R run -s "$OLDT" --focus=false --shell=none -c "$AT/repo" -- /bin/sh -c 'wvr >"$1" 2>&1; echo $? >"$1.rc"' sh "$AT/restart.out" >/dev/null
 	waitfor '[ -n "$(sid)" ] && [ "$(sid)" != "$OLD" ]' 100
 	SID=$(sid)
 	waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 Greeting · repo/main/2" ]' 200
