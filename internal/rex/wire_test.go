@@ -255,7 +255,7 @@ func TestWireRefusesAnOldRevision(t *testing.T) {
 			}
 			dials.Add(1)
 			go func() {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				r := bufio.NewReader(c)
 				key := ""
 				for {
