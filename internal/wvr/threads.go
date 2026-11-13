@@ -1390,6 +1390,9 @@ func (e *Env) Quit(args []string) error {
 		return err
 	}
 	name := e.Session
+	// The session's threads as they are now: for the card, and for the
+	// ones whose agent you exited to come back with the rest.
+	rows, now := e.AgentRows()
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
@@ -1398,7 +1401,6 @@ func (e *Env) Quit(args []string) error {
 		// What comes back (its threads) and what stops: turns under way,
 		// and the nvims open in the agents' reviews.
 		threads, work, editing := 0, 0, 0
-		rows, now := e.AgentRows()
 		for _, r := range rows {
 			if r.Tnum > 0 {
 				threads++
@@ -1434,9 +1436,10 @@ func (e *Env) Quit(args []string) error {
 		}
 	}
 	// Quitting is not closing: a thread whose agent you exited comes back
-	// with the rest, as the card says.
-	e.KeepExited()
+	// with the rest, as the card says (unless the quit fails).
+	undo := e.KeepExited(rows)
 	if err := e.Mux().Quit(); err != nil {
+		undo()
 		return errors.New("could not quit " + name + " in Rex")
 	}
 	return nil

@@ -419,8 +419,9 @@ func TestGCWithHomeClosedAlone(t *testing.T) {
 }
 
 // A thread whose agent you exited, its session gone on the same server:
-// closed by hand (its window), forgotten; quit (KeepExited first), kept as
-// lost, as quit's card says.
+// closed by hand (its window), forgotten; quit (KeepExited first, its pane
+// shown exited), kept as lost, as quit's card says; the quit failing, as
+// it was.
 func TestExitedThreadOnQuit(t *testing.T) {
 	for _, quit := range []bool{false, true} {
 		rextest.Server(t, rex.Bin())
@@ -431,33 +432,53 @@ func TestExitedThreadOnQuit(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		sleep := []string{"/bin/sleep", "600"}
-		home, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+		home, err := rex.Start(e.RexDir(), "demo", "/", []string{"/bin/sleep", "600"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), home.ID
-		_, p, _, err := e.Mux().OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+		// Its agent exited, its pane kept.
+		_, p, _, err := e.Mux().OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: []string{"/usr/bin/true"}, Dir: "/", Keep: true}, Label: "main", Background: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		ps, _ := e.Mux().Panes()
-		q, _ := PaneIn(ps, p)
+		var q mux.Pane
+		for i := 0; ; i++ {
+			ps, _ := e.Mux().Panes()
+			if q, _ = PaneIn(ps, p); q.Exited {
+				break
+			}
+			if i == 50 {
+				t.Fatal("the pane did not show its agent exited")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 		n, _ := strconv.Atoi(string(p))
 		pane := jsonx.Int(n)
 		if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: 1, Name: "t", Pane: &pane, SessionID: "conv"}); err != nil {
 			t.Fatal(err)
 		}
 		dead := strconv.Itoa(deadPid(t))
-		if err := store.Write(e.StateFile(p), agent.Record{Pane: pane, Agent: agent.Claude, State: agent.StateEnded, TS: time.Now().Unix(),
+		sf := e.StateFile(p)
+		if err := store.Write(sf, agent.Record{Pane: pane, Agent: agent.Claude, State: agent.StateEnded, TS: time.Now().Unix(),
 			SessionID: "conv", Pid: json.Number(dead), EndReason: "prompt_input_exit", Where: agent.Where{Server: home.Life().Server, Session: q.Session}}); err != nil {
 			t.Fatal(err)
 		}
 		if quit {
-			e.KeepExited()
+			rows, _ := e.AgentRows()
+			undo := e.KeepExited(rows)
+			if st, _ := store.ReadState(sf); st.EndReason != "" {
+				t.Fatalf("kept for the quit: end_reason %q", st.EndReason)
+			}
+			// A quit that fails puts it back; then as quitting does.
+			undo()
+			if st, _ := store.ReadState(sf); st.EndReason != "prompt_input_exit" {
+				t.Errorf("the quit failed: end_reason %q, want it back", st.EndReason)
+			}
+			e.KeepExited(rows)
 		}
 		e.Mux().CloseSession(p)
-		e.Retire(e.StateFile(p), dead)
+		e.Retire(sf, dead)
 		ls, _ := os.ReadDir(e.LostDir)
 		if want := map[bool]int{false: 0, true: 1}[quit]; len(ls) != want {
 			t.Errorf("quit %v: %d lost records, want %d", quit, len(ls), want)

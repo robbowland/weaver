@@ -155,16 +155,29 @@ func (l *lives) serverWent(skey string, ts int64, w agent.Where) (gone, known bo
 	return l.rex.ServerGone(w)
 }
 
-// KeepExited has each thread of this session whose agent you ended (its
-// pane kept, shown exited) kept as lost with the rest when its session
-// goes, as quitting does to every thread: its state forgets why it ended.
-func (e *Env) KeepExited() {
-	for _, f := range e.SessionFiles("thread") {
-		sf := strings.TrimSuffix(f, ".thread") + ".json"
-		if files.Exists(sf) {
-			store.UpdateState(sf, func(r *agent.Record) {
-				if endedOnPurpose(r.EndReason) {
-					r.EndReason = ""
+// KeepExited has each thread of rows (the session's, as a look just
+// took them) whose agent you ended, its pane kept and shown exited, kept
+// as lost with the rest when its session goes, as quitting does to every
+// thread: its state forgets why it ended. Not one whose window you have
+// closed since (a thread closed), which no row shows. What it returns
+// puts the reasons back (the quit failed).
+func (e *Env) KeepExited(rows []Row) (undo func()) {
+	was := map[string]string{}
+	for _, r := range rows {
+		if r.Tnum == 0 || !r.Exited || !strings.HasSuffix(r.Sfile, ".json") {
+			continue
+		}
+		store.UpdateState(r.Sfile, func(st *agent.Record) {
+			if endedOnPurpose(st.EndReason) {
+				was[r.Sfile], st.EndReason = st.EndReason, ""
+			}
+		})
+	}
+	return func() {
+		for f, reason := range was {
+			store.UpdateState(f, func(st *agent.Record) {
+				if st.EndReason == "" {
+					st.EndReason = reason
 				}
 			})
 		}

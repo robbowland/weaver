@@ -77,12 +77,11 @@ func TestExitedThreadLasts(t *testing.T) {
 	for _, c := range []struct {
 		name   string
 		ts     int64
-		kept   bool // KeepExited before
 		reason string
 		want   int // lost records
 	}{
-		{"exited, then the machine started again", process.BootTime() - 60, false, "prompt_input_exit", 1},
-		{"logged out, then the machine started again", process.BootTime() - 60, false, "logout", 1},
+		{"exited, then the machine started again", process.BootTime() - 60, "prompt_input_exit", 1},
+		{"logged out, then the machine started again", process.BootTime() - 60, "logout", 1},
 	} {
 		dir := t.TempDir()
 		e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SKey: "rex-s"}
@@ -97,9 +96,6 @@ func TestExitedThreadLasts(t *testing.T) {
 		}
 		if err := os.WriteFile(sf, []byte(fmt.Sprintf(`{"pane":3,"agent":"claude","state":"ended","ts":%d,"session_id":"conv","pid":7,"end_reason":%q}`+"\n", c.ts, c.reason)), 0o644); err != nil {
 			t.Fatal(err)
-		}
-		if c.kept {
-			e.KeepExited()
 		}
 		e.Retire(sf, "7")
 		if ls, _ := os.ReadDir(e.LostDir); len(ls) != c.want {
