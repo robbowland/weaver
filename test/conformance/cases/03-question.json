@@ -1,0 +1,46 @@
+{
+ "about": "a question (the sync PreToolUse on AskUserQuestion) needs you and rings; answered, it works on",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "AskUserQuestion",
+    "tool_input": {
+     "questions": [
+      {
+       "question": "Which branch?"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "state": "needs-you",
+    "waiting": "question: Which branch?"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "AskUserQuestion",
+    "tool_input": {
+     "questions": [
+      {
+       "question": "Which branch?"
+      }
+     ]
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

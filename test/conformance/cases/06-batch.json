@@ -1,0 +1,117 @@
+{
+ "about": "a dialog's batch: rejected with feedback works on, rejected outright is interrupted, one without the dialog's call leaves it waiting, its own answers it",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --force"
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolBatch",
+    "tool_calls": [
+     {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "git push --force"
+      },
+      "tool_use_id": "t1",
+      "tool_response": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said: use --force-with-lease"
+     }
+    ]
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --force"
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolBatch",
+    "tool_calls": [
+     {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "git push --force"
+      },
+      "tool_use_id": "t2",
+      "tool_response": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+     }
+    ]
+   },
+   "expect": {
+    "state": "interrupted"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --force"
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolBatch",
+    "tool_calls": [
+     {
+      "tool_name": "Read",
+      "tool_input": {
+       "file_path": "/x"
+      },
+      "tool_use_id": "t3",
+      "tool_response": "x"
+     }
+    ]
+   },
+   "expect": {
+    "state": "needs-you",
+    "waiting": "Bash: git push --force"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolBatch",
+    "tool_calls": [
+     {
+      "tool_name": "Bash",
+      "tool_input": {
+       "command": "git push --force"
+      },
+      "tool_use_id": "t4",
+      "tool_response": "pushed"
+     }
+    ]
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

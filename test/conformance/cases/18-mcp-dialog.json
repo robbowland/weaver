@@ -1,0 +1,51 @@
+{
+ "about": "a dialog of no call weaver knows (an MCP server's) waits through a parallel tool finishing; the batch's end, or its answer, ends it",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "elicitation_dialog",
+    "message": "an MCP server asks for a token"
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/x"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "needs-you"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolBatch",
+    "tool_calls": [
+     {
+      "tool_name": "mcp__x__login",
+      "tool_input": {},
+      "tool_use_id": "t1",
+      "tool_response": "ok"
+     }
+    ]
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

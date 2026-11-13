@@ -1,0 +1,79 @@
+{
+ "about": "where it works: the repo of the file it edited (a worktree), the files it edited, most recent last; a Read changes nothing of that",
+ "mkdirs": [
+  "wt/.git",
+  "wt/src"
+ ],
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "edit"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "$T/wt/src/a.go"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "root": "$T/wt",
+    "file": "$T/wt/src/a.go",
+    "files": [
+     "$T/wt/src/a.go"
+    ]
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+     "file_path": "$T/wt/b.md"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "files": [
+     "$T/wt/src/a.go",
+     "$T/wt/b.md"
+    ],
+    "file": "$T/wt/b.md"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Edit",
+    "tool_input": {
+     "file_path": "$T/wt/src/a.go"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "files": [
+     "$T/wt/b.md",
+     "$T/wt/src/a.go"
+    ]
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "$T/repo/README"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "root": "$T/wt",
+    "file": "$T/wt/src/a.go"
+   }
+  }
+ ]
+}

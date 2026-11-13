@@ -1,0 +1,64 @@
+{
+ "about": "subagents: each one started is listed till it stops; a subagent's own cwd is not where the agent is",
+ "mkdirs": [
+  "elsewhere/.git"
+ ],
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "fan out"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SubagentStart",
+    "agent_id": "a1",
+    "agent_type": "Explore"
+   },
+   "expect": {
+    "subagents": {
+     "len": 1
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SubagentStart",
+    "agent_id": "a2",
+    "agent_type": "Plan",
+    "cwd": "$T/elsewhere"
+   },
+   "expect": {
+    "subagents": {
+     "len": 2
+    },
+    "root": "$T/repo"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SubagentStop",
+    "agent_id": "a1",
+    "agent_type": "Explore"
+   },
+   "expect": {
+    "subagents": {
+     "len": 1
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "ok"
+   },
+   "expect": {
+    "subagents": {
+     "len": 0
+    },
+    "state": "done"
+   }
+  }
+ ]
+}

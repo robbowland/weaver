@@ -8,7 +8,10 @@ description: Use when running, writing or judging weaver's tests: which suite co
 ## The suites
 
 `test/run.sh` runs them all (~3 min): `go vet` + `go test ./...` (with the
-Go/design.md state contract), `test/hooks.sh [suite…]` (~2 min,
+Go/design.md state contract), `test/conformance/run.py` (~1 s, no Rex: the
+hook engine's events in and state file out, as JSON cases any build of
+weaver must pass, `--wvr PATH` for another build; see its README),
+`test/hooks.sh [suite…]` (~2 min,
 test/suites/*.sh on a throwaway Rex server), `test/rex.sh` (~30 s, weaver
 on a throwaway Rex server end to end, with a fake tuicr); both skip without
 rex. CI (macos-15, no Rex: it runs only Go's tests) runs `test/run.sh` and golangci-lint with only-new-issues:

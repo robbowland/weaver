@@ -1,0 +1,44 @@
+{
+ "about": "the session's end: ended, and why (your /exit, or a hangup)",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "bye"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionEnd",
+    "reason": "prompt_input_exit"
+   },
+   "expect": {
+    "state": "ended",
+    "end_reason": "prompt_input_exit"
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "startup",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "idle",
+    "end_reason": null
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionEnd",
+    "reason": "other",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "ended",
+    "end_reason": "other"
+   }
+  }
+ ]
+}

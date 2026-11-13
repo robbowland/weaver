@@ -1,0 +1,38 @@
+{
+ "about": "a session nested in the pane's agent (claude -p, an SDK script) inherits its pane: while the pane's agent runs, its events are not the pane's",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "mine"
+   }
+  },
+  {
+   "pid": "other",
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "nested",
+    "session_id": "nested-1"
+   },
+   "expect": {
+    "state": "working",
+    "prompt": "mine",
+    "session_id": "conv-1",
+    "pid": "agent"
+   }
+  },
+  {
+   "pid": "other",
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "nested done",
+    "session_id": "nested-1"
+   },
+   "expect": {
+    "state": "working",
+    "session_id": "conv-1"
+   },
+   "bell": false
+  }
+ ]
+}

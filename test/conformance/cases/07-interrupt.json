@@ -1,0 +1,91 @@
+{
+ "about": "Esc: a tool that merely fails works on, one interrupted is; quiet a minute while working is interrupted, unless background work is pending",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "long job"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUseFailure",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "false"
+    },
+    "error": "exit 1"
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUseFailure",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 100"
+    },
+    "error": "Interrupted",
+    "is_interrupt": true
+   },
+   "expect": {
+    "state": "interrupted"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "long job"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "idle_prompt",
+    "message": "Claude is waiting for your input"
+   },
+   "expect": {
+    "state": "interrupted"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "research"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "waiting on two",
+    "background_tasks": [
+     {
+      "type": "subagent",
+      "description": "read the docs"
+     },
+     {
+      "type": "subagent",
+      "description": "grep"
+     }
+    ]
+   },
+   "expect": {
+    "state": "working",
+    "background": 2
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "idle_prompt",
+    "message": "m"
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

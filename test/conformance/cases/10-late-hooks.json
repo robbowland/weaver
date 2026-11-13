@@ -1,0 +1,51 @@
+{
+ "about": "an async hook may land a second or two behind: one of the turn that ended leaves it done; one long after says the turn carries on (a Stop hook of yours blocked its end)",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go",
+    "prompt_id": "p1"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "ok",
+    "prompt_id": "p1"
+   },
+   "expect": {
+    "state": "done"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "prompt_id": "p1",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/x"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "done"
+   }
+  },
+  {
+   "age": 20,
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "prompt_id": "p1",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/x"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

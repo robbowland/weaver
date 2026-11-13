@@ -1,0 +1,70 @@
+{
+ "about": "after /clear, a late async event of the conversation before changes nothing of the new one's",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "old work"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionEnd",
+    "reason": "clear"
+   },
+   "expect": {
+    "state": "ended",
+    "end_reason": "clear"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "clear",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "idle",
+    "session_id": "conv-2"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "ls"
+    },
+    "tool_use_id": "t1",
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "idle",
+    "session_id": "conv-2"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SubagentStop",
+    "agent_id": "a1",
+    "agent_type": "Explore"
+   },
+   "expect": {
+    "state": "idle",
+    "session_id": "conv-2"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "new work",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "working",
+    "turn": 1,
+    "session_id": "conv-2"
+   }
+  }
+ ]
+}

@@ -1,0 +1,127 @@
+{
+ "about": "notifications: the idle reminder after a Stop leaves it done; another agent's input, an MCP dialog, a worker's permission and a stale quota need you; an MCP dialog answered, or a quota resumed, works on; other notices change nothing",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "ok"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "idle_prompt",
+    "message": "m"
+   },
+   "expect": {
+    "state": "done"
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "agent_needs_input",
+    "message": "a subagent asks"
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "elicitation_dialog",
+    "message": "an MCP server asks"
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "elicitation_response",
+    "message": "m"
+   },
+   "expect": {
+    "state": "working"
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "elicitation_complete",
+    "message": "m"
+   },
+   "expect": {
+    "state": "working"
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "worker_permission_prompt",
+    "message": "m"
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "quota_auto_resume_stale",
+    "message": "Usage limit reset"
+   },
+   "expect": {
+    "state": "needs-you"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "quota_auto_resume_fired",
+    "message": "resuming"
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "auth_success",
+    "message": "Claude Code login successful"
+   },
+   "expect": {
+    "state": "working"
+   }
+  }
+ ]
+}

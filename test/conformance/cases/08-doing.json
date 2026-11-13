@@ -1,0 +1,104 @@
+{
+ "about": "what it runs: from the async PreToolUse on Bash to its PostToolUse, paired by tool_use_id; one landing after its PostToolUse runs nothing; the turn's end ends it",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "run the tests"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_use_id": "tu-1"
+   },
+   "hook": "async",
+   "expect": {
+    "state": "working",
+    "doing": "npm test",
+    "doing_id": "tu-1"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "npm test"
+    },
+    "tool_use_id": "tu-1",
+    "tool_response": {}
+   },
+   "expect": {
+    "doing": null
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "make lint"
+    },
+    "tool_use_id": "tu-2",
+    "tool_response": {}
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "make lint"
+    },
+    "tool_use_id": "tu-2"
+   },
+   "hook": "async",
+   "expect": {
+    "doing": null
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "sleep 30"
+    },
+    "tool_use_id": "tu-3"
+   },
+   "hook": "async"
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "ok"
+   },
+   "expect": {
+    "state": "done",
+    "doing": null
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "AskUserQuestion",
+    "tool_input": {
+     "questions": [
+      {
+       "question": "Which?"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "state": "needs-you",
+    "doing": null
+   }
+  }
+ ]
+}

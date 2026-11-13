@@ -1,0 +1,83 @@
+{
+ "about": "its task list: each task created, then done; a resume keeps it, a new session starts it over",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "plan"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "TaskCreated",
+    "task_id": "1",
+    "task_subject": "parse the flag"
+   },
+   "expect": {
+    "tasks": [
+     {
+      "id": "1",
+      "subject": "parse the flag",
+      "done": false
+     }
+    ]
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "TaskCreated",
+    "task_id": "2",
+    "task_subject": "wire it in"
+   },
+   "expect": {
+    "tasks": {
+     "len": 2
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "TaskCompleted",
+    "task_id": "1",
+    "task_subject": "parse the flag"
+   },
+   "expect": {
+    "tasks": [
+     {
+      "id": "1",
+      "subject": "parse the flag",
+      "done": true
+     },
+     {
+      "id": "2",
+      "subject": "wire it in",
+      "done": false
+     }
+    ]
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "resume"
+   },
+   "expect": {
+    "tasks": {
+     "len": 2
+    }
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "startup",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "tasks": {
+     "len": 0
+    }
+   }
+  }
+ ]
+}

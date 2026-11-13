@@ -1,0 +1,82 @@
+{
+ "about": "a compaction carries on as it was; a resume is idle; a clear is a new session, its turns from 0; a task notification is no prompt of yours; your prompt is a turn, with the session's title",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "big refactor"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "compact"
+   },
+   "expect": {
+    "state": "working",
+    "prompt": "big refactor",
+    "turn": 1
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/x"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "resume"
+   },
+   "expect": {
+    "state": "idle",
+    "turn": 1
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "SessionStart",
+    "source": "clear",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "idle",
+    "turn": 0,
+    "session_id": "conv-2"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "<task-notification>done</task-notification>",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "state": "working",
+    "turn": 0
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "hi",
+    "source": "user",
+    "session_title": "Fix the readme",
+    "session_id": "conv-2"
+   },
+   "expect": {
+    "turn": 1,
+    "title": "Fix the readme",
+    "prompt": "hi"
+   }
+  }
+ ]
+}

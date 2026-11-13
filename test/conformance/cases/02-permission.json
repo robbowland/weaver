@@ -1,0 +1,66 @@
+{
+ "about": "a permission dialog needs you at once and rings; its notification keeps the request's text and rings no more; another tool finishing leaves it; its own tool finishing works on",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "go"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --force"
+    }
+   },
+   "expect": {
+    "state": "needs-you",
+    "waiting": "Bash: git push --force"
+   },
+   "bell": true
+  },
+  {
+   "event": {
+    "hook_event_name": "Notification",
+    "notification_type": "permission_prompt",
+    "message": "Claude needs your permission to use Bash"
+   },
+   "expect": {
+    "state": "needs-you",
+    "waiting": "Bash: git push --force"
+   },
+   "bell": false
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "file_path": "/x"
+    },
+    "tool_response": {}
+   },
+   "expect": {
+    "state": "needs-you",
+    "waiting": "Bash: git push --force"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "PostToolUse",
+    "tool_response": {},
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "git push --force"
+    }
+   },
+   "expect": {
+    "state": "working",
+    "waiting": "",
+    "pending": ""
+   }
+  }
+ ]
+}

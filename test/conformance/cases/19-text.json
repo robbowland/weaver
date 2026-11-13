@@ -1,0 +1,23 @@
+{
+ "about": "what it says is kept on one line, cut: control characters as spaces, a long prompt squashed",
+ "steps": [
+  {
+   "event": {
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "fix\tthe\n\nbug\u001b[31m now xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   },
+   "expect": {
+    "state": "working"
+   }
+  },
+  {
+   "event": {
+    "hook_event_name": "Stop",
+    "last_assistant_message": "Done:\n- one\n- two"
+   },
+   "expect": {
+    "last_message": "Done: - one - two"
+   }
+  }
+ ]
+}
