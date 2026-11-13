@@ -225,11 +225,9 @@ func (r ids) keyed(skey string) (string, string, bool) {
 // latest is the home session weaver made last of a name that matches,
 // and its name.
 func (r ids) latest(match func(name string) bool) (string, string, bool) {
-	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	var best, bestName string
 	at := -1.0
-	for _, d := range ents {
-		id := strings.Replace(d.Name(), "_", ":", 1)
+	for _, id := range r.sessionIDs() {
 		if m, ok := r.session(id); ok && m.home == "" && match(m.name) && m.at > at {
 			best, bestName, at = id, m.name, m.at
 		}
@@ -265,22 +263,33 @@ func (r ids) threads(home string) []string {
 // a husk ended, an old home, a thread's closed. Not one made in the last
 // minute, which Rex may not list yet.
 func (r ids) prune(live map[string]bool) {
-	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	before := float64(time.Now().Add(-time.Minute).UnixMilli()) / 1000
-	for _, d := range ents {
-		id := strings.Replace(d.Name(), "_", ":", 1)
+	for _, id := range r.sessionIDs() {
 		if m, ok := r.session(id); ok && !live[id] && m.at < before {
-			os.Remove(r.path("sessions", d.Name()))
+			os.Remove(r.path("sessions", fileName(id)))
 		}
 	}
 }
 
-// allThreads are the sessions weaver made as threads, of any home.
-func (r ids) allThreads() []string {
+// sessionIDs are the ids of the sessions weaver keeps a record of
+// (sessions/<id, : as _>): not the temporary file a record is being
+// written to beside it (files.WriteAtomic's <name>.<pid>), which a pass
+// would otherwise take for a session, and prune.
+func (r ids) sessionIDs() []string {
 	ents, _ := os.ReadDir(filepath.Join(r.dir, "sessions"))
 	var out []string
 	for _, d := range ents {
-		id := strings.Replace(d.Name(), "_", ":", 1)
+		if n := d.Name(); !strings.Contains(n, ".") {
+			out = append(out, strings.Replace(n, "_", ":", 1))
+		}
+	}
+	return out
+}
+
+// allThreads are the sessions weaver made as threads, of any home.
+func (r ids) allThreads() []string {
+	var out []string
+	for _, id := range r.sessionIDs() {
 		if m, ok := r.session(id); ok && m.home != "" {
 			out = append(out, id)
 		}

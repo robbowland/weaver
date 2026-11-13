@@ -2,6 +2,7 @@ package rex
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -106,5 +107,30 @@ func TestPrune(t *testing.T) {
 		if _, ok := r.session(id); ok != kept {
 			t.Errorf("%s kept %v, want %v", id, ok, kept)
 		}
+	}
+}
+
+// A record being written (files.WriteAtomic's temporary file beside it)
+// is no session: a pass over the records neither takes it for one nor
+// prunes it from under its rename.
+func TestIDsSkipRecordsBeingWritten(t *testing.T) {
+	r := ids{t.TempDir()}
+	if err := r.made("session:a", "demo", time.Now().Add(-time.Hour), 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(r.path("sessions", "session_a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := r.path("sessions", "session_b.4242")
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.sessionIDs(); len(got) != 1 || got[0] != "session:a" {
+		t.Errorf("sessionIDs: %q, want session:a alone", got)
+	}
+	r.prune(map[string]bool{"session:a": true})
+	if _, err := os.Stat(tmp); err != nil {
+		t.Errorf("a record being written, pruned: %v", err)
 	}
 }
