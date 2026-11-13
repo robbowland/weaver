@@ -5,6 +5,9 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/robbowland/weaver/internal/jsonx"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // A socket nothing listens on goes once it is old; a live one, or a new
@@ -35,6 +38,38 @@ func TestSweepSockets(t *testing.T) {
 	for name, want := range map[string]bool{"rex-s_1.sock": false, "rex-s_2.sock": true, "rex-s_3.sock": true} {
 		if _, err := os.Lstat(dir + "/" + name); (err == nil) != want {
 			t.Errorf("%s there: %v, want %v", name, err == nil, want)
+		}
+	}
+}
+
+// A thread lost with its session is pruned a month on; one you put on
+// hold waits until you resume it, however long.
+func TestGCKeepsHeldThreads(t *testing.T) {
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock"}
+	for _, d := range []string{e.StateDir, e.LostDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-40 * 24 * time.Hour)
+	for name, rec := range map[string]store.Lost{
+		"rex-s_lost.json": {Lost: jsonx.Int(old.Unix()), SKey: "rex-s"},
+		"rex-s_held.json": {Lost: jsonx.Int(old.Unix()), SKey: "rex-s", Held: jsonx.Int(old.Unix()), Note: "next: the docs"},
+		"rex-s_new.json":  {Lost: jsonx.Int(time.Now().Unix()), SKey: "rex-s"},
+	} {
+		f := e.LostDir + "/" + name
+		if err := store.Write(f, rec); err != nil {
+			t.Fatal(err)
+		}
+		if name != "rex-s_new.json" {
+			_ = os.Chtimes(f, old, old)
+		}
+	}
+	e.gcFiles()
+	for name, want := range map[string]bool{"rex-s_lost.json": false, "rex-s_held.json": true, "rex-s_new.json": true} {
+		if _, err := os.Stat(e.LostDir + "/" + name); (err == nil) != want {
+			t.Errorf("%s kept: %v, want %v", name, err == nil, want)
 		}
 	}
 }

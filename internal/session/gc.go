@@ -108,7 +108,18 @@ func (e *Env) gcFiles() {
 	if st, err := os.Stat(e.StateDir + "/close.log"); err == nil && st.Size() > 100000 {
 		os.Remove(e.StateDir + "/close.log")
 	}
-	old(e.LostDir, "*.json", month, false)
+	// Threads lost with their session a month ago; never one you held,
+	// which waits until you resume it.
+	ls, _ := filepath.Glob(e.LostDir + "/*.json")
+	for _, f := range ls {
+		if st, err := os.Lstat(f); err != nil || !st.Mode().IsRegular() || time.Since(st.ModTime()) <= month {
+			continue
+		}
+		if l, err := store.ReadLost(f); err == nil && l.Held > 0 {
+			continue
+		}
+		os.Remove(f)
+	}
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)
 	e.sweepSockets(day)
