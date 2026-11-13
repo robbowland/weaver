@@ -12,7 +12,7 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR` | `${XDG_STATE_HOME:-~/.local/state}/weaver` |
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
-| `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below) |
+| `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below); `.closing` while `wvr close` ends it, so nothing keeps a thread being closed as lost |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |

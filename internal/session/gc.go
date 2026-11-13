@@ -104,6 +104,8 @@ func (e *Env) gcFiles() {
 	// Tabs that never finished opening leave their meeting place behind.
 	old(e.StateDir+"/new", "*", day, true)
 	old(e.StateDir, "form.*", day, false)
+	// A close cut short leaves the record it set aside (Closing).
+	old(e.StateDir, "*.closing", day, false)
 	old(e.StateDir+"/fetch", "*", day, false)
 	if st, err := os.Stat(e.StateDir + "/close.log"); err == nil && st.Size() > 100000 {
 		os.Remove(e.StateDir + "/close.log")

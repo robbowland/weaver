@@ -1292,6 +1292,12 @@ func (e *Env) CloseTail(a []string) error {
 	agent, _ := mux.ParsePane(a[0])
 	nv, _ := mux.ParsePane(a[1])
 	pid, start, remove, dir, repo, tok, ends := a[2], a[3], a[4], a[5], a[6], a[7], a[8]
+	sf := e.StateFile(agent)
+	// No longer a thread to keep: from here a look at the rows (a board's
+	// refresh, which the agent's SessionEnd pushes as its session ends)
+	// finds no thread to keep as lost, nor a held one to keep again as
+	// merely lost.
+	e.Closing(sf)
 	// Closing what you are looking at: home, where the rest are, not
 	// whichever window or session Rex would show next.
 	if ends != "" {
@@ -1321,14 +1327,10 @@ func (e *Env) CloseTail(a []string) error {
 		fmt.Fprintf(os.Stderr, "weaver: the agent (pid %s) is still running; its worktree stays\n", pid)
 		remove = "0"
 	}
-	sf := e.StateFile(agent)
-	if files.Exists(sf) {
-		e.Forget(sf, pid)
-	} else {
-		b := strings.TrimSuffix(sf, ".json")
-		os.Remove(b + ".panel")
-		os.Remove(b + ".thread")
-	}
+	// Its files go, whichever agent its state names now: one that started
+	// after the card read its pid (a thread closed before its agent
+	// reported) ended with it.
+	e.ForgetClosed(sf)
 	var rc error
 	if remove == "1" {
 		t := tildify(dir)

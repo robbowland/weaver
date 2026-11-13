@@ -472,8 +472,14 @@ func (e *Env) writeLost(skey string, st agent.Record, th store.Thread, held int6
 	if id == "" {
 		id = "thread-" + strconv.FormatInt(th.Created, 10) + "-" + strconv.Itoa(th.Num)
 	}
+	f := e.LostDir + "/" + skey + "_" + id + ".json"
+	// A thread you held stays held, with your note: kept as lost later
+	// (its session going as it closed) it is never merely lost.
+	if old, err := store.ReadLost(f); err == nil && old.Held > 0 && held == 0 {
+		held, note = int64(old.Held), old.Note
+	}
 	rec := store.Lost{Lost: jsonx.Int(time.Now().Unix()), SKey: skey, State: st, Thread: th, Held: jsonx.Int(held), Note: note}
-	return store.Write(e.LostDir+"/"+skey+"_"+id+".json", rec) == nil
+	return store.Write(f, rec) == nil
 }
 
 // Hold keeps the thread of the agent whose state file is f as held: a lost
@@ -496,6 +502,23 @@ func (e *Env) Hold(f, note string) bool {
 // its pid is still pid when we hold its lock.
 func (e *Env) Forget(f, pid string) { e.forget(f, pid, nil) }
 
+// Closing takes the agent whose state file is f out of what a look at the
+// rows keeps as lost, as it is closed: its thread record set aside
+// (.closing), which ForgetClosed then removes with the rest.
+func (e *Env) Closing(f string) {
+	b := strings.TrimSuffix(f, ".json")
+	if files.Exists(b + ".thread") {
+		_ = os.Rename(b+".thread", b+".closing") // none to set aside: none to keep
+	}
+}
+
+// ForgetClosed removes the files of the agent whose state file is f,
+// closed: whatever its state says of its agent.
+func (e *Env) ForgetClosed(f string) {
+	defer store.Lock(f)()
+	removePaneFiles(strings.TrimSuffix(f, ".json"))
+}
+
 // forget is Forget, first doing end (when not nil) under the lock, once
 // the pid is known to be still pid.
 func (e *Env) forget(f, pid string, end func()) {
@@ -517,7 +540,7 @@ func (e *Env) forget(f, pid string, end func()) {
 // review panel binding, and the locks of the state, the record and the
 // panel's opening.
 func removePaneFiles(b string) {
-	for _, x := range []string{".json", ".panel", ".thread", ".json.lock", ".thread.lock", ".opening.lock"} {
+	for _, x := range []string{".json", ".panel", ".thread", ".closing", ".json.lock", ".thread.lock", ".opening.lock"} {
 		os.Remove(b + x)
 	}
 }
