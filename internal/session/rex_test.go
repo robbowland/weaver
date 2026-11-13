@@ -417,3 +417,50 @@ func TestGCWithHomeClosedAlone(t *testing.T) {
 		t.Errorf("%d threads lost once taken over, their sessions running", len(ls))
 	}
 }
+
+// A thread whose agent you exited, its session gone on the same server:
+// closed by hand (its window), forgotten; quit (KeepExited first), kept as
+// lost, as quit's card says.
+func TestExitedThreadOnQuit(t *testing.T) {
+	for _, quit := range []bool{false, true} {
+		rextest.Server(t, rex.Bin())
+		dir := t.TempDir()
+		e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost"}
+		for _, d := range []string{e.StateDir, e.LostDir} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sleep := []string{"/bin/sleep", "600"}
+		home, err := rex.Start(e.RexDir(), "demo", "/", sleep)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Session, e.SKey, e.RexID = "demo", rex.Key("demo"), home.ID
+		_, p, _, err := e.Mux().OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ps, _ := e.Mux().Panes()
+		q, _ := PaneIn(ps, p)
+		n, _ := strconv.Atoi(string(p))
+		pane := jsonx.Int(n)
+		if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: 1, Name: "t", Pane: &pane, SessionID: "conv"}); err != nil {
+			t.Fatal(err)
+		}
+		dead := strconv.Itoa(deadPid(t))
+		if err := store.Write(e.StateFile(p), agent.Record{Pane: pane, Agent: agent.Claude, State: agent.StateEnded, TS: time.Now().Unix(),
+			SessionID: "conv", Pid: json.Number(dead), EndReason: "prompt_input_exit", Where: agent.Where{Server: home.Life().Server, Session: q.Session}}); err != nil {
+			t.Fatal(err)
+		}
+		if quit {
+			e.KeepExited()
+		}
+		e.Mux().CloseSession(p)
+		e.Retire(e.StateFile(p), dead)
+		ls, _ := os.ReadDir(e.LostDir)
+		if want := map[bool]int{false: 0, true: 1}[quit]; len(ls) != want {
+			t.Errorf("quit %v: %d lost records, want %d", quit, len(ls), want)
+		}
+	}
+}

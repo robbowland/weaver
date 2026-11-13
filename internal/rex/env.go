@@ -108,6 +108,20 @@ func (a *Answer) Lost(w agent.Where) (lost, known bool) {
 	return !live[w.Session], true
 }
 
+// ServerGone: has the server life w ran on gone (its process ended, or
+// another server runs), and does Rex say? Lost without asking whether its
+// session is still on it.
+func (a *Answer) ServerGone(w agent.Where) (gone, known bool) {
+	if w.Server > 1 && !process.Alive(w.Server) {
+		return true, true
+	}
+	pid := a.serverPID()
+	if pid == 0 {
+		return false, false
+	}
+	return w.Server != 0 && pid != w.Server, true
+}
+
 // Keyed is the session whose files are keyed skey (Key of its name), with
 // its threads' sessions: one weaver made of a name with that key, else the
 // one whose id the key holds (a session weaver did not make is named by

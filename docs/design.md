@@ -353,9 +353,13 @@ thread is kept as lost rather than forgotten, so it can be resumed.
 
 - **When:** where an agent's files would be forgotten for a dead pid
   (`AgentRows`, `GC`), `retire` keeps them as lost when the agent has a
-  thread record (whether or not its conversation is known), its `end_reason` is not `prompt_input_exit`,
-  `logout` or `clear` (ended on purpose), and its session has gone since its
-  last event: the machine has started since its last event `ts`
+  thread record (whether or not its conversation is known), and its session
+  has gone since its last event (one whose `end_reason` is
+  `prompt_input_exit`, `logout` or `clear`, its agent ended on purpose and
+  its pane kept, only when the machine or its server went, since its
+  session gone on the same server may be its window closed by hand; `wvr
+  quit` first clears that reason from its threads' states, quitting being
+  no close): the machine has started since its last event `ts`
   (`kern.boottime`), or its server's process has ended
   (neither asks Rex), or Rex says another server runs or the session is no
   longer on it (`rex.Answer.Lost`); when a call that takes fails, neither: its

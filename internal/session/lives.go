@@ -121,11 +121,54 @@ func (l *lives) lostCheck(f string) (lost, known bool) {
 	if err != nil {
 		return false, true
 	}
-	switch s.EndReason {
-	case "prompt_input_exit", "logout", "clear":
-		return false, true
+	if endedOnPurpose(s.EndReason) {
+		// You ended its agent (its pane kept, shown exited): a thread
+		// lasts until you close it, so it is kept when the machine or the
+		// server it ran on went, which is no close of yours; its session
+		// gone on the server it ran on may be its window closed by hand,
+		// which closes it. (Quitting keeps it: KeepExited.)
+		return l.serverWent(KeyOfFile(f), s.TS, s.Where)
 	}
 	return l.lost(s.TS, s.Where)
+}
+
+// endedOnPurpose: did the agent end as you asked (/exit, a logout, /clear)?
+func endedOnPurpose(reason string) bool {
+	switch reason {
+	case "prompt_input_exit", "logout", "clear":
+		return true
+	}
+	return false
+}
+
+// serverWent: has the machine started, or the server life w ran on gone,
+// since ts? As lost, without its session's own going.
+func (l *lives) serverWent(skey string, ts int64, w agent.Where) (gone, known bool) {
+	switch {
+	case !strings.HasPrefix(skey, "rex-"):
+		return false, true
+	case l.beforeBoot(ts):
+		return true, true
+	case w.Session == "":
+		return false, true
+	}
+	return l.rex.ServerGone(w)
+}
+
+// KeepExited has each thread of this session whose agent you ended (its
+// pane kept, shown exited) kept as lost with the rest when its session
+// goes, as quitting does to every thread: its state forgets why it ended.
+func (e *Env) KeepExited() {
+	for _, f := range e.SessionFiles("thread") {
+		sf := strings.TrimSuffix(f, ".thread") + ".json"
+		if files.Exists(sf) {
+			store.UpdateState(sf, func(r *agent.Record) {
+				if endedOnPurpose(r.EndReason) {
+					r.EndReason = ""
+				}
+			})
+		}
+	}
 }
 
 // retire: the agent of state file f (pid) is gone: its thread lost with

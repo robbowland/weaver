@@ -1434,6 +1434,9 @@ func (e *Env) Quit(args []string) error {
 			return cli.ErrCancelled
 		}
 	}
+	// Quitting is not closing: a thread whose agent you exited comes back
+	// with the rest, as the card says.
+	e.KeepExited()
 	if err := e.Mux().Quit(); err != nil {
 		return errors.New("could not quit " + name + " in Rex")
 	}

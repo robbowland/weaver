@@ -64,3 +64,44 @@ func TestRetireKeepsALostThreadItCannotRecord(t *testing.T) {
 		t.Errorf("once it can be: %d lost records, want 1", len(ls))
 	}
 }
+
+// A thread whose agent you exited (its pane kept, shown exited) lasts
+// until you close it: the machine starting again since keeps it as lost,
+// as any thread; marked as kept (as quitting does), so does its session
+// going. Its session gone otherwise (its window closed by hand) forgets
+// it, ended on purpose.
+func TestExitedThreadLasts(t *testing.T) {
+	rextest.NoRex(t)
+	for _, c := range []struct {
+		name   string
+		ts     int64
+		kept   bool // KeepExited before
+		reason string
+		want   int // lost records
+	}{
+		{"exited, then the machine started again", process.BootTime() - 60, false, "prompt_input_exit", 1},
+		{"logged out, then the machine started again", process.BootTime() - 60, false, "logout", 1},
+	} {
+		dir := t.TempDir()
+		e := &Env{StateDir: dir + "/state", LostDir: dir + "/lost", SKey: "rex-s"}
+		for _, d := range []string{e.StateDir, e.LostDir} {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sf := e.StateFile("3")
+		if err := os.WriteFile(e.PaneFile("3", "thread"), []byte(`{"num":1,"name":"t","session_id":"conv"}`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(sf, []byte(fmt.Sprintf(`{"pane":3,"agent":"claude","state":"ended","ts":%d,"session_id":"conv","pid":7,"end_reason":%q}`+"\n", c.ts, c.reason)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if c.kept {
+			e.KeepExited()
+		}
+		e.Retire(sf, "7")
+		if ls, _ := os.ReadDir(e.LostDir); len(ls) != c.want {
+			t.Errorf("%s: %d lost records, want %d", c.name, len(ls), c.want)
+		}
+	}
+}
