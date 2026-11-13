@@ -17,9 +17,12 @@ import (
 	"github.com/robbowland/weaver/internal/cli"
 )
 
-// reOurs is a hook command of weaver's: wvr alone, a path to it, either
-// with arguments.
-var reOurs = regexp.MustCompile(`^(\S*/)?wvr( |$)`)
+// reOurs is a hook of weaver's written as one command line (wvr by name or
+// path, run as a hook): "wvr hook --async", "/some path/bin/wvr hook".
+var reOurs = regexp.MustCompile(`^(.*/)?wvr hook( |$)`)
+
+// ourNames are weaver's names.
+var ourNames = map[string]bool{"wvr": true}
 
 // Run is `wvr setup [--dry-run] [--bin PATH]`: weaver's hooks into Claude
 // Code's settings, run by this binary's path (or PATH), each file backed up before
@@ -232,9 +235,10 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 			for _, h := range hs {
 				var c struct {
 					Command any `json:"command"`
+					Args    any `json:"args"`
 				}
 				// A hook that is not an object is not weaver's: kept.
-				if json.Unmarshal(h, &c) == nil && isOurs(c.Command) {
+				if json.Unmarshal(h, &c) == nil && isOurs(c.Command, c.Args) {
 					continue
 				}
 				keep = append(keep, h)
@@ -292,8 +296,18 @@ func mergeHooks(settings, add []byte, bin string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// isOurs is whether a hook's command runs weaver.
-func isOurs(command any) bool {
+// isOurs is whether a hook runs weaver as a hook: its command wvr (by name
+// or path, spaces and all) with hook its first argument, or one command
+// line saying that (reOurs). Another program named wvr, or wvr run
+// otherwise, is yours.
+func isOurs(command, args any) bool {
 	s, ok := command.(string)
-	return ok && reOurs.MatchString(s)
+	if !ok {
+		return false
+	}
+	if as, ok := args.([]any); ok && len(as) > 0 {
+		first, _ := as[0].(string)
+		return ourNames[filepath.Base(s)] && first == "hook"
+	}
+	return reOurs.MatchString(s)
 }

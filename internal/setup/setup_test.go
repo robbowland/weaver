@@ -165,3 +165,49 @@ func TestBringSkill(t *testing.T) {
 		t.Errorf("your skill: %q, want it left alone", b)
 	}
 }
+
+// weaver's hooks are those that run wvr as a hook (hook first): a path
+// with a space in it is still weaver's, so a second merge changes
+// nothing; another program (OpenTelemetry's weaver, a wvr of your own) or
+// wvr run otherwise is yours, kept, as is a hook of weaver's old names.
+func TestMergeHooksKnowsWeaversOwn(t *testing.T) {
+	add, err := os.ReadFile("../../config/claude-hooks.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"hooks": {
+    "Stop": [{ "hooks": [
+      { "type": "command", "command": "weaver registry check --policy p" },
+      { "type": "command", "command": "/opt/tools/wvr lint" },
+      { "type": "command", "command": "/opt/otel/weaver", "args": ["registry", "check"] },
+      { "type": "command", "command": "/old place/bin/weaver hook" },
+      { "type": "command", "command": "/old place/bin/wvr", "args": ["hook", "--async"] }
+    ] }]
+  }}`
+	bin := "/Users/x/My Tools/bin/wvr"
+	once, err := mergeHooks([]byte(settings), add, bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	twice, err := mergeHooks(once, add, bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(once) != string(twice) {
+		t.Errorf("a second merge, with weaver at a path with a space, changed it:\n%s\nthen\n%s", once, twice)
+	}
+	s := string(once)
+	for _, kept := range []string{"weaver registry check --policy p", "/opt/tools/wvr lint", "/opt/otel/weaver", "/old place/bin/weaver hook"} {
+		if !strings.Contains(s, kept) {
+			t.Errorf("yours, removed: %s\n%s", kept, s)
+		}
+	}
+	for _, gone := range []string{"/old place/bin/wvr"} {
+		if strings.Contains(s, gone) {
+			t.Errorf("an old weaver hook kept: %s", gone)
+		}
+	}
+	if n := strings.Count(s, bin); n != strings.Count(string(add), `"wvr"`) {
+		t.Errorf("weaver's hooks: %d, want one each", n)
+	}
+}
