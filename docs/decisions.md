@@ -989,6 +989,18 @@ can supersede an earlier one, and says so.
   Neovim plugin's copies under `~/.local/share/weaver`. Rob's machine had
   none of them left.
 
+- 2026-11-13: A look at the fleet (the board's rows, its card, the
+  status counts, alt+1) is one `rex do` against home: its Lua lists the
+  sessions, attaches to each thread's that runs (a script's connection
+  reaches only the sessions it is attached to: `session.view` of another
+  answers "stream is not attached") and calls each terminal's methods by
+  session (`block.method`). It was `session.list`, then a `rex do` for home
+  and each thread at once: with six threads, eight processes of a 42 MB
+  binary and two in turn (~45 ms); now one, `_rows` 43.8 to 28.7 ms median,
+  `_preview` 47.6 to 32.9 ms, the same rows byte for byte. A Rex without
+  `rex.call` or `rex.session.attach` (a script error, `-e:<line>:`) is
+  looked at session by session as before.
+
 ## Code
 
 - 2026-10-16: An audit against Go's module layout guide, Google's and

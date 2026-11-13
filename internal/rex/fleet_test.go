@@ -214,3 +214,55 @@ func TestFocusShowsItsSession(t *testing.T) {
 		t.Errorf("focus: no %q in:\n%s", want, calls())
 	}
 }
+
+// The fleet is looked at in one call, home's and every thread's session
+// that runs; a Rex whose scripts lack what that call uses is looked at
+// session by session, alike; a Rex that fails a call fails the look.
+func TestFleetLook(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	var ps []mux.PaneID
+	for range 3 {
+		_, p, _, err := f.OpenSession("demo/t", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep, Dir: "/"}, Label: "main", Background: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ps = append(ps, p)
+	}
+	// One gone: a thread closed is no session to look at.
+	f.CloseSession(ps[2])
+	names := func(l []mux.Pane) string {
+		var s []string
+		for _, p := range l {
+			s = append(s, string(p.ID)+"@"+p.Session)
+		}
+		return strings.Join(s, " ")
+	}
+	one, err := f.Panes()
+	if err != nil || len(one) != 3 {
+		t.Fatalf("panes in one look: %+v %v", one, err)
+	}
+	if _, ok := paneIn(one, ps[2]); ok {
+		t.Errorf("a closed thread's pane listed: %s", names(one))
+	}
+	ws, err := f.Windows()
+	if err != nil || len(ws) != 3 {
+		t.Errorf("windows in one look: %+v %v", ws, err)
+	}
+	defer func(s string) { fleetScript = s }(fleetScript)
+	fleetScript = `return rex.no_such_thing.at_all`
+	each, err := f.Panes()
+	if err != nil || names(each) != names(one) {
+		t.Errorf("panes session by session: %s (%v), want %s", names(each), err, names(one))
+	}
+	fleetScript = `error("rex: down", 0)`
+	if _, err := f.Panes(); err == nil {
+		t.Error("a failed look gave panes")
+	}
+}

@@ -804,8 +804,11 @@ over (`takeOver`): its id goes into their records.
   that takes fails, when weaver takes nothing for lost (see [Lost
   threads](#lost-threads)).
 - **Calls:** each look at the session is one `rex do` (its view, and each
-  terminal's size, with `Panes` its directory and processes too); every
-  other method one `rex api call`. A pane's environment goes through
+  terminal's size, with `Panes` its directory and processes too); a look at
+  the whole fleet (`Fleet.Panes`, `Fleet.Windows`) is one too, against
+  home, which lists the sessions Rex runs and attaches to each thread's to
+  look at it (`fleetLua`; a Rex whose scripts cannot, session by session);
+  every other method one `rex api call`. A pane's environment goes through
   `env(1)`, Rex setting none: `WEAVER_WVR`, the
   weaver that started it, which home follows ahead of PATH (Rex runs a
   command after the login shell's startup). `Spawn.Keep` makes a pane stay

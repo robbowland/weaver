@@ -40,6 +40,59 @@ end
 return { view = view, blocks = blocks }
 `
 
+// fleetLua is one look at a fleet, in one rex do against its home: the
+// sessions Rex runs, and a snapshot (as snapshotLua's) of home and of each
+// session of rex.args.threads that runs. A script's connection reaches a
+// session other than its own once it attaches to it; a terminal's methods
+// are then called by session (block.method). A Rex call that fails fails
+// the look (error at level 0: no position, unlike a script's own error).
+const fleetLua = `
+local term = "` + terminal + `"
+local list, err = rex.call("session.list", {})
+if not list then error(err, 0) end
+local live = {}
+for _, s in ipairs(list.sessions or {}) do live[s.session_id] = true end
+local function method(sid, b, m)
+  local r, err = rex.call("block.method", { session_id = sid, block_id = b, method = m })
+  if r == nil then error(err, 0) end
+  return r
+end
+local function look(sid, view)
+  local blocks = {}
+  for _, w in ipairs(view.windows or {}) do
+    for _, layer in ipairs(w.layers or {}) do
+      if layer.kind == "tiled" then
+        for _, b in ipairs(layer.blocks or {}) do
+          if b.creator_name == term then
+            local info = { size = method(sid, b.block_id, "size") }
+            if rex.args.full then
+              info.pwd = method(sid, b.block_id, "pwd")
+              info.process = method(sid, b.block_id, "process")
+            end
+            blocks[b.block_id] = info
+          end
+        end
+      end
+    end
+  end
+  return { view = view, blocks = blocks }
+end
+local snaps = {}
+local view, err = rex.session.view{}
+if not view then error(err, 0) end
+snaps[rex.session_id] = look(rex.session_id, view)
+for _, sid in ipairs(rex.args.threads or {}) do
+  if live[sid] and not snaps[sid] then
+    local a, err = rex.session.attach{ session_id = sid }
+    if not a then error(err, 0) end
+    snaps[sid] = look(sid, a.view)
+  end
+end
+local ids = {}
+for sid in pairs(live) do ids[#ids + 1] = sid end
+return { live = ids, snaps = snaps }
+`
+
 // list is a JSON array that Lua may have written as {} when empty.
 type list[T any] []T
 

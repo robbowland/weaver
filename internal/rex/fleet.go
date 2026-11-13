@@ -133,31 +133,96 @@ func (f Fleet) Quit() error {
 	return err
 }
 
+// look is a snapshot of home and of every thread's session that runs, in
+// one rex do (fleetLua) rather than a call to list the sessions and one
+// each to look at them: the sessions in order, home first, and their
+// snapshots. A Rex without what that script uses (its error is the
+// script's own, "-e:<line>: ...") is looked at session by session.
+func (f Fleet) look(full bool) ([]Session, map[string]snapshot, error) {
+	ts := f.Home.ids().threads(f.Home.ID)
+	var out struct {
+		Live  list[string]        `json:"live"`
+		Snaps map[string]snapshot `json:"snaps"`
+	}
+	err := do(f.Home.ID, fleetScript, map[string]any{"full": full, "threads": orNone(ts)}, &out)
+	if err != nil && strings.Contains(err.Error(), "-e:") {
+		return f.lookEach(full)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	ss := []Session{f.Home}
+	for _, id := range ts {
+		if _, ok := out.Snaps[id]; ok && id != f.Home.ID {
+			ss = append(ss, f.in(id))
+		}
+	}
+	return ss, out.Snaps, nil
+}
+
+// lookEach is look, a call for the sessions and one for each.
+func (f Fleet) lookEach(full bool) ([]Session, map[string]snapshot, error) {
+	ss, err := f.all()
+	if err != nil {
+		return nil, nil, err
+	}
+	sns, err := each(ss, func(s Session) ([]snapshot, error) {
+		sn, err := s.snapshot(full)
+		return []snapshot{sn}, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	m := map[string]snapshot{}
+	for i, s := range ss {
+		m[s.ID] = sns[i]
+	}
+	return ss, m, nil
+}
+
+// fleetScript is the script look runs: fleetLua (a test's stand-in).
+var fleetScript = fleetLua
+
+// orNone is l, or an empty list for none: [] in JSON, which Lua reads as
+// an empty table (null it reads as nil).
+func orNone(l []string) []string {
+	if l == nil {
+		return []string{}
+	}
+	return l
+}
+
 // Panes are the panes of home and of every thread's session; an error
 // when one of them did not answer (a pane not listed is one gone).
 func (f Fleet) Panes() ([]mux.Pane, error) {
-	ss, err := f.all()
+	ss, sns, err := f.look(true)
 	if err != nil {
 		return nil, err
 	}
-	return each(ss, Session.Panes)
+	var out []mux.Pane
+	for _, s := range ss {
+		out = append(out, s.panesOf(sns[s.ID])...)
+	}
+	return out, nil
 }
 
 // Windows are the windows of home and of every thread's session; the
 // active one is Here's.
 func (f Fleet) Windows() ([]mux.Window, error) {
-	ss, err := f.all()
+	ss, sns, err := f.look(false)
 	if err != nil {
 		return nil, err
 	}
 	here := f.here().ID
-	return each(ss, func(s Session) ([]mux.Window, error) {
-		ws, err := s.Windows()
+	var out []mux.Window
+	for _, s := range ss {
+		ws := s.windowsOf(sns[s.ID])
 		for i := range ws {
 			ws[i].Active = ws[i].Active && s.ID == here
 		}
-		return ws, err
-	})
+		out = append(out, ws...)
+	}
+	return out, nil
 }
 
 // Active is the active pane where wvr runs.
