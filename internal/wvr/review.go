@@ -210,7 +210,7 @@ func (e *Env) Panel(args []string) error {
 		args := reviewArgs(dir, e.reviewBase(a))
 		if args == nil {
 			fmt.Print("\033[2J\033[H" + CGrey + "no changes on this branch yet" + COff + "\n")
-			time.Sleep(2 * time.Second)
+			waitForChange(dir, func() string { return e.reviewBase(a) }, e.StateFile(a))
 			continue
 		}
 		was := spanOf(dir, e.reviewBase(a))
@@ -260,6 +260,31 @@ func (s span) rewritten(dir string, now span) bool {
 		return true
 	}
 	return now.head != s.head && !git.OK(dir, "merge-base", "--is-ancestor", s.head, now.head)
+}
+
+// waitForChange waits, while a branch has nothing to review, for what may
+// give it some: its refs moved (git.Stamp), its base changed, or its
+// agent's state written (its hooks: an edit, a command, a turn), looked
+// at every 2 s; and 10 s at most, for an edit of yours (nvim, a shell),
+// which says nothing. Then reviewArgs looks again with git, git status
+// and all, where it ran every 2 s.
+func waitForChange(dir string, base func() string, state string) {
+	stamp, b, at := git.Stamp(dir), base(), modTime(state)
+	for range 5 {
+		time.Sleep(2 * time.Second)
+		if git.Stamp(dir) != stamp || base() != b || modTime(state) != at {
+			return
+		}
+	}
+}
+
+// modTime is file f's modification time (zero when there is none).
+func modTime(f string) time.Time {
+	st, err := os.Stat(f)
+	if err != nil {
+		return time.Time{}
+	}
+	return st.ModTime()
 }
 
 // rewriteCheck is untilRewritten's look, once a second, at whether the

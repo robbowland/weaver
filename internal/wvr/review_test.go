@@ -262,3 +262,35 @@ func TestRewriteCheckLooksWhenRefsMove(t *testing.T) {
 		t.Error("an amend: not seen at the next look")
 	}
 }
+
+// A panel with nothing to review waits for what may give it some, and
+// no longer: a commit (its refs), or its agent's state written (a hook:
+// an edit, a command).
+func TestWaitForChange(t *testing.T) {
+	d, _ := filepath.EvalSymlinks(t.TempDir())
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", d, "-c", "user.email=t@e", "-c", "user.name=t"}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("commit", "-q", "--allow-empty", "-m", "init")
+	state := filepath.Join(t.TempDir(), "state.json")
+	base := func() string { return "" }
+	for name, change := range map[string]func(){
+		"a commit":         func() { run("commit", "-q", "--allow-empty", "-m", "c") },
+		"its agent's hook": func() { _ = os.WriteFile(state, []byte("{}\n"), 0o644) },
+	} {
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			change()
+		}()
+		start := time.Now()
+		waitForChange(d, base, state)
+		if took := time.Since(start); took > 4*time.Second {
+			t.Errorf("%s: waited %v, past the look after it", name, took.Round(100*time.Millisecond))
+		}
+	}
+}
