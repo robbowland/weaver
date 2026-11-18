@@ -260,6 +260,13 @@ can supersede an earlier one, and says so.
   HEAD: on a branch with no commits yet, the agent's first commit dropped
   its files out of the open review until `q`. rb2 keeps the range's base,
   so the panel shows every change since the fork point, committed or not.
+- 2026-11-18: An agent makes the worktrees its work needs (Rob), and the
+  weaver skill's rule to leave worktrees to Rob goes. That rule stood in
+  for following (1057756: policy over machinery): one worktree per thread
+  kept the agent's work where its one review could see it. With the panel
+  following the agent, work in another repository or on a branch of its
+  own needs no thread of its own. Removing the worktrees agents make is
+  not settled yet.
 - 2026-11-18: The review panel follows its agent (Rob: the panel should
   show the agent's work without a new thread for each worktree it works
   in). It runs tuicr where the agent last edited or moved to (`agentWhere`),
