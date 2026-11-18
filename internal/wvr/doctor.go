@@ -147,10 +147,10 @@ func tuicrCheck() check {
 	case m == nil:
 		c.found = reVersion.FindString(string(out)) + ", upstream's: weaver needs its fork"
 		c.remedy = byHand{"brew uninstall tuicr && brew install " + tuicrFork}
-	case !atLeast(m[1], 0, 29) && !(atLeast(m[1], 0, 28) && atLeast(m[2], 2)):
-		c.found, c.remedy = m[0]+", weaver needs 0.28.0-rb2 or newer", brewUpgrade{tuicrFork}
-	default:
+	case atLeast(m[1], 0, 29), atLeast(m[1], 0, 28) && atLeast(m[2], 2):
 		c.ok, c.found = true, m[0]
+	default:
+		c.found, c.remedy = m[0]+", weaver needs 0.28.0-rb2 or newer", brewUpgrade{tuicrFork}
 	}
 	return c
 }
