@@ -183,12 +183,13 @@ func (e *Env) Review(args []string) error {
 // panelTitle is the title of a review panel in dir.
 func panelTitle(dir string) string { return "review: " + filepath.Base(dir) }
 
-// Panel is `wvr _panel [AGENT]`, what runs in a review panel, in the
-// worktree it reviews: bound to the agent (its pane and pid, as it starts),
-// then tuicr ($WEAVER_TUICR, else tuicr) on the branch, started again
-// whenever it ends (q), so it reads the branch afresh: tuicr takes its range
-// once, as it starts, and a commit made while it is open joins its commit
-// list only then. It ends with its pane.
+// Panel is `wvr _panel [AGENT]`, what runs in a review panel: bound to the
+// agent (its pane and pid, as it starts), then tuicr ($WEAVER_TUICR, else
+// tuicr) on the branch of the worktree the agent works in (panelDir),
+// started again whenever it ends (q), so it reads the branch afresh: tuicr
+// takes its range once, as it starts, and a commit made while it is open
+// joins its commit list only then. When the agent goes to work in another
+// worktree, tuicr is started again there. It ends with its pane.
 func (e *Env) Panel(args []string) error {
 	a, ok := mux.ParsePane(arg(args, 0))
 	if ok && e.MyPane != "" {
@@ -200,25 +201,28 @@ func (e *Env) Panel(args []string) error {
 		_, _ = os.Stdin.Read(make([]byte, 1))
 		return &cli.Exit{Code: 1}
 	}
-	dir, _ := os.Getwd()
+	here, _ := os.Getwd()
 	// tuicr's e opens $EDITOR: nvim, whatever the pane's environment says
 	// (Rex runs a key's command without your shell's).
 	env := append(os.Environ(), "EDITOR=nvim")
 	// ctrl+c is tuicr's while it runs, never the loop's.
 	sig := make(chan os.Signal, 1)
 	for {
-		args := reviewArgs(dir, e.reviewBase(a))
+		dir := e.panelDir(a, here)
+		base := func() string { return e.reviewBase(a, dir) }
+		args := reviewArgs(dir, base())
 		if args == nil {
 			fmt.Print("\033[2J\033[H" + CGrey + "no changes on this branch yet" + COff + "\n")
-			waitForChange(dir, func() string { return e.reviewBase(a) }, e.StateFile(a))
+			waitForChange(dir, base, e.StateFile(a))
 			continue
 		}
-		was := spanOf(dir, e.reviewBase(a))
+		was := spanOf(dir, base())
 		c := exec.Command(tuicr, args...)
 		c.Dir, c.Env, c.Stdin, c.Stdout, c.Stderr = dir, env, os.Stdin, os.Stdout, os.Stderr
 		signal.Notify(sig, os.Interrupt, syscall.SIGQUIT)
 		start := time.Now()
-		ended, err := untilRewritten(c, rewriteCheck(dir, func() string { return e.reviewBase(a) }, was))
+		rewritten := rewriteCheck(dir, base, was)
+		ended, err := untilRewritten(c, func() bool { return e.panelDir(a, here) != dir || rewritten() })
 		signal.Stop(sig)
 		if ended {
 			// Out of tuicr's screen, the terminal as it was, and at once
@@ -237,6 +241,20 @@ func (e *Env) Panel(args []string) error {
 		}
 		time.Sleep(wait - time.Since(start))
 	}
+}
+
+// panelDir is where agent a's review panel looks now: the worktree the
+// agent works in (agentWhere: where it last edited, or moved to), so the
+// panel follows it into another worktree or repository; else here, where
+// the panel started.
+func (e *Env) panelDir(a mux.PaneID, here string) string {
+	if a == "" {
+		return here
+	}
+	if root, ok := e.agentWhere(a); ok {
+		return root
+	}
+	return here
 }
 
 // span is a review's range as tuicr was launched on it: HEAD and the fork
@@ -307,8 +325,8 @@ func rewriteCheck(dir string, base func() string, was span) func() bool {
 }
 
 // untilRewritten runs c until it ends, looking every second whether its
-// range was rewritten (moved), and ending it when it was: whether it was
-// ended for that, and how it ended. Never while an nvim runs under it
+// range was rewritten or its agent moved to another worktree (moved), and
+// ending it when it was: whether it was ended for that, and how it ended. Never while an nvim runs under it
 // (tuicr's e): ended, tuicr would leave it reading the terminal beside
 // the next tuicr, its edits unsaved; the end waits for it.
 func untilRewritten(c *exec.Cmd, moved func() bool) (bool, error) {
@@ -357,11 +375,15 @@ func reviewArgs(dir, base string) []string {
 	return look
 }
 
-// reviewBase is the branch agent's thread is reviewed against, as its
-// record says now (a pull request's follows its base): "" for none, the
-// default branch.
-func (e *Env) reviewBase(agent mux.PaneID) string {
+// reviewBase is the branch the worktree at dir is reviewed against: its
+// thread's base as the record says now (a pull request's follows its
+// base) when dir is agent's thread's worktree; "" for none, the default
+// branch, as for another worktree the agent works in.
+func (e *Env) reviewBase(agent mux.PaneID, dir string) string {
 	th, _ := store.ReadThread(e.ThreadFile(agent))
+	if th.Worktree != "" && th.Worktree != dir {
+		return ""
+	}
 	return th.Base
 }
 

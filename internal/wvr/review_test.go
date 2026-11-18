@@ -194,11 +194,16 @@ func TestReviewAgainstThreadBase(t *testing.T) {
 	git("add", ".")
 	git("commit", "-q", "-m", "fix")
 	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-s"}}
-	if err := store.Write(e.ThreadFile("5"), store.Thread{Num: 1, Base: baseBranch(d, "release/2.0")}); err != nil {
+	if err := store.Write(e.ThreadFile("5"), store.Thread{Num: 1, Worktree: d, Base: baseBranch(d, "release/2.0")}); err != nil {
 		t.Fatal(err)
 	}
-	if a := strings.Join(reviewArgs(d, e.reviewBase("5")), " "); !strings.HasPrefix(a, "-r "+fork+"..HEAD ") {
+	if a := strings.Join(reviewArgs(d, e.reviewBase("5", d)), " "); !strings.HasPrefix(a, "-r "+fork+"..HEAD ") {
 		t.Errorf("a thread off release/2.0: %q, want from %s", a, fork)
+	}
+	// Its agent at work in another worktree: that one is reviewed against
+	// the default branch, not the thread's base.
+	if b := e.reviewBase("5", t.TempDir()); b != "" {
+		t.Errorf("another worktree's base: %q, want the default branch", b)
 	}
 }
 

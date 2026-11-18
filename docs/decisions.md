@@ -255,6 +255,13 @@ can supersede an earlier one, and says so.
   "Error: No changes to review"). A base merged into the branch needs no
   rule of its own: the fork point moves with it, and the fork keeps the
   merged base out of the diff.
+- 2026-11-18: The review panel follows its agent (Rob: the panel should
+  show the agent's work without a new thread for each worktree it works
+  in). It runs tuicr where the agent last edited or moved to (`agentWhere`),
+  and starts it again there when the agent moves; a worktree other than the
+  thread's is reviewed against the default branch. This is not the
+  following that 2026-10-29 removed: that opened a tab per worktree, which
+  piled up; the panel is one tuicr, ended before the next starts.
 
 ## Holding threads
 

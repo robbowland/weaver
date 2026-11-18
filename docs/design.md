@@ -100,18 +100,20 @@ panel alone in it.
 
 ### Review panel
 
-A thread's left pane is its review: `wvr _panel AGENT`, in the worktree,
-records itself as the agent's (`.panel`: its pane and pid), then runs tuicr
-(`$WEAVER_TUICR`, else `tuicr`) there, and again each time tuicr ends
-(`q`, with weaver's `q_quits`, or `:q`), so it reads the branch afresh:
-tuicr takes its range once, as it starts. While it runs the loop looks
-every second whether that range was rewritten (`span.rewritten`): the
-fork point moved (a rebase onto a newer base, the base merged in, the
-thread's base changed), or HEAD is neither what tuicr was launched on nor
-after it (an amend, a squash, a reset); then it ends tuicr and runs it
-again on the range as it is now. New commits on top wait for `q`: an end
-for them would drop a comment half typed. Each round it picks what to show
-(`reviewArgs`):
+A thread's left pane is its review: `wvr _panel AGENT` records itself as
+the agent's (`.panel`: its pane and pid), then runs tuicr
+(`$WEAVER_TUICR`, else `tuicr`) in the worktree the agent works in
+(`panelDir`: `agentWhere`, where it last edited or moved to, else where the
+panel started), and again each time tuicr ends (`q`, with weaver's
+`q_quits`, or `:q`), so it reads the branch afresh: tuicr takes its range
+once, as it starts. While it runs the loop looks every second whether the
+agent has gone to work in another worktree or repository, or the range was
+rewritten (`span.rewritten`): the fork point moved (a rebase onto a newer
+base, the base merged in, the thread's base changed), or HEAD is neither
+what tuicr was launched on nor after it (an amend, a squash, a reset); then
+it ends tuicr and runs it again where the agent is, on the range as it is
+now. New commits on top wait for `q`: an end for them would drop a comment
+half typed. Each round it picks what to show (`reviewArgs`):
 
 - the branch's commits since its fork point, with what is not committed:
   `-r <fork>..HEAD -w`, the fork point as a SHA (`git.ForkPoint`: the merge
@@ -127,11 +129,13 @@ for them would drop a comment half typed. Each round it picks what to show
   every 2 s: the one review the fork refuses ("No changes to review").
 
 The review base is the thread's record's `base`, read again each round
-(weaver's store is its one source); when that is none or names no commit
-(a branch deleted), the default branch: the upstream remote's (its `HEAD`,
-else `main` or `master`: a fork's base), else origin's, else a local `main`
-or `master`. Its fork point is worked out each round too, so a rebase onto
-a newer base, or the base merged in, moves it. The base is the
+(weaver's store is its one source), for the thread's own worktree; another
+worktree the agent works in is reviewed against the default branch. When
+the base is none or names no commit (a branch deleted), it is the default
+branch: the upstream remote's (its `HEAD`, else `main` or `master`: a
+fork's base), else origin's, else a local `main` or `master`. Its fork
+point is worked out each round too, so a rebase onto a newer base, or the
+base merged in, moves it. The base is the
 remote-tracking branch, which the panel never fetches: one fetched long
 ago is as old as that. Every run has
 `--theme micrographics --no-update-check` and `EDITOR=nvim`, so tuicr's `e`
