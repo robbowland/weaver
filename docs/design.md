@@ -249,6 +249,17 @@ names (a name unchanged is left as it is, so an agent's title is never
 taken for yours) and prints the actions back to browsing; `esc` goes back
 without it.
 
+`wvr branch [PANE] NAME` renames a thread's branch (PANE as for rename;
+else the agent this pane belongs to): `git branch -m` in its worktree, then
+the record's `branch`, and its `name` when that was the branch, then the
+labels and boards as rename does. Its worktree keeps its directory, which
+its agent works in. It refuses a branch the preferred remote has, since a
+pull request on it would keep the old name. A thread's agent gets this to
+do from its first prompt when weaver named its new branch from the task's
+slug (no `--branch`, branch row or item, and a branch weaver made): the
+task, then `weaver named this thread's branch SLUG from the first words of
+the task. Before your first commit, rename it ...` (`branchNote`).
+
 ### Restarting
 
 `wvr restart [--all] [--force] [PANE]` starts a thread's agent again in its

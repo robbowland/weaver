@@ -612,6 +612,15 @@ can supersede an earlier one, and says so.
   is gone: one path to keep and test, and your Worktrunk `worktree-path` and
   hooks always apply. `wvr doctor` checks for it as it does for tuicr, and
   `--fix` installs it.
+- 2026-11-18: A thread's agent names a branch weaver named from the task
+  (Rob: typed tasks made poor branch names). Its first prompt asks it to
+  rename the branch with `wvr branch` before its first commit, so the name
+  can follow the repository's conventions, which the agent can read and
+  weaver cannot. The rename happens after the worktree is made, so its
+  directory keeps the task's name: moving it would pull the directory out
+  from under the running agent. Naming the branch with a model before the
+  worktree is made would have kept the two together, but would delay every
+  new thread.
 
 ## Work items and views
 

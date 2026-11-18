@@ -123,6 +123,12 @@ offline, the fetch takes longer than `WEAVER_FETCH_TIMEOUT` seconds, or there
 is no remote, the branch starts from the local default branch, and the form
 says so.
 
+A branch named from the task (you gave none) is renamed by its agent: its
+first prompt asks it to give the branch a short name for the work, in the
+repository's conventions, with `wvr branch NAME` before its first commit.
+The worktree's directory keeps the task's name. `wvr branch [PANE] NAME`
+does the same from a shell, for a branch not yet pushed.
+
 ### Working in a thread
 
 The review on the left shows what the thread's branch has changed, as the

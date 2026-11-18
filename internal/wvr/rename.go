@@ -2,10 +2,13 @@ package wvr
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
@@ -46,6 +49,61 @@ func (e *Env) Rename(args []string) error {
 		name = n
 	}
 	return e.retitle(p, oneline.Line(strings.TrimSpace(name)))
+}
+
+// RenameBranch is `wvr branch [PANE] NAME`: the branch of the thread of
+// the agent in PANE (else the one this pane belongs to) renamed NAME
+// (renameBranch), then the windows relabelled and the boards reloaded.
+func (e *Env) RenameBranch(args []string) error {
+	if err := e.toWeaverSession(); err != nil {
+		return err
+	}
+	var p mux.PaneID
+	switch {
+	case len(args) == 2:
+		p, _ = e.paneArg(args[0])
+	case len(args) == 1 && e.MyPane != "":
+		p = e.agentOf(e.MyPane)
+	}
+	if p == "" {
+		return errors.New("usage: wvr branch [pane-id] name")
+	}
+	name := args[len(args)-1]
+	old, err := e.renameBranch(p, name)
+	if err != nil {
+		return err
+	}
+	e.PushStatusAndLabels()
+	fmt.Printf("weaver: %s is now %s\n", old, name)
+	return nil
+}
+
+// renameBranch renames the branch of the thread whose agent is pane p to
+// name, in git and in its record, which the board, its close card and the
+// views go by: the name it had. Its worktree keeps its directory, which
+// its agent works in. Refused once the remote has the branch: a pull
+// request on it keeps the old name.
+func (e *Env) renameBranch(p mux.PaneID, name string) (string, error) {
+	th, err := store.ReadThread(e.ThreadFile(p))
+	if err != nil {
+		return "", errNotThread
+	}
+	old := th.Branch
+	if rm := git.PreferredRemote(th.Repo); rm != "" && git.HasRemoteBranch(th.Repo, rm, old) {
+		return "", fmt.Errorf("%s is on %s already: a pull request on it would keep the old name", old, rm)
+	}
+	if out, err := exec.Command("git", "-C", th.Worktree, "branch", "-m", old, name).CombinedOutput(); err != nil {
+		return "", errors.New(strings.TrimSpace(string(out)))
+	}
+	if !store.UpdateThread(e.ThreadFile(p), func(th *store.Thread) {
+		th.Branch = name
+		if th.Name == old {
+			th.Name = name
+		}
+	}) {
+		return "", errors.New("renamed in git, but cannot write its thread record")
+	}
+	return old, nil
 }
 
 var errNotThread = errors.New("its agent is no thread: adopt it first (wvr adopt)")

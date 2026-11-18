@@ -445,7 +445,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	title := formName(fm)
 	label := cmp.Or(title, about)
 	var dir, name, branch, base string
-	created := false
+	created, slugged := false, false
 	if fm.Where == WhereHere {
 		dir = fm.Here
 		name = items.Slugify(about)
@@ -496,6 +496,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
 			return cli.ErrSaid
 		}
+		// Named from the task by weaver, and made just now (threadWorktree
+		// keeps a base only for a branch it makes).
+		slugged = fm.Branch == "" && base != ""
 		if created {
 			e.noteWorktree(dir, fm.Repo)
 		}
@@ -512,6 +515,9 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	prompt := task
 	if it != nil && strings.TrimSpace(task) != "" {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
+	}
+	if slugged {
+		prompt += branchNote(branch)
 	}
 	tok := token()
 	d := e.opening(tok)
@@ -551,6 +557,15 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	e.PushStatus()
 	fmt.Printf("weaver: thread %s in %s (window %s)\n", name, tildify(dir), tab)
 	return nil
+}
+
+// branchNote is what a thread's first prompt ends with when weaver named
+// its new branch from the task's first words, which make a poor name: its
+// agent names it for the work (wvr branch) before anything is committed.
+func branchNote(branch string) string {
+	return "\n\nweaver named this thread's branch " + branch + " from the first words of the task. " +
+		"Before your first commit, rename it to a short name for the work that follows this repository's branch conventions: " +
+		"`wvr branch <name>`."
 }
 
 // agentSpawn is a thread's agent pane (`wvr _agent tok`, in dir),

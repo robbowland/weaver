@@ -71,6 +71,8 @@ const Usage = `usage: wvr [command]
   rename [pane-id] [name]      call a thread name on the board and its window, in place of
                                its agent's title; with no name, ask; an empty one gives the
                                agent's title back
+  branch [pane-id] name        rename a thread's branch (pane-id's, else this agent's)
+                               before it is pushed; its worktree keeps its directory
   restart [--all] [--force] [pane-id]
                                start a thread's agent again where it is (after an update),
                                resuming its conversation; --all, every thread's; one
