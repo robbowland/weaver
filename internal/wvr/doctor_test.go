@@ -50,7 +50,7 @@ func TestBroughtCheckOwnTuicrConfig(t *testing.T) {
 
 // tuicr is Rob's fork or not good enough: missing, it is installed;
 // upstream's, it is replaced by hand (the fork's tuicr has its name); a
-// fork older than 0.28, upgraded.
+// fork older than 0.28.0-rb2, upgraded.
 func TestTuicrCheck(t *testing.T) {
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
@@ -62,10 +62,11 @@ func TestTuicrCheck(t *testing.T) {
 		ok          bool
 		remedy      remedy
 	}{
-		{"tuicr 0.28.0-rb1", "0.28.0-rb1", true, nil},
-		{"tuicr 0.29.1-rb3", "0.29.1-rb3", true, nil},
+		{"tuicr 0.28.0-rb2", "0.28.0-rb2", true, nil},
+		{"tuicr 0.29.0-rb1", "0.29.0-rb1", true, nil},
 		{"tuicr 0.28.0", "0.28.0, upstream's: weaver needs its fork", false, byHand{"brew uninstall tuicr && brew install robbowland/kegs/tuicr"}},
-		{"tuicr 0.27.2-rb1", "0.27.2-rb1, weaver needs 0.28.0-rb1 or newer", false, brewUpgrade{"robbowland/kegs/tuicr"}},
+		{"tuicr 0.28.0-rb1", "0.28.0-rb1, weaver needs 0.28.0-rb2 or newer", false, brewUpgrade{"robbowland/kegs/tuicr"}},
+		{"tuicr 0.27.2-rb3", "0.27.2-rb3, weaver needs 0.28.0-rb2 or newer", false, brewUpgrade{"robbowland/kegs/tuicr"}},
 	} {
 		if err := os.WriteFile(bin+"/tuicr", []byte("#!/bin/sh\necho '"+x.says+"'\n"), 0o755); err != nil {
 			t.Fatal(err)

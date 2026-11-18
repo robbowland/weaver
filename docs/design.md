@@ -112,15 +112,18 @@ rewritten (`span.rewritten`): the fork point moved (a rebase onto a newer
 base, the base merged in, the thread's base changed), or HEAD is neither
 what tuicr was launched on nor after it (an amend, a squash, a reset); then
 it ends tuicr and runs it again where the agent is, on the range as it is
-now. New commits on top wait for `q`: an end for them would drop a comment
-half typed. Each round it picks what to show (`reviewArgs`):
+now. New commits on top need no new run: the fork diffs from the fork point
+to the work tree, so they stay in the diff as they land (they join its
+commit list at the next round). Each round it picks what to show
+(`reviewArgs`):
 
 - the branch's commits since its fork point, with what is not committed:
   `-r <fork>..HEAD -w`, the fork point as a SHA (`git.ForkPoint`: the merge
   base of HEAD and the review base, never the base's name, since tuicr
   diffs a range's two ends and with `main..HEAD` a file main gained after
   the fork showed as deleted). Rob's fork of tuicr opens this on the work
-  tree while the branch has no commits of its own, and opens one whose
+  tree while the branch has no commits of its own, keeping the fork point
+  as its base when commits come, and opens one whose
   commits change nothing in all (a commit and its revert) on its empty diff;
 - with no review base, what is not committed (`-w`), else tuicr's own
   choice of commit;

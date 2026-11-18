@@ -118,16 +118,18 @@ func tool(name, cmd, formula string, w weight, versionArg string, least ...int) 
 }
 
 // tuicrFork is the formula of Rob's fork of tuicr, which the review panel
-// needs: upstream's refuses a range with no commits that -w would show (the
-// work tree), and lets a merged base into a range's diff.
+// needs: upstream's lets a merged base into a range's diff, and reviews a
+// range with no commits against HEAD, so a commit made while it is open
+// drops out of it.
 const tuicrFork = "robbowland/kegs/tuicr"
 
 // reTuicrFork is the fork's version, as tuicr --version says it: upstream's
-// with -rbN after it (0.28.0-rb1).
-var reTuicrFork = regexp.MustCompile(`(\d+(?:\.\d+)+)-rb\d+`)
+// with -rbN after it (0.28.0-rb2).
+var reTuicrFork = regexp.MustCompile(`(\d+(?:\.\d+)+)-rb(\d+)`)
 
-// tuicrCheck is tuicr as the review panel needs it: Rob's fork, at 0.28 or
-// later. Upstream's tuicr is replaced, by hand: the fork installs a tuicr
+// tuicrCheck is tuicr as the review panel needs it: Rob's fork, at
+// 0.28.0-rb2 or later (one rebased onto a newer upstream starts at rb1
+// again). Upstream's tuicr is replaced, by hand: the fork installs a tuicr
 // of the same name.
 func tuicrCheck() check {
 	c := check{name: "tuicr", weight: needed}
@@ -145,8 +147,8 @@ func tuicrCheck() check {
 	case m == nil:
 		c.found = reVersion.FindString(string(out)) + ", upstream's: weaver needs its fork"
 		c.remedy = byHand{"brew uninstall tuicr && brew install " + tuicrFork}
-	case !atLeast(m[1], 0, 28):
-		c.found, c.remedy = m[0]+", weaver needs 0.28.0-rb1 or newer", brewUpgrade{tuicrFork}
+	case !atLeast(m[1], 0, 29) && !(atLeast(m[1], 0, 28) && atLeast(m[2], 2)):
+		c.found, c.remedy = m[0]+", weaver needs 0.28.0-rb2 or newer", brewUpgrade{tuicrFork}
 	default:
 		c.ok, c.found = true, m[0]
 	}

@@ -67,9 +67,9 @@ Homebrew installs everything else weaver uses: fzf, tuicr and
 [Worktrunk](https://worktrunk.dev) (which makes the threads' worktrees), which
 weaver needs, and Neovim (for editing from a review) and gh, which it can do
 without. The tuicr is [a fork](https://github.com/robbowland/tuicr)
-(`robbowland/kegs/tuicr`, 0.28.0-rb1 or later): it shows a branch with no
-commits yet as its uncommitted edits, keeps a base merged into the branch out
-of the diff, and has the quieter look weaver's review uses. `wvr doctor` says
+(`robbowland/kegs/tuicr`, 0.28.0-rb2 or later): it shows every change since
+a branch started, committed or not, as the agent commits, keeps a base merged
+into the branch out of the diff, and has the quieter look weaver's review uses. `wvr doctor` says
 when the tuicr you have is upstream's.
 
 ## Install

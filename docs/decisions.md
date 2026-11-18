@@ -255,6 +255,11 @@ can supersede an earlier one, and says so.
   "Error: No changes to review"). A base merged into the branch needs no
   rule of its own: the fork point moves with it, and the fork keeps the
   merged base out of the diff.
+- 2026-11-18: The review panel needs the fork at 0.28.0-rb2, superseding
+  rb1 above. rb1, like upstream, reviewed an empty range with `-w` against
+  HEAD: on a branch with no commits yet, the agent's first commit dropped
+  its files out of the open review until `q`. rb2 keeps the range's base,
+  so the panel shows every change since the fork point, committed or not.
 - 2026-11-18: The review panel follows its agent (Rob: the panel should
   show the agent's work without a new thread for each worktree it works
   in). It runs tuicr where the agent last edited or moved to (`agentWhere`),
