@@ -378,21 +378,20 @@ func ghItem(it github.Item) viewItem {
 		v.startOn = v.branch
 		f("by", "@"+it.Author, CGrey, 1)
 		f("branch", it.Base+" ← "+it.Head, CGrey, 1)
+		pr := prOfItem(it)
 		label := "review"
-		switch it.Review {
-		case "CHANGES_REQUESTED":
-			f(label, "changes requested", CRed, 1)
+		switch pr.Review {
+		case reviewChanges, reviewApproved:
+			f(label, string(pr.Review), prSignal(checksNone, pr.Review), 1)
 			label = ""
-		case "APPROVED":
-			f(label, "approved", CGreen, 1)
-			label = ""
+		case reviewNone, reviewRequested:
 		}
 		if len(it.Requested) > 0 {
 			f(label, "waits on "+strings.Join(it.Requested, ", "), CGrey, 2)
 		}
 		label = "checks"
 		if n := len(it.FailingChecks); n > 0 {
-			f(label, strconv.Itoa(n)+" failing: "+strings.Join(it.FailingChecks, ", "), CRed, 2)
+			f(label, strconv.Itoa(n)+" failing: "+strings.Join(it.FailingChecks, ", "), prSignal(checksFailing, reviewNone), 2)
 			label = ""
 		}
 		var cs []string
@@ -451,19 +450,22 @@ func ghFact(it github.Item) string {
 		}
 		return CDim + "@" + it.Author + COff
 	}
+	pr, fact := prOfItem(it), ""
 	switch {
-	case it.Draft:
+	case pr.Draft:
 		return CDim + "draft" + COff
-	case it.Review == "CHANGES_REQUESTED":
-		return CRed + "changes requested" + COff
-	case len(it.FailingChecks) == 1:
-		return CRed + it.FailingChecks[0] + " failing" + COff
-	case len(it.FailingChecks) > 1:
-		return CRed + strconv.Itoa(len(it.FailingChecks)) + " checks failing" + COff
-	case it.Review == "APPROVED":
-		return CGreen + "approved" + COff
-	case it.RunningChecks > 0:
-		return CGrey + "checks running" + COff
+	case pr.Review == reviewChanges:
+		fact = string(reviewChanges)
+	case pr.Checks == checksFailing && len(it.FailingChecks) == 1:
+		fact = it.FailingChecks[0] + " failing"
+	case pr.Checks == checksFailing:
+		fact = strconv.Itoa(len(it.FailingChecks)) + " checks failing"
+	case pr.Review == reviewApproved:
+		fact = string(reviewApproved)
+	case pr.Checks == checksRunning:
+		fact = "checks running"
+	default:
+		return CDim + "@" + it.Author + COff
 	}
-	return CDim + "@" + it.Author + COff
+	return prSignal(pr.Checks, pr.Review) + fact + COff
 }

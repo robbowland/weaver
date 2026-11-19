@@ -345,27 +345,20 @@ func prLine(pr threadPR) (string, string) {
 	if pr.Draft {
 		ps = append(ps, "draft")
 	}
-	if pr.Checks != "" {
-		ps = append(ps, "checks "+pr.Checks)
+	if pr.Checks != checksNone {
+		ps = append(ps, "checks "+string(pr.Checks))
 	}
 	switch pr.Review {
-	case "":
-	case "requested":
+	case reviewNone:
+	case reviewRequested:
 		ps = append(ps, "review requested")
-	default:
-		ps = append(ps, pr.Review)
+	case reviewChanges, reviewApproved:
+		ps = append(ps, string(pr.Review))
 	}
 	if len(ps) == 0 {
-		ps = append(ps, "open")
+		ps = append(ps, string(prOpen))
 	}
-	colour := CGrey
-	switch {
-	case pr.Checks == "failing" || pr.Review == "changes requested":
-		colour = CRed
-	case pr.Review == "approved":
-		colour = CGreen
-	}
-	return num + strings.Join(ps, " · "), colour
+	return num + strings.Join(ps, " · "), prSignal(pr.Checks, pr.Review)
 }
 
 // rowOfRecord is record s's state as a row, for an agent with no row.

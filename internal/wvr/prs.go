@@ -19,28 +19,53 @@ import (
 // board's rows and cards read that file alone, so a redraw asks neither
 // GitHub nor git.
 
-// How a thread's pull request stands.
+// prState is how a thread's pull request stands.
+type prState string
+
 const (
-	prOpen   = "open"
-	prMerged = "merged"
-	prClosed = "closed"
+	prOpen   prState = "open"
+	prMerged prState = "merged"
+	prClosed prState = "closed"
+)
+
+// prChecks is how a pull request's checks stand: failing when one fails,
+// else running when one runs, else passing; checksNone for none.
+type prChecks string
+
+const (
+	checksNone    prChecks = ""
+	checksFailing prChecks = "failing"
+	checksRunning prChecks = "running"
+	checksPassing prChecks = "passing"
+)
+
+// prReview is where a pull request's review stands: changes requested,
+// else approved, else asked for; reviewNone for none asked.
+type prReview string
+
+const (
+	reviewNone      prReview = ""
+	reviewChanges   prReview = "changes requested"
+	reviewApproved  prReview = "approved"
+	reviewRequested prReview = "requested"
 )
 
 // threadPR is a thread's pull request: its number (none when git alone
 // says its branch merged), how it stands, whether it is a draft, its
-// checks (failing, running, passing; "" for none) and its review (changes
-// requested, approved, requested; "" for none asked). Into is the branch
-// git says it merged into (origin/main), when git said so.
+// checks and its review. Into is the branch git says it merged into
+// (origin/main), when git said so.
 type threadPR struct {
-	Num    int    `json:"num,omitempty"`
-	State  string `json:"state"`
-	Draft  bool   `json:"draft,omitempty"`
-	Checks string `json:"checks,omitempty"`
-	Review string `json:"review,omitempty"`
-	Into   string `json:"into,omitempty"`
+	Num    int      `json:"num,omitempty"`
+	State  prState  `json:"state"`
+	Draft  bool     `json:"draft,omitempty"`
+	Checks prChecks `json:"checks,omitempty"`
+	Review prReview `json:"review,omitempty"`
+	Into   string   `json:"into,omitempty"`
 }
 
-// prOfItem is pull request it as a thread shows it.
+// prOfItem is pull request it as weaver reads it: what the GITHUB view's
+// fact (ghFact) and card, a thread's card (prLine) and its row
+// (rowSignals) say of it.
 func prOfItem(it github.Item) threadPR {
 	pr := threadPR{Num: it.Number, State: prOpen, Draft: it.Draft}
 	switch strings.ToUpper(it.State) {
@@ -51,21 +76,34 @@ func prOfItem(it github.Item) threadPR {
 	}
 	switch {
 	case len(it.FailingChecks) > 0:
-		pr.Checks = "failing"
+		pr.Checks = checksFailing
 	case it.RunningChecks > 0:
-		pr.Checks = "running"
+		pr.Checks = checksRunning
 	case it.PassingChecks > 0:
-		pr.Checks = "passing"
+		pr.Checks = checksPassing
 	}
 	switch {
 	case it.Review == "CHANGES_REQUESTED":
-		pr.Review = "changes requested"
+		pr.Review = reviewChanges
 	case it.Review == "APPROVED":
-		pr.Review = "approved"
+		pr.Review = reviewApproved
 	case len(it.Requested) > 0 || it.Review == "REVIEW_REQUIRED":
-		pr.Review = "requested"
+		pr.Review = reviewRequested
 	}
 	return pr
+}
+
+// prSignal is the colour of what is said of a pull request whose checks
+// and review stand so: red when a check fails or changes are requested,
+// else green when it is approved, else grey.
+func prSignal(c prChecks, r prReview) string {
+	switch {
+	case c == checksFailing || r == reviewChanges:
+		return CRed
+	case r == reviewApproved:
+		return CGreen
+	}
+	return CGrey
 }
 
 // prFor is the pull request among its (the view's cache's) for the

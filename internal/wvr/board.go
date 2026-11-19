@@ -1026,7 +1026,7 @@ func rowSignals(fact string, a session.Row, now int64, pr threadPR, behind bool)
 		return fact
 	}
 	var out []string
-	if pr.State == prOpen && pr.Checks == "failing" && atRest(a, now) {
+	if pr.State == prOpen && pr.Checks == checksFailing && atRest(a, now) {
 		out = append(out, "checks failing")
 	}
 	if behind {
