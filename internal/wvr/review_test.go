@@ -355,7 +355,7 @@ func TestReviewOnAList(t *testing.T) {
 		}
 		return strings.Join(ls, "|")
 	}
-	const want = "weaver: alt+v opens a thread's review: v on the board opens the selected thread's"
+	const want = "weaver: alt+v opens a thread's review: on the board, use v"
 	for _, where := range []string{"home", "a view"} {
 		if where == "a view" {
 			w, _, _, err := e.Mux().OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "github", View: "github", At: 900})
