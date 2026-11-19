@@ -145,13 +145,13 @@ R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
 waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 say hello · repo/main/2" ]' 100
 T=$(threads)
 ok "new: a session of its own, labelled with its name; its window, its review panel on the left and the agent on the right; home as it was" \
-	"$(threads | wc -l | tr -d ' ')|$(label "$T")|$(windows "$T")|$(windows)" "1|say-hello|01 say hello · repo/main/2|home/1"
+	"$(threads | wc -l | tr -d ' ')|$(label "$T")|$(windows "$T")|$(windows)" "1|01 say hello|01 say hello · repo/main/2|home/1"
 PB=$(block_at "$T" 1 0) AGB=$(block_at "$T" 1 1)
 waitfor '[ -f "$AT/args.${AGB#block:}" ]' 100
 AG=$(num "$AGB") PN=$(num "$PB")
 waitfor '[ -f "$SD/rex-${S}_$AG.panel" ]' 100
-ok "new: the agent took the task, and its review panel is bound to it" \
-	"$(tail -n 1 "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "say hello|$PN"
+ok "new: the agent took the task, asked to name its thread, and its review panel is bound to it" \
+	"$(grep -cx 'say hello' "$AT/args.${AGB#block:}")|$(grep -c 'wvr title <name>' "$AT/args.${AGB#block:}")|$(head -n 1 "$SD/rex-${S}_$AG.panel" 2>/dev/null)" "1|1|$PN"
 # --- the panel: tuicr on the branch, again each time it ends, as the
 # branch is then (what it is run on round by round: TestReviewArgs):
 # nothing while the branch has nothing of its own, then, once there is a
@@ -255,13 +255,23 @@ k=$(seen)
 REX_SESSION=$SID wvr next >/dev/null 2>&1
 ok "seen: a thread done is new until alt+1 takes you to it" "$k|$(seen)" "done false|done true"
 
+# --- the agent names its thread (wvr title, as its first prompt asks):
+# the board, its window and its session in Rex's sidebar take the name
+REX_SESSION=$T REX_BLOCK=$AGB wvr title "Say hello politely" >/dev/null 2>&1
+waitfor '[ "$(windows "$T")" = "01 Say hello politely · repo/main/2" ]' 50
+ok "title: the agent's name for its thread, on the board, its window and its session" \
+	"$(windows "$T")|$(label "$T")|$(REX_SESSION=$SID wvr ls 2>/dev/null | grep -c 'Say hello politely')" "01 Say hello politely · repo/main/2|01 Say hello politely|1"
 # --- the board's edits: rename (as its enter does it), and hold
 REX_SESSION=$SID wvr _modedone "rename 01 › " "Greeting" >/dev/null 2>&1
 waitfor '[ "$(windows "$T")" = "01 Greeting · repo/main/2" ]' 50
-ok "rename in place: the thread its prompt names takes the name, and its window; its session keeps its label" \
-	"$(windows "$T")|$(label "$T")|$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "01 Greeting · repo/main/2|say-hello|Greeting"
+ok "rename in place: the thread its prompt names takes the name, its window and its session too" \
+	"$(windows "$T")|$(label "$T")|$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)" "01 Greeting · repo/main/2|01 Greeting|Greeting"
+k=$(REX_SESSION=$T REX_BLOCK=$AGB wvr title "Something else" 2>&1)
+ok "title: a name you gave stays yours, whatever its agent calls it" \
+	"$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)|$(windows "$T")|$(printf '%s' "$k" | grep -c 'keeps your name')" "Greeting|01 Greeting · repo/main/2|1"
 # Rex's labels are anyone's (Claude Code's agents rename their sessions):
-# weaver goes on finding the thread by id.
+# weaver goes on finding the thread by id, and leaves the label you gave
+# until its thread's name changes.
 R session rename "$T" demo-greet >/dev/null
 ok "a thread's session renamed in Rex: still the thread, its agent still followed" \
 	"$(threads)|$(REX_SESSION=$SID wvr ls 2>/dev/null | grep -c Greeting)" "$T|1"
@@ -318,7 +328,7 @@ AB=$(block_at "$A" 1 1)
 waitfor '[ -f "$AT/args.${AB#block:}" ]' 100
 ok "adopt: the helper's window goes, its conversation resumes in a thread's session of its own" \
 	"$(windows "$T")|$(label "$A")|$(windows "$A")|$(tr '\n' ' ' <"$AT/args.${AB#block:}" 2>/dev/null)|$([ -f "$SD/rex-${S}_$HP.json" ] && echo kept)" \
-	"01 Greeting · repo/main/2|check-the-tests|02 check the tests · repo/main/2|--resume $HS |" ||
+	"01 Greeting · repo/main/2|02 check the tests|02 check the tests · repo/main/2|--resume $HS |" ||
 	sed 's/^/  adopt: /' "$AT/adopt.out"
 REX_SESSION=$SID wvr close --yes "$(num "$AB")" >/dev/null 2>&1
 waitfor '[ "$(threads)" = "$T" ]' 100

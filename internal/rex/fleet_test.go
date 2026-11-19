@@ -382,3 +382,67 @@ func TestFleetLookBlockGone(t *testing.T) {
 		t.Errorf("panes: %+v, want home's and the thread's still", ps)
 	}
 }
+
+// A thread's session takes the label weaver gives it (Rex's sidebar shows
+// it), as its thread's name changes; one you give it in Rex stays until
+// weaver's changes again. Home's is never weaver's to relabel.
+func TestFleetLabelSession(t *testing.T) {
+	server(t)
+	dir := t.TempDir()
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(dir, "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	w, _, _, err := f.OpenSession("01 fix it", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "main", Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts, err := f.threads()
+	if err != nil || len(ts) != 1 {
+		t.Fatalf("threads: %+v %v", ts, err)
+	}
+	label := func(id string) string {
+		var out struct {
+			Sessions []struct {
+				ID    string `json:"session_id"`
+				Label string `json:"label"`
+			} `json:"sessions"`
+		}
+		if err := call("session.list", map[string]any{}, &out); err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range out.Sessions {
+			if s.ID == id {
+				return s.Label
+			}
+		}
+		return ""
+	}
+	id := ts[0].ID
+	f.LabelSession(w, "01 Flaky test fix")
+	if got := label(id); got != "01 Flaky test fix" {
+		t.Errorf("labelled %q, want the thread's name", got)
+	}
+	if err := call("session.set_label", map[string]any{"session_id": id, "label": "mine"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.LabelSession(w, "01 Flaky test fix")
+	if got := label(id); got != "mine" {
+		t.Errorf("your label %q, want it kept while the thread's name is the same", got)
+	}
+	f.LabelSession(w, "01 Flaky test, fixed")
+	if got := label(id); got != "01 Flaky test, fixed" {
+		t.Errorf("labelled %q, want the thread's new name", got)
+	}
+	homeWas := label(home.ID)
+	hw, _, _, err := home.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "w", At: 1, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.LabelSession(hw, "01 not home")
+	if got := label(home.ID); got != homeWas {
+		t.Errorf("home's session labelled %q, want %q as it was", got, homeWas)
+	}
+}

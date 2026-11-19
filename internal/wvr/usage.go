@@ -68,9 +68,10 @@ const Usage = `usage: wvr [command]
                                session-id, resumed in a session of its own; alone, pick
                                one of Claude Code's recent conversations. Outside it,
                                into the weaver session
-  rename [pane-id] [name]      call a thread name on the board and its window, in place of
-                               its agent's title; with no name, ask; an empty one gives the
-                               agent's title back
+  rename [pane-id] [name]      call a thread name on the board, its window and Rex's
+                               sidebar, in place of its agent's title; with no name, ask;
+                               an empty one gives the agent's title back
+  title title                  (a thread's agent) call its thread title, unless you named it
   branch [pane-id] name        rename a thread's branch (pane-id's, else this agent's)
                                before it is pushed; its worktree keeps its directory
   restart [--all] [--force] [pane-id]

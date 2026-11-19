@@ -170,8 +170,9 @@ func (e *Env) AgentRows() ([]Row, int64) {
 			r.Waiting = oneline.Line(s.Waiting)
 		}
 		r.Bg = s.Background
-		// The name you gave the thread, else its agent's title.
-		r.Title = oneline.Line(cmp.Or(t.Title, s.Title))
+		// The name you gave the thread, else its agent's, else its
+		// conversation's title.
+		r.Title = oneline.Line(t.Called(s.Title))
 		r.Review = t.Mode == agent.ModeReview
 		r.Nsub = len(s.Subagents)
 		r.Pid = oneline.Line(string(s.Pid))
@@ -226,7 +227,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		rows = append(rows, Row{Pane: pane, Window: p.Window, Session: p.Session, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
 			WindowName: oneline.Line(p.WindowName), Agent: agent.Claude, Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Title), Review: t.Mode == agent.ModeReview,
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Called("")), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}
 	starts := process.Starts(pids)
@@ -387,8 +388,8 @@ func (e *Env) LostRows() []LostRow {
 		}
 		r := LostRow{File: f, Sid: oneline.Line(st.SessionID), Name: oneline.Line(lo.Thread.Name), Num: num,
 			Dir: oneline.Line(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: oneline.Line(lo.Key()),
-			// Named as you renamed it, else as asked.
-			Task: oneline.Line(cmp.Or(lo.Thread.Title, lo.Task())), Title: oneline.Line(cmp.Or(lo.Thread.Title, st.Title)),
+			// Named as it was named, else as asked.
+			Task: oneline.Line(cmp.Or(lo.Thread.Called(""), lo.Task())), Title: oneline.Line(lo.Thread.Called(st.Title)),
 			Note: oneline.Line(lo.Note)}
 		if lo.Held > 0 {
 			r.Held = strconv.Itoa(int(lo.Held))

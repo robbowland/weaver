@@ -128,6 +128,7 @@ var commands = map[string]command{
 	"adopt":   {run: helped((*wvr.Env).Adopt)},
 	"rename":  {run: helped((*wvr.Env).Rename)},
 	"branch":  {run: helped((*wvr.Env).RenameBranch)},
+	"title":   {run: helped((*wvr.Env).AgentTitle)},
 	"hold":    {run: helped((*wvr.Env).Hold)},
 	"restart": {run: helped((*wvr.Env).Restart)},
 	"quit":    {run: helped((*wvr.Env).Quit)},

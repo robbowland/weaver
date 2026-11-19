@@ -72,3 +72,29 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("%v %v: a change lost", v, err)
 	}
 }
+
+// A thread is called by the name you gave it, else its agent's, else its
+// conversation's title; not by the name weaver started that conversation
+// with (claude -n), which is only its branch, whatever the branch became.
+func TestThreadCalled(t *testing.T) {
+	base := Thread{Name: "fix-it", Branch: "fix-it", ConvName: "fix-it"}
+	renamed := Thread{Name: "fix/flaky-test", Branch: "fix/flaky-test", ConvName: "fix-it"}
+	old := Thread{Name: "fix-it", Branch: "fix-it"} // from before ConvName
+	for _, c := range []struct {
+		th         Thread
+		conv, want string
+	}{
+		{base, "fix-it", ""},
+		{renamed, "fix-it", ""},
+		{old, "fix-it", ""},
+		{base, "Fix the flaky test", "Fix the flaky test"},
+		{Thread{Name: "fix-it", AgentTitle: "Flaky test fix"}, "fix-it", "Flaky test fix"},
+		{Thread{Name: "fix-it", AgentTitle: "Flaky test fix"}, "Claude's own", "Flaky test fix"},
+		{Thread{Name: "fix-it", Title: "Mine", AgentTitle: "Flaky test fix"}, "Claude's own", "Mine"},
+		{Thread{}, "a hand-started agent's title", "a hand-started agent's title"},
+	} {
+		if got := c.th.Called(c.conv); got != c.want {
+			t.Errorf("%+v.Called(%q) = %q, want %q", c.th, c.conv, got, c.want)
+		}
+	}
+}

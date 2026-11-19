@@ -5,6 +5,7 @@ package store
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -39,6 +40,25 @@ type Thread struct {
 	// Title is the name you gave it (wvr new --name, the form's name,
 	// wvr rename), shown in place of the title its agent gives it.
 	Title string `json:"title,omitempty"`
+	// AgentTitle is the name its agent gave it (wvr title), shown when you
+	// gave none.
+	AgentTitle string `json:"agent_title,omitempty"`
+	// ConvName is the name weaver started its conversation with (claude
+	// -n, its branch then), which Claude Code keeps as the conversation's
+	// title: no name of its agent's.
+	ConvName string `json:"conv_name,omitempty"`
+}
+
+// Called is what the thread is called, conv being its conversation's
+// title (Claude Code's session_title): the name you gave it, else the one
+// its agent gave it, else conv unless that is only the name weaver started
+// the conversation with (ConvName; a record from before it was kept: its
+// name or branch); "" for none of them.
+func (t Thread) Called(conv string) string {
+	if conv == t.ConvName || conv == t.Name || conv == t.Branch {
+		conv = ""
+	}
+	return cmp.Or(t.Title, t.AgentTitle, conv)
 }
 
 // About is what the thread is about, for its label: its task, else (one

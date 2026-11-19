@@ -311,6 +311,7 @@ func (f Fleet) OpenSession(label string, w mux.NewWindow) (mux.WindowID, mux.Pan
 		return "", "", 0, err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(w.Argv, " "))
+	_ = s.ids().note("slabel", fileName(out.ID), cut(label))
 	if !w.Background {
 		s.show(out.Windows[0].Window)
 	}
@@ -336,6 +337,13 @@ func (f Fleet) Respawn(p mux.PaneID, s mux.Spawn) error { return f.of(string(p))
 
 // Close ends pane p.
 func (f Fleet) Close(p mux.PaneID) { f.of(string(p)).Close(p) }
+
+// LabelSession labels the session window w is in, never home's.
+func (f Fleet) LabelSession(w mux.WindowID, label string) {
+	if s := f.of(string(w)); s.ID != f.Home.ID {
+		s.SetLabel(label)
+	}
+}
 
 // Label names window w, and Title pane p.
 func (f Fleet) Label(w mux.WindowID, label string) { f.of(string(w)).Label(w, label) }

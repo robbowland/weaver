@@ -146,7 +146,7 @@ func (e *Env) MarkSeen(p mux.PaneID) {
 // threadTabLabels: a thread's first window is labelled "<num> <name> ·
 // <repo>/<branch>"; renamed only when that is not its label already, as
 // its row read it (Row.WindowName: rows read the panes, and their windows'
-// labels, once).
+// labels, once). Its session is labelled "<num> <name>" (SessionLabel).
 func (e *Env) threadTabLabels(rows []Row) {
 	for _, r := range rows {
 		if r.Pane == "" || r.Tnum == 0 {
@@ -159,12 +159,23 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if l == "" {
 			l = r.Prompt
 		}
+		// Its session, in Rex's sidebar: its number and name.
+		e.Mux().LabelSession(r.Window, SessionLabel(r.Tnum, l))
 		label := ThreadLabel(r.Tnum, l, r.Root)
 		if r.WindowName == label {
 			continue
 		}
 		e.Mux().Label(r.Window, label)
 	}
+}
+
+// SessionLabel is the label of a thread's session, which Rex's sidebar
+// shows: its number and what it is about (the first line, fitted).
+func SessionLabel(n int, text string) string {
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		text = text[:i]
+	}
+	return padNum(n) + " " + strings.TrimRight(oneline.Fit(text, 30), " ")
 }
 
 // ThreadLabel is the label of a thread's first window: its number,

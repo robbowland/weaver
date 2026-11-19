@@ -528,6 +528,19 @@ func (s Session) placeIn(v view, seen bool, id string, w mux.WindowID, at int) {
 	_ = s.callS("session.move_window", in, nil)
 }
 
+// SetLabel labels the session itself, which Rex's sidebar shows, unless
+// label is the one weaver gave it last (slabel/): one you give it in Rex
+// stays until weaver's changes.
+func (s Session) SetLabel(label string) {
+	label = cut(label)
+	if s.ids().noted("slabel", fileName(s.ID)) == label {
+		return
+	}
+	if s.callS("session.set_label", map[string]any{"label": label}, nil) == nil {
+		_ = s.ids().note("slabel", fileName(s.ID), label)
+	}
+}
+
 func (s Session) Label(w mux.WindowID, label string) {
 	if id, err := s.window(w); err == nil {
 		_ = s.callS("session.set_window_label", map[string]any{"window_id": id, "label": cut(label)}, nil)

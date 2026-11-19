@@ -104,8 +104,9 @@ func (e *Env) threadNum() (int, map[int]bool) {
 	return n, used
 }
 
-// threadTab opens a thread's session, labelled name (its branch) for good:
-// its first window, labelled label, in dir, its agent first (`wvr _agent
+// threadTab opens a thread's session, labelled name (session.SessionLabel,
+// which follows the thread's name as it changes): its first window,
+// labelled label, in dir, its agent first (`wvr _agent
 // tok`), then its review panel on the agent's left, bound to it
 // before this returns; the agent at its width, with the focus (not gone
 // to when nofocus). Its window id. The window is made whole behind you,
@@ -517,8 +518,8 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	if it != nil && strings.TrimSpace(task) != "" {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
 	}
-	if slugged {
-		prompt += branchNote(branch)
+	if strings.TrimSpace(task) != "" {
+		prompt += nameNote(branch, title == "", slugged)
 	}
 	tok := token()
 	d := e.opening(tok)
@@ -545,7 +546,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	// Its window has its label from the start, not once its agent first
 	// reports.
 	wl := session.ThreadLabel(n, label, dir)
-	tab, ok := e.threadTab(tok, dir, name, wl, nofocus)
+	tab, ok := e.threadTab(tok, dir, session.SessionLabel(n, label), wl, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
@@ -561,13 +562,26 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	return wl, nil
 }
 
-// branchNote is what a thread's first prompt ends with when weaver named
-// its new branch from the task's first words, which make a poor name: its
-// agent names it for the work (wvr branch) before anything is committed.
-func branchNote(branch string) string {
-	return "\n\nweaver named this thread's branch " + branch + " from the first words of the task. " +
-		"Before your first commit, rename it to a short name for the work that follows this repository's branch conventions: " +
-		"`wvr branch <name>`."
+// nameNote is what a thread's first prompt ends with when weaver has only
+// the task's first words to call it by: with no name of yours (untitled),
+// its agent names it for the work (wvr title) in its first turn; when
+// weaver named its new branch from those words (slugged), its agent
+// renames the branch (wvr branch) before anything is committed. "" when
+// neither.
+func nameNote(branch string, untitled, slugged bool) string {
+	var n string
+	if untitled {
+		n += " weaver calls this thread by the first words of its task. Early in this first turn, once you know what the work is, " +
+			"name it in 3 to 6 words, in sentence case: `wvr title <name>` (the board, its window and Rex's sidebar show it)."
+	}
+	if slugged {
+		n += " weaver named this thread's branch " + branch + " from the first words of the task. Before your first commit, " +
+			"rename it to a short name for the work that follows this repository's branch conventions: `wvr branch <name>`."
+	}
+	if n == "" {
+		return ""
+	}
+	return "\n\n" + strings.TrimPrefix(n, " ")
 }
 
 // agentSpawn is a thread's agent pane (`wvr _agent tok`, in dir),
@@ -625,6 +639,7 @@ func (e *Env) AgentPane(tok string) error {
 		}
 		if therr == nil {
 			th.Pane = &pn
+			th.ConvName = th.Name
 			if sid != "" {
 				th.SessionID = sid
 			}
@@ -775,8 +790,8 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		return "", fmt.Errorf("%s: %v", nm, err)
 	}
 	unlock()
-	t := cmp.Or(oneline.Line(cmp.Or(th.Title, st.Title)), oneline.Line(th.About()), nm)
-	tab, ok := e.threadTab(tok, dir, nm, session.ThreadLabel(n, t, dir), nofocus)
+	t := cmp.Or(oneline.Line(th.Called(st.Title)), oneline.Line(th.About()), nm)
+	tab, ok := e.threadTab(tok, dir, session.SessionLabel(n, t), session.ThreadLabel(n, t, dir), nofocus)
 	if !ok {
 		return "", fmt.Errorf("%s: Rex could not open its session", nm)
 	}

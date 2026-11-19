@@ -51,6 +51,41 @@ func (e *Env) Rename(args []string) error {
 	return e.retitle(p, oneline.Line(strings.TrimSpace(name)))
 }
 
+// AgentTitle is `wvr title TITLE...`, which a thread's agent runs in its
+// pane: its thread called TITLE on the board, its window and Rex's
+// sidebar, unless you named it, which it keeps. No pane argument: a title
+// may start with a number.
+func (e *Env) AgentTitle(args []string) error {
+	if err := e.toWeaverSession(); err != nil {
+		return err
+	}
+	var p mux.PaneID
+	if e.MyPane != "" {
+		p = e.agentOf(e.MyPane)
+	}
+	title := oneline.Line(strings.TrimSpace(strings.Join(args, " ")))
+	if title == "" {
+		return errors.New("usage: wvr title title (in a thread's agent)")
+	}
+	if p == "" {
+		return errors.New("wvr title names the thread of the agent it runs in: run it there")
+	}
+	th, err := store.ReadThread(e.ThreadFile(p))
+	if err != nil {
+		return errNotThread
+	}
+	if th.Title != "" {
+		fmt.Printf("weaver: you named this thread %q: it keeps your name\n", th.Title)
+		return nil
+	}
+	if !store.UpdateThread(e.ThreadFile(p), func(th *store.Thread) { th.AgentTitle = title }) {
+		return errors.New("cannot write its thread record")
+	}
+	e.PushStatusAndLabels()
+	fmt.Printf("weaver: this thread is now called %q\n", title)
+	return nil
+}
+
 // RenameBranch is `wvr branch [PANE] NAME`: the branch of the thread of
 // the agent in PANE (else the one this pane belongs to) renamed NAME
 // (renameBranch), then the windows relabelled and the boards reloaded.
@@ -109,18 +144,15 @@ func (e *Env) renameBranch(p mux.PaneID, name string) (string, error) {
 var errNotThread = errors.New("its agent is no thread: adopt it first (wvr adopt)")
 
 // shownName is what the board calls the thread of the agent in pane p now:
-// your name, its agent's title, else its task (or the item it started
-// from); false when the agent is no thread.
+// your name, its agent's, its conversation's title, else its task (or the
+// item it started from); false when the agent is no thread.
 func (e *Env) shownName(p mux.PaneID) (string, bool) {
 	th, err := store.ReadThread(e.ThreadFile(p))
 	if err != nil {
 		return "", false
 	}
-	cur := th.Title
-	if cur == "" {
-		st, _ := store.ReadState(e.StateFile(p))
-		cur = st.Title
-	}
+	st, _ := store.ReadState(e.StateFile(p))
+	cur := th.Called(st.Title)
 	if cur == "" {
 		cur = oneline.Line(strings.SplitN(th.About(), "\n", 2)[0])
 	}

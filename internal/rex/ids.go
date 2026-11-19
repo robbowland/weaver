@@ -292,6 +292,7 @@ func (r ids) pruneOn(live map[string]bool, server int) {
 			continue
 		}
 		os.Remove(r.path("sessions", fileName(id)))
+		os.Remove(r.path("slabel", fileName(id)))
 	}
 }
 
