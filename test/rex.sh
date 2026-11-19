@@ -140,6 +140,14 @@ ok "start in another Rex session: weaver's shown, no second one, no board there"
 	"1|1|1" || sed 's/^/  other: /' "$AT/other.out"
 R api call session.destroy "{\"session_id\":\"$OTHER\"}" >/dev/null 2>&1
 
+# --- alt+v on home, as the app presses it: the board is no agent's, so no
+# review panel splits into home's window; a message says where reviews are
+said() { view | jq -r '[.windows[].layers[] | select(.kind == "floating") | .blocks[].label] | join("|")'; }
+k=$(R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_v\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":118}}" | jq -r .handled)
+waitfor 'said | grep -q "opens a thread"' 50
+ok "alt+v on home: no review panel, and a message says v on the board opens one" \
+	"$k|$(windows)|$(said)" "true|home/1|alt+v opens a thread's review: v on the board opens the selected thread's"
+
 # --- a thread (wvr new, here), as Alt N's form makes it
 (cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'say hello' >"$AT/new.out" 2>&1)
 waitfor '[ -n "$(threads)" ] && [ "$(windows "$(threads)")" = "01 say hello · repo/main/2" ]' 100
@@ -411,7 +419,6 @@ R send -s "$SID" -b "$FL" 'second thread'
 waitfor 'R capture -s "$SID" -b "$FL" 2>/dev/null | grep -q "task  second thread"' 50
 k=$(R api call client.key "{\"session_id\":\"$SID\",\"block_id\":\"$FL\",\"key\":{\"action\":\"press\",\"key\":\"enter\",\"mods\":\"shift\",\"text\":\"\",\"unshifted_codepoint\":13}}" | jq -r .handled)
 waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
-said() { view | jq -r '[.windows[].layers[] | select(.kind == "floating") | .blocks[].label] | join("|")'; }
 waitfor 'said | grep -q "in the background"' 30
 T2=$(threads | grep -vx "$T")
 ok "form: shift+enter in its popup starts the thread in the background, and says so" \
