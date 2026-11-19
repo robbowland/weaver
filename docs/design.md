@@ -153,7 +153,10 @@ the second (two when it failed), and the panel ends with its pane.
 `wvr review [--full] [PANE]` (alt+v, alt+V, the board's `v`, `e` and
 `ctrl+e`) goes to the agent's panel, or opens one on its left in the
 worktree it is in (`agentWhere`) and puts the thread's widths back; in a
-pane that is no agent's, a panel beside it in its directory. `--full` zooms
+pane that is no agent's, a panel beside it in its directory. On home's
+board or in a view (`onList`: lists, whose selection is the board's `v`
+to open) it opens nothing, says `alt+v opens a thread's review: v on the
+board opens the selected thread's`, and exits 1. `--full` zooms
 it. One press per agent at a time (`<skey>_<pane>.opening.lock`, `store.Lock`), under the
 session's UI lock.
 

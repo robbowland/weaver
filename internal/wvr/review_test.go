@@ -1,6 +1,8 @@
 package wvr
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +11,10 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/agent"
+	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -296,6 +302,76 @@ func TestWaitForChange(t *testing.T) {
 		waitForChange(d, base, state)
 		if took := time.Since(start); took > 4*time.Second {
 			t.Errorf("%s: waited %v, past the look after it", name, took.Round(100*time.Millisecond))
+		}
+	}
+}
+
+// alt+v on home's board or in a view (a list, no agent's) opens no review
+// panel in the list's window, and says that the board's v opens the
+// selected thread's.
+func TestReviewOnAList(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	dir := t.TempDir()
+	se := &session.Env{StateDir: dir + "/state", SockDir: dir + "/sock", Self: "/usr/bin/true"}
+	if err := os.MkdirAll(se.StateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := rex.Start(se.RexDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = home.Quit() })
+	se.Session, se.SKey, se.RexID, se.RexHere = "demo", rex.Key("demo"), home.ID, home.ID
+	e := &Env{se}
+	// The labels of the session's messages (floating layers) shown now.
+	said := func() string {
+		out, err := exec.Command(rex.Bin(), "--autostart=false", "api", "call", "session.view", `{"session_id":"`+home.ID+`"}`).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v struct {
+			Windows []struct {
+				Layers []struct {
+					Kind   string `json:"kind"`
+					Blocks []struct {
+						Label string `json:"label"`
+					} `json:"blocks"`
+				} `json:"layers"`
+			} `json:"windows"`
+		}
+		if err := json.Unmarshal(out, &v); err != nil {
+			t.Fatal(err)
+		}
+		var ls []string
+		for _, w := range v.Windows {
+			for _, l := range w.Layers {
+				for _, b := range l.Blocks {
+					if l.Kind == "floating" {
+						ls = append(ls, b.Label)
+					}
+				}
+			}
+		}
+		return strings.Join(ls, "|")
+	}
+	const want = "alt+v opens a thread's review: v on the board opens the selected thread's"
+	for _, where := range []string{"home", "a view"} {
+		if where == "a view" {
+			w, _, _, err := e.Mux().OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "github", View: "github", At: 900})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.Mux().Show(w)
+		}
+		before, _ := e.Mux().Panes()
+		err := e.Review(nil)
+		after, _ := e.Mux().Panes()
+		if len(after) != len(before) || !errors.Is(err, cli.ErrSaid) {
+			t.Errorf("alt+v on %s: %d panes, then %d (%v); want no panel, and ErrSaid", where, len(before), len(after), err)
+		}
+		if got := said(); got != want {
+			t.Errorf("alt+v on %s said %q, want %q", where, got, want)
 		}
 	}
 }

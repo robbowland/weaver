@@ -143,7 +143,8 @@ does the same from a shell, for a branch not yet pushed.
 The review on the left shows what the thread's branch has changed, as the
 agent changes it ([Review](#review)). If you close it, `alt+v` brings it
 back on the left, with the agent at its usual width, as long as nothing else
-is in the window.
+is in the window. On the board and in a view, `alt+v` opens nothing and says
+so: there, `v` opens the selected thread's review.
 
 ### Restarting an agent
 

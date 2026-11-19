@@ -111,7 +111,8 @@ func (e *Env) agentWhere(p mux.PaneID) (root string, known bool) {
 // Review is `wvr review [--full] [PANE]` (alt+v, v on the board): go to the
 // review panel of the focused agent (or PANE's), or open one on its left in
 // the worktree it is in; in a pane that is no agent's, a panel beside it in
-// its directory. --full: the panel fills the window.
+// its directory; on home's board or in a view, none: a message says to use
+// the board's v. --full: the panel fills the window.
 func (e *Env) Review(args []string) error {
 	full, target := false, mux.PaneID("")
 	for _, a := range args {
@@ -134,6 +135,12 @@ func (e *Env) Review(args []string) error {
 		if target = e.focusedPane(); target == "" {
 			return errors.New("cannot find the focused pane")
 		}
+	}
+	// Home's board and a view are lists, no agent's: a panel there would
+	// split into the list's window. Which thread's review is the board's v.
+	if e.onList(panes, target) {
+		e.Mux().Say(4000, "alt+v opens a thread's review: v on the board opens the selected thread's")
+		return cli.ErrSaid
 	}
 	agentPane := e.agentOf(target)
 	cwd := ""
@@ -178,6 +185,18 @@ func (e *Env) Review(args []string) error {
 		e.Mux().Zoom(rp)
 	}
 	return nil
+}
+
+// onList: is pane p, among panes, in home's window or a view's (GITHUB,
+// LINEAR), whose one pane is a list?
+func (e *Env) onList(panes []mux.Pane, p mux.PaneID) bool {
+	q, ok := session.PaneIn(panes, p)
+	if !ok {
+		return false
+	}
+	ws, _ := e.Mux().Windows()
+	w, ok := windowIn(ws, q.Window)
+	return ok && (isHome(w) || w.View != "")
 }
 
 // panelTitle is the title of a review panel in dir.
