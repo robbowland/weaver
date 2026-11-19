@@ -146,7 +146,7 @@ said() { view | jq -r '[.windows[].layers[] | select(.kind == "floating") | .blo
 k=$(R api call client.key "{\"session_id\":\"$SID\",\"key\":{\"action\":\"press\",\"key\":\"key_v\",\"mods\":\"alt\",\"text\":\"\",\"unshifted_codepoint\":118}}" | jq -r .handled)
 waitfor 'said | grep -q "opens a thread"' 50
 ok "alt+v on home: no review panel, and a message says v on the board opens one" \
-	"$k|$(windows)|$(said)" "true|home/1|alt+v opens a thread's review: v on the board opens the selected thread's"
+	"$k|$(windows)|$(said)" "true|home/1|weaver: alt+v opens a thread's review: v on the board opens the selected thread's"
 
 # --- a thread (wvr new, here), as Alt N's form makes it
 (cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'say hello' >"$AT/new.out" 2>&1)

@@ -139,7 +139,7 @@ func (e *Env) Review(args []string) error {
 	// Home's board and a view are lists, no agent's: a panel there would
 	// split into the list's window. Which thread's review is the board's v.
 	if e.onList(panes, target) {
-		e.Mux().Say(4000, "alt+v opens a thread's review: v on the board opens the selected thread's")
+		e.Mux().Say(4000, "weaver: alt+v opens a thread's review: v on the board opens the selected thread's")
 		return cli.ErrSaid
 	}
 	agentPane := e.agentOf(target)
