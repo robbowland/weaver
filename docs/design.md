@@ -187,10 +187,17 @@ the agent's other files. Readers ignore fields they don't know.
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
 | `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode auto`, the prompt telling it to change no files; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
+| `agent_title` | string | the name its agent gave it (`wvr title`), shown when it has no `title`; absent for none |
+| `conv_name` | string | the name weaver started its conversation with (`claude -n`, its `name` then), which Claude Code reports as the conversation's `title`: not a name of its agent's, so never shown; absent in a record from before it was kept |
 
-A thread is a Rex session of its own, labelled with its `name` as it is
-made and never again: Rex's labels are anyone's (Claude Code's agents
-rename their sessions), so weaver finds a thread by ids alone. Its first
+A thread is a Rex session of its own, labelled `NN name`
+(`session.SessionLabel`: its number and what the board calls it) as it is
+made and again as that changes (`threadTabLabels`, through
+`Fleet.LabelSession`); weaver notes the label it gave
+(`$STATE_DIR/rex/slabel/<session>`) and sets it again only when its own
+changes, so a label you give it in Rex stays until then. Rex's labels are
+anyone's (Claude Code's agents rename their sessions), so weaver finds a
+thread by ids alone. Its first
 window holds its review panel and its agent, labelled by weaver
 (`threadTabLabels`); its helpers' windows beside it are theirs.
 
@@ -248,6 +255,14 @@ _modedone "$FZF_PROMPT" "$FZF_QUERY"`, which renames the thread the prompt
 names (a name unchanged is left as it is, so an agent's title is never
 taken for yours) and prints the actions back to browsing; `esc` goes back
 without it.
+
+`wvr title NAME` is the agent's own: run in a thread's agent pane, it sets
+the record's `agent_title` and relabels as rename does, unless the thread
+has a `title` (yours), which it keeps, saying so. A thread's first prompt
+asks for it when it has no `title` (`nameNote`). What a thread is called
+(`Thread.Called`): `title`, else `agent_title`, else its conversation's
+title unless that is `conv_name` (or, in an older record, its `name` or
+`branch`), else its task.
 
 `wvr branch [PANE] NAME` renames a thread's branch (PANE as for rename;
 else the agent this pane belongs to): `git branch -m` in its worktree, then
@@ -709,7 +724,7 @@ that one (home's).
   weaver placed at 0 that shows no view, by its registry, whatever its
   label.
 - **Views:** see [Views](#views).
-- **Threads:** a session labelled with the thread's name, its first
+- **Threads:** a session labelled `NN name` (SessionLabel), its first
   window labelled LABEL in DIR running `wvr _agent TOK`, then a split on its left running `wvr _panel AGENT` (argv, no
   shell), titled `review: <dir>`, then the agent focused: whole before it
   is shown, as Rex needs. alt+v's panel, opened again, is a split on the

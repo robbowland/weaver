@@ -633,6 +633,19 @@ can supersede an earlier one, and says so.
   pickers run in its popup): no other popup takes alt+enter, and a card
   reading keys raw passes ESC CR over. Outside popups
   the binding gives the key back, so an agent's shift+enter is untouched.
+- 2026-11-19: A thread's agent names it, and its Rex session follows its
+  name (Rob: "allowing the llm to rename the weaver session in the same way
+  as the branches so 'just works' (assuming a manual name wasn't chosen)").
+  Threads went by their task's slug everywhere, sidebar included: weaver
+  starts Claude Code with `-n <branch>`, so the conversation's title, which
+  the board took for the agent's, was the slug. Now the first prompt of a
+  thread you did not name asks its agent for a 3 to 6 word name (`wvr
+  title`), once, which never replaces yours (Rob chose this over the agent
+  renaming as the work pivots, and over Claude Code's own titles); the
+  slug passed as `-n` is kept as `conv_name` and never shown, so until the
+  agent names it the board shows the task. The session's label, set "for
+  good" since the move to Rex, now follows the name, as `NN name`: one you
+  give in Rex stays until weaver's changes, since weaver notes its own.
 
 ## Work items and views
 

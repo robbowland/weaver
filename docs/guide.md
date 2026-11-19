@@ -33,11 +33,12 @@ The weaver session's windows are:
 - **the views**, GITHUB and LINEAR, beside home
   ([Pull requests and issues](#pull-requests-and-issues)).
 
-A thread's session is labelled with its name (its branch) as it is made;
-its first window has the thread's review on the left and the agent on the
+A thread's session is labelled with its number and name (`01 Add a CLI
+flag`), which Rex's sidebar shows, and follows the name as it changes; its
+first window has the thread's review on the left and the agent on the
 right, and helpers its agent starts get windows beside it. Renaming the
-session in Rex changes only its label: weaver finds its threads by Rex's
-ids.
+session in Rex changes only its label, until the thread's name next
+changes: weaver finds its threads by Rex's ids.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
 `weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
@@ -102,7 +103,7 @@ that changes it from anywhere:
 | --- | --- | --- |
 | `start` | `enter` | Start the thread and go to it (the row says what it would start) |
 |  | `shift+enter`, `alt+enter` | Start the thread in the background, from any row |
-| `name` | `alt+n` | What the board and its window call it: by default a pull request's or issue's number and title (read-only, after `review :: `), else the title its agent gives it |
+| `name` | `alt+n` | What the board, its window and Rex's sidebar call it: by default a pull request's or issue's number and title (read-only, after `review :: `), else the name its agent gives it |
 | `repo` | `ctrl+r` | Choose another repository: recent ones, any zoxide knows, or a path |
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
 | `branch` | `alt+b` | The new worktree's branch, named from the task by default. An existing branch, here or on the remote, continues in its own worktree |
@@ -129,7 +130,9 @@ says so.
 
 A branch named from the task (you gave none) is renamed by its agent: its
 first prompt asks it to give the branch a short name for the work, in the
-repository's conventions, with `wvr branch NAME` before its first commit.
+repository's conventions, with `wvr branch NAME` before its first commit
+(and a thread you gave no name, a name too: [Renaming a
+thread](#renaming-a-thread)).
 The worktree's directory keeps the task's name. `wvr branch [PANE] NAME`
 does the same from a shell, for a branch not yet pushed.
 
@@ -154,15 +157,17 @@ would stop its turn; `--force` restarts it all the same.
 A thread is called by the name it started with: the form's `name` row (or
 `wvr new --name`), which for a pull request or issue is its number and title
 (`#45 Add a flag`, or `review :: #45 Add a flag` read-only) unless you change
-it. With none, it is called by the title
-its agent gives it (Claude Code names its conversations as they go), else by
-its task. `r` on the board gives it a name of your own, there and then: the
-board's search line becomes `rename 02 › its name`, `enter` saves and `esc`
-leaves it as it was. The name shows on the board, its card and its window.
-An empty name gives the agent's title back, and saving the
-agent's title as it is leaves it the agent's, to change as it goes. `wvr
-rename [PANE] [NAME]` does the same from a shell (with no name, it asks).
-The name stays with the thread when it is lost and resumed.
+it. With none, its agent names it: its first prompt asks it to, in 3 to 6
+words, once it knows what the work is (`wvr title NAME`, run in the agent's
+pane). Until then it is called by its task. A name you give always wins:
+the agent's `wvr title` leaves it as it is. `r` on the board gives it a name
+of your own, there and then: the board's search line becomes `rename 02 ›
+its name`, `enter` saves and `esc` leaves it as it was. The name shows on
+the board, its card, its window and its session in Rex's sidebar. An empty
+name gives the agent's name back, and saving the agent's name as it is
+leaves it the agent's. `wvr rename [PANE] [NAME]` does the same from a shell
+(with no name, it asks). The name stays with the thread when it is lost and
+resumed.
 
 ### Closing a thread
 
