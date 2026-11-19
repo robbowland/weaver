@@ -364,7 +364,9 @@ its agent again on its conversation, `x` closes the thread.
 | `ctrl+q` | Quit the session |
 
 The card shows what the agent was asked, what it waits on or runs, what it
-last said, its tasks, subagents and files, and its worktree's git status. It
+last said, how many of your review comments it has not seen yet (they go
+with your next message), its tasks, subagents and files, and its
+worktree's git status. It
 sits beside the list when the pane is at least 150 columns wide, else under
 it, and gives way to the list when space is short (`s` still shows it).
 

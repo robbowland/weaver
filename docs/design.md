@@ -737,8 +737,11 @@ Whatever shows a key is its button, and every mouse action has its key.
 ### Resume card
 
 `wvr _preview PANE LABEL`: the label in bold, then the state and its age,
-then aligned fields (asked, waits, background, said, tasks, subagents, files,
-git), each wrapped under itself, at most a few lines. `git` is the worktree's
+then aligned fields (asked, waits, background, said, review, tasks,
+subagents, files, git), each wrapped under itself, at most a few lines.
+`review` counts your tuicr comments its agent has not been given
+(`tuicr.ThreadUnread`, what its next prompt of yours carries: see [Review
+panel](#review-panel)), absent for none. `git` is the worktree's
 `git status` in one line: branch, ahead/behind, changed and new files. A
 thread whose agent has not reported shows its record (task, worktree).
 `s`/`tab` swap in the agent's screen (`Mux.Screen`) under

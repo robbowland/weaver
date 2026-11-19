@@ -21,6 +21,7 @@ import (
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
+	"github.com/robbowland/weaver/internal/tuicr"
 )
 
 // The dashboard's preview: an agent's resume card, its screen, the keys, or
@@ -303,12 +304,18 @@ func (e *Env) Preview(args []string) string {
 			}
 		}
 	}
+	// Your review comments its agent has not been given: they go with
+	// your next prompt (wvr hook).
+	notes := 0
+	if terr == nil {
+		notes = len(tuicr.ThreadUnread(e.StateDir, t, root))
+	}
 	got := <-row
 	r := got.r
 	if !got.ok {
 		r = rowOfRecord(s)
 	}
-	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared)
+	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared, notes)
 }
 
 // rowOfRecord is record s's state as a row, for an agent with no row.
@@ -341,7 +348,7 @@ func itemLine(t store.Thread) string {
 	return l
 }
 
-func card(s agent.Record, r session.Row, from string, w int, head, ab string, changed, nw, shared int) string {
+func card(s agent.Record, r session.Row, from string, w int, head, ab string, changed, nw, shared, notes int) string {
 	now := time.Now().Unix()
 	st := r.State
 	word := stateWord(r, now)
@@ -370,6 +377,13 @@ func card(s agent.Record, r session.Row, from string, w int, head, ab string, ch
 	}
 	if s.LastMessage != "" && st != agent.StateWorking {
 		add(field(w, "said", s.LastMessage, CGrey, 6))
+	}
+	if notes > 0 {
+		n := strconv.Itoa(notes) + " review comments"
+		if notes == 1 {
+			n = "1 review comment"
+		}
+		add(field(w, "review", n+", with your next prompt", "", 1))
 	}
 	if ts := s.Tasks; len(ts) > 0 {
 		if len(ts) > 12 {
