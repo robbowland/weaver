@@ -98,3 +98,23 @@ func TestThreadCalled(t *testing.T) {
 		}
 	}
 }
+
+// A thread's own directory stays its own through what changes its record
+// (a rename, a pane), and is another thread's for another worktree or
+// another start.
+func TestThreadDir(t *testing.T) {
+	th := Thread{Created: 100, Worktree: "/w/a", Name: "a"}
+	moved := th
+	moved.Name, moved.Title, moved.Num = "b", "B", 7
+	if th.Dir("/s") != moved.Dir("/s") {
+		t.Errorf("renamed: %s, was %s", moved.Dir("/s"), th.Dir("/s"))
+	}
+	for _, other := range []Thread{{Created: 100, Worktree: "/w/b"}, {Created: 101, Worktree: "/w/a"}} {
+		if other.Dir("/s") == th.Dir("/s") {
+			t.Errorf("%+v shares %s", other, th.Dir("/s"))
+		}
+	}
+	if d := th.Dir("/s"); filepath.Dir(d) != "/s/threads" {
+		t.Errorf("not under /s/threads: %s", d)
+	}
+}

@@ -504,9 +504,10 @@ follows the agent's edits as it makes them:
   config, in the same pane; quitting it brings the review back on the same
   hunk. (In the file list, `e` is tuicr's exclude filter.)
 - **Notes for the agent:** `c` comments a line and `v` a range, saved as you
-  write them. When you have reviewed, tell the agent: it reads them with
-  `tuicr review list --repo .` and `tuicr review comments --session
-  <slug>`, which give each comment's `path:line`.
+  write them. Your next message to the agent carries the ones it has not
+  seen yet, each with its `path:line`, so there is no need to tell it to
+  read them. It can read them all again with `tuicr review list --repo .`
+  and `tuicr review comments --session <slug>`.
 - **A fresh range:** `q` (or `:q`) starts the review again, so commits made since it
   opened join its list (tuicr reads its range once, as it starts).
 

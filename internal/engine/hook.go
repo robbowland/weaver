@@ -78,21 +78,22 @@ type hk struct {
 }
 
 // Hook is `wvr hook [--async]`: returns the bell to ring (10 needs you,
-// 11 done; 0 none).
-func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, me string) int {
+// 11 done; 0 none), and what the event gives its agent to read (a prompt
+// of yours: your review comments it has not been given, reviewNotes).
+func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, me string) (int, string) {
 	var ev hooks.Input
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
-		return 0
+		return 0, ""
 	}
 	return hook(e, ev, mode, pane, me)
 }
 
 // hook folds event ev into the state of the agent in pane.
-func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me string) int {
+func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me string) (int, string) {
 	h := &hk{Pane: pane, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID, RexHere: e.RexHere}
 	me = knownPid(me)
 	if os.MkdirAll(e.StateDir, 0o755) != nil {
-		return 0
+		return 0, ""
 	}
 	h.sf = e.StateFile(pane)
 	pk := session.Peek(h.sf)
@@ -102,7 +103,7 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 	if me != "" && pk.Pid != "" && me != pk.Pid {
 		if process.StillRuns(pk.Pid, pk.Start, nil) {
 			if pk.State != agent.StateEnded {
-				return 0
+				return 0, ""
 			}
 		} else {
 			// The pane's last agent died with a session that is gone, and
@@ -120,25 +121,29 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 		e.LoseStaleThread(pane)
 	}
 	if mode == "async" && !hooks.AsyncGate(ev, pk.State) {
-		return 0
+		return 0, ""
 	}
 	release := store.Lock(h.sf)
 	// Its pane started another agent since it was told its number (wvr
 	// restart: its block replaced): its state is the new agent's now.
 	if b := os.Getenv("REX_BLOCK"); b != "" && !rex.StillNames(e.RexDir(), pane, b) {
 		release()
-		return 0
+		return 0, ""
 	}
 	st, _ := os.ReadFile(h.sf)
 	if !h.parse(ev, st) || mode == "async" && h.otherConversation(me) {
 		release()
-		return 0
+		return 0, ""
 	}
 	h.run(e, me)
 	writeState(e, h)
 	release()
 	afterWrite(e, h)
-	return h.rc
+	notes := ""
+	if mode == "sync" && h.Event == "UserPromptSubmit" && ev.Yours() {
+		notes = reviewNotes(e, pane, h.Root)
+	}
+	return h.rc, notes
 }
 
 // parse reads the event and the stored state: false when there is no
@@ -450,17 +455,48 @@ func HookMain(e *session.Env, args []string) {
 		return
 	}
 	in, _ := io.ReadAll(os.Stdin)
-	rc := Hook(e, in, mode, e.MyPane, os.Getenv("CLAUDE_PID"))
+	rc, notes := Hook(e, in, mode, e.MyPane, os.Getenv("CLAUDE_PID"))
 	if mode == "sync" {
 		bell := os.Getenv("WEAVER_BELL")
 		if bell == "" {
 			bell = "1"
 		}
-		if bell == "1" && (rc == 10 || rc == 11) || bell == "needs-you" && rc == 10 {
-			_, err := os.Stdout.WriteString(bellJSON + "\n")
-			bestEffort(err) // a bell missed
+		ring := bell == "1" && (rc == 10 || rc == 11) || bell == "needs-you" && rc == 10
+		if out := hookOutput(ring, notes); out != "" {
+			_, err := os.Stdout.WriteString(out + "\n")
+			bestEffort(err) // a bell, or the notes, missed
 		}
 	}
+}
+
+// hookOutput is a sync hook's output for Claude Code, one JSON object: the
+// bell (its terminalSequence, which Claude Code writes to the agent's
+// terminal) when ring, and notes, what a prompt carries to the agent
+// (UserPromptSubmit's additionalContext). "" for neither.
+func hookOutput(ring bool, notes string) string {
+	if !ring && notes == "" {
+		return ""
+	}
+	if notes == "" {
+		return bellJSON
+	}
+	type specific struct {
+		Event   string `json:"hookEventName"`
+		Context string `json:"additionalContext"`
+	}
+	var out struct {
+		Specific specific `json:"hookSpecificOutput"`
+		Bell     string   `json:"terminalSequence,omitempty"`
+	}
+	out.Specific = specific{"UserPromptSubmit", notes}
+	if ring {
+		out.Bell = "\a"
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // orEmpty is s, or an empty list for none: [] in JSON, not null.

@@ -274,6 +274,16 @@ can supersede an earlier one, and says so.
   thread's is reviewed against the default branch. This is not the
   following that 2026-10-29 removed: that opened a tab per worktree, which
   piled up; the panel is one tuicr, ended before the next starts.
+- 2026-11-19: Your tuicr comments reach the thread's agent with your next
+  prompt (Rob chose it). Before, you commented, then told the agent to
+  read your review, and it searched tuicr's sessions by slug; nothing
+  showed comments were waiting. The `UserPromptSubmit` hook adds the ones
+  its agent has not been given as the prompt's context, once each (the
+  thread's `review-comments` record). It reads tuicr's files rather than
+  running `tuicr review comments` on every prompt: tuicr's index counts
+  each session's comments, so a prompt with none costs 0.03 ms, where a
+  tuicr process would cost milliseconds. Only your prompts carry them, to
+  the thread's own agent: a helper beside it works for that agent.
 
 ## Holding threads
 

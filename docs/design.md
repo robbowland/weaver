@@ -14,6 +14,7 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below); `.closing` while `wvr close` ends it, so nothing keeps a thread being closed as lost |
 | `$STATE_DIR/new/<skey>_<token>/` | a thread being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
+| `$STATE_DIR/threads/<created>-<hash>/` | a thread's own files, for its life (`store.Thread.Dir`: named for its record's `created` and its `worktree`'s FNV-32a hash, which nothing changes, so they follow it through a new pane, lost and resumed): `review-comments`, the ids of the tuicr comments its agent has been given, one a line (see [Review panel](#review-panel)) |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
@@ -166,6 +167,28 @@ sessions, newest by `updated_at`) and `tuicr review comments --session
 <slug>` (each comment as JSON with its `location`, `path:line`). A session's
 slug includes its range, so after the panel's next round on a new commit
 earlier comments sit in the previous session.
+
+Your comments reach the thread's agent without your asking. Its
+`UserPromptSubmit` hook (`wvr hook`, run before the prompt goes) gives a
+prompt of yours, as its `additionalContext`, the comments its agent has
+not been given yet (`reviewNotes`): yours (tuicr's author `user`, or the
+`username` of your tuicr settings; never an agent's `tuicr review add
+--username`), in the sessions of the thread's worktree or of the one its
+agent works in now, written since the thread was made; each its location
+as `tuicr review comments` gives it (`path:line`, `path:12-14`, `[old]`
+for a deleted line, the path for a file's, `review` for the review's), its
+type when it has one, and its text, fenced and marked as your review
+comments, as many as fit in 9,000 characters (Claude Code takes 10,000),
+the rest with the next prompt. Those given go in the thread's
+`review-comments` record. Another agent's message carries none, and
+neither does a helper's prompt (a pane with no thread record): the helper
+works for the thread's agent. weaver reads tuicr's files, never runs it:
+`reviews/index.json` in tuicr's data directory (`~/Library/Application
+Support/tuicr` on macOS, else `$XDG_DATA_HOME/tuicr`) lists each
+checkout's sessions by canonical path with how many comments each holds,
+so only a session with comments is opened (`internal/tuicr`). Without
+tuicr or its files, a prompt carries nothing. A prompt costs 0.03 ms more
+with no comments, 0.3 ms with a 46 KB session of 20.
 
 ### Thread record
 
