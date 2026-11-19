@@ -155,8 +155,8 @@ the second (two when it failed), and the panel ends with its pane.
 worktree it is in (`agentWhere`) and puts the thread's widths back; in a
 pane that is no agent's, a panel beside it in its directory. On home's
 board or in a view (`onList`: lists, whose selection is the board's `v`
-to open) it opens nothing, says `alt+v opens a thread's review: v on the
-board opens the selected thread's`, and exits 1. `--full` zooms
+to open) it opens nothing, says `weaver: alt+v opens a thread's review: on the
+board, use v`, and exits 1. `--full` zooms
 it. One press per agent at a time (`<skey>_<pane>.opening.lock`, `store.Lock`), under the
 session's UI lock.
 
@@ -356,8 +356,10 @@ branch against what the pull request merges into (its record's `base`).
 ### Commands for the dashboard
 
 - `wvr new [--from PANE]`: with no task and a terminal, the form. Exit 0
-  started (you are on the new tab unless `--no-focus`, or the form's
-  alt+enter started it in the background, which says so with a message), 130
+  started (you are on the new tab unless `--no-focus`; the form's alt+enter
+  hands it to `wvr _behind FILE`, a process of its own that makes it with
+  `--no-focus`'s behaviour while the form closes, and says how it went,
+  Worktrunk's and git's words going to `$STATE_DIR/behind.log`), 130
   cancelled (nothing made), 1 error (one line on stderr). `--from` starts in
   that agent's repository. Outside weaver's session it starts the thread in
   weaver's (`toWeaverSession`), from the directory it runs in, as `wvr
