@@ -1,8 +1,10 @@
 package wvr
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,6 +167,93 @@ func rexCheck() check {
 		remedy: byHand{"install Rex (superlogical.com/rex), weaver's terminal"}}
 }
 
+// rexKeysCheck is weaver's keys in Rex: the Rex server has read them (its
+// keymap binds weaver.lua's), or, Rex not running, its init.lua loads
+// them for when it starts. Without them no weaver key does anything, and
+// wvr says so in one line Rex hides as it switches session. The fix
+// (loadRexKeys) is --fix's alone: init.lua is yours, and plain wvr only
+// says what it lacks.
+func (e *Env) rexKeysCheck() check {
+	c := check{name: "Rex's keys", weight: needed}
+	init := rexInit()
+	b, err := os.ReadFile(init)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		c.found, c.remedy = "cannot read "+tildify(init), byHand{"make " + tildify(init) + " readable"}
+		return c
+	}
+	loaded, err := rex.Keys()
+	answers := err == nil
+	fix := func() error { return e.loadRexKeys(answers) }
+	switch {
+	case loaded:
+		c.ok, c.found = true, "loaded"
+	case !loadsWeaver(string(b)):
+		c.found = tildify(init) + " does not load them: no weaver key works"
+		c.remedy = selfFix{`add require("weaver") to ` + tildify(init), fix}
+	case !answers:
+		// Rex reads init.lua as it starts.
+		c.ok, c.found = true, tildify(init)+" loads them (Rex is not running)"
+	default:
+		c.found, c.remedy = "Rex has not read them: no weaver key works", selfFix{"rex config reload", fix}
+	}
+	return c
+}
+
+// loadRexKeys has Rex load weaver's keys: weaver.lua written, a require
+// of it added at the end of Rex's init.lua when that has none (the file
+// backed up beside it first, as the hooks' is), and Rex, when it answers,
+// told to read its configuration again.
+func (e *Env) loadRexKeys(answers bool) error {
+	_, loads, _, err := e.writeRexKeys()
+	if err != nil {
+		return err
+	}
+	if !loads {
+		init := rexInit()
+		ch, err := setup.AddLine("rex", init, `require("weaver")`)
+		if err != nil {
+			return err
+		}
+		backup, err := ch.Apply(setup.Timestamp())
+		if err != nil {
+			return err
+		}
+		msg := "wvr: " + tildify(init) + " loads weaver's keys now"
+		if backup != "" {
+			msg += " (the old one is " + tildify(backup) + ")"
+		}
+		fmt.Println(msg)
+	}
+	if !answers {
+		return nil
+	}
+	return rex.ReloadConfig()
+}
+
+// rexPrefs is the Rex app's preferences domain, and remoteControlPref its
+// Remote Control setting there.
+const rexPrefs, remoteControlPref = "com.superlogical.rex", "rex.client.remoteControl"
+
+// remoteControlCheck is the Rex app's Remote Control, without which it
+// shows nothing weaver opens (wvr leaves you to switch to it yourself):
+// its setting, as the app keeps it; not ok when there is none to read (no
+// app here, or one that never set it), as then weaver cannot tell.
+func remoteControlCheck() (check, bool) {
+	out, err := exec.Command("defaults", "read", rexPrefs, remoteControlPref).Output()
+	if err != nil {
+		return check{}, false
+	}
+	c := check{name: "Remote Control", weight: optional, found: "on"}
+	switch strings.TrimSpace(string(out)) {
+	case "1", "true", "YES":
+		c.ok = true
+	default:
+		c.found = "off: Rex shows nothing weaver opens"
+		c.remedy = byHand{"turn on Remote Control in Rex's settings (Rex Server)"}
+	}
+	return c, true
+}
+
 // broughtCheck is the files weaver brings to other programs (tuicr's
 // settings and theme, the weaver skill): there as weaver writes them, or
 // yours, left alone; tuicr's settings of yours said short of what the
@@ -210,14 +299,20 @@ func panelSettings(f string) []string {
 
 // checks are what weaver works with, each checked.
 func (e *Env) checks() []check {
-	cs := []check{
-		rexCheck(),
+	cs := []check{rexCheck()}
+	if cs[0].ok {
+		cs = append(cs, e.rexKeysCheck())
+		if rc, ok := remoteControlCheck(); ok {
+			cs = append(cs, rc)
+		}
+	}
+	cs = append(cs,
 		tool("git", "git", "git", needed, "--version"),
 		tool("Neovim", "nvim", "neovim", optional, "--version"),
 		tool("fzf", "fzf", "fzf", needed, "--version", 0, 62),
 		tuicrCheck(),
 		tool("Worktrunk", "wt", "worktrunk", needed, ""),
-	}
+	)
 	// Claude Code, its hooks running weaver.
 	c := check{name: "Claude Code", weight: needed, found: "not installed",
 		remedy: byHand{"install Claude Code (github.com/anthropics/claude-code)"}}
@@ -290,9 +385,10 @@ func (e *Env) Doctor(out io.Writer) error {
 }
 
 // Fix is `wvr doctor --fix`: what can be fixed, fixed. Homebrew installs
-// and upgrades what is missing or too old, weaver sets up its hooks and
-// brings its files, and, at a terminal, each sign-in is offered. Then
-// what is left.
+// and upgrades what is missing or too old, weaver sets up its hooks,
+// brings its files and has Rex load its keys (a require of them added to
+// Rex's init.lua, backed up first), and, at a terminal, each sign-in is
+// offered. Then what is left.
 func (e *Env) Fix(out io.Writer) error {
 	cs := e.checks()
 	var install, upgrade []string

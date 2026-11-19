@@ -208,6 +208,29 @@ func (ch Change) Apply(ts string) (string, error) {
 	return backup, nil
 }
 
+// AddLine is the change that adds line at the end of file, for a file of
+// yours weaver only adds to (Rex's init.lua loading weaver's keys): the
+// file as it is, or none, and with line after what is there. Applied
+// (Apply) as the hooks are, the file backed up beside it first.
+func AddLine(label, file, line string) (Change, error) {
+	ch := Change{label: label, file: file}
+	old, err := os.ReadFile(file)
+	switch {
+	case err == nil:
+		ch.existed = true
+	case errors.Is(err, fs.ErrNotExist):
+	default:
+		return Change{}, fmt.Errorf("cannot read %s: %v", file, err)
+	}
+	ch.old = old
+	ch.new = bytes.Clone(old)
+	if len(old) > 0 && old[len(old)-1] != '\n' {
+		ch.new = append(ch.new, '\n')
+	}
+	ch.new = append(ch.new, line+"\n"...)
+	return ch, nil
+}
+
 func Timestamp() string { return time.Now().Format("20060102-150405") }
 
 // backUp copies file from to a backup named as given, or with -2, -3, ...

@@ -41,9 +41,11 @@ session in Rex changes only its label, until the thread's name next
 changes: weaver finds its threads by Rex's ids.
 
 Rex binds keys in its app, so weaver's are a Lua file: `wvr` writes
-`weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, has
-Rex read it when it is new to Rex, and says to load it by adding
-`require("weaver")` to `init.lua` when that does not. It binds `alt+y`,
+`weaver.lua` beside Rex's `init.lua` (`~/.config/rex/`) as it starts, and
+has Rex read it when it is new to Rex. `init.lua` is yours: when it does not
+load weaver.lua, `wvr` only says so, and `wvr doctor --fix` adds
+`require("weaver")` to it (backing it up beside it first) and has Rex read
+it. It binds `alt+y`,
 `alt+Y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k`, `alt+h`/`alt+l` and
 `ctrl+q`, which asks every time before it quits. Rex's configuration is one
 for every session, so the keys are weaver's only in the Rex sessions weaver
@@ -559,9 +561,11 @@ keeps it in the macOS Keychain.
 ### Checking and fixing
 
 `wvr doctor` says what weaver works with, what is set up, and the command that
-fixes each problem. `wvr doctor --fix` does what it can: Homebrew installs
-what is missing or too old, weaver sets up its hooks and brings tuicr's files
-and its skill, and each sign-in is offered.
+fixes each problem: among them, whether Rex has loaded weaver's keys
+(without them no weaver key does anything) and whether Remote Control is on
+in Rex's settings. `wvr doctor --fix` does what it can: Homebrew installs
+what is missing or too old, weaver sets up its hooks, brings tuicr's files
+and its skill and has Rex load its keys, and each sign-in is offered.
 
 The review panel needs Rob's fork of tuicr (`robbowland/kegs/tuicr`,
 0.28.0-rb2 or later; its version ends in `-rbN`): upstream's drops a

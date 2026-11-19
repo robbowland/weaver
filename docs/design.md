@@ -919,6 +919,15 @@ over (`takeOver`): its id goes into their records.
   weaver.lua changed, or the server's keymap (`client.keymap`) has none of
   its bindings, it has Rex read its configuration again (`rex config
   reload`), the server having read init.lua before weaver.lua was there.
+  init.lua is the user's: when it has no `require` of weaver, `wvr` says
+  so on stderr (which Rex hides as it switches session), and `wvr doctor`
+  fails its `Rex's keys` check (the server's keymap, else, Rex not
+  running, init.lua's text); `--fix` alone adds `require("weaver")` at
+  init.lua's end, backed up beside it as the hooks' file is
+  (`setup.AddLine`, `Change.Apply`), and reloads Rex's configuration.
+  doctor reads Remote Control from the Rex app's preferences
+  (`rex.client.remoteControl` in `com.superlogical.rex`), and leaves the
+  check out when there is no setting to read.
   weaver.lua's keys are weaver's only in the sessions it made, and run wvr
   with `REX_BIN_DIR` where the wvr that wrote it found rex, and the settings
   a key's wvr reads that it had set (`rexSettings`: `XDG_STATE_HOME`,

@@ -287,3 +287,42 @@ func TestApplyIsAtomicAndBacksUpEach(t *testing.T) {
 		t.Errorf("left beside it: %q", left)
 	}
 }
+
+// AddLine puts the line after what is there, a line of its own, and Apply
+// backs the file up beside it first; a file not there is made, with no
+// backup.
+func TestAddLine(t *testing.T) {
+	dir := t.TempDir()
+	init := filepath.Join(dir, "init.lua")
+	if err := os.WriteFile(init, []byte(`rex.set("theme", "x")`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ch, err := AddLine("rex", init, `require("weaver")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ch.Changed() {
+		t.Fatal("adding a line: no change")
+	}
+	backup, err := ch.Apply("20261119-120000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(init); string(b) != "rex.set(\"theme\", \"x\")\nrequire(\"weaver\")\n" {
+		t.Errorf("init.lua: %q", b)
+	}
+	if b, _ := os.ReadFile(backup); backup != init+".bak.20261119-120000" || string(b) != `rex.set("theme", "x")` {
+		t.Errorf("backup %s: %q, want the file as it was beside it", backup, b)
+	}
+	none := filepath.Join(dir, "rex", "init.lua")
+	ch, err = AddLine("rex", none, `require("weaver")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backup, err := ch.Apply("20261119-120000"); err != nil || backup != "" {
+		t.Errorf("none there: backup %q, %v", backup, err)
+	}
+	if b, _ := os.ReadFile(none); string(b) != "require(\"weaver\")\n" {
+		t.Errorf("made: %q", b)
+	}
+}

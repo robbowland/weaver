@@ -32,12 +32,12 @@ func (e *Env) Start(name string) error {
 		name = "weaver"
 	}
 	e.SelfSetup()
-	keys, loads, changed, err := e.writeRexKeys()
+	_, loads, changed, err := e.writeRexKeys()
 	switch {
 	case err != nil:
 		fmt.Fprintln(os.Stderr, "weaver: could not write weaver's keys for Rex: "+err.Error())
 	case !loads:
-		fmt.Fprintf(os.Stderr, "weaver: for its keys, add require(\"weaver\") to %s, then run rex config reload\n", tildify(filepath.Join(filepath.Dir(keys), "init.lua")))
+		fmt.Fprintf(os.Stderr, "weaver: Rex does not load weaver's keys: wvr doctor --fix adds require(\"weaver\") to %s\n", tildify(rexInit()))
 	case changed || !rex.KeysLoaded():
 		// Rex reads its configuration only when told: one read before
 		// weaver.lua was there (or was this) has none of its keys.
@@ -83,14 +83,7 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	if err != nil {
 		return "", false, false, err
 	}
-	init := os.Getenv("REX_CONFIG")
-	if init == "" {
-		conf := os.Getenv("XDG_CONFIG_HOME")
-		if conf == "" {
-			conf = os.Getenv("HOME") + "/.config"
-		}
-		init = filepath.Join(conf, "rex", "init.lua")
-	}
+	init := rexInit()
 	f = filepath.Join(filepath.Dir(init), "weaver.lua")
 	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
 		return f, false, false, err
@@ -107,6 +100,19 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 	}
 	b, _ := os.ReadFile(init)
 	return f, loadsWeaver(string(b)), changed, nil
+}
+
+// rexInit is the init.lua Rex reads: $REX_CONFIG, else rex/init.lua in
+// the configuration directory.
+func rexInit() string {
+	if f := os.Getenv("REX_CONFIG"); f != "" {
+		return f
+	}
+	conf := os.Getenv("XDG_CONFIG_HOME")
+	if conf == "" {
+		conf = os.Getenv("HOME") + "/.config"
+	}
+	return filepath.Join(conf, "rex", "init.lua")
 }
 
 // rexSettings are the variables a wvr run by a key reads that Rex's server
