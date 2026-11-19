@@ -26,14 +26,13 @@ const (
 	prClosed = "closed"
 )
 
-// threadPR is a thread's pull request: its number and repository (none
-// when git alone says its branch merged), how it stands, whether it is a
-// draft, its checks (failing, running, passing; "" for none) and its review
-// (changes requested, approved, requested; "" for none asked). Into is the
-// branch git says it merged into (origin/main), when git said so.
+// threadPR is a thread's pull request: its number (none when git alone
+// says its branch merged), how it stands, whether it is a draft, its
+// checks (failing, running, passing; "" for none) and its review (changes
+// requested, approved, requested; "" for none asked). Into is the branch
+// git says it merged into (origin/main), when git said so.
 type threadPR struct {
 	Num    int    `json:"num,omitempty"`
-	Repo   string `json:"repo,omitempty"`
 	State  string `json:"state"`
 	Draft  bool   `json:"draft,omitempty"`
 	Checks string `json:"checks,omitempty"`
@@ -43,7 +42,7 @@ type threadPR struct {
 
 // prOfItem is pull request it as a thread shows it.
 func prOfItem(it github.Item) threadPR {
-	pr := threadPR{Num: it.Number, Repo: it.Repo, State: prOpen, Draft: it.Draft}
+	pr := threadPR{Num: it.Number, State: prOpen, Draft: it.Draft}
 	switch strings.ToUpper(it.State) {
 	case "MERGED":
 		pr.State = prMerged

@@ -33,10 +33,10 @@ func TestPRFor(t *testing.T) {
 		want threadPR
 		ok   bool
 	}{
-		{"by branch", threadKey{repo: "O/R", branch: "fix-tests"}, threadPR{Num: 45, Repo: "o/r", State: prOpen, Checks: "failing"}, true},
-		{"a fork's, as pr-N", threadKey{repo: "o/r", branch: "pr-47"}, threadPR{Num: 47, Repo: "o/r", State: prOpen, Checks: "passing", Review: "approved"}, true},
-		{"by its item", threadKey{ref: "o/r#48"}, threadPR{Num: 48, Repo: "o/r", State: prMerged}, true},
-		{"by its item, in any case", threadKey{ref: "O/R#48", repo: "o/r", branch: "fix-tests"}, threadPR{Num: 48, Repo: "o/r", State: prMerged}, true},
+		{"by branch", threadKey{repo: "O/R", branch: "fix-tests"}, threadPR{Num: 45, State: prOpen, Checks: "failing"}, true},
+		{"a fork's, as pr-N", threadKey{repo: "o/r", branch: "pr-47"}, threadPR{Num: 47, State: prOpen, Checks: "passing", Review: "approved"}, true},
+		{"by its item", threadKey{ref: "o/r#48"}, threadPR{Num: 48, State: prMerged}, true},
+		{"by its item, in any case", threadKey{ref: "O/R#48", repo: "o/r", branch: "fix-tests"}, threadPR{Num: 48, State: prMerged}, true},
 		{"another repository's branch", threadKey{repo: "o/r", branch: "docs"}, threadPR{}, false},
 		{"its repository not known", threadKey{branch: "fix-tests"}, threadPR{}, false},
 		{"no pull request", threadKey{repo: "o/r", branch: "nothing"}, threadPR{}, false},
@@ -214,7 +214,7 @@ func TestNotePRs(t *testing.T) {
 	}
 	m := newPRMemo()
 	e.notePRs(m)
-	want := threadPR{Num: 45, Repo: "o/r", State: prOpen, Checks: "failing", Review: "requested"}
+	want := threadPR{Num: 45, State: prOpen, Checks: "failing", Review: "requested"}
 	if got := e.readPRs()["17"]; got != want {
 		t.Fatalf("read %+v, want %+v", got, want)
 	}
@@ -234,7 +234,7 @@ func TestNotePRs(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.notePRs(m)
-	want = threadPR{Num: 45, Repo: "o/r", State: prMerged, Into: "origin/main"}
+	want = threadPR{Num: 45, State: prMerged, Into: "origin/main"}
 	if got := e.readPRs()["17"]; got != want {
 		t.Fatalf("merged: read %+v, want %+v", got, want)
 	}
