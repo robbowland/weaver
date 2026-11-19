@@ -3,6 +3,7 @@ package wvr
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/session"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // A fetch's pid left behind (its wvr _fetch killed, the machine shut down)
@@ -85,5 +87,36 @@ func TestFormFooter(t *testing.T) {
 func TestKeyLabelEnter(t *testing.T) {
 	if l := keyLabel(formBackground); l != "alt+⏎" || fzfKey(l) != formBackground {
 		t.Errorf("keyLabel(%q) = %q, back %q", formBackground, l, fzfKey(l))
+	}
+}
+
+// wvr new from a shell outside weaver's session starts the thread in
+// weaver's session, from the directory it runs in; with weaver's not
+// running, it says so.
+func TestNewOutsideTheSession(t *testing.T) {
+	e, home := outside(t)
+	repo, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	t.Chdir(repo)
+	if err := e.New([]string{"--here", "--no-focus", "say hello"}); err != nil {
+		t.Fatalf("wvr new outside: %v", err)
+	}
+	recs := e.openingRecords()
+	if e.Session != "demo" || e.RexID != home.ID || len(recs) != 1 {
+		t.Fatalf("wvr new outside: in %q (%s), %d threads opening; want demo (%s), one", e.Session, e.RexID, len(recs), home.ID)
+	}
+	if th, err := store.ReadThread(recs[0]); err != nil || th.Worktree != repo || th.Task != "say hello" {
+		t.Errorf("its thread: %+v (%v), want say hello in %s", th, err, repo)
+	}
+	if err := home.Quit(); err != nil {
+		t.Fatal(err)
+	}
+	e = &Env{&session.Env{StateDir: e.StateDir, SockDir: e.SockDir, ClaudeDir: e.ClaudeDir, Self: e.Self}}
+	if err := e.New([]string{"--here", "--no-focus", "say hello"}); err == nil || !strings.Contains(err.Error(), "no Rex session demo of weaver's is running") {
+		t.Errorf("wvr new with weaver's not running: %v, want it said", err)
 	}
 }

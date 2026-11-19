@@ -359,7 +359,10 @@ branch against what the pull request merges into (its record's `base`).
   started (you are on the new tab unless `--no-focus`, or the form's
   alt+enter started it in the background, which says so with a message), 130
   cancelled (nothing made), 1 error (one line on stderr). `--from` starts in
-  that agent's repository.
+  that agent's repository. Outside weaver's session it starts the thread in
+  weaver's (`toWeaverSession`), from the directory it runs in, as `wvr
+  status` prints weaver's counts; both fail only when weaver's session is
+  not running.
 - `wvr close [--yes] [--remove-worktree] [PANE]`: PANE is an agent or its
   review panel (default: the focused one). It says what goes and asks `close it?
   [y/N]` (`--yes` skips only that); then, for a worktree it may remove, `remove

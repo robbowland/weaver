@@ -571,7 +571,8 @@ func checkThread(task string, fm form) string {
 }
 
 // New is `wvr new [options] [TASK]`: a thread for TASK (or, without
-// one, the form's), its worktree and its session.
+// one, the form's), its worktree and its session. Outside it, in the
+// weaver session.
 func (e *Env) New(args []string) error {
 	var nameArg, repoArg, branch, base, itemArg string
 	var from mux.PaneID
@@ -625,8 +626,9 @@ func (e *Env) New(args []string) error {
 			task = append(task, a)
 		}
 	}
-	if e.Session == "" {
-		return errors.New("not inside a weaver session: start it with `wvr`, then alt+N (or wvr new) there")
+	// From a terminal outside it, into the weaver session.
+	if err := e.toWeaverSession(); err != nil {
+		return err
 	}
 	// Where it starts: --repo; the agent of --from's repository; else here.
 	start, _ := os.Getwd()

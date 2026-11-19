@@ -153,14 +153,8 @@ var commands = map[string]command{
 		}
 		return nil
 	}},
-	"status": {session: true, run: done(func(e *wvr.Env, args []string) {
-		if arg(args, 0) == "--push" {
-			e.PushStatus()
-		} else {
-			fmt.Println(e.StatusText())
-		}
-	})},
-	"gc": {run: done(func(e *wvr.Env, _ []string) { e.Sweep() })},
+	"status": {run: (*wvr.Env).Status},
+	"gc":     {run: done(func(e *wvr.Env, _ []string) { e.Sweep() })},
 	"doctor": {run: func(e *wvr.Env, args []string) error {
 		switch arg(args, 0) {
 		case "":

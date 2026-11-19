@@ -114,7 +114,9 @@ that changes it from anywhere:
 |  | `ctrl+e` | Write a long task in `$EDITOR` |
 |  | `esc` | Cancel |
 
-From a shell, `wvr new "fix the flaky test"` does the same. Its options are
+From a shell, `wvr new "fix the flaky test"` does the same, from the
+directory it runs in; outside weaver's session, it starts the thread in
+weaver's session. Its options are
 `--name NAME`, `--repo DIR`, `--branch NAME`, `--base REF`, `--here` (the current checkout),
 `--edit` (write the task in `$EDITOR`) and `--no-focus`.
 
@@ -459,7 +461,9 @@ An agent that starts needing you, or finishes, rings the terminal bell.
 ### Counts
 
 `wvr status` prints the counts: `[!] 1  [x] 2  [/] 3` means one agent needs
-you, two finished that you haven't seen, and three are working. The board's
+you, two finished that you haven't seen, and three are working. It prints
+weaver's session's from any terminal, so a menu bar or a shell prompt can
+show them. The board's
 border shows the same counts in colour, updated as they change rather than
 polled.
 
