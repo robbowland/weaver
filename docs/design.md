@@ -1001,7 +1001,9 @@ configs loaded) and the plugins it fetched for it (`weaver/plugins`).
 Windows of the weaver session beside home, out of the thread numbering
 (GITHUB at index 900, LINEAR at 901), each weaver's own list of a service's
 work items (`itemsview.go`, one view over a source per service). Every view is in the session but those hidden from their setup
-screen (`$STATE_DIR/hidden-views`; `wvr view NAME` shows one again);
+screen (`$STATE_DIR/hidden-views`; `wvr view NAME` shows one again, which
+the board's `?` help lists first for each hidden one, `boardHelp`: fzf's
+preview takes no clicks, so its rows are no buttons);
 `$WEAVER_VIEWS` names them instead (`none`, or `github linear`).
 
 A view is ready when it is signed in: GITHUB when gh is installed and has a

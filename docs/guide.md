@@ -197,7 +197,8 @@ views, then back to the thread you came from.
 
 A view that is not set up yet says in its window what it needs, such as gh installed and signed in, or a Linear
 API key, and `enter` sets that up. `h` in a view hides it; `wvr view linear`
-shows it again, and `WEAVER_VIEWS` chooses the views outright.
+shows it again (the board's `?` help lists the views you hid, and says so),
+and `WEAVER_VIEWS` chooses the views outright.
 
 Each view groups its items like the board:
 
