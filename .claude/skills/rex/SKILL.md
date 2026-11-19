@@ -124,6 +124,13 @@ connection that goes without a close message stays a client for 60 s
 19. The sidebar's colour is not configurable (a raised surface over the
     theme's background, rgb(19,20,19) on black); `interfaceStyle`
     (`system | useTheme | blendTheme`) does not change it.
+20. **Rex sends shift+enter as `CSI 27;2;13~`** (xterm's modifyOtherKeys
+    form) to a program that asked for nothing, alt+enter as ESC CR. fzf
+    has no shift-enter or ctrl-enter and passes the CSI over in silence;
+    weaver.lua types shift+enter into weaver's popups as ESC CR (the form's
+    alt+enter). A Lua binding that returns false gives the key back as Rex
+    would have sent it. `rex.block.call(terminal, "write", {block_id=…,
+    data=…})` types bytes into a block from a key's function.
 
 ## Testing against Rex
 

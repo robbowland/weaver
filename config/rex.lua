@@ -142,6 +142,17 @@ local function key(k, fn)
   end)
 end
 
+-- shift+enter in one of weaver's popups is alt+enter there, which the
+-- new-thread form takes to start the thread in the background: Rex sends
+-- shift+enter as CSI 27;2;13~, which fzf passes over. No other popup takes
+-- alt+enter, so there it still does nothing. Anywhere else (an agent's
+-- pane) the key is the terminal's, as Rex sends it.
+rex.bind("shift+enter", function(ctx)
+  if not weavers(ctx) or not inPopup(ctx) then return false end
+  pcall(rex.block.call, terminal, "write", { block_id = ctx.block_id, data = "\27\r" })
+  return true
+end)
+
 key("alt+y", function(ctx) return run(ctx, { "go", "home" }, pwd(ctx)) end)
 -- In a thread's session, its own board: its agent and its helpers.
 key("alt+shift+y", function(ctx) return run(ctx, { "go", "local" }, pwd(ctx)) end)

@@ -463,6 +463,92 @@ func TestKeysInPopup(t *testing.T) {
 	}
 }
 
+// shift+enter in one of weaver's popups reaches its program as alt+enter
+// (ESC CR), which fzf can read and the new-thread form starts a thread in
+// the background with; in a window's pane (an agent's) it is the
+// terminal's, as Rex sends it (CSI 27;2;13~).
+func TestKeysShiftEnter(t *testing.T) {
+	at, err := os.MkdirTemp("/tmp", "wvr-rex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(at) })
+	reg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(at, "weaver.lua"), []byte(keysLua(t, "/usr/bin/true", reg+"/sessions", "", "")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(at, "init.lua"), []byte("pcall(require, \"weaver\")\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rextest.ServerAt(t, Bin(), at)
+	// A program that notes the first n bytes typed at it, raw, once it is
+	// ready for them.
+	out := t.TempDir()
+	reader := func(name string, n int) []string {
+		return []string{"/bin/sh", "-c", `stty raw -echo; : >"$1.ready"; dd bs=1 count="$2" 2>/dev/null >"$1"; exec /bin/sleep 600`,
+			"sh", filepath.Join(out, name), strconv.Itoa(n)}
+	}
+	s, err := Start(reg, "demo", "/", reader("tiled", 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Quit() })
+	v, err := s.view()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tiled := ""
+	for _, w := range v.Windows {
+		for _, l := range w.Layers {
+			for _, b := range l.Blocks {
+				tiled = b.ID
+			}
+		}
+	}
+	var made struct {
+		Blocks []string `json:"block_ids"`
+	}
+	if err := s.callS("session.new_layer", map[string]any{"bounds": []float64{0.25, 0.25, 0.5, 0.5}, "focus": true,
+		"layout": layout(mux.Spawn{Argv: reader("popup", 2)}, "weaver")}, &made); err != nil || len(made.Blocks) == 0 {
+		t.Fatal(err, made)
+	}
+	for _, f := range []string{"tiled", "popup"} {
+		for i := 0; ; i++ {
+			if _, err := os.Stat(filepath.Join(out, f+".ready")); err == nil {
+				break
+			}
+			if i == 50 {
+				t.Fatalf("the %s's reader did not start", f)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	press := func(block string) bool {
+		var r struct {
+			Handled bool `json:"handled"`
+		}
+		if err := s.callS("client.key", map[string]any{"block_id": block, "key": map[string]any{"key": "enter", "mods": "shift",
+			"consumed_mods": "", "text": "", "unshifted_codepoint": 13, "composing": false, "action": "press"}}, &r); err != nil {
+			t.Fatal(err)
+		}
+		return r.Handled
+	}
+	typed := func(f, want string) string {
+		var b []byte
+		for i := 0; i < 50 && string(b) != want; i++ {
+			time.Sleep(100 * time.Millisecond)
+			b, _ = os.ReadFile(filepath.Join(out, f))
+		}
+		return string(b)
+	}
+	if h, got := press(made.Blocks[0]), typed("popup", "\x1b\r"); !h || got != "\x1b\r" {
+		t.Errorf("shift+enter in a popup: handled %v, typed %q, want true, %q", h, got, "\x1b\r")
+	}
+	if h, got := press(tiled), typed("tiled", "\x1b[27;2;13~"); h || got != "\x1b[27;2;13~" {
+		t.Errorf("shift+enter in a window's pane: handled %v, typed %q, want false, %q", h, got, "\x1b[27;2;13~")
+	}
+}
+
 // A pane's width is set in its own window, whatever the windows before it:
 // here one of blocks that are not terminals, whose width is not known.
 func TestBorder(t *testing.T) {

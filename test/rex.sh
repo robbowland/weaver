@@ -129,7 +129,7 @@ ok "start: a Rex session of its name, home in its first window, the board in it"
 		R capture -s "$SID" -b "$(view | jq -r '.windows[0].layers[0].blocks[0].block_id')" --trim | sed 's/^/  | /'
 	}
 ok "start: weaver's keys written beside Rex's init.lua, and Rex told to read them" \
-	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|11"
+	"$(grep -c "local wvr = \"$AT/bin/wvr\"" "$AT/weaver.lua")|$(grep -c 'require("weaver")' "$AT/start.out")|$(R api call client.keymap '{}' | jq '[.bindings[] | select(.source | startswith("weaver.lua"))] | length')" "1|0|12"
 
 # --- wvr in a Rex session weaver did not make (any Rex terminal's):
 # weaver's session, shown, never a board of that one
@@ -389,11 +389,26 @@ else
 		sed 's/^/  restart: /' "$AT/restart.out"
 fi
 
+# --- the form in its popup, as Alt N opens it (a floating layer made as
+# wvr's makes one: wvr opens a popup only when an app is attached):
+# shift+enter, pressed as the app sends it, starts the thread in the
+# background (weaver.lua makes it the form's alt+enter), and says so where
+# you are
+FL=$(R api call session.new_layer "$(jq -nc --arg s "$SID" --arg w "$AT/bin/wvr" --arg d "$AT/repo" '{session_id: $s, bounds: [0.2, 0.2, 0.6, 0.6], focus: true,
+	layout: {block: {flavor: "com.superlogical.terminal.shell", label: "weaver", options: {command: [$w, "new", "--here"], cwd: $d}}}}')" | jq -r '.block_ids[0]')
+waitfor 'R capture -s "$SID" -b "$FL" 2>/dev/null | grep -q "IN THE BACKGROUND"' 50
+R send -s "$SID" -b "$FL" 'second thread'
+waitfor 'R capture -s "$SID" -b "$FL" 2>/dev/null | grep -q "task  second thread"' 50
+k=$(R api call client.key "{\"session_id\":\"$SID\",\"block_id\":\"$FL\",\"key\":{\"action\":\"press\",\"key\":\"enter\",\"mods\":\"shift\",\"text\":\"\",\"unshifted_codepoint\":13}}" | jq -r .handled)
+waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
+said() { view | jq -r '[.windows[].layers[] | select(.kind == "floating") | .blocks[].label] | join("|")'; }
+waitfor 'said | grep -q "in the background"' 30
+T2=$(threads | grep -vx "$T")
+ok "form: shift+enter in its popup starts the thread in the background, and says so" \
+	"$k|$(windows "$T2")|$(said | grep -o 'weaver: started [^|]*')" "true|02 second thread · repo/main/2|weaver: started 02 second thread · repo/main in the background"
+
 # --- a thread's own window closed by hand while a helper runs: the thread
 # is closed as the board's x closes it, its session ending, helpers too
-(cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'second thread' >/dev/null 2>&1)
-waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
-T2=$(threads | grep -vx "$T")
 B2=$(block_at "$T2" 1 1)
 waitfor '[ -f "$AT/pid.${B2#block:}" ]' 100
 printf '%s' "$(ev SessionStart ',"source":"startup"')" | CLAUDE_PID=$(cat "$AT/pid.${B2#block:}") REX_SESSION=$T2 REX_BLOCK=$B2 wvr hook >/dev/null
