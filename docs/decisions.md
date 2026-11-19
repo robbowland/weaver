@@ -519,6 +519,23 @@ can supersede an earlier one, and says so.
   nor keeps a preview's offset, and tracking it means following every way
   of scrolling. Dragging the card's scrollbar is the one way not marked: it
   scrolls as before, without the hold.
+- 2026-11-19: The board has a section per project, with what needs you
+  pinned on top. Grouped by state alone, IDLE became one long list that
+  mixed every repository once there were many threads (Rob: "better
+  sectioning on things so there's not just a big blob of threads"). Rob
+  chose the layout from a mockup: NEEDS YOU on top, across repositories,
+  holds what alt+1 visits (needs you, then done and not yet seen,
+  read-only threads too), so DONE is no longer a heading of its own; then
+  each repository's threads under its name in capitals, working first, the
+  busiest repository first; then REVIEWS (read-only threads at work or at
+  rest), LOST and HELD as before. Under a repository's heading the
+  repo/branch column shows the branch alone; NEEDS YOU keeps both, since it
+  mixes repositories. A repository's threads idle for more than a day fold
+  into `+ N older`, so its section shows what is live: HELD's fold, made
+  per section rather than copied. A folded thread stays reachable: its 1-9
+  key unfolds it, and the next load puts the cursor on it and jumps; going
+  home from it and alt+y over it unfold it too. The board as text lists
+  every row.
 
 ## Threads
 

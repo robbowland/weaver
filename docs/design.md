@@ -436,8 +436,8 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   unasked, its worktree never offered for removal. The board lists it under
   HELD, last, newest first, its note as its fact, its cell `[=]`, and its age
   a shade brighter after a week. Past three, HELD shows the three newest and
-  one row (id `m`) for the rest, `… N more held`, whose `enter` (`wvr _fold`,
-  the board's `<base>.heldopen`) shows them all and then folds them again;
+  one row (id `mheld`) for the rest, `… N more held`, whose `enter` (`wvr _fold
+  mheld`, the board's `<base>.unfolded`) shows them all and then folds them again;
   the board as text (`wvr ls | cat`) lists every one. A held thread is hidden while an agent with its
   session id still runs (being closed). Neither the session starting (its
   lost threads brought back) nor `wvr resume --all` takes a held thread;
@@ -517,31 +517,43 @@ and refreshes), or as the card is shown from its top again (`ctrl+r`, `s`,
 fzf draws one sharp border in faint grey: `┌─ [ WEAVER :: THREADS ] 5 ──── [!] 2  [x] 1  [/] 1 ─┐`, the
 title and the counts in its label. Inside, from the top: a blank
 line (the search input takes its place, so nothing moves), the agents under a
-heading per group, groups apart by one blank line, fzf's footer with the keys
+heading per section, sections apart by one blank line, fzf's footer with the keys
 that work now, then the card. The card goes beside the list when the pane can
 be 150 columns wide (74 of them), else below it, where it gets what the list
 leaves: under 6 lines it is hidden, and `s`, `tab` or `?` show it over the
-list. When even the list would not fit, the gaps between groups go first, so
+list. When even the list would not fit, the gaps between sections go first, so
 a heading never shows without its rows. With no agents, the board says how
 to start one, with nothing to select.
 
-| Group | Glyph | Who | Order |
-| --- | --- | --- | --- |
-| NEEDS YOU | `[!]` red | needs you | longest waiting first |
-| DONE | `[x]` green | done, not yet seen | finished longest ago first |
-| WORKING | `[/]` grey | working; a thread whose agent has not reported, for its first 2 minutes | longest working first |
-| IDLE | `[x]` `[ ]` faint, `[-]` grey | done and seen, idle, interrupted, exited (its pane kept: R, x), not reporting | most recent first |
-| REVIEWS | as its state | a read-only thread's agent (`mode` `review`), in any state | by state as above, then as that group orders |
+| Section | Who | Order |
+| --- | --- | --- |
+| NEEDS YOU | needs you (`[!]` red), then done and not yet seen (`[x]` green), from every repository, read-only threads too | longest waiting first, finished longest ago first |
+| a repository's, its name in capitals | its threads that work (`[/]` grey; a thread whose agent has not reported, for its first 2 minutes), then the rest: done and seen (`[x]` faint), idle (`[ ]` faint), interrupted (`[-]` grey), exited (its pane kept: R, x), not reporting | longest working first, then most recent first |
+| REVIEWS | a read-only thread's agent (`mode` `review`) at work or at rest | as a repository's |
+| LOST, HELD | lost and held threads (Lost threads) | newest first |
 
-The group is what the agent asks of you (`session.Need`: needs you, done and
-unseen, working or starting, nothing), from its row (`AgentRows`: its
-hooks' state refined by Claude Code's own session file). The border's
+A thread is in NEEDS YOU by what its agent asks of you (`session.Need`:
+needs you, done and unseen, working or starting, nothing), from its row
+(`AgentRows`: its hooks' state refined by Claude Code's own session file);
+else in its repository's section, by the repository part of `git.WhereOf`
+(the name its row's repo/branch shows before the `/`). The border's
 counts, ctrl+q's question (needs you or working: mid-turn), alt+1,
 the card, close's card, quit's card and `wvr restart`'s mid-turn guard all
-take it from there, so none says otherwise. So the headings' counts are the
-border's, and the order is the one alt+1
-visits, but for read-only threads: REVIEWS holds them whatever their state
-(the title's counts, by state, still include them). A row: its number (1-9), glyph, name (`Row.Called`, as everything that
+take it from there, so none says otherwise. So NEEDS YOU's count is the
+border's `[!]` and `[x]` together, and its order is the one alt+1 visits.
+Repositories go busiest first: the most threads working, then the latest
+`since` among their rows, then by name; a single one has its heading too.
+Under a repository's heading its rows' repo/branch is the branch alone.
+Past a day unchanged (`idleOld`), a repository's threads at rest fold into
+one row (id `m<section>`), `+ N older`, whose `enter` (`wvr _fold ID`)
+shows them and then folds them again, as HELD's does: the sections
+unfolded are kept in `<base>.unfolded`, one key a line, and the panes
+folded away in `<base>.folded`. A 1-9 key whose thread is folded away runs
+`wvr _fold ID PANE jump` then reloads: `<base>.goto` asks the next load's
+`wvr _chrome` to put the cursor on its row and jump; `wvr _pos` of a pane
+folded away (going home from it) does the same without the jump, and
+alt+y's popover over such a thread opens with its section unfolded. The
+board as text (`wvr ls | cat`) lists every row. A row: its number (1-9), glyph, name (`Row.Called`, as everything that
 names it: the name you gave the thread, else Claude Code's title, else the
 thread's task or item, else the last prompt; at most 40 columns), one fact (what it
 waits on; for a finished turn, its last reply;
@@ -557,8 +569,10 @@ file, `commondir` and `HEAD`.
 ### Items
 
 `wvr _rows` prints one item per line, TAB-separated: `id pane tab prev next label display`. `id` is `a<pane>` for an
-agent, `l<session id>` a lost thread, `h<group>` a heading and `g<group>` the
-gap above it (an empty board has no items: its message is fzf's header); fzf tracks the selection by it (`--track --id-nth 1`). A heading
+agent, `l<session id>` a lost thread, `m<section>` a fold row, `h<section>` a
+heading and `g<section>` the gap above it, where a section is `needs`,
+`p<repository>` (its name, any character but letters, digits, `.`, `-` and
+`_` as `_`), `reviews`, `lost` or `held` (an empty board has no items: its message is fzf's header); fzf tracks the selection by it (`--track --id-nth 1`). A heading
 or gap has the list positions of the agents before and after it in `prev` and
 `next`. `label` (`name · repo/branch · turn N`) heads the card. `display` has
 a TAB after the glyph; fzf shows it with `--tabstop 1` and searches only what

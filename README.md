@@ -13,17 +13,15 @@ threads come back after Rex restarts or the machine does.
 ```
 ┌─ [ WEAVER :: THREADS ] 5 ─────────────────── [!] 2  [x] 1  [/] 1 ─┐
 │                                                                      │
-│   NEEDS YOU · 2                                                      │
+│   NEEDS YOU · 3                                                      │
 │   01 [!]  Add a CLI flag          Bash: python app.py --name … 11m  │
 │   02 [!]  Tidy the fish config    question: Which config file…  8m  │
-│                                                                      │
-│   DONE · 1                                                           │
 │   03 [x]  Add a README            Wrote README.md and CONTRIB…  8m  │
 │                                                                      │
-│   WORKING · 1                                                        │
+│   WEAVER · 1                                                         │
 │   04 [/]  Group the dashboard r…  2 subagents                   9m  │
 │                                                                      │
-│   IDLE · 1                                                           │
+│   DOTFILES · 1                                                       │
 │   05 [x]  Audit yabai float rules Removed two dead rules; th…  47m  │
 │   ⏎ OPEN  n NEW  x CLOSE  h HOLD  / SEARCH  v REVIEW  ? HELP         │
 │ ─────────────────────────────────────────────────────────────────────│
@@ -37,8 +35,9 @@ threads come back after Rex restarts or the machine does.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- **See every agent at once.** The board groups threads by what they need
-  from you, with what each is waiting on or doing.
+- **See every agent at once.** The board puts what needs you on top, then
+  each repository's threads under its name, with what each is waiting on or
+  doing.
 - **Go straight to the one that's waiting.** `alt+1` jumps to the agent that
   has needed you longest; press it again for the next.
 - **Review as it works.** The review beside each agent shows its branch as

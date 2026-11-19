@@ -277,13 +277,17 @@ sessions in its sidebar's order.
 
 Agents are grouped under these headings:
 
-- **NEEDS YOU**: waiting on you;
-- **DONE**: finished, and you haven't looked yet;
-- **WORKING**: running a turn;
-- **IDLE**: idle or interrupted, or finished and seen;
-- **REVIEWS**: read-only threads (reviews and investigations), whatever
-  their state, since you watch them less closely; each row's cell still
-  shows its state, and `alt+1` still goes to one that needs you;
+- **NEEDS YOU**, on top: every thread waiting on you (a permission, a
+  question, an error), then every one that has finished and you haven't
+  looked at yet, from every repository, in the order `alt+1` visits them;
+- **one heading per repository**, its name in capitals (`WEAVER`): its
+  threads running a turn, longest first, then the rest (idle, interrupted,
+  or finished and seen), most recent first. The repository with the most
+  threads running comes first, then the one most recently active. A single
+  repository has its heading too;
+- **REVIEWS**: read-only threads (reviews and investigations) running a
+  turn or at rest, since you watch them less closely; one that needs you,
+  or has finished and you haven't looked yet, is under NEEDS YOU;
 - **LOST**: threads whose session went, and that weaver hasn't brought back
   ([Keeping threads](#keeping-threads));
 - **HELD**: threads you put on hold, each with what's next
@@ -292,11 +296,18 @@ Agents are grouped under these headings:
 Each row shows the thread's number and name, its state as a cell (`[!]`,
 `[x]`, `[/]`, `[ ]`, `[-]`), one fact about it (what it waits on, the command
 it runs, what its last turn said, or its subagents), its
-repository and branch when there is room, and how long it has been in that
-state. Titles are bright only where a thread needs you. `×2` after a branch
-means two agents work in the same worktree.
+repository and branch when there is room (under a repository's heading, the
+branch alone), and how long it has been in that state. Titles are bright
+only where a thread needs you. `×2` after a branch means two agents work in
+the same worktree.
 
-The headings' counts are the board's border's. The cursor never rests on a
+Under a repository's heading, threads idle for more than a day fold into one
+row, `+ N older`: `enter` on it shows them, and on it again folds them. A
+thread's number key still goes to it while it is folded away, and shows it.
+The board as text (`wvr ls | cat`) lists every thread.
+
+NEEDS YOU's count is the border's `[!]` and `[x]` together; every heading
+counts its threads, folded ones included. The cursor never rests on a
 heading, and stays on its agent as the board reloads itself.
 
 When a thread's agent exits (you quit it, or it fails as it starts), its
