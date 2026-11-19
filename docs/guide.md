@@ -159,6 +159,14 @@ twice. `wvr restart --all` restarts every thread's agent, from any shell. An
 agent that is working, or waiting on you, is left alone, since restarting it
 would stop its turn; `--force` restarts it all the same.
 
+weaver notices the update itself: an agent whose process started before the
+installed `claude` last changed says `update · R` on its row. Once such an
+agent has rested for ten minutes (idle, nothing asked of you, nothing in the
+background, its helpers at rest too), the home board restarts it onto the
+new version and says so: "weaver: restarted 03 onto Claude Code 2.1.330".
+It never restarts one in the Rex session you are looking at, where a prompt
+you are typing would be lost; until you leave it, `R` is yours to press.
+
 ### Renaming a thread
 
 A thread is called by the name it started with: the form's `name` row (or

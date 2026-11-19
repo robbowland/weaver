@@ -575,6 +575,9 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts
 	wn, wf, ww, numw := 0, 0, 0, 2
 	nums := false
+	// When the Claude Code agents start now last changed: an agent started
+	// before runs an older one (outdated). A few stats.
+	_, installed := claudeInstalled()
 	for _, a := range agents {
 		if a.Pane == "" {
 			continue
@@ -587,7 +590,7 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		// Its section is what it asks of you (session.Need), as the status
 		// line counts it, else its project; the glyph and fact say how.
 		need := a.Need(now)
-		glyph, fact := stateCell(a, now, p), rowFact(a, now)
+		glyph, fact := stateCell(a, now, p), rowSignals(rowFact(a, now), a, now, outdated(a, installed))
 		w := git.WhereOf(a.Root)
 		// Needs you, done and working: longest first; the rest: latest
 		// first.
@@ -1003,6 +1006,24 @@ func rowFact(a session.Row, now int64) string {
 	}
 	// Idle, or ended: quiet, the idle cell.
 	return ""
+}
+
+// rowSignals is a live row's fact (rowFact) with what matters beyond its
+// agent's turn, first: its agent behind an update of Claude Code (behind:
+// R restarts it onto the new one). Mid-turn, the turn's fact stands alone
+// (R would stop the turn).
+func rowSignals(fact string, a session.Row, now int64, behind bool) string {
+	if a.Exited || a.MidTurn(now) || a.NotReporting(now) {
+		return fact
+	}
+	var out []string
+	if behind {
+		out = append(out, "update · R")
+	}
+	if fact != "" {
+		out = append(out, fact)
+	}
+	return strings.Join(out, " · ")
 }
 
 // boardHints are the dashboard's footer: the keys that work now, as many as

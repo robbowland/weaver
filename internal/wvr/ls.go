@@ -57,6 +57,21 @@ func (e *Env) Home() error {
 	return e.Ls()
 }
 
+// tendEvery is how often the home board tends the threads (tend).
+const tendEvery = time.Minute
+
+// tend is what the home board does now and then, from its own process,
+// behind you and off the board's rows (which hooks redraw): the threads'
+// agents an update of Claude Code left behind restarted once they rest
+// (restartUpdated).
+func (e *Env) tend() {
+	go func() {
+		for range time.Tick(tendEvery) {
+			e.restartUpdated()
+		}
+	}()
+}
+
 // Ls is the dashboard (`wvr ls`): fzf over the session's agents, which
 // hooks reload through its socket as they change. Without fzf or a terminal,
 // the board as text. The home board ($LS_HOME) stays: its keys act and it
@@ -163,6 +178,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 	if home {
 		e.markBorn(base + ".born")
 		e.watchInstalls(base+".born", sock)
+		e.tend()
 		// The windows' labels as this weaver makes them: an install may
 		// have changed that under a running session, whose home board then
 		// starts again in it.

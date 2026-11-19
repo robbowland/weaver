@@ -916,6 +916,21 @@ can supersede an earlier one, and says so.
   again in one step, so the pane, window, nvim and number stay, and the
   agent resumes through the same meeting place a restored thread's does.
   An agent mid-turn is left unless forced: restarting stops the turn.
+- 2026-11-19: Claude Code update marker (Rob's choice). After an update,
+  noticing it and pressing `R` on each row was Rob's to remember. An agent
+  whose process started before the installed `claude` last changed (its
+  recorded `procStart` against the resolved file's mtime: two numbers
+  weaver already has or can stat, where asking each agent its version
+  would mean a process each) says `update · R` on its row, and one that has
+  rested ten minutes is restarted by the home board's tender, every
+  minute, from the board's own process: hooks never wait on it, and the
+  board's rows only stat a file. Never in the session the Rex app shows,
+  where a prompt being typed would be lost: Rex does not say which session
+  an app shows, so weaver reads the app's own preference for it
+  (`Workspace.lastFocusedSession`), and restarts nothing when it cannot.
+  Ten minutes at rest, its helpers at rest too, is long enough that you
+  are not about to prompt it, and short enough that an update is taken
+  within the hour.
 - 2026-11-19: `Ctrl q` asks again only when quitting would cost something:
   an agent or a helper working, one waiting on you, or nvim open in a
   review, whose unsaved edits would go. Otherwise it quits at once, as the

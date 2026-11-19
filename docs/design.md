@@ -319,6 +319,25 @@ stay. It says what it did (restarted, left mid-turn, failed) on stdout and
 in a message, since the board's `R` and the popover run it out of
 sight.
 
+An agent runs an older Claude Code than the one installed (`outdated`)
+when its process started (its state's `procStart`, ps's lstart in UTC)
+before the file its command resolves to (`$WEAVER_CLAUDE`, else `claude`
+on `$PATH`, links followed) last changed, to the second. Its row's fact
+starts `update · R` unless it is mid-turn, not reporting or exited (whose
+fact names `R` already); the board stats the file once a render. The home
+board's own process tends the threads every minute (`tend`, off the rows
+hooks redraw): each thread's agent behind an update that has rested ten
+minutes (`restartable`: no turn, nothing asked of you, not done unseen, no
+background task or subagent, no helper of its thread mid-turn or with a
+background task) is restarted as `R` restarts it, except in the Rex
+session the app shows. Rex does not say which that is; the app keeps it
+in its preferences (`Workspace.lastFocusedSession` of
+`com.superlogical.rex`, read with `defaults export`), and when that
+cannot be read none is restarted. What it restarted is said in that
+session: `weaver: restarted 03 05 onto Claude Code 2.1.330`, the version
+from the npm package's `package.json` above the file or a native
+install's file name, else "the new Claude Code".
+
 ### Work items
 
 `wvr new --pr REF` and `--issue REF` (with `--review`, read-only) start a
