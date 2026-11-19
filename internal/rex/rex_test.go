@@ -355,7 +355,8 @@ func keysLua(t *testing.T, wvr, sessions, settings, more string) string {
 }
 
 // A key's wvr runs with the settings wvr baked in (Rex's server has an
-// app's environment), from home when the pane's directory has gone; when it
+// app's environment), and WEAVER_KEY=1, for it to say what went wrong
+// where you are; from home when the pane's directory has gone; when it
 // cannot run at all, the key is the terminal's (false), not swallowed.
 func TestKeysRun(t *testing.T) {
 	server(t)
@@ -381,7 +382,7 @@ func TestKeysRun(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	for _, want := range []string{"XDG_STATE_HOME=/the/state\n", "WEAVER_VIEWS=\n", "REX_SESSION=" + s.ID + "\n"} {
+	for _, want := range []string{"XDG_STATE_HOME=/the/state\n", "WEAVER_VIEWS=\n", "REX_SESSION=" + s.ID + "\n", "WEAVER_KEY=1\n"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("a key's wvr has no %q in its environment:\n%s", want, env)
 		}

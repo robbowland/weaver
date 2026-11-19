@@ -52,7 +52,8 @@ end
 -- run runs wvr with args for the session the key was pressed in, in no
 -- pane of its own, so weaver acts on the focused one.
 -- From cwd, else home (as well when cwd has gone: a removed worktree's).
--- What it says when it fails goes to Rex's log (rex server logs). False
+-- What it says on stderr goes to Rex's log (rex server logs); WEAVER_KEY
+-- has it say what went wrong as a message too, where you are. False
 -- when it could not run at all (no wvr where it was): the key is the
 -- terminal's then, not swallowed.
 local function run(ctx, args, cwd)
@@ -62,6 +63,7 @@ local function run(ctx, args, cwd)
   for k, v in pairs(settings) do env[k] = v end
   env.REX_SESSION, env.REX_BLOCK = ctx.session_id, false
   env.REX_BIN_DIR = rexbin ~= "" and rexbin or false
+  env.WEAVER_KEY = "1"
   local opts = {
     cwd = (cwd ~= nil and cwd ~= "") and cwd or nil,
     env = env,

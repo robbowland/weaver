@@ -64,7 +64,8 @@ characters.
 
 The Rex app shows the window it is asked to, so weaver's moves (its keys,
 enter on the board, a new thread) ask it, which it does only with Remote
-Control on. When a key does nothing, `rex server logs` has what wvr said.
+Control on. When a key fails, weaver says why at the foot of the window;
+`rex server logs` has everything wvr said.
 
 Rex has no status line or message line: Rex shows each agent's state itself,
 from what Claude Code reports to it, the board shows the rest, and weaver's

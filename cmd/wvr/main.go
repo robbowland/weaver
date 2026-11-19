@@ -32,7 +32,7 @@ func main() {
 		fmt.Println("weaver " + buildVersion())
 		return
 	case "setup":
-		exit(setup.Run(args, wvr.Load().Self, os.Stdout))
+		exit(nil, setup.Run(args, wvr.Load().Self, os.Stdout))
 	}
 	c, ok := commands[cmd]
 	if !ok {
@@ -41,30 +41,39 @@ func main() {
 	}
 	e := wvr.Load()
 	if c.session && e.Session == "" {
-		exit(noSession(e))
+		exit(e, noSession(e))
 	}
-	exit(c.run(e, args))
+	exit(e, c.run(e, args))
 }
 
 // exit ends wvr as err says: nothing, the usage, or what went wrong (said
-// once, here, unless the command has said it already).
-func exit(err error) {
-	rex.Close()
+// once, here, unless the command has said it already: cli.ErrSaid, and
+// cli.ErrCancelled, which needs no word) on stderr. A key's wvr
+// (WEAVER_KEY=1, as weaver.lua runs it), whose stderr goes only to Rex's
+// log, says it as a message too, in e's session.
+func exit(e *wvr.Env, err error) {
+	code, msg := 0, ""
 	var x *cli.Exit
 	switch {
 	case err == nil:
-		os.Exit(0)
 	case errors.Is(err, cli.ErrHelp):
 		fmt.Print(wvr.UsageHelp())
-		os.Exit(0)
 	case errors.As(err, &x):
+		code = x.Code
 		if x.Err != nil {
-			fmt.Fprintln(os.Stderr, "weaver: "+x.Err.Error())
+			msg = "weaver: " + x.Err.Error()
 		}
-		os.Exit(x.Code)
+	default:
+		code, msg = 1, "weaver: "+err.Error()
 	}
-	fmt.Fprintln(os.Stderr, "weaver: "+err.Error())
-	os.Exit(1)
+	if msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		if e != nil && os.Getenv("WEAVER_KEY") == "1" {
+			e.Mux().Say(4000, msg)
+		}
+	}
+	rex.Close()
+	os.Exit(code)
 }
 
 // noSession is why a command that acts on the session you are in cannot:

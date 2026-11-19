@@ -945,7 +945,11 @@ over (`takeOver`): its id goes into their records.
   app's environment, where `rex.Bin` would find no rex but the app's
   server's own, and weaver its state in the wrong place. They run in the
   pane's directory (its program's when it reports none), from home when
-  that has gone; what wvr says on stderr goes to Rex's log, and a key whose
+  that has gone; what wvr says on stderr goes to Rex's log, and with
+  `WEAVER_KEY=1`, which weaver.lua sets, wvr's exit says its error as a
+  message too (`weaver: …`, for 4 s; not a cancellation or `cli.ErrSaid`,
+  said already), so a failing key is never silent; hooks and terminals
+  have stderr alone. A key whose
   wvr cannot run at all is the terminal's, not swallowed. In a floating
   layer (weaver's popups: the form, a card, alt+y's board) the keys are the
   popup's program's, but for shift+enter, which weaver.lua types into the
