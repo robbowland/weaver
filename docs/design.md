@@ -544,7 +544,8 @@ border's `[!]` and `[x]` together, and its order is the one alt+1 visits.
 Repositories go busiest first: the most threads working, then the latest
 `since` among their rows, then by name; a single one has its heading too.
 Under a repository's heading its rows' repo/branch is the branch alone.
-Past a day unchanged (`idleOld`), a repository's threads at rest fold into
+Past a day unchanged (`idleOld`), a repository's threads at rest, two or
+more (one shows as it is: its fold row would save no line), fold into
 one row (id `m<section>`), `+ N older`, whose `enter` (`wvr _fold ID`)
 shows them and then folds them again, as HELD's does: the sections
 unfolded are kept in `<base>.unfolded`, one key a line, and the panes

@@ -397,3 +397,21 @@ func TestBoardOneProject(t *testing.T) {
 		t.Errorf("one repository:\n%s", got)
 	}
 }
+
+// One thread idle for days shows as it is: a fold row in its place would
+// save no line.
+func TestBoardOneOldThreadUnfolded(t *testing.T) {
+	d := t.TempDir()
+	t.Setenv("FZF_SOCK", d+"/b.sock")
+	t.Setenv("FZF_COLUMNS", "116")
+	t.Setenv("FZF_LINES", "60")
+	t.Setenv("COLOR", "1")
+	t.Setenv("LS_JUMP", "")
+	t.Setenv("LS_HOME", "")
+	e, agents, _, now := boardScene(t)
+	// weaver's working and idle threads, and one of its two idle for days.
+	ids, folds := boardItems(t, e, []session.Row{agents[2], agents[3], agents[5]}, nil, now)
+	if want := "hpweaver a15 a17 a18 gz"; strings.Join(ids, " ") != want || len(folds) != 0 {
+		t.Errorf("items %q, folds %q: want %q, no fold", strings.Join(ids, " "), folds, want)
+	}
+}

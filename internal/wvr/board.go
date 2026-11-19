@@ -339,7 +339,7 @@ func (s *section) rank() int {
 // what needs you, the projects busiest first (the most at work, then the
 // latest to change), then reviews, lost and held. With fold (the board,
 // not its text), HELD past heldFold and a project's threads idle past
-// idleOld fold.
+// idleOld, two or more, fold.
 func sections(rs []boardRow, order []int, fold bool) []*section {
 	by := map[string]*section{}
 	var ss []*section
@@ -388,7 +388,9 @@ func sections(rs []boardRow, order []int, fold bool) []*section {
 					n++
 				}
 			}
-			if n > 0 {
+			// One old thread shows as it is: its fold row would take
+			// its line.
+			if n > 1 {
 				s.fold = len(s.rows) - n
 			}
 		}

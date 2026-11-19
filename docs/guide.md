@@ -301,8 +301,8 @@ branch alone), and how long it has been in that state. Titles are bright
 only where a thread needs you. `×2` after a branch means two agents work in
 the same worktree.
 
-Under a repository's heading, threads idle for more than a day fold into one
-row, `+ N older`: `enter` on it shows them, and on it again folds them. A
+Under a repository's heading, threads idle for more than a day, when there
+are two or more, fold into one row, `+ N older`: `enter` on it shows them, and on it again folds them. A
 thread's number key still goes to it while it is folded away, and shows it.
 The board as text (`wvr ls | cat`) lists every thread.
 
