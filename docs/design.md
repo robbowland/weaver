@@ -338,9 +338,10 @@ branch against what the pull request merges into (its record's `base`).
 ### Commands for the dashboard
 
 - `wvr new [--from PANE]`: with no task and a terminal, the form. Exit 0
-  started (you are on the new tab unless `--no-focus`), 130 cancelled (nothing
-  made), 1 error (one line on stderr). `--from` starts in that agent's
-  repository.
+  started (you are on the new tab unless `--no-focus`, or the form's
+  alt+enter started it in the background, which says so with a message), 130
+  cancelled (nothing made), 1 error (one line on stderr). `--from` starts in
+  that agent's repository.
 - `wvr close [--yes] [--remove-worktree] [PANE]`: PANE is an agent or its
   review panel (default: the focused one). It says what goes and asks `close it?
   [y/N]` (`--yes` skips only that); then, for a worktree it may remove, `remove
@@ -899,7 +900,11 @@ over (`takeOver`): its id goes into their records.
   that has gone; what wvr says on stderr goes to Rex's log, and a key whose
   wvr cannot run at all is the terminal's, not swallowed. In a floating
   layer (weaver's popups: the form, a card, alt+y's board) the keys are the
-  popup's program's. Rex starts a key's wvr at once, not after the last
+  popup's program's, but for shift+enter, which weaver.lua types into the
+  popup as alt+enter (ESC CR): Rex sends shift+enter as CSI 27;2;13~, which
+  fzf has no name for and passes over, and the form's alt+enter starts a
+  thread in the background. No other popup takes alt+enter. Outside a popup
+  shift+enter is the terminal's, as Rex sends it. Rex starts a key's wvr at once, not after the last
   one's: `wvr review` holds the session's UI lock (`uiLock`) and `wvr next`
   tries it, so a press while the last is at work does not undo it. alt+j
   and alt+k are the app's own `session.next` and `session.previous`

@@ -94,8 +94,10 @@ The command is `wvr`. `brew upgrade` keeps it current.
 
 2. **Start a thread.** Press `alt+N`, type what the agent should do, and press
    `enter`. weaver creates a worktree on a new branch named after the task,
-   opens a window with its review on the left and the agent on the right, and
-   gives the agent your task as its first prompt.
+   opens a window with its review on the left and the agent on the right,
+   gives the agent your task as its first prompt, and takes you to it.
+   `shift+enter` starts it in the background instead, leaving you where you
+   are.
 
 3. **Check on your threads.** Press `alt+y`: the board opens over the thread
    you are in. Each thread is a row showing its state, what it is doing or

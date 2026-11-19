@@ -621,6 +621,18 @@ can supersede an earlier one, and says so.
   from under the running agent. Naming the branch with a model before the
   worktree is made would have kept the two together, but would delay every
   new thread.
+- 2026-11-19: The form starts a thread in the background as well as in
+  front (Rob: "enter starts the task and switches the screen to it and
+  shift enter starts it in the background"). enter on `start` goes to the
+  thread, as before; alt+enter, from any row, starts it with `--no-focus`'s
+  behaviour and says so with a message, the popup closing on where you
+  were. fzf has no shift-enter (and no ctrl-enter): Rex sends shift+enter as
+  CSI 27;2;13~, which fzf passes over, so weaver.lua types shift+enter into
+  any of weaver's popups as alt+enter (ESC CR). That needs no knowing which
+  popup is the form (Rex names no process's arguments, and the form's
+  pickers run in its popup): no other popup takes alt+enter, and a card
+  reading keys raw passes ESC CR over. Outside popups
+  the binding gives the key back, so an agent's shift+enter is untouched.
 
 ## Work items and views
 

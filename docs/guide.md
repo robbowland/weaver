@@ -91,13 +91,17 @@ repository of the pane you were on (else the one you used last).
 
 You type the task at the top. Under it, each choice has a row, with `start`
 first. `↑` and `↓` (or `tab`) move between rows, and `enter` (or a click) acts
-on the row you are on: on `start` it starts the thread; on a choice it changes
-that choice, then puts you back on `start`. The footer says what `enter` does
-where you are. Each choice also has a key that changes it from anywhere:
+on the row you are on: on `start` it starts the thread and takes you to it; on
+a choice it changes that choice, then puts you back on `start`. `shift+enter`
+(or `alt+enter`), from any row, starts the thread in the background instead:
+you stay where you were, a message says it started, and the board shows it.
+The footer says what `enter` does where you are. Each choice also has a key
+that changes it from anywhere:
 
 | Row | Key | Does |
 | --- | --- | --- |
-| `start` | `enter` | Start the thread (the row says what it would start) |
+| `start` | `enter` | Start the thread and go to it (the row says what it would start) |
+|  | `shift+enter`, `alt+enter` | Start the thread in the background, from any row |
 | `name` | `alt+n` | What the board and its window call it: by default a pull request's or issue's number and title (read-only, after `review :: `), else the title its agent gives it |
 | `repo` | `ctrl+r` | Choose another repository: recent ones, any zoxide knows, or a path |
 | `where` | `alt+w` | A new worktree, or a checkout that exists: the main one or a worktree (one a thread already works in says so) |
