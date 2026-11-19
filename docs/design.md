@@ -772,7 +772,14 @@ that one (home's).
   needs you · what it waits on`; a helper's, `02 › <its window's label>`.
   It goes to every agent that needs you, helpers included, and to every
   agent done that you have not looked at but a helper (its thread's to
-  look at).
+  look at). Its first jump of a run keeps where you were in
+  `$STATE_DIR/<skey>.back` (the window, its Rex session, the session the
+  run's last jump took you to, and when); a press in that session with
+  nothing else needing you (nothing, or only the agent you are on) shows
+  that window again and says `nothing else needs you: back to <place>`
+  there (`home`, a view, `03 name`, `03 › helper`). A press anywhere else
+  starts a new run, and the place is forgotten once used, once its window
+  is gone, or an hour after the run's last jump.
 - **A thread's window closed by hand:** its agent gone while its session
   runs on (its helpers' windows) is the thread closed, as `x` closes it:
   as the agent is retired its session ends, helpers and all, and the

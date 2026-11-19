@@ -288,7 +288,10 @@ you, and its row says which helper. `alt+Y` (`alt+shift+y`) opens the
 thread's own board instead: its agent and its helpers, each helper by its
 window's name, with the same keys; outside a thread it is `alt+y`. `enter`
 on a thread whose helper waits, and `alt+1`, go to that helper's window
-itself; `alt+1` passes a helper that is merely done. Choosing
+itself; `alt+1` passes a helper that is merely done. Once nothing else
+needs you, `alt+1` takes you back to where its first jump took you from
+("weaver: nothing else needs you: back to home"), if you are still where
+its last jump left you and it was within the hour. Choosing
 something that goes elsewhere or opens a dialog (a jump, `n`, `x`, `a`, or
 `enter` on a pull request) closes the popover first, then does it. To go to
 home's session itself, use `alt+j` and `alt+k`, which step through Rex's

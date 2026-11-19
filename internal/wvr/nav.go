@@ -393,7 +393,9 @@ func (e *Env) takeUILock(nowait bool) (func(), bool) {
 
 // Next is `wvr next` (Alt 1): to the agent that has needed you longest;
 // failing that, the one that finished longest ago and you haven't looked at
-// yet. Pressed again on one of those, on to the next, round and round.
+// yet. Pressed again on one of those, on to the next, round and round. Its
+// first jump keeps where you were (backPlace); once nothing else needs you,
+// it takes you back there.
 func (e *Env) Next() {
 	// Pressed again while the last press is still at work: that one moves
 	// you, so this one does nothing.
@@ -404,10 +406,11 @@ func (e *Env) Next() {
 	defer release()
 	rows, now := e.AgentRows()
 	type c struct {
-		class int
-		since int64
-		pane  mux.PaneID
-		label string
+		class   int
+		since   int64
+		pane    mux.PaneID
+		session string
+		label   string
 	}
 	var cs []c
 	for _, r := range rows {
@@ -428,17 +431,7 @@ func (e *Env) Next() {
 			continue
 		}
 		// What the message says as you land: whose, and why.
-		l := r.Called()
-		if i := strings.IndexByte(l, '\n'); i >= 0 {
-			l = l[:i]
-		}
-		l = ansi.Truncate(l, 40, "…")
-		switch {
-		case r.Tnum > 0:
-			l = fmt.Sprintf("%02d %s", r.Tnum, l)
-		case r.Helper():
-			l = fmt.Sprintf("%02d › %s", r.Thread, cmp.Or(r.WindowName, l))
-		}
+		l := rowName(r)
 		if r.State == agent.StateNeedsYou {
 			l += " · needs you"
 			if r.Waiting != "" {
@@ -447,7 +440,25 @@ func (e *Env) Next() {
 		} else {
 			l += " · done"
 		}
-		cs = append(cs, c{class, r.Since, r.Pane, l})
+		cs = append(cs, c{class, r.Since, r.Pane, r.Session, l})
+	}
+	// Where you are now, to go on from there: the session's active pane (a
+	// popup or a key's wvr is not a pane).
+	focused := e.focusedPane()
+	// A run of jumps goes on while you are in the session its last jump
+	// took you to; anywhere else, you left it, and a press starts another.
+	back, inRun := e.readBack(now)
+	if inRun && back.to != e.RexHere {
+		inRun = false
+		os.Remove(e.backFile())
+	}
+	if len(cs) == 0 || len(cs) == 1 && cs[0].pane == focused {
+		// Nothing else needs you: back where the run began.
+		if inRun && e.goBackTo(back, rows) {
+			return
+		}
+		inRun = false
+		os.Remove(e.backFile())
 	}
 	if len(cs) == 0 {
 		if term.IsTerminal(1) {
@@ -464,9 +475,6 @@ func (e *Env) Next() {
 		}
 		return cs[i].since < cs[j].since
 	})
-	// Where you are now, to go on from there: the session's active pane (a
-	// popup or a key's wvr is not a pane).
-	focused := e.focusedPane()
 	at := -1
 	for i, x := range cs {
 		if x.pane == focused {
@@ -474,10 +482,119 @@ func (e *Env) Next() {
 		}
 	}
 	pick := (at + 1) % len(cs)
+	if cs[pick].pane != focused {
+		if !inRun {
+			// The run's first jump: where you are, to come back to.
+			back = backPlace{}
+			if _, cur, _ := e.where(); cur.ID != "" {
+				back = backPlace{from: cur.ID, fromSession: e.RexHere}
+			}
+		}
+		if back.from != "" {
+			back.to, back.at = cs[pick].session, now
+			e.writeBack(back)
+		}
+	}
 	e.focus(cs[pick].pane)
 	e.MarkSeen(cs[pick].pane)
 	e.Mux().Say(2500, fmt.Sprintf("weaver: [%d/%d] %s", pick+1, len(cs), cs[pick].label))
 	e.PushStatus()
+}
+
+// rowName is row r's agent as alt+1's messages name it: its thread's
+// number and name ("03 Fix the tests"), a helper by its thread's number
+// and its window's label ("03 › reviews"), else what it is called.
+func rowName(r session.Row) string {
+	l := r.Called()
+	if i := strings.IndexByte(l, '\n'); i >= 0 {
+		l = l[:i]
+	}
+	l = ansi.Truncate(l, 40, "…")
+	switch {
+	case r.Tnum > 0:
+		l = fmt.Sprintf("%02d %s", r.Tnum, l)
+	case r.Helper():
+		l = fmt.Sprintf("%02d › %s", r.Thread, cmp.Or(r.WindowName, l))
+	}
+	return l
+}
+
+// backPlace is where a run of alt+1's jumps began, for alt+1 to come back
+// to once nothing else needs you: the window you were on and its Rex
+// session, the Rex session the run's last jump took you to (where the run
+// goes on from), and when that jump was (epoch s).
+type backPlace struct {
+	from        mux.WindowID
+	fromSession string
+	to          string
+	at          int64
+}
+
+// backStale is how long after a run's last jump alt+1 still comes back
+// (s): later, the place you started from is no longer what you are doing.
+const backStale = 3600
+
+// backFile keeps backPlace: "WINDOW FROM-SESSION TO-SESSION EPOCH".
+func (e *Env) backFile() string { return e.StateDir + "/" + e.SKey + ".back" }
+
+// readBack is where the run began, at now; false when none is kept, or it
+// is stale (removed then).
+func (e *Env) readBack(now int64) (backPlace, bool) {
+	l, err := files.FirstLine(e.backFile())
+	if err != nil {
+		return backPlace{}, false
+	}
+	f := strings.Fields(l)
+	if len(f) == 4 {
+		w, ok := mux.ParseWindow(f[0])
+		at, err := strconv.ParseInt(f[3], 10, 64)
+		if ok && err == nil && now-at <= backStale {
+			return backPlace{from: w, fromSession: f[1], to: f[2], at: at}, true
+		}
+	}
+	os.Remove(e.backFile())
+	return backPlace{}, false
+}
+
+func (e *Env) writeBack(b backPlace) {
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	bestEffort(files.WriteAtomic(e.backFile(), fmt.Appendf(nil, "%s %s %s %d\n", b.from, b.fromSession, b.to, b.at)))
+}
+
+// goBackTo takes you back to where the run began, saying so there, and
+// forgets it; false when that window is gone, or is where you are.
+func (e *Env) goBackTo(b backPlace, rows []session.Row) bool {
+	ws, cur, _ := e.where()
+	w, ok := windowIn(ws, b.from)
+	if !ok || w.ID == cur.ID {
+		return false
+	}
+	os.Remove(e.backFile())
+	m := e.Mux()
+	m.Show(w.ID)
+	// Said where you land, not in the session you left.
+	if m.Has(b.fromSession) {
+		m.Here = b.fromSession
+	}
+	m.Say(2500, "weaver: nothing else needs you: back to "+placeName(w, rows))
+	return true
+}
+
+// placeName is window w as alt+1's way back names it: home, a view, the
+// thread or helper whose window it is (rowName), else its label.
+func placeName(w mux.Window, rows []session.Row) string {
+	switch {
+	case isHome(w):
+		return mux.HomeName
+	case w.View != "":
+		return w.View
+	}
+	for _, r := range rows {
+		if r.Window == w.ID && (r.Tnum > 0 || r.Helper()) {
+			return rowName(r)
+		}
+	}
+	return w.Name
 }
 
 // agentOf is the agent of pane p: the pane itself when it is an agent (it
