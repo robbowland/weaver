@@ -478,7 +478,9 @@ needs:
   left running in the background from its worktree (a dev server, a
   watcher) is not: end it yourself once its thread has gone.
 - **Files.** Agents that are gone are forgotten. Lost threads go after a
-  month.
+  month. A thread's own files (the comments its agent was given, what it
+  is told as it starts) go once nothing is left of the thread: closed, or
+  lost and forgotten. A thread on hold keeps them.
 
 ## What weaver tracks
 

@@ -73,3 +73,50 @@ func TestGCKeepsHeldThreads(t *testing.T) {
 		}
 	}
 }
+
+// GC removes a thread's own directory once no record of its thread names
+// it, and only once it has stood an hour unchanged (a thread being made
+// writes it before its record); one named by a record anywhere a thread's
+// is kept (open, being closed, being opened, lost, held) stays.
+func TestGCThreadDirs(t *testing.T) {
+	dir := t.TempDir()
+	e := &Env{StateDir: dir + "/state", LostDir: dir + "/state/lost"}
+	th := func(n int) store.Thread {
+		return store.Thread{Num: n, Worktree: "/w/t", Created: int64(1700000000 + n)}
+	}
+	for _, d := range []string{e.LostDir, e.StateDir + "/new/rex-s_11", e.StateDir + "/new/rex-s_12"} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f, rec := range map[string]any{
+		e.StateDir + "/rex-s_1.thread":           th(1),
+		e.StateDir + "/rex-s_2.closing":          th(2),
+		e.LostDir + "/rex-s_s3.json":             store.Lost{SKey: "rex-s", Thread: th(3)},
+		e.LostDir + "/rex-s_s4.json":             store.Lost{SKey: "rex-s", Thread: th(4), Held: jsonx.Int(1)},
+		e.StateDir + "/new/rex-s_11/thread.json": th(5),
+		e.StateDir + "/new/rex-s_12/lost.json":   store.Lost{SKey: "rex-s", Thread: th(6)},
+	} {
+		if err := store.Write(f, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	for n := 1; n <= 8; n++ {
+		d := th(n).Dir(e.StateDir)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if n != 8 {
+			_ = os.Chtimes(d, old, old)
+		}
+	}
+	e.gcFiles()
+	// 7: named by none, an hour unchanged; 8: named by none, but new.
+	for n := 1; n <= 8; n++ {
+		_, err := os.Stat(th(n).Dir(e.StateDir))
+		if want := n != 7; (err == nil) != want {
+			t.Errorf("thread %d's directory kept: %v, want %v", n, err == nil, want)
+		}
+	}
+}

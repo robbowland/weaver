@@ -527,19 +527,12 @@ func (e *Env) Closing(f string) {
 }
 
 // ForgetClosed removes the files of the agent whose state file is f,
-// closed: whatever its state says of its agent; and its thread's own
-// directory (store.Thread.Dir: its item's context, the review comments it
-// was given), the thread being gone for good.
+// closed: whatever its state says of its agent. Its thread's own directory
+// (store.Thread.Dir) stays for GC, which removes it once no record of the
+// thread is left: one held as it closed still has its lost record.
 func (e *Env) ForgetClosed(f string) {
 	defer store.Lock(f)()
-	b := strings.TrimSuffix(f, ".json")
-	for _, r := range []string{b + ".closing", b + ".thread"} {
-		if th, err := store.ReadThread(r); err == nil && th.Created != 0 {
-			_ = os.RemoveAll(th.Dir(e.StateDir))
-			break
-		}
-	}
-	removePaneFiles(b)
+	removePaneFiles(strings.TrimSuffix(f, ".json"))
 }
 
 // forget is Forget, first doing end (when not nil) under the lock, once

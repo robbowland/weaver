@@ -124,7 +124,69 @@ func (e *Env) gcFiles() {
 	}
 	// A removed worktree's ignored files (wvr keepIgnored).
 	old(e.StateDir+"/trash", "*", month, true)
+	e.gcThreadDirs(time.Hour)
 	e.sweepSockets(day)
+}
+
+// gcThreadDirs removes the threads' own directories (store.Thread.Dir: the
+// context its agent is told, the review comments it was given) that no
+// record of a thread names any more, once unchanged for age: a thread
+// closed, or lost and forgotten. A directory lives as long as a record of
+// its thread does, open or held, and only this removes it. A thread being
+// made can write its directory before its record (age covers that).
+func (e *Env) gcThreadDirs(age time.Duration) {
+	ds, _ := filepath.Glob(e.StateDir + "/threads/*")
+	if len(ds) == 0 {
+		return
+	}
+	used := e.threadDirsUsed()
+	for _, d := range ds {
+		st, err := os.Lstat(d)
+		if err != nil || !st.IsDir() || used[d] || time.Since(st.ModTime()) <= age {
+			continue
+		}
+		os.RemoveAll(d)
+	}
+}
+
+// threadDirsUsed are the directories the records of threads name: open
+// (.thread), being closed (.closing), being opened (new/), lost or held
+// (lost/). A record moves between these, written where it goes before it
+// leaves where it was, or renamed, so all are read twice: one moving as
+// they are read is seen at one end of its move or the other.
+func (e *Env) threadDirsUsed() map[string]bool {
+	used := map[string]bool{}
+	thread := func(f string) {
+		if th, err := store.ReadThread(f); err == nil {
+			used[th.Dir(e.StateDir)] = true
+		}
+	}
+	lost := func(f string) {
+		if lo, err := store.ReadLost(f); err == nil {
+			used[lo.Thread.Dir(e.StateDir)] = true
+		}
+	}
+	for range 2 {
+		for _, f := range paneFiles(e.StateDir, "thread") {
+			thread(f)
+		}
+		for _, f := range paneFiles(e.StateDir, "closing") {
+			thread(f)
+		}
+		ls, _ := filepath.Glob(e.LostDir + "/*.json")
+		for _, f := range ls {
+			lost(f)
+		}
+		ns, _ := filepath.Glob(e.StateDir + "/new/*/thread.json")
+		for _, f := range ns {
+			thread(f)
+		}
+		ns, _ = filepath.Glob(e.StateDir + "/new/*/lost.json")
+		for _, f := range ns {
+			lost(f)
+		}
+	}
+	return used
 }
 
 // sweepSockets removes sockets nothing listens on any more (a board or a

@@ -992,10 +992,8 @@ func (e *Env) Resume(args []string) error {
 				return cli.ErrCancelled
 			}
 		}
-		// Its own directory goes with it (store.Thread.Dir).
-		if lo, err := store.ReadLost(f); err == nil && lo.Thread.Created != 0 {
-			bestEffort(os.RemoveAll(lo.Thread.Dir(e.StateDir)))
-		}
+		// Its own directory (store.Thread.Dir) is GC's to remove, once no
+		// record of it is left.
 		os.Remove(f)
 		// The boards drop its row (forgotten from a popup over one).
 		if e.Session != "" {

@@ -62,14 +62,16 @@ func TestForgetTakesTheLocks(t *testing.T) {
 	}
 }
 
-// A thread closed for good takes its own directory with it (its item's
-// context, the review comments it was given), from its record set aside
-// as it closed.
-func TestForgetClosedTakesTheThreadDir(t *testing.T) {
+// A thread put on hold keeps its own directory (its item's context, the
+// review comments it was given) as it closes: its held record names it,
+// so its agent resumes with them. Once that record is gone too (resumed
+// elsewhere, or forgotten), GC takes it.
+func TestHoldKeepsTheThreadDir(t *testing.T) {
 	dir := t.TempDir()
+	e := &Env{StateDir: dir, LostDir: dir + "/lost"}
 	b := dir + "/rex-w_3"
 	th := store.Thread{Num: 1, Worktree: "/w/fix", Created: 1700000000}
-	if err := store.Write(b+".json", agent.Record{Pid: "42"}); err != nil {
+	if err := store.Write(b+".json", agent.Record{Pid: "42", SessionID: "s1"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Write(b+".thread", th); err != nil {
@@ -79,13 +81,24 @@ func TestForgetClosedTakesTheThreadDir(t *testing.T) {
 	if err := os.MkdirAll(td, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	e := &Env{StateDir: dir}
+	if err := os.WriteFile(td+"/review-comments", []byte("c1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// wvr hold: its held record, then the close (wvr close --hold).
+	if !e.Hold(b+".json", "next: the docs") {
+		t.Fatal("hold: no record written")
+	}
 	e.Closing(b + ".json")
 	e.ForgetClosed(b + ".json")
-	if _, err := os.Stat(td); !os.IsNotExist(err) {
-		t.Errorf("the thread's directory stays: %v", err)
+	e.gcThreadDirs(0)
+	if _, err := os.Stat(td + "/review-comments"); err != nil {
+		t.Errorf("the held thread's directory went as it closed: %v", err)
 	}
-	if left, _ := os.ReadDir(dir); len(left) != 1 || left[0].Name() != "threads" {
-		t.Errorf("left %v, want only threads/", left)
+	if err := os.Remove(e.LostDir + "/rex-w_s1.json"); err != nil {
+		t.Fatal(err)
+	}
+	e.gcThreadDirs(0)
+	if _, err := os.Stat(td); !os.IsNotExist(err) {
+		t.Errorf("forgotten, its directory stays: %v", err)
 	}
 }
