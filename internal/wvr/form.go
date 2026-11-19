@@ -3,6 +3,7 @@ package wvr
 import (
 	"bufio"
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -799,8 +800,13 @@ func (e *Env) New(args []string) error {
 		if i := strings.IndexByte(query, '\n'); i >= 0 {
 			query = query[:i]
 		}
-		// The thread being made, framed as the form was.
 		fm := loadForm(sf)
+		// Started in the background: made behind you by a process of its
+		// own, the form closing at once; here when that cannot start.
+		if behind && e.startBehind(t, fm) == nil {
+			return nil
+		}
+		// The thread being made, framed as the form was.
 		err = framed(newFormLabel(fm), func(f *frame) error {
 			label, err := e.threadCreate(t, fm, nofocus || behind)
 			if err == nil {
@@ -830,6 +836,77 @@ func (e *Env) New(args []string) error {
 			return err
 		}
 	}
+}
+
+// behindJob is a thread the form starts in the background: its task and
+// the form's fields, for `wvr _behind FILE`.
+type behindJob struct {
+	Task string `json:"task"`
+	Form form   `json:"form"`
+}
+
+// behindLog is where threads started in the background say what they
+// said making their worktrees.
+func (e *Env) behindLog() string { return e.StateDir + "/behind.log" }
+
+// startBehind starts making the thread for task and fm in a process of its
+// own (`wvr _behind`), which outlives the form's popup and says how it
+// went where you are.
+func (e *Env) startBehind(task string, fm form) error {
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	f, err := os.CreateTemp(e.StateDir, "behind.")
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(behindJob{Task: task, Form: fm})
+	if err == nil {
+		_, err = f.Write(b)
+	}
+	if err = errors.Join(err, f.Close()); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	lg, err := os.OpenFile(e.behindLog(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	defer func() { _ = lg.Close() }()
+	c := exec.Command(e.Self, "_behind", f.Name())
+	c.Stdout, c.Stderr = lg, lg
+	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := c.Start(); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	bestEffort(c.Process.Release())
+	return nil
+}
+
+// Behind is `wvr _behind FILE`: the thread the form started in the
+// background (behindJob), made with --no-focus's behaviour, and said
+// where you are: started, or why not.
+func (e *Env) Behind(args []string) error {
+	f := arg(args, 0)
+	b, err := os.ReadFile(f)
+	os.Remove(f)
+	var j behindJob
+	if err != nil || json.Unmarshal(b, &j) != nil {
+		e.Mux().Say(6000, "weaver: could not start the thread: its form's fields are gone")
+		return cli.ErrSaid
+	}
+	label, err := e.threadCreate(j.Task, j.Form, true)
+	if err == nil {
+		e.Mux().Say(3000, "weaver: started "+label+" in the background")
+		return nil
+	}
+	what := oneline.Fit(oneline.Line(strings.SplitN(j.Task, "\n", 2)[0]), 30)
+	why := err.Error()
+	if errors.Is(err, cli.ErrSaid) {
+		why = "see " + tildify(e.behindLog())
+	}
+	e.Mux().Say(8000, "weaver: could not start "+strings.TrimRight(what, " ")+": "+why)
+	return cli.ErrSaid
 }
 
 // readKey is one key from the terminal, unechoed.

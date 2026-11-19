@@ -210,6 +210,8 @@ var commands = map[string]command{
 
 	// The new-thread form, and the threads it opens.
 	"_from": {session: true, run: (*wvr.Env).From},
+	// A thread the form started in the background, made behind you.
+	"_behind": {session: true, run: (*wvr.Env).Behind},
 	"_form": {run: func(e *wvr.Env, args []string) error {
 		if len(args) < 2 {
 			return &cli.Exit{Code: 1}
