@@ -361,6 +361,27 @@ func rowOf(rows, id string) int {
 	return 0
 }
 
+// boardHelp is the board's ? card: first the views you hid (h on a view's
+// setup card), each with the command that shows it again, which no key on
+// the board does; then the keys (Help). With WEAVER_VIEWS set, it chooses
+// the views and none is hidden.
+func (e *Env) boardHelp() string {
+	if _, set := os.LookupEnv("WEAVER_VIEWS"); set {
+		return Help()
+	}
+	hidden := e.hiddenViews()
+	out := ""
+	for _, n := range allViews {
+		if hidden[n] {
+			out += helpRow(strings.ToUpper(n), "wvr view "+n+" shows it again", "(in a shell)")
+		}
+	}
+	if out == "" {
+		return Help()
+	}
+	return CGrey + "HIDDEN VIEWS" + COff + " " + CDim + "(you hid them: h on a view's setup)" + COff + "\n" + out + "\n" + Help()
+}
+
 // peekChoice is what key, pressed on the board's line sel ("" on an empty
 // board) in Alt y's popover, asks for: tab and shift-tab's step to the
 // views beside it ("next", "prev"), or the wvr commands to run once the

@@ -180,7 +180,7 @@ func (e *Env) Preview(args []string) string {
 	// threads idle for more than a day.
 	if strings.HasPrefix(id, "m") {
 		if view == "help" {
-			return Help()
+			return e.boardHelp()
 		}
 		what := "the threads idle for more than a day"
 		if id == "m"+secHeld {
@@ -191,14 +191,14 @@ func (e *Env) Preview(args []string) string {
 	// A lost thread (its item's id l…, or without one, its session id).
 	if strings.HasPrefix(id, "l") || id == "" && pane != "" && !cli.Digits(pane) {
 		if view == "help" {
-			return Help()
+			return e.boardHelp()
 		}
 		return e.lostCard(pane, title)
 	}
 	p := mux.PaneID(pane)
 	switch view {
 	case "help":
-		return Help()
+		return e.boardHelp()
 	case "screen":
 		if pane == "" {
 			return ""

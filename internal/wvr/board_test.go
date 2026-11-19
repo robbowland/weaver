@@ -457,3 +457,30 @@ func TestBoardHintsTab(t *testing.T) {
 		}
 	}
 }
+
+// The board's ? help (its card while .view says help) lists the views you
+// hid, each with the command that shows it again; none hidden, or
+// WEAVER_VIEWS choosing the views, it is the keys alone.
+func TestBoardHelpHiddenViews(t *testing.T) {
+	e := &Env{&session.Env{StateDir: t.TempDir()}}
+	d := t.TempDir()
+	t.Setenv("FZF_SOCK", d+"/b.sock")
+	if err := os.WriteFile(d+"/b.view", []byte("help\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WEAVER_VIEWS", "")
+	os.Unsetenv("WEAVER_VIEWS")
+	help := func() string { return e.Preview([]string{"", "", ""}) }
+	if got := help(); got != Help() {
+		t.Errorf("none hidden: %q", got)
+	}
+	e.setHidden("linear", true)
+	got := ansi.Strip(help())
+	if !strings.HasPrefix(got, "HIDDEN VIEWS") || !strings.Contains(got, "LINEAR") || !strings.Contains(got, "wvr view linear shows it again") || strings.Contains(got, "wvr view github") {
+		t.Errorf("linear hidden:\n%s", got)
+	}
+	t.Setenv("WEAVER_VIEWS", "github")
+	if got := help(); got != Help() {
+		t.Errorf("WEAVER_VIEWS set: %q", got)
+	}
+}

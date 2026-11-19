@@ -37,12 +37,11 @@ type view struct {
 // names), else every view weaver has but those you hid. One not ready yet
 // shows faint in the strip, and going there sets it up.
 func (e *Env) viewNames() []string {
-	all := []string{"github", "linear"}
 	want, set := os.LookupEnv("WEAVER_VIEWS")
 	if set {
 		var ns []string
 		for _, n := range strings.Fields(strings.ReplaceAll(want, ",", " ")) {
-			for _, a := range all {
+			for _, a := range allViews {
 				if n == a {
 					ns = append(ns, n)
 				}
@@ -52,7 +51,7 @@ func (e *Env) viewNames() []string {
 	}
 	hidden := e.hiddenViews()
 	var ns []string
-	for _, n := range all {
+	for _, n := range allViews {
 		if !hidden[n] {
 			ns = append(ns, n)
 		}
@@ -60,8 +59,12 @@ func (e *Env) viewNames() []string {
 	return ns
 }
 
+// allViews are the views weaver has, in order.
+var allViews = []string{"github", "linear"}
+
 // hiddenViews are the views you hid from their setup screen, kept in
-// $STATE_DIR/hidden-views; `wvr view NAME` brings one back.
+// $STATE_DIR/hidden-views; `wvr view NAME` brings one back (the board's ?
+// help says so: boardHelp).
 func (e *Env) hiddenViews() map[string]bool {
 	m := map[string]bool{}
 	b, _ := os.ReadFile(e.StateDir + "/hidden-views")
