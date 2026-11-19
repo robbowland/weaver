@@ -4,10 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/session"
 )
 
@@ -47,5 +49,41 @@ func TestFetchPidTakenAgain(t *testing.T) {
 	case <-ended:
 		t.Error("the process that took the fetch's pid was ended")
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// The form's footer keeps every hint in its place as the cursor moves:
+// enter's slot is as wide on every row, start's naming the key that starts
+// the thread in the background too, which a click on it presses.
+func TestFormFooter(t *testing.T) {
+	rows := []string{"start", "name", "from", "mode", "repo", "where", "branch", "base"}
+	at := map[string]int{}
+	for _, id := range rows {
+		line := reSGR.ReplaceAllString(formRowFooter(id), "")
+		at[id] = ansi.StringWidth(line[:strings.Index(line, "↑↓")])
+	}
+	for _, id := range rows {
+		if at[id] != at["start"] {
+			t.Errorf("↑↓ at %d on %s, %d on start: the footer moves", at[id], id, at["start"])
+		}
+	}
+	start := reSGR.ReplaceAllString(formRowFooter("start"), "")
+	if !strings.HasPrefix(start, "⏎ START   alt+⏎ IN THE BACKGROUND") {
+		t.Errorf("start's footer %q: no alt+⏎ after ⏎", start)
+	}
+	col := ansi.StringWidth(start[:strings.Index(start, "alt+⏎")]) + 1 // fzf counts columns from 1
+	hs := formHints("start")
+	if h, ok := hintAt(hs, formGap, col); !ok || hintAct(h.key, "wvr") != "trigger(alt-enter)" {
+		t.Errorf("a click on alt+⏎ at column %d: %q, want trigger(alt-enter)", col, h.key)
+	}
+	if h, _ := hintAt(hs, formGap, 1); hintAct(h.key, "wvr") != "trigger(enter)" {
+		t.Errorf("a click on ⏎: %q, want trigger(enter)", h.key)
+	}
+}
+
+// fzf's alt-enter is weaver's alt+⏎, both ways.
+func TestKeyLabelEnter(t *testing.T) {
+	if l := keyLabel(formBackground); l != "alt+⏎" || fzfKey(l) != formBackground {
+		t.Errorf("keyLabel(%q) = %q, back %q", formBackground, l, fzfKey(l))
 	}
 }

@@ -408,22 +408,46 @@ func formEnter(id string) string {
 	return ""
 }
 
+// formBackground is the form's key that starts the thread from any row and
+// leaves you where you are (enter, on start, takes you to it). Rex sends
+// shift+enter, which fzf cannot read, as this key in weaver's popups
+// (weaver.lua).
+const formBackground = "alt-enter"
+
+// formGap is the room between the form's footer hints.
+const formGap = 3
+
+// formEnters are the footer's first hints with the cursor on row id: what
+// enter does there, and on start what formBackground does too.
+func formEnters(id string) []choice {
+	hs := []choice{{"⏎", formEnter(id)}}
+	if id == "start" || id == "" {
+		hs = append(hs, choice{keyLabel(formBackground), "IN THE BACKGROUND"})
+	}
+	return hs
+}
+
 // formHints are the form's footer with the cursor on row id: what enter
 // does there, then how to move, the editor and cancelling. The same hints
 // in the same places on every row, enter's slot as wide as its widest, so
 // nothing in it moves as the cursor does: only what enter does changes.
 func formHints(id string) []choice {
-	w := ansi.StringWidth(formEnter("start"))
+	w := ansi.StringWidth(hintLine(formEnters("start"), formGap))
 	for f := range formDoes {
-		w = max(w, ansi.StringWidth(formEnter(f)))
+		w = max(w, ansi.StringWidth(hintLine(formEnters(f), formGap)))
 	}
-	what := formEnter(id)
-	what += strings.Repeat(" ", w-ansi.StringWidth(what))
-	return []choice{{"⏎", what}, {"↑↓", "FIELDS"}, {"ctrl+e", "TASK IN $EDITOR"}, {"esc", "CANCEL"}}
+	hs := formEnters(id)
+	last := &hs[len(hs)-1]
+	pad := w - ansi.StringWidth(hintLine(hs, formGap))
+	if last.what == "" {
+		pad-- // hintLine puts a space before what there is
+	}
+	last.what += strings.Repeat(" ", max(pad, 0))
+	return append(hs, choice{"↑↓", "FIELDS"}, choice{"ctrl+e", "TASK IN $EDITOR"}, choice{"esc", "CANCEL"})
 }
 
 // formRowFooter is the form's footer on row id: its hints, each a button.
-func formRowFooter(id string) string { return hintLine(formHints(id), 3) }
+func formRowFooter(id string) string { return hintLine(formHints(id), formGap) }
 
 // baseRow is the form's base row: where the new branch starts, and how the
 // fetch is going.
@@ -740,7 +764,8 @@ func (e *Env) New(args []string) error {
 		if m := checkThread(t, fm); m != "" {
 			return errors.New(m)
 		}
-		return e.threadCreate(t, fm, nofocus)
+		_, err := e.threadCreate(t, fm, nofocus)
+		return err
 	}
 	if _, err := exec.LookPath("fzf"); err != nil || !term.IsTerminal(0) || !term.IsTerminal(1) {
 		return errors.New(`what should the agent do? weaver new "<task>" (the form needs a terminal and fzf)`)
@@ -764,7 +789,7 @@ func (e *Env) New(args []string) error {
 		query = fm.Item.Item.DefaultTask(mode)
 	}
 	for {
-		t, err := e.newForm(sf, query, repoErr)
+		t, behind, err := e.newForm(sf, query, repoErr)
 		if err != nil {
 			return err
 		}
@@ -775,8 +800,13 @@ func (e *Env) New(args []string) error {
 		// The thread being made, framed as the form was.
 		fm := loadForm(sf)
 		err = framed(newFormLabel(fm), func(f *frame) error {
-			err := e.threadCreate(t, fm, nofocus)
+			label, err := e.threadCreate(t, fm, nofocus || behind)
 			if err == nil {
+				// Started behind you: said where you are, as the form
+				// closes.
+				if behind {
+					e.Mux().Say(3000, "weaver: started "+label+" in the background")
+				}
 				return nil
 			}
 			// It could not be made: say why, unless that is on screen.
@@ -822,9 +852,13 @@ func readKey() byte {
 // form again.
 var errBackToForm = errors.New("back to the form")
 
-// newForm is the form until you start a thread it can start: the task, or
-// 130 when you cancel.
-func (e *Env) newForm(sf, query, errs string) (string, error) {
+// formStartsBehind is what the form prints after the task when you start
+// the thread in the background (formBackground).
+const formStartsBehind = "background"
+
+// newForm is the form until you start a thread it can start: the task, and
+// whether you started it in the background; or 130 when you cancel.
+func (e *Env) newForm(sf, query, errs string) (string, bool, error) {
 	q := session.Quote(e.Self)
 	qs := session.Quote(sf)
 	hd := q + " _form header " + qs + " {q}"
@@ -836,13 +870,16 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 		go e.fetchStart(fm.Repo, sf)
 	}
 	if err := e.SockDirReady(); err != nil {
-		return "", err
+		return "", false, err
 	}
 	for {
 		h := strings.TrimRight(e.FormHeader(sf, query, errs), "\n")
 		sock := e.formSock(sf)
 		os.Remove(sock)
-		args := []string{"--listen", sock, "--disabled", "--reverse"}
+		// The query printed first, whichever way the form ends: enter on
+		// start prints only it; formBackground, it then formStartsBehind
+		// (print is printed only as fzf accepts) and the row it was on.
+		args := []string{"--listen", sock, "--disabled", "--reverse", "--print-query"}
 		args = append(args, formFzf...)
 		// The task is the query; the rows are what enter (or a click) acts
 		// on: start, first, then each choice, which ↑↓, tab and the mouse
@@ -856,6 +893,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			"--bind", "focus:transform("+q+" _form focus {1})",
 			"--bind", "tab:down,btab:up",
 			"--bind", "enter,left-click:transform("+q+" _form keys {1} "+qs+")",
+			"--bind", formBackground+":print("+formStartsBehind+")+accept",
 			"--bind", "double-click:ignore",
 			"--bind", "click-footer:transform("+q+" _click form {1})",
 			"--bind", "load:transform("+q+" _form land "+qs+" {q})")
@@ -876,15 +914,14 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			rc = x.ExitCode()
 		}
 		if rc == 130 {
-			return "", cli.ErrCancelled
+			return "", false, cli.ErrCancelled
 		}
 		if rc > 1 {
-			return "", errors.New("fzf failed (the form needs fzf 0.62 or newer)")
+			return "", false, errors.New("fzf failed (the form needs fzf 0.62 or newer)")
 		}
-		query = strings.TrimRight(string(out), "\n")
-		if i := strings.IndexByte(query, '\n'); i >= 0 {
-			query = query[:i]
-		}
+		var rest string
+		query, rest, _ = strings.Cut(string(out), "\n")
+		behind := strings.HasPrefix(rest, formStartsBehind+"\n")
 		task := query
 		if first, err := files.FirstLine(sf + ".task"); err == nil && first == query {
 			if b, err := files.ReadTrim(sf + ".task"); err == nil {
@@ -892,7 +929,7 @@ func (e *Env) newForm(sf, query, errs string) (string, error) {
 			}
 		}
 		if errs = checkThread(task, loadForm(sf)); errs == "" {
-			return task, nil
+			return task, behind, nil
 		}
 	}
 }

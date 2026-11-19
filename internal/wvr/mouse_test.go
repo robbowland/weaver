@@ -31,6 +31,7 @@ func TestHintAct(t *testing.T) {
 		"⏎": "trigger(enter)", "esc": "trigger(esc)", "?": "trigger(?)", "n": "trigger(n)",
 		"ctrl+r": "trigger(ctrl-r)", "ctrl+e": "trigger(ctrl-e)", "alt+r": "trigger(alt-r)", "alt+B": "trigger(alt-B)",
 		"shift+tab": "trigger(btab)", "ctrl+q": "execute-silent(wvr _popup quit)", "1-9": "", "↑↓": "",
+		"alt+⏎": "trigger(alt-enter)",
 	} {
 		if got := hintAct(key, "wvr"); got != want {
 			t.Errorf("hintAct(%q) = %q, want %q", key, got, want)

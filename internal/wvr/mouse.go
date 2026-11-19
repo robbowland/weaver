@@ -83,7 +83,7 @@ func (e *Env) Click(args []string) {
 	case "pick":
 		fmt.Print(footClick(pickHints, 3, q))
 	case "form":
-		fmt.Print(footClick(formHints(arg(args, 1)), 3, q))
+		fmt.Print(footClick(formHints(arg(args, 1)), formGap, q))
 	}
 }
 

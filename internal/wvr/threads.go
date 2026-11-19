@@ -431,8 +431,9 @@ func threadItem(it items.Item) *store.ThreadItem {
 }
 
 // threadCreate starts the thread for task and the form's fields: its
-// worktree (unless here), then its window. Prints where it went.
-func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
+// worktree (unless here), then its window. Prints where it went; its
+// window's label.
+func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	var it items.Item
 	if fm.Item != nil {
 		it = fm.Item.Item
@@ -456,7 +457,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		// A pull request's thread works on its branch: in a checkout on
 		// another, it would review (and set the review base of) the wrong one.
 		if isPR && branch != pr.BranchName() {
-			return fmt.Errorf("%s is on %s, not %s's branch %s: start it in a worktree of its own",
+			return "", fmt.Errorf("%s is on %s, not %s's branch %s: start it in a worktree of its own",
 				tildify(dir), cmp.Or(branch, "a detached HEAD"), pr.Label(), pr.BranchName())
 		}
 	} else {
@@ -481,7 +482,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 			// (here, and to its agent) why not.
 			var ok bool
 			if pr.Behind, ok = e.prHead(fm.Repo, pr, branch); !ok {
-				return fmt.Errorf("could not fetch %s's head, and %s is not here: nothing to work on", pr.Label(), branch)
+				return "", fmt.Errorf("could not fetch %s's head, and %s is not here: nothing to work on", pr.Label(), branch)
 			}
 			if pr.Behind != "" {
 				fmt.Fprintf(os.Stderr, "%sweaver: %s%s\n", CDim, pr.Behind, COff)
@@ -494,7 +495,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		}
 		var ok bool
 		if dir, created, base, ok = threadWorktree(fm.Repo, branch, base, from, note); !ok {
-			return cli.ErrSaid
+			return "", cli.ErrSaid
 		}
 		// Named from the task by weaver, and made just now (threadWorktree
 		// keeps a base only for a branch it makes).
@@ -522,11 +523,11 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 	tok := token()
 	d := e.opening(tok)
 	if os.MkdirAll(d, 0o755) != nil {
-		return errors.New("cannot create " + d)
+		return "", errors.New("cannot create " + d)
 	}
 	if os.WriteFile(d+"/task", []byte(prompt), 0o644) != nil {
 		os.RemoveAll(d)
-		return errors.New("cannot write the task for its agent in " + d)
+		return "", errors.New("cannot write the task for its agent in " + d)
 	}
 	// Its stable number: the lowest free one (two at once must not share).
 	unlock := e.numLock()
@@ -538,25 +539,26 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) error {
 		Item: ti, Mode: fm.Mode}
 	if store.Write(d+"/thread.json", rec) != nil {
 		unlock()
-		return errors.New("cannot write the thread record")
+		return "", errors.New("cannot write the thread record")
 	}
 	unlock()
 	// Its window has its label from the start, not once its agent first
 	// reports.
-	tab, ok := e.threadTab(tok, dir, name, session.ThreadLabel(n, label, dir), nofocus)
+	wl := session.ThreadLabel(n, label, dir)
+	tab, ok := e.threadTab(tok, dir, name, wl, nofocus)
 	if !ok {
 		os.RemoveAll(d)
 		if created {
-			return fmt.Errorf("could not open the session for %s in Rex (its new worktree stays: %s)", name, dir)
+			return "", fmt.Errorf("could not open the session for %s in Rex (its new worktree stays: %s)", name, dir)
 		}
-		return fmt.Errorf("could not open the session for %s in Rex", name)
+		return "", fmt.Errorf("could not open the session for %s in Rex", name)
 	}
 	e.rememberRepo(fm.Repo)
 	// The boards and the GITHUB view show it now, not at its agent's first
 	// hook.
 	e.PushStatus()
 	fmt.Printf("weaver: thread %s in %s (window %s)\n", name, tildify(dir), tab)
-	return nil
+	return wl, nil
 }
 
 // branchNote is what a thread's first prompt ends with when weaver named
