@@ -169,7 +169,7 @@ Shift and V.
 | `alt+v` / `alt+V` | The focused agent's review / the same, full screen |
 | `alt+m` | In a view: a read-only review of the selected item |
 | `tab` / `shift+tab` | On home or in a view: the next / previous view |
-| `ctrl+q` | Quit the session, after asking |
+| `ctrl+q` | Quit the session (asking first while an agent is mid-turn) |
 
 On the board, `enter` or `1`–`9` jumps to a thread, `n` starts one, `x`
 closes one, `r` renames one, `R` restarts its agent after an update, `a`

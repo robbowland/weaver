@@ -47,7 +47,8 @@ load weaver.lua, `wvr` only says so, and `wvr doctor --fix` adds
 `require("weaver")` to it (backing it up beside it first) and has Rex read
 it. It binds `alt+y`,
 `alt+Y`, `alt+N`, `alt+v`, `alt+V`, `alt+1`, `alt+j`/`alt+k`, `alt+h`/`alt+l` and
-`ctrl+q`, which asks every time before it quits. Rex's configuration is one
+`ctrl+q`, which quits at once unless an agent is mid-turn or Neovim is open
+in a review (then it asks). Rex's configuration is one
 for every session, so the keys are weaver's only in the Rex sessions weaver
 made; in any other they are the terminal's. In weaver's popups (a new
 thread's form, a card, alt+y's board) they are the popup's. Rex runs them
@@ -427,10 +428,12 @@ there before adopting it, so that two processes don't share one conversation.
 
 Because threads come back, quitting everything is safe. `ctrl+q`, from any
 pane, quits the session with every agent and review in it, and `wvr` brings
-the threads back next time. It asks first, saying what would stop: a turn
-under way (an agent working, or waiting on you) stops with it.
+the threads back next time. It asks first only when quitting would stop
+something, and says what: a turn under way (an agent or a helper working,
+or one waiting on you), or Neovim open in a review, whose unsaved edits
+would go. Otherwise it quits at once.
 
-`wvr quit` quits after asking, and says what would stop: turns in progress,
+`wvr quit` asks every time, and says what would stop: turns in progress,
 and the reviews with Neovim open in them. From outside the session it quits
 a `weaver` session left running behind a closed terminal.
 

@@ -906,6 +906,15 @@ can supersede an earlier one, and says so.
   again in one step, so the pane, window, nvim and number stay, and the
   agent resumes through the same meeting place a restored thread's does.
   An agent mid-turn is left unless forced: restarting stops the turn.
+- 2026-11-19: `Ctrl q` asks again only when quitting would cost something:
+  an agent or a helper working, one waiting on you, or nvim open in a
+  review, whose unsaved edits would go. Otherwise it quits at once, as the
+  2026-10-16 decision says (Rob: "ctrl+q asks only mid-turn"). Commit
+  542a2da had made it ask every time on Rex, recording no decision, so the
+  reflex the card was meant to avoid came back. wvr decides as the key runs
+  (`wvr _popup quit`), before any card opens, so Rex's key binding stays
+  as it was; `wvr quit` from a shell still asks every time, as it said it
+  would.
 
 ## The weaver session
 

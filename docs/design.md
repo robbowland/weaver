@@ -499,8 +499,11 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   (`wvr resume`), x forgets it (`wvr resume --forget`), and the preview
   shows its card (`wvr _preview <session id>`).
 - **Quit:** `ctrl+q` kills the session, and the threads come back as above.
+  It runs `wvr _popup quit`, which kills it at once when nothing would be
+  lost (`quitLoses`: no row mid-turn, helpers' included, and no review
+  `editing`), and otherwise opens `wvr quit`'s card in a popup.
   `wvr quit [--yes]` kills the session you are in (outside it,
-  `$WEAVER_SESSION`) after a card (ctrl+q's, in a popup): the threads kept,
+  `$WEAVER_SESSION`) after a card, every time: the threads kept,
   the turns under way, and the reviews where nvim is open (`editing`: an
   nvim among the panel's processes, which tuicr's `e` started, whose
   unsaved edits would go; no nvim weaver could ask has a socket), as `wvr
@@ -688,7 +691,7 @@ Whatever shows a key is its button, and every mouse action has its key.
   form <row>`, `_click pick` or `_items NAME click`, which finds the hint
   at `$FZF_CLICK_FOOTER_COLUMN` in the same list (`hintAt`) and prints its
   action (`hintAct`): `trigger(<its fzf key>)`, `^q` as `wvr _popup quit`
-  (ctrl+q's card), nothing for `1-9` and `↑↓`.
+  (ctrl+q: at once, or its card), nothing for `1-9` and `↑↓`.
 ### Resume card
 
 `wvr _preview PANE LABEL`: the label in bold, then the state and its age,

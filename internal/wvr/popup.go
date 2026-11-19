@@ -84,8 +84,18 @@ func (e *Env) Popup(args []string) error {
 	case "forget":
 		return e.cardPopup(append([]string{"resume", "--forget"}, args[1:]...)...)
 	case "quit":
-		// Ctrl q: what quitting stops and keeps, asked in the card.
-		return e.cardPopup("quit")
+		// Ctrl q asks, in the card, only when quitting would cost
+		// something; else it quits at once: the threads come back, and a
+		// question asked every time becomes a reflex (docs/decisions.md).
+		rows, now := e.AgentRows()
+		if work, editing := e.quitLoses(rows, now); work+editing > 0 {
+			return e.cardPopup("quit")
+		}
+		if err := e.quitNow(rows); err != nil {
+			e.Mux().Say(2500, "weaver: "+err.Error())
+			return cli.ErrSaid
+		}
+		return nil
 	case "adopt":
 		// An agent you started by hand becomes a thread where it is, said on
 		// the status line; anything else opens the picker of conversations.

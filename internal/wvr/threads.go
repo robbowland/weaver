@@ -1434,20 +1434,14 @@ func (e *Env) Quit(args []string) error {
 		if err != nil {
 			return errors.New("quit needs a terminal to ask, or --yes")
 		}
-		// What comes back (its threads) and what stops: turns under way,
-		// and the nvims open in the agents' reviews.
-		threads, work, editing := 0, 0, 0
+		// What comes back (its threads) and what stops.
+		threads := 0
 		for _, r := range rows {
 			if r.Tnum > 0 {
 				threads++
 			}
-			if r.MidTurn(now) {
-				work++
-			}
-			if e.editing(r.Pane) {
-				editing++
-			}
 		}
+		work, editing := e.quitLoses(rows, now)
 		back := "back when you start weaver"
 		pad := cardPlace(t, 7)
 		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and review in it"+COff))
@@ -1471,12 +1465,33 @@ func (e *Env) Quit(args []string) error {
 			return cli.ErrCancelled
 		}
 	}
+	return e.quitNow(rows)
+}
+
+// quitLoses is what quitting would stop for good, the threads coming back:
+// turns under way (an agent or a helper working, or waiting on you), and
+// the reviews with nvim open in them, whose unsaved edits go.
+func (e *Env) quitLoses(rows []session.Row, now int64) (work, editing int) {
+	for _, r := range rows {
+		if r.MidTurn(now) {
+			work++
+		}
+		if e.editing(r.Pane) {
+			editing++
+		}
+	}
+	return work, editing
+}
+
+// quitNow quits the session, rows its agents as they were when you chose
+// to.
+func (e *Env) quitNow(rows []session.Row) error {
 	// Quitting is not closing: a thread whose agent you exited comes back
 	// with the rest, as the card says (unless the quit fails).
 	undo := e.KeepExited(rows)
 	if err := e.Mux().Quit(); err != nil {
 		undo()
-		return errors.New("could not quit " + name + " in Rex")
+		return errors.New("could not quit " + e.Session + " in Rex")
 	}
 	return nil
 }
