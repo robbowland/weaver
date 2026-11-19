@@ -61,3 +61,31 @@ func TestForgetTakesTheLocks(t *testing.T) {
 		t.Errorf("left %v", left)
 	}
 }
+
+// A thread closed for good takes its own directory with it (its item's
+// context, the review comments it was given), from its record set aside
+// as it closed.
+func TestForgetClosedTakesTheThreadDir(t *testing.T) {
+	dir := t.TempDir()
+	b := dir + "/rex-w_3"
+	th := store.Thread{Num: 1, Worktree: "/w/fix", Created: 1700000000}
+	if err := store.Write(b+".json", agent.Record{Pid: "42"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Write(b+".thread", th); err != nil {
+		t.Fatal(err)
+	}
+	td := th.Dir(dir)
+	if err := os.MkdirAll(td, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e := &Env{StateDir: dir}
+	e.Closing(b + ".json")
+	e.ForgetClosed(b + ".json")
+	if _, err := os.Stat(td); !os.IsNotExist(err) {
+		t.Errorf("the thread's directory stays: %v", err)
+	}
+	if left, _ := os.ReadDir(dir); len(left) != 1 || left[0].Name() != "threads" {
+		t.Errorf("left %v, want only threads/", left)
+	}
+}
