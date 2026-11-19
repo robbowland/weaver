@@ -555,6 +555,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 		return "", fmt.Errorf("could not open the session for %s in Rex", name)
 	}
 	e.rememberRepo(fm.Repo)
+	e.rememberTeamRepo(ti, fm.Repo)
 	// The boards and the GITHUB view show it now, not at its agent's first
 	// hook.
 	e.PushStatus()

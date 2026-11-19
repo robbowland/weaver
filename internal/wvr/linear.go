@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/robbowland/weaver/internal/cli"
+	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/linear"
 	"github.com/robbowland/weaver/internal/oneline"
@@ -401,4 +402,65 @@ func (e *Env) Linear(args []string) error {
 		return e.LinearLogin(false)
 	}
 	return errors.New("usage: wvr linear login")
+}
+
+// linearRepo is the repository a thread from Linear issue id starts in:
+// the one its team's issues' threads last started in (teamRepos), else,
+// the team new to weaver or that repository gone, the one used last
+// ($STATE_DIR/repos); "" when there is none.
+func (e *Env) linearRepo(id string) string {
+	if r := e.teamRepos()[linearTeam(id)]; r != "" && files.Exists(r) {
+		return r
+	}
+	if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" && files.Exists(l) {
+		return l
+	}
+	return ""
+}
+
+// linearTeam is the key of Linear issue id's team: ENG of ENG-42.
+func linearTeam(id string) string {
+	k, _, _ := strings.Cut(id, "-")
+	return strings.ToUpper(k)
+}
+
+// teamReposFile keeps, for each Linear team, the repository its issues'
+// threads last started in: a line a team, its key and the repository
+// tab-separated, the team used last first.
+func (e *Env) teamReposFile() string { return e.StateDir + "/linear-repos" }
+
+// teamRepos are the repositories of teamReposFile, by team key.
+func (e *Env) teamRepos() map[string]string {
+	m := map[string]string{}
+	b, _ := os.ReadFile(e.teamReposFile())
+	for _, l := range strings.Split(string(b), "\n") {
+		if k, r, ok := strings.Cut(l, "\t"); ok && k != "" && r != "" {
+			if _, seen := m[k]; !seen {
+				m[k] = r
+			}
+		}
+	}
+	return m
+}
+
+// rememberTeamRepo keeps repo as the one for the team of a thread's Linear
+// issue ti (none, or another kind of item: nothing), first, at most 50
+// teams.
+func (e *Env) rememberTeamRepo(ti *store.ThreadItem, repo string) {
+	if ti == nil || ti.Kind != (items.LinearIssue{}).Kind() || repo == "" {
+		return
+	}
+	team := linearTeam(ti.Ref)
+	if team == "" {
+		return
+	}
+	ls := []string{team + "\t" + repo}
+	b, _ := os.ReadFile(e.teamReposFile())
+	for _, l := range strings.Split(string(b), "\n") {
+		if k, _, ok := strings.Cut(l, "\t"); ok && k != team && len(ls) < 50 {
+			ls = append(ls, l)
+		}
+	}
+	bestEffort(os.MkdirAll(e.StateDir, 0o755))
+	bestEffort(files.WriteAtomic(e.teamReposFile(), []byte(strings.Join(ls, "\n")+"\n")))
 }

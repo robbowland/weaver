@@ -1188,6 +1188,9 @@ registers every lexer as it loads, which costs every hook 6 ms.
   github pr|issue <owner/name> <number>` or `wvr _from linear <ID>`. `_from`
   opens `wvr new --pr/--issue … [--review]` in a popup (96 x 20) from a
   detached process, so the view goes on; a Linear issue's thread starts in
-  the repository used last (`$STATE_DIR/repos`).
+  the repository its team's last thread started in (`linearRepo`:
+  `$STATE_DIR/linear-repos`, a line a team key and its repository, kept as
+  a thread from a Linear issue starts), else, for a team new to weaver or
+  its repository gone, the repository used last (`$STATE_DIR/repos`).
 - **alt+j / alt+k** are Rex's next and previous session, views and all.
 

@@ -237,7 +237,9 @@ On a pull request or an issue, `alt+N` opens the new-thread form filled in for
 it: its branch (the pull request's own, `12-fix-the-flaky-test` for a GitHub
 issue, or Linear's branch name for a Linear issue) and the repository's
 checkout, if weaver knows one (`ctrl+r` to choose one when it doesn't). A thread
-from a Linear issue starts in the repository you used last. If the branch
+from a Linear issue starts in the repository that issue's team's last
+thread started in (ENG's for ENG-42), or, for a team new to weaver, the one
+you used last. If the branch
 already has a thread, weaver goes to that thread instead.
 
 The task is yours to write:

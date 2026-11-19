@@ -268,7 +268,8 @@ func (e *Env) View(args []string) error {
 // From is `wvr _from github pr|issue REPO NUM [--review]` and `wvr _from
 // linear ID [--review]` (a view's enter and Alt R): the new-thread form for
 // that item, in a popup, while the view goes on. A Linear issue's thread
-// works in the repository used last.
+// works in the repository its team's last worked in, else the one used
+// last (linearRepo).
 func (e *Env) From(args []string) error {
 	review := false
 	var rest []string
@@ -286,9 +287,9 @@ func (e *Env) From(args []string) error {
 		nw = []string{"--" + rest[1], rest[2] + "#" + rest[3]}
 	case len(rest) == 2 && rest[0] == "linear":
 		nw = []string{"--issue", rest[1]}
-		if l, err := files.FirstLine(e.StateDir + "/repos"); err == nil && l != "" && files.Exists(l) {
-			dir = l
-			nw = append(nw, "--repo", l)
+		if r := e.linearRepo(rest[1]); r != "" {
+			dir = r
+			nw = append(nw, "--repo", r)
 		}
 	default:
 		return &cli.Exit{Code: 2, Err: errors.New("usage: wvr _from github pr|issue REPO NUM [--review] | linear ID [--review]")}
