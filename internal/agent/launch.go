@@ -8,18 +8,16 @@ type Mode string
 const (
 	// ModeWork changes what it works on.
 	ModeWork Mode = ""
-	// ModeReview changes nothing without asking: Claude Code in its default
-	// permission mode, which asks before each edit and each command outside
-	// its read-only set, so posting a review comment takes one approval.
+	// ModeReview reviews without changing files, as its prompt says: Claude
+	// Code in auto mode, so it can post a review comment.
 	ModeReview Mode = "review"
 )
 
 // Command is the command line that runs the agent from base (the command
-// its thread was given, WEAVER_CLAUDE's say) held to mode m. A review asks
-// before it changes anything, whatever base says: what would loosen it
-// goes, and the default permission mode is added. The one place a thread's
-// agent gets its mode, so every start of it (new, resumed, restarted)
-// keeps it.
+// its thread was given, WEAVER_CLAUDE's say) held to mode m. A review runs in
+// auto mode whatever base says: what would loosen it goes, and auto mode is
+// added. The one place a thread's agent gets its mode, so every start of it
+// (new, resumed, restarted) keeps it.
 func Command(base string, m Mode) []string {
 	w := strings.Fields(base)
 	if m != ModeReview || len(w) == 0 {
@@ -29,7 +27,7 @@ func Command(base string, m Mode) []string {
 	// follows it (as the next word, unless given as name=value).
 	loose := map[string]bool{"--permission-mode": true, "--dangerously-skip-permissions": false,
 		"--allow-dangerously-skip-permissions": false}
-	hold := []string{"--permission-mode", "default"}
+	hold := []string{"--permission-mode", "auto"}
 	out := []string{w[0]}
 	for i := 1; i < len(w); i++ {
 		name, _, hasValue := strings.Cut(w[i], "=")
