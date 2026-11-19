@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -464,10 +465,11 @@ func TestKeysInPopup(t *testing.T) {
 	}
 }
 
-// shift+enter in one of weaver's popups reaches its program as alt+enter
-// (ESC CR), which fzf can read and the new-thread form starts a thread in
-// the background with; in a window's pane (an agent's) it is the
-// terminal's, as Rex sends it (CSI 27;2;13~).
+// shift+enter where fzf reads keys in one of weaver's popups reaches it as
+// alt+enter (ESC CR), which fzf can read and the new-thread form starts a
+// thread in the background with; under fzf (the form's ctrl+e running
+// $EDITOR, where ESC would leave insert mode) and in a window's pane (an
+// agent's) it is the terminal's, as Rex sends it (CSI 27;2;13~).
 func TestKeysShiftEnter(t *testing.T) {
 	at, err := os.MkdirTemp("/tmp", "wvr-rex")
 	if err != nil {
@@ -482,12 +484,31 @@ func TestKeysShiftEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	rextest.ServerAt(t, Bin(), at)
+	// Programs by fzf's name, as the system names a process (its
+	// executable's file name): dd, reading keys as fzf would; a shell, to
+	// run dd under fzf as fzf runs the form's editor.
+	bin := t.TempDir()
+	for from, to := range map[string]string{"/bin/dd": "fzf", "/bin/bash": "sh/fzf"} {
+		b, err := os.ReadFile(from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(bin, to)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(bin, to), b, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// A program that notes the first n bytes typed at it, raw, once it is
-	// ready for them.
+	// ready for them: dd, or what reads (dd's arguments) for it.
 	out := t.TempDir()
-	reader := func(name string, n int) []string {
-		return []string{"/bin/sh", "-c", `stty raw -echo; : >"$1.ready"; dd bs=1 count="$2" 2>/dev/null >"$1"; exec /bin/sleep 600`,
-			"sh", filepath.Join(out, name), strconv.Itoa(n)}
+	reader := func(name string, n int, dd ...string) []string {
+		if len(dd) == 0 {
+			dd = []string{"/bin/dd"}
+		}
+		return append([]string{"/bin/sh", "-c", `f=$1 n=$2; shift 2; stty raw -echo; : >"$f.ready"; "$@" bs=1 count="$n" 2>/dev/null >"$f"; exec /bin/sleep 600`,
+			"sh", filepath.Join(out, name), strconv.Itoa(n)}, dd...)
 	}
 	s, err := Start(reg, "demo", "/", reader("tiled", 10))
 	if err != nil {
@@ -506,14 +527,19 @@ func TestKeysShiftEnter(t *testing.T) {
 			}
 		}
 	}
-	var made struct {
-		Blocks []string `json:"block_ids"`
+	popup := func(argv []string) string {
+		var made struct {
+			Blocks []string `json:"block_ids"`
+		}
+		if err := s.callS("session.new_layer", map[string]any{"bounds": []float64{0.25, 0.25, 0.5, 0.5}, "focus": true,
+			"layout": layout(mux.Spawn{Argv: argv}, "weaver")}, &made); err != nil || len(made.Blocks) == 0 {
+			t.Fatal(err, made)
+		}
+		return made.Blocks[0]
 	}
-	if err := s.callS("session.new_layer", map[string]any{"bounds": []float64{0.25, 0.25, 0.5, 0.5}, "focus": true,
-		"layout": layout(mux.Spawn{Argv: reader("popup", 2)}, "weaver")}, &made); err != nil || len(made.Blocks) == 0 {
-		t.Fatal(err, made)
-	}
-	for _, f := range []string{"tiled", "popup"} {
+	fzf := popup(reader("popup", 2, filepath.Join(bin, "fzf")))
+	editor := popup(reader("editor", 10, filepath.Join(bin, "sh/fzf"), "-c", `/bin/dd "$@"; :`, "fzf"))
+	for _, f := range []string{"tiled", "popup", "editor"} {
 		for i := 0; ; i++ {
 			if _, err := os.Stat(filepath.Join(out, f+".ready")); err == nil {
 				break
@@ -524,6 +550,27 @@ func TestKeysShiftEnter(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+	// reads waits for block's newest foreground process to be name.
+	reads := func(block, name string) {
+		got := ""
+		for i := 0; i < 50; i++ {
+			var p struct {
+				Foreground struct {
+					Pid int `json:"pid"`
+				} `json:"foreground"`
+			}
+			if s.callS("block.method", map[string]any{"block_id": block, "method": "process", "args": map[string]any{}}, &p) == nil && p.Foreground.Pid > 0 {
+				o, _ := exec.Command("/usr/bin/pgrep", "-l", "-n", "-g", strconv.Itoa(p.Foreground.Pid)).Output()
+				if got = strings.TrimSpace(strings.TrimLeft(string(o), "0123456789")); got == name {
+					return
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("the reader is %q, want %q", got, name)
+	}
+	reads(fzf, "fzf")
+	reads(editor, "dd")
 	press := func(block string) bool {
 		var r struct {
 			Handled bool `json:"handled"`
@@ -542,8 +589,11 @@ func TestKeysShiftEnter(t *testing.T) {
 		}
 		return string(b)
 	}
-	if h, got := press(made.Blocks[0]), typed("popup", "\x1b\r"); !h || got != "\x1b\r" {
-		t.Errorf("shift+enter in a popup: handled %v, typed %q, want true, %q", h, got, "\x1b\r")
+	if h, got := press(fzf), typed("popup", "\x1b\r"); !h || got != "\x1b\r" {
+		t.Errorf("shift+enter to fzf in a popup: handled %v, typed %q, want true, %q", h, got, "\x1b\r")
+	}
+	if h, got := press(editor), typed("editor", "\x1b[27;2;13~"); h || got != "\x1b[27;2;13~" {
+		t.Errorf("shift+enter to a program under fzf in a popup: handled %v, typed %q, want false, %q", h, got, "\x1b[27;2;13~")
 	}
 	if h, got := press(tiled), typed("tiled", "\x1b[27;2;13~"); h || got != "\x1b[27;2;13~" {
 		t.Errorf("shift+enter in a window's pane: handled %v, typed %q, want false, %q", h, got, "\x1b[27;2;13~")

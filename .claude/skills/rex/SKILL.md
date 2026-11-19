@@ -128,7 +128,11 @@ connection that goes without a close message stays a client for 60 s
     form) to a program that asked for nothing, alt+enter as ESC CR. fzf
     has no shift-enter or ctrl-enter and passes the CSI over in silence;
     weaver.lua types shift+enter into weaver's popups as ESC CR (the form's
-    alt+enter). A Lua binding that returns false gives the key back as Rex
+    alt+enter) where fzf reads them. The `process` method's `foreground`
+    is the foreground process group's leader (wvr in a popup, whether fzf
+    or the editor fzf runs reads the keys): what reads is the group's
+    newest process, `pgrep -l -n -g PID` (`rex.exec` is synchronous; Lua's
+    io.popen and os.execute raise). A Lua binding that returns false gives the key back as Rex
     would have sent it. `rex.block.call(terminal, "write", {block_id=…,
     data=…})` types bytes into a block from a key's function.
 

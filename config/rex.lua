@@ -144,13 +144,27 @@ local function key(k, fn)
   end)
 end
 
--- shift+enter in one of weaver's popups is alt+enter there, which the
--- new-thread form takes to start the thread in the background: Rex sends
--- shift+enter as CSI 27;2;13~, which fzf passes over. No other popup takes
--- alt+enter, so there it still does nothing. Anywhere else (an agent's
--- pane) the key is the terminal's, as Rex sends it.
+-- reading: the name of the program reading the keys of the block a key
+-- was pressed in: the newest process in its terminal's foreground process
+-- group, else "". Rex's process method names the group's leader, which in
+-- a popup is wvr, whatever reads under it: its fzf, or the editor the
+-- form's ctrl+e runs from that fzf.
+local function reading(ctx)
+  local p = rex.block.call(terminal, "process", { block_id = ctx.block_id })
+  local pid = p and p.foreground and p.foreground.pid
+  if not pid then return "" end
+  local r = rex.exec({ "/usr/bin/pgrep", "-l", "-n", "-g", tostring(pid) }, { timeout = 2 })
+  return (r and r.ok and (r.stdout or ""):match("^%d+%s+(.-)%s*$")) or ""
+end
+
+-- shift+enter where fzf reads keys in one of weaver's popups is alt+enter
+-- there, which the new-thread form takes to start the thread in the
+-- background: Rex sends shift+enter as CSI 27;2;13~, which fzf passes
+-- over. No other popup takes alt+enter, so there it still does nothing.
+-- Anywhere else (an agent's pane, the editor of the form's ctrl+e, where
+-- ESC would leave insert mode) the key is the terminal's, as Rex sends it.
 rex.bind("shift+enter", function(ctx)
-  if not weavers(ctx) or not inPopup(ctx) then return false end
+  if not weavers(ctx) or not inPopup(ctx) or reading(ctx) ~= "fzf" then return false end
   pcall(rex.block.call, terminal, "write", { block_id = ctx.block_id, data = "\27\r" })
   return true
 end)

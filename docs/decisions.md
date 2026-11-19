@@ -660,6 +660,12 @@ can supersede an earlier one, and says so.
   pickers run in its popup): no other popup takes alt+enter, and a card
   reading keys raw passes ESC CR over. Outside popups
   the binding gives the key back, so an agent's shift+enter is untouched.
+- 2026-11-19: shift+enter becomes alt+enter only where fzf reads the
+  popup's keys: the form's ctrl+e opens `$EDITOR` in the same popup, under
+  its fzf, and there ESC CR left insert mode (nvim took the next keys as
+  commands). Rex's `process` names the foreground group's leader, which in
+  a popup is always wvr, so weaver.lua asks for the group's newest process
+  (`pgrep -n -g`, a few milliseconds, on shift+enter in a popup only).
 - 2026-11-19: A thread's agent names it, and its Rex session follows its
   name (Rob: "allowing the llm to rename the weaver session in the same way
   as the branches so 'just works' (assuming a manual name wasn't chosen)").
