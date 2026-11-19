@@ -237,8 +237,9 @@ review on #45`, `Implement #12`).
 
 `alt+m` is the read-only version. On a pull request, it starts a thread on the
 pull request's branch whose review shows it against the branch it merges
-into, and whose agent reviews without changing files (Claude Code in
-plan mode). On an issue, it starts an
+into, and whose agent reviews without changing files (Claude Code asks
+before each edit or command that could change anything, so it posts a
+review comment once you approve it). On an issue, it starts an
 investigation that ends in a plan for you to approve. The form's `alt+m`
 switches between work and read-only.
 

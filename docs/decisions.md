@@ -645,8 +645,9 @@ can supersede an earlier one, and says so.
 - 2026-10-16: Alt N and Alt R open the new-thread form filled in, rather
   than start at once: you see the branch and repository before anything is
   made, and pick a checkout when weaver knows none. Alt R is read-only:
-  Claude Code in plan mode, Codex in a read-only sandbox, and a pull
-  request's nvim on the review against its base.
+  Claude Code in plan mode (2026-11-19: its default permission mode, which
+  asks), Codex in a read-only sandbox, and a pull request's nvim on the
+  review against its base.
 - 2026-10-16: The branch is the join key, as the 2026-10-14 brief proposed:
   nothing is written back to GitHub or Linear, and a branch that already has
   a thread goes to it. The item's text is fenced between marker lines with a
@@ -793,6 +794,15 @@ can supersede an earlier one, and says so.
   the list for SEARCH's. Rows are tracked by section and ref; only the
   item's first row is searched. An item that moves section across a reload
   leaves the cursor where it was rather than following it.
+- 2026-11-19: A read-only thread's agent runs Claude Code in its default
+  permission mode, no longer plan mode (Rob: "it being in plan mode is
+  super annoying as it can't post comments"). Plan mode has the agent
+  propose changes rather than make them, so a review it was asked to post
+  stayed in the conversation. The default mode asks before each edit and
+  each command outside its read-only set (`git diff` and `git log` run
+  without asking), so posting a review comment is one approval, and the
+  prompt still says to change no files. What would loosen it still goes
+  from the command.
 
 ## Lost threads
 

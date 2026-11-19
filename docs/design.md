@@ -185,7 +185,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `pane` | int | the agent's pane |
 | `session_id` | string | its conversation: Claude Code's from the start (weaver chooses it), any agent's from its SessionStart on; absent while unknown |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
-| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode plan`; absent otherwise |
+| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode default`, which asks before each edit and each command outside its read-only set; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 
 A thread is a Rex session of its own, labelled with its `name` as it is
@@ -332,7 +332,7 @@ random nonce, said to be untrusted: written by anyone who can comment.
 Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
 silence (the item's `review_unread`). `--review` makes the thread's `mode`
-`review`: its agent runs Claude Code in plan mode, each time it starts; a pull request's review panel shows the
+`review`: its agent runs Claude Code in its default permission mode, asking before it changes anything, each time it starts; a pull request's review panel shows the
 branch against what the pull request merges into (its record's `base`).
 
 ### Commands for the dashboard

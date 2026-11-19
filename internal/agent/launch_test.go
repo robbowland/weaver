@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// A review holds whatever command line runs the agent to reading only:
-// what would loosen it goes, its own read-only mode is added once.
+// A review holds whatever command line runs the agent to asking before it
+// changes anything: what would loosen it goes, the mode that asks is added
+// once.
 func TestCommand(t *testing.T) {
 	for _, c := range []struct {
 		base string
@@ -15,12 +16,12 @@ func TestCommand(t *testing.T) {
 	}{
 		{"claude", ModeWork, "claude"},
 		{"claude --model opus", ModeWork, "claude --model opus"},
-		{"claude", ModeReview, "claude --permission-mode plan"},
-		// A record from before: its command already has the flag.
-		{"claude --permission-mode plan", ModeReview, "claude --permission-mode plan"},
+		{"claude", ModeReview, "claude --permission-mode default"},
+		// A record from before Command: plan mode is in its command.
+		{"claude --permission-mode plan", ModeReview, "claude --permission-mode default"},
 		{"claude --model opus --dangerously-skip-permissions --permission-mode acceptEdits", ModeReview,
-			"claude --model opus --permission-mode plan"},
-		{"claude --permission-mode=bypassPermissions", ModeReview, "claude --permission-mode plan"},
+			"claude --model opus --permission-mode default"},
+		{"claude --permission-mode=bypassPermissions", ModeReview, "claude --permission-mode default"},
 	} {
 		if got := strings.Join(Command(c.base, c.m), " "); got != c.want {
 			t.Errorf("Command(%q, %q) = %q, want %q", c.base, c.m, got, c.want)
