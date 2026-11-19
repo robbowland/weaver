@@ -18,6 +18,7 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
+| `$STATE_DIR/<skey>.prs` | each thread's pull request, by its agent's pane, as the home board's tender last read it from `github.json` and git (see [Pull requests on the board](#pull-requests-on-the-board)) |
 | `$STATE_DIR/github.json`, `linear.json` | what GitHub and Linear said last for the views' sections, each section with when it was read and why asking for it last failed; changed under `.lock` beside it (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 31 days, but one held |
@@ -642,6 +643,36 @@ their longest entry, so repo/branch and age stay close at any width.
 
 Rows cost no git command: repo and branch come from the checkout's `.git`
 file, `commondir` and `HEAD`.
+
+### Pull requests on the board
+
+A thread's pull request is the one the GITHUB view's cache
+(`github.json`) holds for its item (a thread from a pull request), else
+the one whose branch, as a thread from it names it (`pr-N` for a fork's),
+is the branch its worktree is on, in the same repository on GitHub (its
+checkout's remote, `items.GitHubRepo`). The cache holds open pull
+requests alone, so a merged one is read from git: the worktree's HEAD in
+its remote's default branch (`origin/HEAD`, else its main or master), on
+a branch that is not that one and whose reflog has a commit made on it (a
+branch never committed to is in the default branch from the start).
+Squash and rebase merges, which git cannot see, show nothing once GitHub
+has merged them. The home board's own process reads them (`tend`: at once,
+then every minute, its git answers kept while HEAD and the default branch
+stay where they were) into `$STATE_DIR/<skey>.prs`, and pushes the boards
+a refresh when they change; a merged one keeps the number the cache gave
+it. The rows and the card read that file alone: a redraw asks neither
+GitHub nor git, and a thread the file does not have shows nothing.
+
+On its card, under `from`, a `pr` line: `#45 · checks failing · review
+requested` (draft, checks failing, running or passing, changes requested,
+approved, review requested; `open` when none), `#45 · merged`, `#45 ·
+closed`, or `merged into origin/main` when git alone says so; red for
+failing checks or changes requested, green for approved or merged. On its
+row, unless it is mid-turn or not reporting, `merged · x closes` takes the
+fact's place (x's card then offers to remove the merged worktree), and a
+thread at rest (no turn, nothing asked of you, not done unseen) whose
+checks fail says `checks failing` first, then `update · R` when its agent
+is behind an update, then its fact.
 
 ### Items
 

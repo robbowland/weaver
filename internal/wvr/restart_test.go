@@ -180,11 +180,11 @@ func TestRowSignalsUpdate(t *testing.T) {
 		{session.Row{State: agent.StateNeedsYou}, "input", "input"},
 		{session.Row{State: agent.StateIdle, Exited: true}, "exited · R starts it again, x closes it", "exited · R starts it again, x closes it"},
 	} {
-		if got := rowSignals(c.fact, c.r, now, true); got != c.want {
+		if got := rowSignals(c.fact, c.r, now, threadPR{}, true); got != c.want {
 			t.Errorf("rowSignals(%q, %s) = %q, want %q", c.fact, c.r.State, got, c.want)
 		}
 	}
-	if got := rowSignals("", session.Row{State: agent.StateIdle}, now, false); got != "" {
+	if got := rowSignals("", session.Row{State: agent.StateIdle}, now, threadPR{}, false); got != "" {
 		t.Errorf("not behind: %q", got)
 	}
 }

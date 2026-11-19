@@ -62,11 +62,15 @@ const tendEvery = time.Minute
 
 // tend is what the home board does now and then, from its own process,
 // behind you and off the board's rows (which hooks redraw): the threads'
+// pull requests read (notePRs), at once and then each round, and their
 // agents an update of Claude Code left behind restarted once they rest
 // (restartUpdated).
 func (e *Env) tend() {
 	go func() {
+		m := newPRMemo()
+		e.notePRs(m)
 		for range time.Tick(tendEvery) {
+			e.notePRs(m)
 			e.restartUpdated()
 		}
 	}()

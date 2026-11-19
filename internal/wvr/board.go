@@ -576,8 +576,10 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 	wn, wf, ww, numw := 0, 0, 0, 2
 	nums := false
 	// When the Claude Code agents start now last changed: an agent started
-	// before runs an older one (outdated). A few stats.
+	// before runs an older one (outdated). A few stats. And the threads'
+	// pull requests, as the tender last read them (notePRs).
 	_, installed := claudeInstalled()
+	prs := e.readPRs()
 	for _, a := range agents {
 		if a.Pane == "" {
 			continue
@@ -590,7 +592,7 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		// Its section is what it asks of you (session.Need), as the status
 		// line counts it, else its project; the glyph and fact say how.
 		need := a.Need(now)
-		glyph, fact := stateCell(a, now, p), rowSignals(rowFact(a, now), a, now, outdated(a, installed))
+		glyph, fact := stateCell(a, now, p), rowSignals(rowFact(a, now), a, now, prs[string(a.Pane)], outdated(a, installed))
 		w := git.WhereOf(a.Root)
 		// Needs you, done and working: longest first; the rest: latest
 		// first.
@@ -1009,14 +1011,24 @@ func rowFact(a session.Row, now int64) string {
 }
 
 // rowSignals is a live row's fact (rowFact) with what matters beyond its
-// agent's turn, first: its agent behind an update of Claude Code (behind:
-// R restarts it onto the new one). Mid-turn, the turn's fact stands alone
-// (R would stop the turn).
-func rowSignals(fact string, a session.Row, now int64, behind bool) string {
-	if a.Exited || a.MidTurn(now) || a.NotReporting(now) {
+// agent's turn: its pull request merged (x closes the thread, in place of
+// the rest), its checks failing while it rests, its agent behind an update
+// of Claude Code (behind: R restarts it onto the new one), each first.
+// Mid-turn, the turn's fact stands alone (R would stop the turn).
+func rowSignals(fact string, a session.Row, now int64, pr threadPR, behind bool) string {
+	if a.MidTurn(now) || a.NotReporting(now) {
+		return fact
+	}
+	if pr.State == prMerged {
+		return "merged · x closes"
+	}
+	if a.Exited {
 		return fact
 	}
 	var out []string
+	if pr.State == prOpen && pr.Checks == "failing" && atRest(a, now) {
+		out = append(out, "checks failing")
+	}
 	if behind {
 		out = append(out, "update · R")
 	}

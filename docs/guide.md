@@ -333,7 +333,9 @@ Agents are grouped under these headings:
 
 Each row shows the thread's number and name, its state as a cell (`[!]`,
 `[x]`, `[/]`, `[ ]`, `[-]`), one fact about it (what it waits on, the command
-it runs, what its last turn said, or its subagents), its
+it runs, what its last turn said, or its subagents; `merged · x closes` once
+its pull request has merged, `checks failing` first when its checks fail
+while it rests, `update · R` when its agent runs an older Claude Code), its
 repository and branch when there is room (under a repository's heading, the
 branch alone), and how long it has been in that state. Titles are bright
 only where a thread needs you. `×2` after a branch means two agents work in
@@ -371,7 +373,10 @@ its agent again on its conversation, `x` closes the thread.
 | `q`, `esc` | Back to your thread |
 | `ctrl+q` | Quit the session |
 
-The card shows what the agent was asked, what it waits on or runs, what it
+The card shows its thread's pull request, when the GITHUB view has seen
+it (`pr  #45 · checks failing`, `review requested`, `merged`, `closed`; one
+merged into the default branch as git says shows as merged even after the
+view stops listing it), what the agent was asked, what it waits on or runs, what it
 last said, how many of your review comments it has not seen yet (they go
 with your next message), its tasks, subagents and files, and its
 worktree's git status. It

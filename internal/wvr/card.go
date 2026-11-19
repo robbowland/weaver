@@ -315,7 +315,57 @@ func (e *Env) Preview(args []string) string {
 	if !got.ok {
 		r = rowOfRecord(s)
 	}
-	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared, notes)
+	// Its pull request, as the home board's tender last read it (notePRs).
+	pr := e.readPRs()[string(p)]
+	return out + card(s, r, from, previewCols(), head, ab, changed, nw, shared, notes, pr)
+}
+
+// prLine is a thread's pull request for its card, and the colour its
+// signal takes: #45 and how it stands (draft, its checks, its review), or
+// merged and closed alone; merged as git alone says, the branch it merged
+// into. "" for none.
+func prLine(pr threadPR) (string, string) {
+	num := ""
+	if pr.Num > 0 {
+		num = "#" + strconv.Itoa(pr.Num) + " · "
+	}
+	switch pr.State {
+	case prMerged:
+		if pr.Num == 0 {
+			return "merged into " + cmp.Or(pr.Into, "its default branch"), CGreen
+		}
+		return num + "merged", CGreen
+	case prClosed:
+		return num + "closed", CGrey
+	case prOpen:
+	default:
+		return "", ""
+	}
+	var ps []string
+	if pr.Draft {
+		ps = append(ps, "draft")
+	}
+	if pr.Checks != "" {
+		ps = append(ps, "checks "+pr.Checks)
+	}
+	switch pr.Review {
+	case "":
+	case "requested":
+		ps = append(ps, "review requested")
+	default:
+		ps = append(ps, pr.Review)
+	}
+	if len(ps) == 0 {
+		ps = append(ps, "open")
+	}
+	colour := CGrey
+	switch {
+	case pr.Checks == "failing" || pr.Review == "changes requested":
+		colour = CRed
+	case pr.Review == "approved":
+		colour = CGreen
+	}
+	return num + strings.Join(ps, " · "), colour
 }
 
 // rowOfRecord is record s's state as a row, for an agent with no row.
@@ -348,7 +398,7 @@ func itemLine(t store.Thread) string {
 	return l
 }
 
-func card(s agent.Record, r session.Row, from string, w int, head, ab string, changed, nw, shared, notes int) string {
+func card(s agent.Record, r session.Row, from string, w int, head, ab string, changed, nw, shared, notes int, pr threadPR) string {
 	now := time.Now().Unix()
 	st := r.State
 	word := stateWord(r, now)
@@ -360,6 +410,9 @@ func card(s agent.Record, r session.Row, from string, w int, head, ab string, ch
 	add := func(f []string) { ls = append(ls, f...) }
 	if from != "" {
 		add(field(w, "from", from, "", 1))
+	}
+	if l, c := prLine(pr); l != "" {
+		add(field(w, "pr", l, c, 1))
 	}
 	add(field(w, "asked", s.Prompt, "", 4))
 	if st == agent.StateNeedsYou && !r.Exited {
