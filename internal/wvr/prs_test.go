@@ -28,23 +28,46 @@ func TestPRFor(t *testing.T) {
 		{Kind: github.PRs, Repo: "o/r", Number: 48, Head: "x", State: "MERGED"},
 	}
 	for _, c := range []struct {
-		name         string
-		th           store.Thread
-		slug, branch string
-		want         threadPR
-		ok           bool
+		name string
+		k    threadKey
+		want threadPR
+		ok   bool
 	}{
-		{"by branch", store.Thread{}, "O/R", "fix-tests", threadPR{Num: 45, Repo: "o/r", State: prOpen, Checks: "failing"}, true},
-		{"a fork's, as pr-N", store.Thread{}, "o/r", "pr-47", threadPR{Num: 47, Repo: "o/r", State: prOpen, Checks: "passing", Review: "approved"}, true},
-		{"by its item", store.Thread{Item: &store.ThreadItem{Kind: "pr", Ref: "o/r#48"}}, "", "", threadPR{Num: 48, Repo: "o/r", State: prMerged}, true},
-		{"another repository's branch", store.Thread{}, "o/r", "docs", threadPR{}, false},
-		{"its repository not known", store.Thread{}, "", "fix-tests", threadPR{}, false},
-		{"no pull request", store.Thread{}, "o/r", "nothing", threadPR{}, false},
+		{"by branch", threadKey{repo: "O/R", branch: "fix-tests"}, threadPR{Num: 45, Repo: "o/r", State: prOpen, Checks: "failing"}, true},
+		{"a fork's, as pr-N", threadKey{repo: "o/r", branch: "pr-47"}, threadPR{Num: 47, Repo: "o/r", State: prOpen, Checks: "passing", Review: "approved"}, true},
+		{"by its item", threadKey{ref: "o/r#48"}, threadPR{Num: 48, Repo: "o/r", State: prMerged}, true},
+		{"by its item, in any case", threadKey{ref: "O/R#48", repo: "o/r", branch: "fix-tests"}, threadPR{Num: 48, Repo: "o/r", State: prMerged}, true},
+		{"another repository's branch", threadKey{repo: "o/r", branch: "docs"}, threadPR{}, false},
+		{"its repository not known", threadKey{branch: "fix-tests"}, threadPR{}, false},
+		{"no pull request", threadKey{repo: "o/r", branch: "nothing"}, threadPR{}, false},
 	} {
-		got, ok := prFor(c.th, c.slug, c.branch, its)
+		got, ok := prFor(c.k, its)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: %+v %v, want %+v %v", c.name, got, ok, c.want, c.ok)
 		}
+	}
+}
+
+// A thread is tied to its work item by the branch its worktree is on now,
+// which its agent may have made or switched to since the thread was made;
+// by the one it was made on when its worktree cannot be read.
+func TestThreadKeyBranch(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	repo, wt := ghRepo(t)
+	gitRun(t, wt, "switch", "-q", "-c", "fix-tests")
+	th := store.Thread{Repo: repo, Branch: "feat", Worktree: wt, Item: &store.ThreadItem{Kind: "issue", Ref: "o/r#7"}}
+	if got, want := (slugMemo{}).keyOf(th), (threadKey{ref: "o/r#7", repo: "o/r", branch: "fix-tests"}); got != want {
+		t.Errorf("keyOf = %+v, want %+v", got, want)
+	}
+	th.Worktree = filepath.Join(t.TempDir(), "gone")
+	if got := (slugMemo{}).keyOf(th).branch; got != "feat" {
+		t.Errorf("its worktree gone: branch %q, want feat", got)
+	}
+	// The GITHUB view finds it by that branch, as the board does.
+	it := ghItem(github.Item{Kind: github.PRs, Repo: "o/r", Number: 45, Head: "fix-tests"})
+	th.Worktree = wt
+	if v, ok := threadOf([]viewThread{{num: 7, key: (slugMemo{}).keyOf(th)}}, it); !ok || v.num != 7 {
+		t.Errorf("the view's thread for its pull request: %v %v", v, ok)
 	}
 }
 

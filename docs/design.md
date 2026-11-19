@@ -651,7 +651,8 @@ A thread's pull request is the one the GITHUB view's cache
 (`github.json`) holds for its item (a thread from a pull request), else
 the one whose branch, as a thread from it names it (`pr-N` for a fork's),
 is the branch its worktree is on, in the same repository on GitHub (its
-checkout's remote, `items.GitHubRepo`). The cache holds open pull
+checkout's remote, `items.GitHubRepo`): the rule by which the GITHUB view
+finds an item's thread (`firstTied`). The cache holds open pull
 requests alone, so a merged one is read from git: the worktree's HEAD in
 its remote's default branch (`origin/HEAD`, else its main or master), on
 a branch that is not that one and whose reflog has a commit made on it (a
@@ -1064,11 +1065,16 @@ over (`takeOver`): its id goes into their records.
   have stderr alone. A key whose
   wvr cannot run at all is the terminal's, not swallowed. In a floating
   layer (weaver's popups: the form, a card, alt+y's board) the keys are the
-  popup's program's, but for shift+enter, which weaver.lua types into the
-  popup as alt+enter (ESC CR): Rex sends shift+enter as CSI 27;2;13~, which
-  fzf has no name for and passes over, and the form's alt+enter starts a
-  thread in the background. No other popup takes alt+enter. Outside a popup
-  shift+enter is the terminal's, as Rex sends it. Rex starts a key's wvr at once, not after the last
+  popup's program's, but for shift+enter where fzf reads them, which
+  weaver.lua types into the popup as alt+enter (ESC CR): Rex sends
+  shift+enter as CSI 27;2;13~, which fzf has no name for and passes over,
+  and the form's alt+enter starts a thread in the background. No other
+  popup takes alt+enter. What reads is the newest process in the
+  terminal's foreground process group (`pgrep -n -g`): Rex's `process`
+  names the group's leader, wvr in every popup, also while the form's
+  ctrl+e has `$EDITOR` open under its fzf, where ESC CR would leave insert
+  mode. Under fzf and outside a popup shift+enter is the terminal's, as
+  Rex sends it. Rex starts a key's wvr at once, not after the last
   one's: `wvr review` holds the session's UI lock (`uiLock`) and `wvr next`
   tries it, so a press while the last is at work does not undo it. alt+j
   and alt+k are the app's own `session.next` and `session.previous`
@@ -1268,10 +1274,15 @@ error. The header's age is the oldest section's, and it names the sections
 that failed and why (every one: just why); a failed section's heading says
 `failed, as of 1h ago`, and one with nothing from before shows too.
 
-A row shows the thread the item has: its item's
-ref, else its branch, as the item's thread would name it
-(`items.Item.BranchName`: a pull request's head, `pr-N` for one from a
-fork; a GitHub issue's `N-…`; Linear's branch name). The card is the
+A row shows the thread the item has (`firstTied`, as the board finds a
+thread's pull request): the thread whose item's ref is the item's, in any
+case (GitHub takes owner/name in any case, and a thread keeps the one you
+typed), else the one whose worktree is on the branch the item's thread
+would be on (`items.Item.BranchName`: a pull request's head, `pr-N` for
+one from a fork; a GitHub issue's `N-…`; Linear's branch name), in the
+same repository on GitHub. Its branch is the one its worktree is on now,
+read from its `.git` (the one it was made on when that cannot be read):
+its agent may have made or switched branches since. The card is the
 thread first (the one it has, or
 the branch enter starts one on), the item's fields, and its description,
 rendered from markdown by `internal/markdown` (goldmark's parser, with

@@ -374,9 +374,7 @@ func ghItem(it github.Item) viewItem {
 		f("by", "@"+it.Author, CGrey, 1)
 	} else {
 		v.from = []string{"github", "pr", it.Repo, strconv.Itoa(it.Number)}
-		// Its thread's branch, as the thread names it: pr-N for one from a
-		// fork, whose own branch (its main, say) is not this repository's.
-		v.branch = items.PullRequest{Repo: it.Repo, Num: it.Number, Head: it.Head, Fork: it.HeadInFork}.BranchName()
+		v.branch = prBranch(it)
 		v.startOn = v.branch
 		f("by", "@"+it.Author, CGrey, 1)
 		f("branch", it.Base+" ← "+it.Head, CGrey, 1)
@@ -414,6 +412,13 @@ func ghItem(it github.Item) viewItem {
 		f("comments", strconv.Itoa(it.Comments), CGrey, 1)
 	}
 	return v
+}
+
+// prBranch is the branch a thread on pull request it works on, as the
+// thread names it (items.PullRequest): pr-N for one from a fork, whose own
+// branch (its main, say) is not this repository's.
+func prBranch(it github.Item) string {
+	return items.PullRequest{Repo: it.Repo, Num: it.Number, Head: it.Head, Fork: it.HeadInFork}.BranchName()
 }
 
 // shownGH is it with the text it shows as one line each (oneline.Line): a

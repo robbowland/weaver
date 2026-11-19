@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/cli"
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/markdown"
 	"github.com/robbowland/weaver/internal/mux"
@@ -229,19 +231,17 @@ type cardField struct {
 
 // viewThread is a thread of this session, as a view matches it to an item.
 type viewThread struct {
-	pane   mux.PaneID // its agent's
-	num    int
-	row    session.Row // as the board shows it (session.Row.Shown)
-	now    int64       // when that was
-	ref    string      // its work item's
-	repo   string      // its repository on GitHub, owner/name
-	branch string
+	pane mux.PaneID // its agent's
+	num  int
+	row  session.Row // as the board shows it (session.Row.Shown)
+	now  int64       // when that was
+	key  threadKey
 }
 
 // itemThreads are the session's threads.
 func (e *Env) itemThreads() []viewThread {
 	rows, now := e.AgentRows()
-	slugs := map[string]string{}
+	slugs := slugMemo{}
 	var ts []viewThread
 	for _, r := range rows {
 		if r.Tnum == 0 {
@@ -256,40 +256,87 @@ func (e *Env) itemThreads() []viewThread {
 		if err != nil {
 			continue
 		}
-		t := viewThread{pane: r.Pane, num: r.Tnum, row: r, now: now, branch: th.Branch}
-		if th.Item != nil {
-			t.ref = th.Item.Ref
-		}
-		if th.Repo != "" {
-			s, ok := slugs[th.Repo]
-			if !ok {
-				s = items.GitHubRepo(th.Repo)
-				slugs[th.Repo] = s
-			}
-			t.repo = s
-		}
-		ts = append(ts, t)
+		ts = append(ts, viewThread{pane: r.Pane, num: r.Tnum, row: r, now: now, key: slugs.keyOf(th)})
 	}
 	return ts
 }
 
-// threadOf is the thread for it, if the session has one: its item, else
-// its branch.
+// threadOf is the thread for it, if the session has one (firstTied).
 func threadOf(ts []viewThread, it viewItem) (viewThread, bool) {
-	for _, t := range ts {
-		if t.ref == it.ref {
-			return t, true
+	i := itemKey{ref: it.ref, repo: it.repo, branch: it.branch, prefix: it.branchPrefix}
+	j := firstTied(len(ts), func(j int) (threadKey, itemKey) { return ts[j].key, i })
+	if j < 0 {
+		return viewThread{}, false
+	}
+	return ts[j], true
+}
+
+// threadKey is what ties a thread to a work item (firstTied): its item's
+// ref, its checkout's repository on GitHub (owner/name; "" not known), and
+// the branch its worktree is on.
+type threadKey struct{ ref, repo, branch string }
+
+// itemKey is what ties a work item to a thread (firstTied): its ref, and
+// the branch a thread on it works on, in repo (owner/name; "" for a
+// service with no repositories), or with prefix, the start of that branch
+// (an issue's N-).
+type itemKey struct {
+	ref, repo, branch string
+	prefix            bool
+}
+
+// firstTied is the first of n pairs of a thread and an item (pair) that
+// are one another's: by the thread's item, refs alike in any case (GitHub
+// takes owner/name in any case, items.SameRepo, and a thread keeps the one
+// you typed); else by its branch, as git names it, in the item's
+// repository. -1 for none. The GITHUB view looks for an item's thread
+// (threadOf) and the board for a thread's pull request (prFor) by it.
+func firstTied(n int, pair func(j int) (threadKey, itemKey)) int {
+	for j := range n {
+		if k, i := pair(j); k.ref != "" && strings.EqualFold(k.ref, i.ref) {
+			return j
 		}
 	}
-	for _, t := range ts {
-		if it.branch == "" || t.branch == "" || it.repo != "" && !items.SameRepo(t.repo, it.repo) {
+	for j := range n {
+		k, i := pair(j)
+		if k.branch == "" || i.branch == "" || i.repo != "" && !items.SameRepo(k.repo, i.repo) {
 			continue
 		}
-		if t.branch == it.branch || it.branchPrefix && strings.HasPrefix(t.branch, it.branch) {
-			return t, true
+		if k.branch == i.branch || i.prefix && strings.HasPrefix(k.branch, i.branch) {
+			return j
 		}
 	}
-	return viewThread{}, false
+	return -1
+}
+
+// slugMemo is each checkout's repository on GitHub (owner/name; "" for
+// none), as items.GitHubRepo said it: one git command a checkout.
+type slugMemo map[string]string
+
+// slug is checkout dir's repository on GitHub.
+func (m slugMemo) slug(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	s, ok := m[dir]
+	if !ok {
+		s = items.GitHubRepo(dir)
+		m[dir] = s
+	}
+	return s
+}
+
+// keyOf is what ties thread th to a work item: its item's ref, its
+// checkout's repository on GitHub, and the branch its worktree is on now
+// (read from its .git, no git command), else, that unread, the one it was
+// made on. Now, not as made: its pull request is from the branch its work
+// is on, which its agent may have made or switched to since.
+func (m slugMemo) keyOf(th store.Thread) threadKey {
+	k := threadKey{repo: m.slug(th.Repo), branch: cmp.Or(git.WhereOf(th.Worktree).Branch, th.Branch)}
+	if th.Item != nil {
+		k.ref = th.Item.Ref
+	}
+	return k
 }
 
 // cell is the thread's cell, painted as the board paints it.

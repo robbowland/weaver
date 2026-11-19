@@ -8,7 +8,6 @@ import (
 
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/github"
-	"github.com/robbowland/weaver/internal/items"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -70,31 +69,23 @@ func prOfItem(it github.Item) threadPR {
 	return pr
 }
 
-// prFor is the pull request among its (the view's cache's) for thread th,
-// whose repository is slug on GitHub (owner/name; "" not known) and whose
-// worktree is on branch: the one its item names, else the one whose
-// branch, as a thread from it names it (pr-N for a fork's), is the
-// thread's in the same repository.
-func prFor(th store.Thread, slug, branch string, its []github.Item) (threadPR, bool) {
-	if th.Item != nil && th.Item.Kind == "pr" && th.Item.Ref != "" {
-		for _, it := range its {
-			if it.Kind == github.PRs && strings.EqualFold(it.Ref(), th.Item.Ref) {
-				return prOfItem(it), true
-			}
+// prFor is the pull request among its (the view's cache's) for the
+// thread k ties (firstTied): the one its item names, else the one whose
+// branch, as a thread from it names it (prBranch), is the thread's.
+func prFor(k threadKey, its []github.Item) (threadPR, bool) {
+	var prs []github.Item
+	for _, it := range its {
+		if it.Kind == github.PRs {
+			prs = append(prs, it)
 		}
 	}
-	if slug == "" || branch == "" {
+	j := firstTied(len(prs), func(j int) (threadKey, itemKey) {
+		return k, itemKey{ref: prs[j].Ref(), repo: prs[j].Repo, branch: prBranch(prs[j])}
+	})
+	if j < 0 {
 		return threadPR{}, false
 	}
-	for _, it := range its {
-		if it.Kind != github.PRs || !items.SameRepo(it.Repo, slug) {
-			continue
-		}
-		if (items.PullRequest{Repo: it.Repo, Num: it.Number, Head: it.Head, Fork: it.HeadInFork}).BranchName() == branch {
-			return prOfItem(it), true
-		}
-	}
-	return threadPR{}, false
+	return prOfItem(prs[j]), true
 }
 
 // prsFile keeps each thread's pull request, by its agent's pane.
@@ -111,25 +102,12 @@ func (e *Env) readPRs() map[string]threadPR {
 // prMemo is what the tender keeps between its rounds: each repository's
 // GitHub name, and what git said of each worktree as it was then.
 type prMemo struct {
-	slugs  map[string]string
+	slugs  slugMemo
 	merged map[string]string // root, HEAD and the default's tip: what it merged into ("" not merged)
 }
 
 func newPRMemo() *prMemo {
-	return &prMemo{slugs: map[string]string{}, merged: map[string]string{}}
-}
-
-// slug is repository dir's name on GitHub (owner/name), "" for none.
-func (m *prMemo) slug(dir string) string {
-	if dir == "" {
-		return ""
-	}
-	s, ok := m.slugs[dir]
-	if !ok {
-		s = items.GitHubRepo(dir)
-		m.slugs[dir] = s
-	}
-	return s
+	return &prMemo{slugs: slugMemo{}, merged: map[string]string{}}
 }
 
 // mergedInto is the remote's default branch (origin/main) the branch the
@@ -196,13 +174,9 @@ func (e *Env) notePRs(m *prMemo) {
 			continue
 		}
 		pane := string(session.PaneOfFile(f))
-		root := th.Worktree
-		branch := git.WhereOf(root).Branch
-		if branch == "" {
-			branch = th.Branch
-		}
-		pr, ok := prFor(th, m.slug(th.Repo), branch, its)
-		if into := m.mergedInto(root, branch); into != "" {
+		k := m.slugs.keyOf(th)
+		pr, ok := prFor(k, its)
+		if into := m.mergedInto(th.Worktree, k.branch); into != "" {
 			if !ok {
 				pr = before[pane]
 				if pr.State != prOpen && pr.State != prMerged {
