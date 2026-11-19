@@ -1091,8 +1091,9 @@ func threadPanel(panes []mux.Pane, agent mux.Pane) (mux.PaneID, string) {
 
 // Close is `wvr close [--yes] [--remove-worktree] [PANE]`: close an
 // agent (the focused one) with its review panel, and a thread's session
-// with every pane in it (its helpers'); offers to remove a thread's
-// worktree when it is clean and merged or pushed.
+// with every pane in it (its helpers'), after one card. A worktree weaver
+// made, clean and merged or pushed, goes with it unless you keep it there
+// (k); --yes leaves it to the sweep, unless --remove-worktree.
 func (e *Env) Close(args []string) error {
 	yes, rmwt, hold, target := false, false, false, mux.PaneID("")
 	for _, a := range args {
@@ -1248,6 +1249,13 @@ func (e *Env) Close(args []string) error {
 	fmt.Fprint(out, cardRow(pad, "close", head))
 	fmt.Fprint(out, cardRow(pad, "", what+sub))
 	fmt.Fprint(out, cardRow(pad, "goes", goes))
+	// A worktree that may go goes with the rest when the card asks (k keeps
+	// it), or with --remove-worktree; --yes alone leaves it to the sweep.
+	offer := removable && !yes && !rmwt
+	takes := removable && !hold && (rmwt || offer)
+	if takes {
+		fmt.Fprint(out, cardRow(pad, "", "and its worktree "+tilde+" "+CGrey+"· branch "+cmp.Or(th.Branch, "?")+" stays"+COff))
+	}
 	if editing {
 		fmt.Fprint(out, cardRow(pad, "", CRed+"nvim is open in its review: unsaved edits go"+COff))
 	}
@@ -1256,28 +1264,23 @@ func (e *Env) Close(args []string) error {
 	}
 	if !yes {
 		fmt.Fprint(out, "\n")
-		if choose(tty, pad, []choice{{"y", "close"}, {"n", "keep"}}, 1) != 0 {
+		cs := []choice{{"y", "close"}, {"n", "keep"}}
+		if offer {
+			cs = []choice{{"y", "close"}, {"k", "close, keep the worktree"}, {"n", "cancel"}}
+		}
+		// Enter takes the last: the one that closes nothing.
+		switch c := choose(tty, pad, cs, len(cs)-1); {
+		case c < 0 || cs[c].key == "n":
 			return cli.ErrCancelled
+		case cs[c].key == "k":
+			// Kept on purpose: yours now, never swept.
+			takes = false
+			e.forgetWorktree(th.Worktree)
 		}
 	}
 	remove := "0"
-	if removable && !hold {
-		if rmwt {
-			remove = "1"
-		} else if t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-			br := th.Branch
-			if br == "" {
-				br = "?"
-			}
-			fmt.Fprint(t, cardRow(pad, "remove", "the worktree "+tilde+" "+CGrey+"· branch "+br+" stays"+COff)+"\n")
-			if choose(t, pad, []choice{{"y", "remove"}, {"n", "keep"}}, 1) == 0 {
-				remove = "1"
-			} else {
-				// Kept on purpose: yours now, never swept.
-				e.forgetWorktree(th.Worktree)
-			}
-			_ = t.Close()
-		}
+	if takes {
+		remove = "1"
 	}
 	ends := ""
 	if ownSession {

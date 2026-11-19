@@ -366,11 +366,17 @@ branch against what the pull request merges into (its record's `base`).
   status` prints weaver's counts; both fail only when weaver's session is
   not running.
 - `wvr close [--yes] [--remove-worktree] [PANE]`: PANE is an agent or its
-  review panel (default: the focused one). It says what goes and asks `close it?
-  [y/N]` (`--yes` skips only that); then, for a worktree it may remove, `remove
-  its worktree … too? [y/N]` (or `--remove-worktree`). Exit 0 closed, 130
-  declined, 1 error. When the tab would close with the pane it runs in, the
-  rest happens in a detached process (log: `close.log`).
+  review panel (default: the focused one). One card says what goes and asks.
+  For a worktree it may remove (below), the worktree is among what goes, and
+  the card's choices are `y` close (the worktree removed), `k` close and keep
+  the worktree (`forgetWorktree`: off the sweep's list, yours for good), and
+  `n` or esc cancel; otherwise `y` close and `n` keep, with a `stays` row
+  saying why a worktree weaver made stays. Enter takes the last, which closes
+  nothing. `--yes` skips the card: the worktree stays on the sweep's list,
+  removed only with `--remove-worktree` (which, without `--yes`, leaves the
+  card `y` or `n`). Exit 0 closed, 130 declined, 1 error. When the tab would
+  close with the pane it runs in, the rest happens in a detached process
+  (log: `close.log`).
 
 `wvr close` removes a worktree only when the thread record says weaver made
 it, it is a linked worktree (not the main checkout), not locked, `git status

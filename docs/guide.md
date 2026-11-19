@@ -178,13 +178,22 @@ resumed.
 ### Closing a thread
 
 `x` on the board, or `wvr close`, closes a thread's agent, its review and its
-session with every pane in it, its helpers' too, after asking (and says so
-when nvim is open in the review, whose unsaved edits would go).
+session with every pane in it, its helpers' too, after one card that says
+what the agent is doing and what goes (and says so when nvim is open in the
+review, whose unsaved edits would go). `enter` takes `n`, which closes
+nothing.
 
 If weaver created the thread's worktree, and nothing in it would be lost (no
 uncommitted changes, and its commits merged into the default branch or
-pushed), weaver then offers to remove it, with `wt remove`. The branch always
-stays.
+pushed), the card offers it too: `y` closes the thread and removes the
+worktree, with `wt remove`; `k` closes the thread and keeps the worktree for
+good; `n` or `esc` closes nothing. Otherwise it is `y` close or `n` keep,
+and for a worktree weaver created the card says why it stays (uncommitted
+files, commits not pushed, another thread in it). The branch always stays.
+
+From a shell, `wvr close --yes` closes without the card and leaves the
+worktree to the clean-up ([What weaver cleans up](#what-weaver-cleans-up));
+`--remove-worktree` removes it then and there.
 
 ## Pull requests and issues
 
@@ -434,8 +443,8 @@ needs:
   (open or lost) and no pane uses it, and nothing in it would be lost: no
   uncommitted or untracked files, and its commits merged or pushed. Its
   ignored files (an `.env`, local settings) are kept a month in
-  `trash/` in weaver's state directory first. Its branch stays. A worktree you chose to keep when you closed its thread is yours, and
-  stays.
+  `trash/` in weaver's state directory first. Its branch stays. A worktree you kept with `k` when you closed its thread
+  is yours, and stays.
 - **Processes.** Sockets nothing listens on are removed. What an agent
   left running in the background from its worktree (a dev server, a
   watcher) is not: end it yourself once its thread has gone.
