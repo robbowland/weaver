@@ -13,8 +13,8 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/<skey>_<pane>.json` | state of the agent in pane `<pane>` of session `<skey>` (`rex-` and the session name with `/` as `_`); one JSON object on one line |
 | `$STATE_DIR/<skey>_<pane>.panel` | line 1: the pane of the agent's review panel; line 2: the panel's pid (`wvr _panel`'s), empty while not known (the panel writes its own as it starts); a pid of 1 or less is no process, never a live panel |
 | `$STATE_DIR/<skey>_<pane>.thread` | the thread record of the agent in pane `<pane>`, when `wvr new` started it (below); `.closing` while `wvr close` ends it, so nothing keeps a thread being closed as lost |
-| `$STATE_DIR/new/<skey>_<token>/` | a thread being opened: `task` (or `resume`) and `thread.json` until the agent's pane takes them |
-| `$STATE_DIR/threads/<created>-<hash>/` | a thread's own files, for its life (`store.Thread.Dir`: named for its record's `created` and its `worktree`'s FNV-32a hash, which nothing changes, so they follow it through a new pane, lost and resumed): `review-comments`, the ids of the tuicr comments its agent has been given, one a line (see [Review panel](#review-panel)) |
+| `$STATE_DIR/new/<skey>_<token>/` | a thread being opened: `task` (or `resume`), `context` when it has one, and `thread.json` until the agent's pane takes them |
+| `$STATE_DIR/threads/<created>-<hash>/` | a thread's own files, for its life (`store.Thread.Dir`: named for its record's `created` and its `worktree`'s FNV-32a hash, which nothing changes, so they follow it through a new pane, lost and resumed): `review-comments`, the ids of the tuicr comments its agent has been given, one a line (see [Review panel](#review-panel)); `context`, what its agent is told each time it starts (see [Work items](#work-items)) |
 | `$STATE_DIR/repos` | repositories threads were started in, most recent first |
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
@@ -211,7 +211,7 @@ the agent's other files. Readers ignore fields they don't know.
 | `pane` | int | the agent's pane |
 | `session_id` | string | its conversation: Claude Code's from the start (weaver chooses it), any agent's from its SessionStart on; absent while unknown |
 | `item` | object | the work item it started from: `kind` (`pr`, `issue`, `linear`), `ref` (`owner/name#45`, `ENG-42`), `url`, `title`; absent without one |
-| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode auto`, the prompt telling it to change no files; absent otherwise |
+| `mode` | string | `review`: read-only, whenever its agent starts (new, resumed, restarted): `agent.Command` takes from `cmd` what would loosen it and adds Claude Code's `--permission-mode auto`, the prompt (or with no task its context, [Work items](#work-items)) telling it to change no files and make no commits, and that reading, read-only commands and comments on the item are expected; absent otherwise |
 | `title` | string | its name (the form's `name` row or `wvr new --name`; for one from an item, by default the item's, `#45 Add a flag`, read-only `review :: #45 Add a flag`; later `wvr rename`, the board's `r`), which rows, cards, window labels and lost rows show in place of its agent's `title`; absent for none |
 | `agent_title` | string | the name its agent gave it (`wvr title`), shown when it has no `title`; absent for none |
 | `conv_name` | string | the name weaver started its conversation with (`claude -n`, its `name` then), which Claude Code reports as the conversation's `title`: not a name of its agent's, so never shown; absent in a record from before it was kept |
@@ -380,7 +380,20 @@ merged) changes its thread's `base`, which the panel's next round takes.
 
 The form's task starts empty (weaver's, above, with `WEAVER_ITEM_TASK=1`),
 and an item's thread may start without one: its agent then runs with no
-prompt. Either way the thread is named for the item (`ThreadItem.Name`:
+prompt, so no turn starts until you speak, but it knows the item from its
+start. weaver writes what the prompt would have carried after the task
+(`items.Context`: that your first message says what to do, the item's
+heading, what to do with it in this worktree, a review's read-only rule,
+and its fenced text) to the meeting place's `context`; the agent's first
+start moves it to the thread's own `context` (`$STATE_DIR/threads/`,
+`store.Thread.Dir`), and every start of its agent (new, resumed,
+restarted, a lost thread brought back) passes it as Claude Code's
+`--append-system-prompt` (`agentArgv`). Claude Code records the system
+prompt a conversation begins with and resumes with that record until a
+compaction, after which it renders it from the options of the agent then
+running: so each start passes it again. A work thread from an item with no
+task gets the same, with its work instructions in place of the rule.
+Either way the thread is named for the item (`ThreadItem.Name`:
 `#45 Add a flag`, `ENG-42 Fix it`; read-only, after `review :: `, `formName`)
 unless its `name` row (`--name`) says
 otherwise, and keeps that name (its record's `title`) over the agent's
@@ -392,7 +405,11 @@ random nonce, said to be untrusted: written by anyone who can comment.
 Review comments that could not be read (gh failed, or GitHub refused the
 query) are said so in that line, with how to read them, never left out in
 silence (the item's `review_unread`). `--review` makes the thread's `mode`
-`review`: its agent runs Claude Code in auto mode, each time it starts; a pull request's review panel shows the
+`review`: its agent runs Claude Code in auto mode, each time it starts, held
+by its prompt (or, with no task, its context) to the read-only rule: change
+no files and make no commits, while reading anything, running read-only
+commands, and posting review comments or replies on the pull request or
+issue are expected; a pull request's review panel shows the
 branch against what the pull request merges into (its record's `base`).
 
 ### Commands for the dashboard

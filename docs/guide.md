@@ -263,20 +263,28 @@ already has a thread, weaver goes to that thread instead.
 The task is yours to write:
 
 - **Left empty**, `enter` starts the agent with no prompt, waiting for you,
-  and names its window after the item (`03 ENG-42 Fix it`).
+  and names its window after the item (`03 ENG-42 Fix it`). The agent
+  already knows the item, its description and comments, and what to do
+  with it in this worktree: weaver gives them to it as it starts, which
+  starts no turn, so your first message can be as short as "go".
 - **Written**, the agent gets your task with the item's description, its
-  unresolved review comments and its comments. weaver fences that text and
-  marks it as untrusted, since anyone who can comment wrote it.
+  unresolved review comments and its comments.
+
+Either way, weaver fences the item's text and marks it as untrusted, since
+anyone who can comment wrote it.
 
 With `WEAVER_ITEM_TASK=1`, weaver writes a task in for you (`Address the
 review on #45`, `Implement #12`).
 
 `alt+m` is the read-only version. On a pull request, it starts a thread on the
 pull request's branch whose review shows it against the branch it merges
-into, and whose agent reviews without changing files (Claude Code in auto
-mode, so it can post review comments). On an issue, it starts an
-investigation that ends in a plan for you to approve. The form's `alt+m`
-switches between work and read-only.
+into, and whose agent reviews it (Claude Code in auto mode, so it can post
+review comments). On an issue, it starts an investigation that ends in a
+plan for you to approve. The agent is told the rule from the start, task
+or none: change no files and make no commits, while reading anything,
+running read-only commands, and posting review comments or replies on the
+pull request or issue are expected. The form's `alt+m` switches between
+work and read-only.
 
 From a shell: `wvr new --pr 45` (or `owner/name#45`, or the pull request's
 URL), `wvr new --issue 12`, or `wvr new --issue ENG-42`, each with `--review`

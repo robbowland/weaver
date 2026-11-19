@@ -280,9 +280,9 @@ func (p PullRequest) instructions(m Mode, base string) string {
 		"a commit for each where that makes sense, and never force-push. " +
 		"Where a comment needs a judgement call, ask me rather than guess.\n"
 	if m == ModeReview {
-		s = fmt.Sprintf("This worktree is at the pull request's head, and the review is read-only: change no files. "+
+		s = fmt.Sprintf("This worktree is at the pull request's head. %s "+
 			"Compare it with %s (git diff %s...HEAD). Report what you find, most serious first, each with its file:line, "+
-			"then any questions for its author.\n", base, base)
+			"then any questions for its author.\n", readOnly("review comments or replies on the pull request"), base, base)
 	}
 	if p.Behind != "" {
 		s = strings.Replace(s, "This worktree is at the pull request's head", "This worktree is meant to be at the pull request's head", 1)
@@ -300,21 +300,45 @@ func (LinearIssue) instructions(m Mode, _ string) string { return issueInstructi
 
 func issueInstructions(m Mode) string {
 	if m == ModeReview {
-		return "Investigate it without changing any files: find where the code stands on it, " +
-			"then propose a plan for me to approve.\n"
+		return "Investigate it. " + readOnly("comments or replies on the issue") +
+			" Find where the code stands on it, then propose a plan for me to approve.\n"
 	}
 	return "This worktree is a new branch for it. Ask me where the issue is unclear.\n"
+}
+
+// readOnly is the rule a read-only thread's agent keeps: it changes nothing
+// of the work, while reading, looking and saying what it finds, posting
+// (what it may post, and where) included, are its job.
+func readOnly(posting string) string {
+	return "This thread is read-only: change no files and make no commits. Reading anything, running read-only commands, " +
+		"and posting " + posting + " are expected."
 }
 
 // promptMax caps an item's text in a prompt (it goes to the agent as an
 // argument).
 const promptMax = 48 << 10
 
-// Prompt is what the agent is sent for task on it: task, what to do
-// in this worktree, and the item's own text, fenced as untrusted.
+// Prompt is what the agent is sent for task on it: task, then what the
+// item is (about).
 func Prompt(it Item, task string, m Mode, base string) string {
+	return strings.TrimRight(task, "\n") + "\n\n" + about(it, m, base)
+}
+
+// Context is what the agent of a thread started on it with no task is
+// told as it starts, in place of a first prompt: Claude Code's
+// --append-system-prompt, which starts no turn, so it still waits for you
+// (docs/decisions.md, 2026-10-17: no prompt is sent for you). That your
+// first message says what to do, then what the item is (about), the
+// read-only rule of a review with it.
+func Context(it Item, m Mode, base string) string {
+	return "weaver started this thread on the work item below, with no task: your user's first message says what to do with it. " +
+		"What follows holds throughout.\n\n" + about(it, m, base)
+}
+
+// about is what the agent is told of item it: what it is, what to do with
+// it in this worktree, and its own text, fenced as untrusted.
+func about(it Item, m Mode, base string) string {
 	var b strings.Builder
-	b.WriteString(strings.TrimRight(task, "\n") + "\n\n")
 	b.WriteString(it.heading())
 	b.WriteString("\n")
 	b.WriteString(it.instructions(m, base))

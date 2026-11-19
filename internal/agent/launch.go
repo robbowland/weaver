@@ -8,7 +8,8 @@ type Mode string
 const (
 	// ModeWork changes what it works on.
 	ModeWork Mode = ""
-	// ModeReview reviews without changing files, as its prompt says: Claude
+	// ModeReview reviews without changing files or committing, as its
+	// prompt (or, with no task, the context it starts with) says: Claude
 	// Code in auto mode, so it can post a review comment.
 	ModeReview Mode = "review"
 )

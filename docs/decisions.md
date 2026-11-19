@@ -854,6 +854,22 @@ can supersede an earlier one, and says so.
   Rob: "Just start in auto mode". Nothing but the prompt now keeps it from
   changing files: auto mode allows edits. A bypass or another permission
   mode still goes from the command.
+- 2026-11-19: A thread from an item with no task knows its item from the
+  start, and a read-only one its rule (Rob chose it). With no task its
+  agent started bare: it never saw the item, its description and
+  comments, nor that it was read-only, though auto mode lets it edit. The
+  2026-10-17 rule stands, no turn until you speak: what the prompt would
+  have carried after the task goes as Claude Code's
+  `--append-system-prompt`, which starts none. It works interactively, and
+  a resume keeps it without the option (Claude Code records the system
+  prompt a conversation begins with), until a compaction renders it again
+  from the running agent's options: so the thread keeps it and every start
+  passes it. The rule says what is expected as well as what is not:
+  change no files and make no commits, but read anything, run read-only
+  commands, and post review comments or replies on the pull request or
+  issue; "change no files" alone had the agent unsure whether posting was
+  allowed. A work thread from an item with no task gets its item the same
+  way.
 
 ## Lost threads
 

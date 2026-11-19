@@ -513,10 +513,14 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 		prBase = prBaseRef(fm.Repo, pr.Base)
 	}
 	// The agent's first prompt: the task, with the item it is on; with no
-	// task, nothing (it waits for you).
-	prompt := task
+	// task, nothing (it waits for you), the item (and a review's read-only
+	// rule) going with its start instead, which starts no turn
+	// (items.Context, AgentPane).
+	prompt, about := task, ""
 	if it != nil && strings.TrimSpace(task) != "" {
 		prompt = items.Prompt(it, task, fm.Mode, prBase)
+	} else if it != nil {
+		about = items.Context(it, fm.Mode, prBase)
 	}
 	if strings.TrimSpace(task) != "" {
 		prompt += nameNote(branch, title == "", slugged)
@@ -526,7 +530,8 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	if os.MkdirAll(d, 0o755) != nil {
 		return "", errors.New("cannot create " + d)
 	}
-	if os.WriteFile(d+"/task", []byte(prompt), 0o644) != nil {
+	if os.WriteFile(d+"/task", []byte(prompt), 0o644) != nil ||
+		about != "" && os.WriteFile(d+"/context", []byte(about), 0o644) != nil {
 		os.RemoveAll(d)
 		return "", errors.New("cannot write the task for its agent in " + d)
 	}
@@ -599,20 +604,23 @@ func (e *Env) agentSpawn(tok, dir string) mux.Spawn {
 // with the task. A lost thread
 // brought back: its records for this pane, then its conversation, resumed.
 // Run again: resume the agent's conversation, never send the task twice.
+// Each start of a thread's agent is told what its thread keeps for it
+// (threadContext).
 func (e *Env) AgentPane(tok string) error {
 	pane := e.MyPane
 	d := e.opening(tok)
-	cmd, mode := agentCmd(), agent.ModeWork
+	cmd, mode, about := agentCmd(), agent.ModeWork, ""
 	cmdOf := func(t store.Thread) {
 		if t.Cmd != "" {
 			cmd = t.Cmd
 		}
 		mode = t.Mode
+		about = threadContext(e.StateDir, t)
 	}
 	paneNum, _ := cli.Atoi(string(pane))
 	pn := jsonx.Int(paneNum)
 	run := func(args ...string) error {
-		w := agent.Command(cmd, mode)
+		w := agentArgv(cmd, mode, about, args)
 		if len(w) == 0 {
 			return errors.New("no command for " + agent.Claude)
 		}
@@ -621,12 +629,15 @@ func (e *Env) AgentPane(tok string) error {
 			return &cli.Exit{Code: 127, Err: errors.New(w[0] + " is not installed")}
 		}
 		rex.Close()
-		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, append(w, args...), os.Environ()))
+		return fmt.Errorf("%s: %w", w[0], syscall.Exec(p, w, os.Environ()))
 	}
 	if tok != "" && pane != "" && files.Exists(d+"/task") {
 		task, _ := os.ReadFile(d + "/task")
 		th, therr := store.ReadThread(d + "/thread.json")
 		cmdOf(th)
+		if a := takeContext(d, e.StateDir, th, therr == nil); a != "" {
+			about = a
+		}
 		// Claude Code starts on a session id weaver chose, named for the
 		// thread: the thread knows its conversation before its first hook,
 		// so it can be resumed (never --continue).
@@ -713,6 +724,58 @@ func resumeArgs(sid string) []string {
 		return nil
 	}
 	return []string{"--resume", sid}
+}
+
+// agentArgv is a thread's agent's command line: cmd held to mode
+// (agent.Command), told about (threadContext) as Claude Code's
+// --append-system-prompt when there is something to tell, then args. Nil
+// for no command.
+func agentArgv(cmd string, mode agent.Mode, about string, args []string) []string {
+	w := agent.Command(cmd, mode)
+	if len(w) == 0 {
+		return nil
+	}
+	if about != "" {
+		w = append(w, "--append-system-prompt", about)
+	}
+	return append(w, args...)
+}
+
+// contextFile is where thread th keeps what its agent is told as it
+// starts, under weaver's state directory stateDir.
+func contextFile(stateDir string, th store.Thread) string { return th.Dir(stateDir) + "/context" }
+
+// threadContext is what thread th's agent is told each time it starts:
+// for a thread started on a work item with no task, the item and what to
+// do with it, a review's read-only rule with it (items.Context); "" for
+// nothing. Every start passes it, a resume too: Claude Code keeps the
+// system prompt a conversation began with until it is compacted, then
+// renders it again from the options of the agent running then.
+func threadContext(stateDir string, th store.Thread) string {
+	b, err := os.ReadFile(contextFile(stateDir, th))
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// takeContext is what a new thread's meeting place d holds for its agent
+// to be told (threadCreate's items.Context), moved to the thread's own
+// directory when its record was read (keep), where each later start finds
+// it; "" for nothing.
+func takeContext(d, stateDir string, th store.Thread, keep bool) string {
+	b, err := os.ReadFile(d + "/context")
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	if keep {
+		f := contextFile(stateDir, th)
+		// Unkept, this start is told all the same; a later one is not.
+		if os.MkdirAll(filepath.Dir(f), 0o755) == nil {
+			bestEffort(os.WriteFile(f, b, 0o644))
+		}
+	}
+	return string(b)
 }
 
 // threadRestore brings lost thread lf back (threadReopen), its record

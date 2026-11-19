@@ -112,3 +112,36 @@ func TestItemBox(t *testing.T) {
 		t.Error("an item of no kind: no error")
 	}
 }
+
+// A read-only thread's rule, in its prompt and in its launch context
+// alike: no change, no commit, and reading, read-only commands and
+// comments on the item expected, never discouraged.
+func TestItemReadOnlyRule(t *testing.T) {
+	pr := PullRequest{Repo: "o/r", Num: 45, Head: "add-flag", Base: "main", Text: Text{Title: "Add a flag", Body: "Adds --name."}}
+	issue := LinearIssue{ID: "ENG-42", Text: Text{Title: "Fix it"}}
+	for _, c := range []struct {
+		what string
+		s    string
+		want []string
+	}{
+		{"pr prompt", Prompt(pr, "Review #45", ModeReview, "origin/main"), []string{"Review #45\n",
+			"change no files and make no commits", "running read-only commands", "posting review comments or replies on the pull request are expected"}},
+		{"pr context", Context(pr, ModeReview, "origin/main"), []string{"no task: your user's first message says what to do",
+			"pull request o/r#45", "change no files and make no commits", "posting review comments or replies on the pull request are expected",
+			"git diff origin/main...HEAD", "Adds --name."}},
+		{"issue context", Context(issue, ModeReview, ""), []string{"Linear issue ENG-42", "change no files and make no commits",
+			"posting comments or replies on the issue are expected", "propose a plan"}},
+	} {
+		for _, w := range c.want {
+			if !strings.Contains(c.s, w) {
+				t.Errorf("%s: missing %q in:\n%s", c.what, w, c.s)
+			}
+		}
+		if strings.Contains(c.s, "without changing any files") {
+			t.Errorf("%s: the old rule:\n%s", c.what, c.s)
+		}
+	}
+	if w := Context(issue, ModeWork, ""); strings.Contains(w, "read-only") || !strings.Contains(w, "new branch for it") {
+		t.Errorf("a work thread's context:\n%s", w)
+	}
+}
