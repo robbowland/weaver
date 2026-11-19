@@ -3,10 +3,12 @@ package wvr
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -147,18 +149,31 @@ func (e *Env) Hold(args []string) error {
 	return e.Close([]string{"--hold", string(p)})
 }
 
-// Fold is `wvr _fold`: the board's HELD threads past its first few shown,
-// or folded again (enter on the row that stands for them).
-func Fold() {
+// Fold is `wvr _fold ID [PANE [jump]]`: the rows the board's fold row ID
+// (m<section>) stands for shown, or folded again (enter on it); with PANE,
+// a thread folded away, shown, and the board's next load puts its cursor
+// on PANE's row, and with jump (a 1-9 key's) jumps there (Chrome). What is
+// unfolded is kept beside the board, one section a line (.unfolded).
+func Fold(args []string) {
 	b := sockBase()
-	if b == "" {
+	sec, ok := strings.CutPrefix(arg(args, 0), "m")
+	if b == "" || !ok {
 		return
 	}
-	if files.Exists(b + ".heldopen") {
-		bestEffort(os.Remove(b + ".heldopen"))
-		return
+	open, pane := unfolded(b), arg(args, 1)
+	if open[sec] && pane == "" {
+		delete(open, sec)
+	} else {
+		open[sec] = true
 	}
-	bestEffort(files.Put(b+".heldopen", "1"))
+	keys := slices.Sorted(maps.Keys(open))
+	bestEffort(files.Put(b+".unfolded", strings.Join(keys, "\n")))
+	if pane != "" {
+		if arg(args, 2) == "jump" {
+			pane += " jump"
+		}
+		bestEffort(files.Put(b+".goto", pane))
+	}
 }
 
 // paneOfThread is the agent's pane of the thread an edit's prompt names

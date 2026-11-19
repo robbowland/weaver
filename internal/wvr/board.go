@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
@@ -249,23 +250,40 @@ func cardRoom(items, cols, lines int) string {
 	return pw
 }
 
-// The board's groups: by state, then read-only threads (reviews,
-// investigations: not ones you watch closely) in a group of their own, then
-// the threads lost with their session, then those you put on hold.
-var heads = [7]string{"NEEDS YOU", "DONE", "WORKING", "IDLE", "REVIEWS", "LOST", "HELD"}
-
+// The board's sections, each under its heading: what needs you, pinned on
+// top across every repository (needs you, then done and not yet looked at:
+// what alt+1 visits, in its order); then a section per repository, its
+// project, named for it; then read-only threads (reviews, investigations:
+// not ones you watch closely) at work or at rest, the threads lost with
+// their session, and those you put on hold. A section's key names its
+// items: its heading h<key>, the gap above it g<key>, its fold row m<key>.
 const (
-	groupReviews = 4
-	groupLost    = 5
-	groupHeld    = 6
+	secNeeds   = "needs"
+	secReviews = "reviews"
+	secLost    = "lost"
+	secHeld    = "held"
 )
 
+// projectKey is the section key of repository repo's project: its name,
+// in characters an fzf action and the shell pass as they are.
+func projectKey(repo string) string {
+	return "p" + strings.Map(func(r rune) rune {
+		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r)) || r == '.' || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, repo)
+}
+
 // GHeld is a held thread's cell; heldStale, how long a hold lasts before
-// its age stands out, as a weekly look at what waits would catch it.
+// its age stands out, as a weekly look at what waits would catch it;
+// heldFold, how many held threads show before the rest fold; idleOld, how
+// long a project's thread rests unchanged before it folds.
 const (
 	GHeld     = "[=]"
 	heldStale = 7 * 24 * 3600
 	heldFold  = 3
+	idleOld   = 24 * 3600
 )
 
 // wipLimit is how many threads you mean to have open at once ($WEAVER_WIP,
@@ -281,11 +299,154 @@ func wipLimit() int {
 // overWIP is whether n threads open is past the limit.
 func overWIP(n int) bool { return wipLimit() > 0 && n > wipLimit() }
 
+// boardRow is a row of the board: in section sec, ordered there by key.
 type boardRow struct {
-	group                                    int
+	sec, repo                                string
 	key, pane, tab, glyph, name, fact, where string
 	age, label, root, num                    string
-	lost, stale                              bool
+	since                                    int64
+	lost, stale, working, old                bool
+}
+
+// section is one of the board's sections: its key, heading and rows (as
+// indexes, in order), and its fold, how many of them show before the rest
+// fold into a row of their own (-1: none fold).
+type section struct {
+	key, head, repo string
+	rows            []int
+	fold            int
+	working         int
+	latest          int64
+}
+
+// rank is where section s goes among the board's: what needs you, the
+// projects, then reviews, lost and held.
+func (s *section) rank() int {
+	switch s.key {
+	case secNeeds:
+		return 0
+	case secReviews:
+		return 2
+	case secLost:
+		return 3
+	case secHeld:
+		return 4
+	}
+	return 1
+}
+
+// sections are rows rs (in order) in their sections, in the board's order:
+// what needs you, the projects busiest first (the most at work, then the
+// latest to change), then reviews, lost and held. With fold (the board,
+// not its text), HELD past heldFold and a project's threads idle past
+// idleOld fold.
+func sections(rs []boardRow, order []int, fold bool) []*section {
+	by := map[string]*section{}
+	var ss []*section
+	for _, i := range order {
+		r := rs[i]
+		s := by[r.sec]
+		if s == nil {
+			head := map[string]string{secNeeds: "NEEDS YOU", secReviews: "REVIEWS", secLost: "LOST", secHeld: "HELD"}[r.sec]
+			if head == "" {
+				head = strings.ToUpper(cmp.Or(r.repo, "/"))
+			}
+			s = &section{key: r.sec, head: head, repo: r.repo, fold: -1}
+			by[r.sec] = s
+			ss = append(ss, s)
+		}
+		s.rows = append(s.rows, i)
+		if r.working {
+			s.working++
+		}
+		s.latest = max(s.latest, r.since)
+	}
+	sort.SliceStable(ss, func(i, j int) bool {
+		a, b := ss[i], ss[j]
+		switch {
+		case a.rank() != b.rank():
+			return a.rank() < b.rank()
+		case a.working != b.working:
+			return a.working > b.working
+		case a.latest != b.latest:
+			return a.latest > b.latest
+		}
+		return a.head < b.head
+	})
+	if !fold {
+		return ss
+	}
+	for _, s := range ss {
+		switch {
+		case s.key == secHeld && len(s.rows) > heldFold:
+			s.fold = heldFold
+		case s.rank() == 1:
+			// Its old threads are its last: latest first.
+			n := 0
+			for _, i := range s.rows {
+				if rs[i].old {
+					n++
+				}
+			}
+			if n > 0 {
+				s.fold = len(s.rows) - n
+			}
+		}
+	}
+	return ss
+}
+
+// foldRow is the row section s folds its rows into: its mark, its text and
+// its card's title, folded or open.
+func (s *section) foldRow(open bool, grey, dim, off string) (mark, text, label string) {
+	n := strconv.Itoa(len(s.rows) - s.fold)
+	if s.key == secHeld {
+		if open {
+			return "…", dim + "⏎ folds them again" + off, "every held thread"
+		}
+		return "…", grey + n + " more held" + off + dim + " · ⏎ shows them" + off, n + " more held"
+	}
+	mark, act := "+", " · ⏎ shows them"
+	if open {
+		mark, act = "-", " · ⏎ folds them again"
+	}
+	return mark, grey + n + " older" + off + dim + act + off, n + " older in " + cmp.Or(s.repo, "/")
+}
+
+// foldTo is the board's action (wvr q) that shows the rows of section sec
+// folded away, and once they are, puts the cursor on pane's row; with
+// jump, jumps there too (Chrome).
+func foldTo(q, sec, pane string, jump bool) string {
+	if jump {
+		pane += " jump"
+	}
+	return "execute-silent(" + q + " _fold m" + sec + " " + pane + ")+reload-sync(" + q + " _rows)"
+}
+
+// foldedIn is the section whose fold leaves pane's row off the board at
+// base, as it last made its rows; "" when none does.
+func foldedIn(base, pane string) string {
+	b, _ := os.ReadFile(base + ".folded")
+	for _, l := range strings.Split(string(b), "\n") {
+		if p, sec, ok := strings.Cut(l, " "); ok && p == pane {
+			return sec
+		}
+	}
+	return ""
+}
+
+// unfolded are the sections whose folded rows the board at base shows
+// (wvr _fold): their keys.
+func unfolded(base string) map[string]bool {
+	open := map[string]bool{}
+	if base == "" {
+		return open
+	}
+	b, _ := os.ReadFile(base + ".unfolded")
+	for _, k := range strings.Fields(string(b)) {
+		open[k] = true
+	}
+	return open
 }
 
 // onBoard are the agents a board lists, of agents: a thread's own board
@@ -375,10 +536,21 @@ func takeNext(base, token string) (string, bool) {
 	return rows, true
 }
 
+// lsJump is what the board does to jump to the row the cursor is on
+// ($LS_JUMP, which ls sets for its fzf).
+func lsJump() string { return cmp.Or(os.Getenv("LS_JUMP"), "print(jump)+accept") }
+
 // PlainRows is the board as text, $COLUMNS wide (`wvr ls | cat`).
 func (e *Env) PlainRows() string { return e.rows(true) }
 
 func (e *Env) rows(plain bool) string {
+	agents, now := e.AgentRows()
+	return e.board(plain, onBoard(agents, os.Getenv("LS_SESSION")), e.LostRows(), now)
+}
+
+// board is the board's lines (rows) for agents, the agents it lists
+// (onBoard), and lost, the threads lost or held, at now (epoch s).
+func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, now int64) string {
 	var b strings.Builder
 	colour := os.Getenv("COLOR")
 	if _, set := os.LookupEnv("COLOR"); !set && !plain {
@@ -396,14 +568,8 @@ func (e *Env) rows(plain bool) string {
 	if width < 40 {
 		width = 40
 	}
-	jump := os.Getenv("LS_JUMP")
-	if jump == "" {
-		jump = "print(jump)+accept"
-	}
-	agents, now := e.AgentRows()
-	agents = onBoard(agents, os.Getenv("LS_SESSION"))
+	jump := lsJump()
 	var rs []boardRow
-	counts := [len(heads)]int{}
 	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts
 	wn, wf, ww, numw := 0, 0, 0, 2
 	nums := false
@@ -416,29 +582,33 @@ func (e *Env) rows(plain bool) string {
 			since = a.Since
 		}
 		name := a.Called()
-		// Its group is what it asks of you (session.Need), as the status
-		// line counts it; the glyph and fact say how.
+		// Its section is what it asks of you (session.Need), as the status
+		// line counts it, else its project; the glyph and fact say how.
 		need := a.Need(now)
-		g := int(need)
 		glyph, fact := stateCell(a, now, p), rowFact(a, now)
-		where := git.WhereOf(a.Root).Name()
-		// Needs you, done and working: longest first; idle: latest first.
+		w := git.WhereOf(a.Root)
+		// Needs you, done and working: longest first; the rest: latest
+		// first.
 		k := since
 		if need == session.NeedNothing {
 			k = 10000000000 - since
+		} else {
+			states[need]++
 		}
-		if need != session.NeedNothing {
-			states[g]++
-		}
-		// A read-only thread: in its own group, by state there.
-		key := fmt.Sprintf("%d%011d", g, k)
-		if a.Review {
-			g, key = groupReviews, strconv.Itoa(groupReviews)+key
+		// In a project, its heading names the repository: the branch is
+		// what tells its rows apart.
+		sec, where := projectKey(w.Repo), w.Branch
+		switch {
+		case need == session.NeedYou || need == session.NeedLook:
+			sec, where = secNeeds, w.Name()
+		case a.Review:
+			sec, where = secReviews, w.Name()
 		}
 		pn, _ := strconv.Atoi(string(a.Pane))
-		r := boardRow{group: g, key: fmt.Sprintf("%s%08d", key, pn), pane: string(a.Pane), tab: string(a.Window), glyph: glyph,
-			name: name, fact: fact, where: where, age: age(now - since), root: a.Root}
-		r.label = name + " · " + where + " · turn " + strconv.Itoa(a.Turn)
+		r := boardRow{sec: sec, repo: w.Repo, key: fmt.Sprintf("%d%011d%08d", need, k, pn), pane: string(a.Pane), tab: string(a.Window), glyph: glyph,
+			name: name, fact: fact, where: where, age: age(now - since), root: a.Root, since: since,
+			working: need == session.NeedWait, old: need == session.NeedNothing && now-since > idleOld}
+		r.label = name + " · " + w.Name() + " · turn " + strconv.Itoa(a.Turn)
 		if a.Tnum > 0 {
 			r.num = strconv.Itoa(a.Tnum)
 			nums = true
@@ -446,7 +616,6 @@ func (e *Env) rows(plain bool) string {
 				numw = len(r.num)
 			}
 		}
-		counts[g]++
 		wn = max(wn, ansi.StringWidth(name))
 		wf = max(wf, ansi.StringWidth(fact))
 		rs = append(rs, r)
@@ -460,7 +629,7 @@ func (e *Env) rows(plain bool) string {
 	}
 	// Threads lost with their session (a crash, or quit), then those you
 	// held, last: enter resumes one in a session of its own (wvr resume).
-	for _, l := range e.LostRows() {
+	for _, l := range lost {
 		// Held a moment ago: its agent is still closing.
 		if l.Sid != "" && running[l.Sid] {
 			continue
@@ -471,17 +640,16 @@ func (e *Env) rows(plain bool) string {
 		}
 		// Named as it was when live.
 		name := l.Called()
-		g, fact, glyph, was := groupLost, "its session went · ⏎ resumes", paint(GEnd, grey, dim, off), "lost"
+		sec, fact, glyph, was := secLost, "its session went · ⏎ resumes", paint(GEnd, grey, dim, off), "lost"
 		if l.Held != "" {
 			since, _ = strconv.ParseInt(l.Held, 10, 64)
-			g, fact, glyph, was = groupHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, grey, dim, off), "held"
+			sec, fact, glyph, was = secHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, grey, dim, off), "held"
 		}
 		where := git.WhereOf(l.Dir).Name()
-		r := boardRow{group: g, key: fmt.Sprintf("%d%011d%08d", g, 10000000000-since, len(rs)), pane: l.Sid,
-			glyph: glyph, lost: true, name: name, fact: fact, where: where,
+		r := boardRow{sec: sec, key: fmt.Sprintf("%011d%08d", 10000000000-since, len(rs)), pane: l.Sid,
+			glyph: glyph, lost: true, name: name, fact: fact, where: where, since: since,
 			age: age(now - since), root: l.Dir, label: name + " · " + where + " · " + was,
-			stale: g == groupHeld && now-since > heldStale}
-		counts[g]++
+			stale: sec == secHeld && now-since > heldStale}
 		wn = max(wn, ansi.StringWidth(name))
 		wf = max(wf, ansi.StringWidth(fact))
 		rs = append(rs, r)
@@ -502,24 +670,34 @@ func (e *Env) rows(plain bool) string {
 				}
 			}
 			if c > 1 {
-				rs[i].where += " ×" + strconv.Itoa(c)
+				rs[i].where = strings.TrimPrefix(rs[i].where+" ×"+strconv.Itoa(c), " ")
 			}
 		}
 		ww = max(ww, ansi.StringWidth(rs[i].where))
+	}
+	// The sections, and the rows the board shows of each: those a fold
+	// leaves out, unless you unfolded them, stand in one row of their own.
+	base := sockBase()
+	secs, open := sections(rs, order, !plain), unfolded(base)
+	listed := 0
+	for _, s := range secs {
+		switch {
+		case s.fold < 0:
+			listed += len(s.rows)
+		case open[s.key]:
+			listed += len(s.rows) + 1
+		default:
+			listed += s.fold + 1
+		}
 	}
 
 	// Columns: key and glyph, name, fact, where (when there is room), age.
 	// fzf searches only what follows the TAB after the glyph (--nth 2).
 	const ageW = 3
-	pre, sep, cw, groups, gaps := 5, "  ", 0, 0, true
+	pre, sep, cw, groups, gaps := 5, "  ", 0, len(secs), true
 	lsCols, lsLines := 0, 0
 	if !plain {
 		pre, sep = numw+6, " \t"
-		for g := range counts {
-			if counts[g] > 0 {
-				groups++
-			}
-		}
 		// The layout.
 		nn := min(wn+2, 42)
 		nf, nw := 0, 0
@@ -529,15 +707,15 @@ func (e *Env) rows(plain bool) string {
 		if ww > 0 {
 			nw = min(ww+2, 30)
 		}
-		// Each group's heading and the gap under it (the last one's
+		// Each section's heading and the gap under it (the last one's
 		// between the list and its keys).
 		items := 0
 		if n > 0 {
-			items = n + groups*2
+			items = listed + groups*2
 		}
 		lsCols, lsLines = lsSize()
 		if n > 0 && items+4 > lsLines {
-			gaps, items = false, n+groups
+			gaps, items = false, listed+groups
 		}
 		width = lsWidth(lsCols) - 7
 		// Repo/branch only when the name and the fact keep 24 and 20 columns.
@@ -617,7 +795,6 @@ func (e *Env) rows(plain bool) string {
 	} else {
 		gap = strings.Repeat(" ", max(width-ansi.StringWidth(titleL)-ansi.StringWidth(titleR), 2))
 	}
-	base := sockBase()
 	if !plain {
 		// The border's label, and (no agents) what to do, for the header.
 		if base != "" {
@@ -630,6 +807,7 @@ func (e *Env) rows(plain bool) string {
 			bestEffort(files.Put(base+".title", out))
 			if n == 0 {
 				bestEffort(os.WriteFile(base+".keys", nil, 0o644))
+				bestEffort(os.WriteFile(base+".folded", nil, 0o644))
 			}
 		}
 		if n == 0 {
@@ -651,95 +829,96 @@ func (e *Env) rows(plain bool) string {
 	}
 	var ls []item
 	var keyl [10]string
-	// HELD past heldFold rows shows its newest and folds the rest into a
-	// row of their own, whose enter unfolds them (and folds them again); on
-	// the board, not in its text.
-	fold, unfolded, held := 0, base != "" && files.Exists(base+".heldopen"), 0
-	if !plain && counts[groupHeld] > heldFold {
-		fold = heldFold
-	}
-	lastG, a := -1, 0
-	for _, i := range order {
-		r := rs[i]
-		if r.group == groupHeld && fold > 0 && !unfolded {
-			if held++; held > fold {
-				continue
-			}
+	q, folds := session.Quote(e.Self), ""
+	a := 0
+	for si, s := range secs {
+		if si > 0 && gaps {
+			ls = append(ls, item{id: "g" + s.key})
 		}
-		g := r.group
-		if g != lastG {
-			if lastG != -1 && gaps {
-				ls = append(ls, item{id: "g" + strconv.Itoa(g)})
-			}
-			t := grey + heads[g] + off + dim + " · " + off + grey + strconv.Itoa(counts[g]) + off
-			if plain {
-				t = heads[g] + " · " + strconv.Itoa(counts[g])
-			}
-			ls = append(ls, item{id: "h" + strconv.Itoa(g), text: t})
-			lastG = g
+		t := grey + s.head + off + dim + " · " + off + grey + strconv.Itoa(len(s.rows)) + off
+		if plain {
+			t = s.head + " · " + strconv.Itoa(len(s.rows))
 		}
-		lead := ""
-		if r.lost {
-			// A lost thread: no number, no 1-9 key.
-			if !plain {
-				lead = strings.Repeat(" ", numw) + " "
-			}
-		} else if !plain {
-			a++
-			// Threads' stable numbers when they have them, else the rows'
-			// order; two digits (01).
-			c, shown := "", ""
-			if nums {
-				c, shown = r.num, r.num
-			} else {
-				c = strconv.Itoa(a)
-				if a <= 9 {
-					shown = c
+		ls = append(ls, item{id: "h" + s.key, text: t})
+		rows, folded := s.rows, s.fold >= 0 && !open[s.key]
+		if folded {
+			rows = s.rows[:s.fold]
+			// The threads folded away, for _pos (foldedIn); a 1-9 key's
+			// unfolds them, and the load that shows its thread puts the
+			// cursor there and jumps (Chrome).
+			for _, i := range s.rows[s.fold:] {
+				if rs[i].lost {
+					continue
+				}
+				folds += rs[i].pane + " " + s.key + "\n"
+				if c := rs[i].num; nums && len(c) == 1 && c >= "1" && c <= "9" {
+					keyl[c[0]-'0'] = foldTo(q, s.key, rs[i].pane, true)
 				}
 			}
-			if shown != "" {
-				v, _ := strconv.Atoi(shown)
-				shown = fmt.Sprintf("%02d", v)
+		}
+		for _, i := range rows {
+			r := rs[i]
+			lead := ""
+			if r.lost {
+				// A lost thread: no number, no 1-9 key.
+				if !plain {
+					lead = strings.Repeat(" ", numw) + " "
+				}
+			} else if !plain {
+				a++
+				// Threads' stable numbers when they have them, else the rows'
+				// order; two digits (01).
+				c, shown := "", ""
+				if nums {
+					c, shown = r.num, r.num
+				} else {
+					c = strconv.Itoa(a)
+					if a <= 9 {
+						shown = c
+					}
+				}
+				if shown != "" {
+					v, _ := strconv.Atoi(shown)
+					shown = fmt.Sprintf("%02d", v)
+				}
+				lead = dim + fmt.Sprintf("%*s", numw, shown) + off + " "
+				if len(c) == 1 && c >= "1" && c <= "9" {
+					keyl[c[0]-'0'] = "pos(" + strconv.Itoa(len(ls)+1) + ")+" + jump
+				}
 			}
-			lead = dim + fmt.Sprintf("%*s", numw, shown) + off + " "
-			if len(c) == 1 && c >= "1" && c <= "9" {
-				keyl[c[0]-'0'] = "pos(" + strconv.Itoa(len(ls)+1) + ")+" + jump
+			f := oneline.Fit(r.name, cn-2)
+			if s.key != secNeeds {
+				f = grey + f + off
 			}
+			out := lead + r.glyph + sep + f + "  "
+			if cf > 0 {
+				out += grey + oneline.Fit(r.fact, cf-2) + off + "  "
+			}
+			if cw > 0 {
+				out += dim + oneline.Fit(r.where, cw-2) + off + "  "
+			}
+			// A hold past a week: its age stands out, a nudge to look at it.
+			ac := dim
+			if r.stale {
+				ac = grey
+			}
+			out += ac + fmt.Sprintf("%*s", ageW, r.age) + off
+			id := "a" + r.pane
+			if r.lost {
+				id = "l" + r.pane
+			}
+			ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, isAgent: true})
 		}
-		f := oneline.Fit(r.name, cn-2)
-		if g >= 2 {
-			f = grey + f + off
+		// The rows folded away, or unfolded: one row, whose enter folds or
+		// unfolds them (wvr _fold).
+		if s.fold >= 0 {
+			mark, t, label := s.foldRow(!folded, grey, dim, off)
+			ls = append(ls, item{id: "m" + s.key, text: strings.Repeat(" ", numw) + " " + dim + mark + off + sep + t, label: label, isAgent: true})
 		}
-		out := lead + r.glyph + sep + f + "  "
-		if cf > 0 {
-			out += grey + oneline.Fit(r.fact, cf-2) + off + "  "
-		}
-		if cw > 0 {
-			out += dim + oneline.Fit(r.where, cw-2) + off + "  "
-		}
-		// A hold past a week: its age stands out, a nudge to look at it.
-		ac := dim
-		if r.stale {
-			ac = grey
-		}
-		out += ac + fmt.Sprintf("%*s", ageW, r.age) + off
-		id := "a" + r.pane
-		if r.lost {
-			id = "l" + r.pane
-		}
-		ls = append(ls, item{id: id, pane: r.pane, tab: r.tab, text: out, label: r.label, isAgent: true})
 	}
-	if fold > 0 {
-		more := strconv.Itoa(counts[groupHeld]-fold) + " more held"
-		t := grey + more + off + dim + " · ⏎ shows them" + off
-		if unfolded {
-			more, t = "every held thread", dim+"⏎ folds them again"+off
-		}
-		ls = append(ls, item{id: "m", text: strings.Repeat(" ", numw) + " " + dim + "…" + off + sep + t, label: more, isAgent: true})
-	}
-	// A gap under the last group too, between the list and its keys, as a
+	// A gap under the last section too, between the list and its keys, as a
 	// view has.
-	if gaps && lastG != -1 && !plain {
+	if gaps && len(secs) > 0 && !plain {
 		ls = append(ls, item{id: "gz"})
 	}
 	if plain {
@@ -752,13 +931,15 @@ func (e *Env) rows(plain bool) string {
 		}
 		return b.String()
 	}
-	// 1-9: fzf actions that pick those agents.
+	// 1-9: fzf actions that pick those agents; and the agents folded away,
+	// by section (foldedIn).
 	if base != "" {
 		keys := ""
 		for c := 1; c <= 9; c++ {
 			keys += keyl[c] + "\n"
 		}
 		bestEffort(files.Put(base+".keys", keys))
+		bestEffort(files.Put(base+".folded", folds))
 	}
 	for i, it := range ls {
 		if it.isAgent {
@@ -1002,8 +1183,24 @@ func (e *Env) Chrome() string {
 		}
 	}
 	out := ""
+	// A thread that was folded away, which this load shows (wvr _fold): the
+	// cursor on its row, and a 1-9 key's jump. Kept for a later load while
+	// this one's rows (another reload's) do not show it, a few seconds.
+	if g, err := files.FirstLine(base + ".goto"); err == nil {
+		p, jump := strings.CutSuffix(g, " jump")
+		rows, _ := os.ReadFile(base + ".rows")
+		if i := rowOf(string(rows), "a"+p); i > 0 {
+			bestEffort(os.Remove(base + ".goto"))
+			out = "pos(" + strconv.Itoa(i) + ")+"
+			if jump {
+				out += lsJump() + "+"
+			}
+		} else if st, err := os.Stat(base + ".goto"); err == nil && time.Since(st.ModTime()) > 5*time.Second {
+			bestEffort(os.Remove(base + ".goto"))
+		}
+	}
 	if hf := e.HF(); hf != "" {
-		out = hf + "+"
+		out += hf + "+"
 	}
 	pw, _ := files.FirstLine(base + ".room")
 	last, _ := files.FirstLine(base + ".shown")

@@ -199,7 +199,7 @@ var commands = map[string]command{
 	// The board's edits in place.
 	"_mode":     {session: true, run: (*wvr.Env).EditMode},
 	"_modedone": {session: true, run: (*wvr.Env).EditDone},
-	"_fold":     {run: done(func(*wvr.Env, []string) { wvr.Fold() })},
+	"_fold":     {run: done(func(_ *wvr.Env, args []string) { wvr.Fold(args) })},
 
 	// A thread's widths back once the Rex app has evened out its panes.
 	"_width": {session: true, run: done(func(e *wvr.Env, args []string) { e.ThreadWidth(arg(args, 0)) })},

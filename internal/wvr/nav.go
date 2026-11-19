@@ -269,7 +269,8 @@ func (e *Env) boardOn(w mux.WindowID) {
 // cursor on PANE's row (nothing when it has none), among the rows the
 // board shows, as it last loaded them (keepRows): pos counts its own
 // lines, and rows made anew would rewrite its keys, and what its refresh
-// compares with, for rows not on screen.
+// compares with, for rows not on screen. A row folded away is shown
+// first, the cursor put there once it is (foldTo).
 func (e *Env) Pos(pane string) string {
 	base := sockBase()
 	if base == "" {
@@ -281,6 +282,9 @@ func (e *Env) Pos(pane string) string {
 	}
 	if i := rowOf(string(shown), "a"+pane); i > 0 {
 		return "pos(" + strconv.Itoa(i) + ")\n"
+	}
+	if sec := foldedIn(base, pane); sec != "" {
+		return foldTo(session.Quote(e.Self), sec, pane, false) + "\n"
 	}
 	return ""
 }

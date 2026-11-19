@@ -176,6 +176,13 @@ func (e *Env) ls(peek, at string) (string, error) {
 		}
 		os.Setenv("FZF_SOCK", sock)
 		rows := e.Rows("")
+		// The popover opens on its thread: shown, when it was folded away.
+		if peek != "" && at != "" {
+			if sec := foldedIn(base, at); sec != "" {
+				Fold([]string{"m" + sec})
+				rows = e.Rows("")
+			}
+		}
 		items := strings.Count(rows, "\n")
 		if items == 0 {
 			os.Setenv("LS_EMPTY", "1")
@@ -205,7 +212,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			"--bind", "j:down,k:up,g,home:first,G,end:last,q:" + quitAct,
 			// An edit open (modes.go) is done; else the row's thread.
 			"--bind", "enter,double-click:transform:case \"$FZF_PROMPT\" in rename\\ *|hold\\ *) " + q + " _modedone \"$FZF_PROMPT\" \"$FZF_QUERY\" ;; " +
-				"*) case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; m*) echo 'execute-silent(" + q + " _fold)+reload-sync(" + q + " _rows)' ;; esac ;; esac",
+				"*) case {1} in a*) echo '" + jumpAct + "' ;; l*) echo '" + resumeAct + "' ;; m*) echo 'execute-silent(" + q + " _fold {1})+reload-sync(" + q + " _rows)' ;; esac ;; esac",
 		}
 		for _, r := range [][3]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}} {
 			var bs []string

@@ -57,12 +57,15 @@ done
 # agents around it (the cursor skips to them), the card's title, the row (a
 # TAB after the glyph: search sees only what follows).
 golden items-120.txt "$(FZF_COLUMNS=120 FZF_LINES=40 FZF_INPUT_STATE=hidden wvr _rows | strip)"
-# A read-only thread (a review): in REVIEWS, below the rest, by its state
-# there; the title's counts are by state still.
+# Read-only threads (reviews): one done and not yet looked at under NEEDS
+# YOU, where alt+1 goes; one at work in REVIEWS, below the projects; the
+# title's counts are by state still.
 jq -nc --arg w "$T/dash-readme" '{name: "readme", task: "review the README", worktree: $w, agent: "claude", mode: "review"}' \
 	>"$SD/${SK}_1.thread"
+jq -nc --arg w "$T/dash" '{name: "dash", task: "review the dashboard", worktree: $w, agent: "claude", mode: "review"}' \
+	>"$SD/${SK}_2.thread"
 golden rows-review-120.txt "$(LS_MODE=plain COLUMNS=120 wvr _rows)"
-rm -f "$SD/${SK}_1.thread"
+rm -f "$SD/${SK}_1.thread" "$SD/${SK}_2.thread"
 for p in 0 1 2; do
 	golden "card-$p-60.txt" "$(FZF_PREVIEW_COLUMNS=60 wvr _preview $p "$(FZF_COLUMNS=120 wvr _rows | awk -F '\t' -v id=a$p '$1 == id { print $6 }')" | strip)"
 done
@@ -89,7 +92,8 @@ ok "...and what is held, past the limit and within it" \
 rm -f "$SD/lost/${SK}_sid-held.json"
 
 # Many held: HELD shows its three newest and folds the rest into a row of
-# their own; enter there (wvr _fold) shows them all, and folds them again.
+# their own; enter there (wvr _fold, its id) shows them all, and folds them
+# again.
 for i in 1 2 3 4 5; do
 	jq -nc --arg k "$SK" --arg w "$T/dash" --argjson h $((NOW - i * 60)) --arg n "next $i" \
 		'{lost: $h, held: $h, note: $n, skey: $k, state: {session_id: ("sid-h" + ($h | tostring))},
@@ -98,10 +102,10 @@ done
 held_rows() { FZF_SOCK=$AT/fold.sock FZF_COLUMNS=120 wvr _rows | strip | awk -F '\t' '$1 ~ /^[lm]/ { print substr($1, 1, 1) ":" $NF }' | sed 's/  */ /g'; }
 ok "HELD folds past three, the rest on a row of their own" \
 	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(held_rows | grep -c '2 more held · ⏎ shows them')" "l: l: l: m: |1"
-FZF_SOCK=$AT/fold.sock wvr _fold
+FZF_SOCK=$AT/fold.sock wvr _fold mheld
 ok "...enter there shows them all, and folds them again" \
 	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(held_rows | grep -c 'folds them again')" "l: l: l: l: l: m: |1"
-FZF_SOCK=$AT/fold.sock wvr _fold
+FZF_SOCK=$AT/fold.sock wvr _fold mheld
 ok "...folded again; the board as text lists every one" \
 	"$(held_rows | cut -c1-2 | tr '\n' ' ')|$(LS_MODE=plain COLUMNS=120 wvr _rows | grep -c '\[=\]')" "l: l: l: m: |5"
 rm -f "$SD/lost/${SK}"_h?.json
