@@ -163,7 +163,7 @@ next
 ok "...and round again to the one still waiting" "$(client)" "1"
 hookj 1 "$(j PostToolUse "$bash_input")" --async
 next
-ok "Alt 1 with nothing waiting stays put" "$(client)" "1"
+ok "Alt 1 with nothing left waiting comes back where its run began" "$(client)" "2"
 hook 2 PermissionRequest "$T/repo" >/dev/null
 sleep 1
 hook 0 PermissionRequest "$T/repo" >/dev/null
