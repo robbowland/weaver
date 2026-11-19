@@ -19,6 +19,7 @@ Change one only with what reads it, and record why in
 | `$STATE_DIR/fetch/<repo path, / as %>.{pid,rc,err}` | a repository's background fetch for a new branch's base: its pid while it runs, then git's status (or `none`: no remote) and its errors |
 | `$STATE_DIR/close.log` | what a `wvr close` finishing in the background said |
 | `$STATE_DIR/<skey>.prs` | each thread's pull request, by its agent's pane, as the home board's tender last read it from `github.json` and git (see [Pull requests on the board](#pull-requests-on-the-board)) |
+| `$STATE_DIR/<skey>.back` | where a run of alt+1's jumps began, for alt+1 to come back to (see [The weaver session](#the-weaver-session)) |
 | `$STATE_DIR/github.json`, `linear.json` | what GitHub and Linear said last for the views' sections, each section with when it was read and why asking for it last failed; changed under `.lock` beside it (see [Views](#views)) |
 | `/tmp/weaver-<uid>/<skey>.fzf.<pid>.sock` | an open dashboard's fzf `--listen` socket (the hooks reload it); beside it `.keys` (the fzf actions for 1-9) and `.view` (`screen` or `help` while the preview shows them) |
 | `$STATE_DIR/lost/<skey>_<session_id>.json` | a thread lost with its session (see [Lost threads](#lost-threads)); pruned after 31 days, but one held |
