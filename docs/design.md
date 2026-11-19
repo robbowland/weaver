@@ -603,6 +603,9 @@ letters; `esc` clears the query, hides it and binds them again. The footer is
 recomputed (`wvr _footer`) on every load and mode change, from the width
 and the mode, `?` always last. Browsing, it holds the few keys most used
 (`⏎ OPEN`, `n`, `x`, `h`, `/`, `v`, `tab`, `ctrl+q`), the rest in `?`'s help;
+`tab` only where it goes somewhere (`tabGoes`): not on Alt Y's board of one
+session nor in Alt y's popover with no view set up (`Peek` sets
+`LS_TABS`), nor beside no views (`WEAVER_VIEWS=none`, each hidden);
 `⏎ OPEN` is a thread's window, or a lost or held one resumed. While a hold
 is on its way (`<board>.holding`, the thread's number, until its agent has
 closed) it starts with `… HOLDING NN`; holding a thread mid-turn adds `!

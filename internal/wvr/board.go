@@ -1008,9 +1008,14 @@ func rowFact(a session.Row, now int64) string {
 // boardHints are the dashboard's footer: the keys that work now, as many as
 // fit the list's width, ? always last; the rest are in its help. ⏎ opens a
 // row's thread: its window, or a lost or held one in a session of its own.
+// tab only where it goes somewhere (tabGoes).
 func (e *Env) boardHints() []choice {
 	browse := "⏎ OPEN|n NEW|x CLOSE|h HOLD|/ SEARCH|v REVIEW|tab VIEWS|ctrl+q QUIT"
 	search := "⏎ OPEN|esc BACK|ctrl+e REVIEW|tab VIEWS"
+	if !e.tabGoes() {
+		browse = strings.Replace(browse, "|tab VIEWS", "", 1)
+		search = strings.Replace(search, "|tab VIEWS", "", 1)
+	}
 	// A toggle says where it goes next: ? from the help back to the card.
 	showing, base := "", sockBase()
 	if base != "" {

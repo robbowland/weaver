@@ -415,3 +415,45 @@ func TestBoardOneOldThreadUnfolded(t *testing.T) {
 		t.Errorf("items %q, folds %q: want %q, no fold", strings.Join(ids, " "), folds, want)
 	}
 }
+
+// The footer offers tab only where it goes somewhere: not on Alt Y's board
+// of one session (Peek's LS_TABS=0), nor with WEAVER_VIEWS=none; on home
+// beside a view, and in Alt y's popover with one, it does.
+func TestBoardHintsTab(t *testing.T) {
+	e := &Env{&session.Env{StateDir: t.TempDir()}}
+	t.Setenv("FZF_SOCK", "")
+	t.Setenv("FZF_PROMPT", "")
+	t.Setenv("FZF_COLUMNS", "200")
+	t.Setenv("FZF_LINES", "40")
+	t.Setenv("FZF_TOTAL_COUNT", "3")
+	t.Setenv("LS_EMPTY", "")
+	hasTab := func() bool {
+		for _, h := range e.boardHints() {
+			if h.key == "tab" {
+				return true
+			}
+		}
+		return false
+	}
+	for _, x := range []struct {
+		tabs, views string // "-": unset
+		want        bool
+	}{
+		{"-", "none", false},
+		{"-", "github", true},
+		{"0", "github", false},
+		{"1", "github", true},
+	} {
+		for _, input := range []string{"hidden", "visible"} {
+			t.Setenv("FZF_INPUT_STATE", input)
+			t.Setenv("WEAVER_VIEWS", x.views)
+			t.Setenv("LS_TABS", x.tabs)
+			if x.tabs == "-" {
+				os.Unsetenv("LS_TABS")
+			}
+			if got := hasTab(); got != x.want {
+				t.Errorf("LS_TABS %s, WEAVER_VIEWS %s, input %s: tab %v, want %v: %v", x.tabs, x.views, input, got, x.want, e.boardHints())
+			}
+		}
+	}
+}

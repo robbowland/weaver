@@ -175,6 +175,8 @@ func (e *Env) Peek(args []string) error {
 			pages = append(pages, n)
 		}
 	}
+	// For the board's footer, which its own wvr draws (tabGoes).
+	os.Setenv("LS_TABS", strconv.Itoa(len(pages)-1))
 	i := 0
 	for {
 		step, err := "", error(nil)
@@ -219,6 +221,17 @@ func (e *Env) toHome(cur mux.Window, home mux.WindowID) {
 	if cur.ID != "" && cur.View == "" && cur.ID != home {
 		e.boardOn(cur.ID)
 	}
+}
+
+// tabGoes: does tab go anywhere from this board? In Alt y's popover, to
+// the views it opened with ($LS_TABS, which Peek sets: none on Alt Y's
+// board of one session); else, home's tab and a view's, to the views
+// beside home (GoView), none with WEAVER_VIEWS=none or each hidden.
+func (e *Env) tabGoes() bool {
+	if n, ok := os.LookupEnv("LS_TABS"); ok {
+		return n != "0"
+	}
+	return len(e.viewNames()) > 0
 }
 
 // GoView is `wvr go next|prev` (tab and shift-tab on home and in a view):
