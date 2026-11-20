@@ -420,12 +420,18 @@ FL=$(R api call session.new_layer "$(jq -nc --arg s "$SID" --arg w "$AT/bin/wvr"
 waitfor 'R capture -s "$SID" -b "$FL" 2>/dev/null | grep -q "IN THE BACKGROUND"' 50
 R send -s "$SID" -b "$FL" 'second thread'
 waitfor 'R capture -s "$SID" -b "$FL" 2>/dev/null | grep -q "task  second thread"' 50
+# What weaver.lua decides shift+enter by, as the key is pressed (said if
+# the check fails): the session in weaver's registry, the block in a
+# floating layer, and the newest process of its foreground group, fzf.
+FG=$(R api call block.method "{\"session_id\":\"$SID\",\"block_id\":\"$FL\",\"method\":\"process\",\"args\":{}}" | jq -r '.foreground.pid // empty')
+SEEN="session $([ -f "$SD/rex/sessions/${SID/:/_}" ] && echo "weaver's" || echo unknown), block $(view | jq -r --arg b "$FL" '[.windows[].layers[] | select(.kind != "tiled") | .blocks[].block_id] | if index($b) then "floating" else "not floating" end'), newest process ${FG:+$(pgrep -l -n -g "$FG" | awk '{print $2}')}"
 k=$(R api call client.key "{\"session_id\":\"$SID\",\"block_id\":\"$FL\",\"key\":{\"action\":\"press\",\"key\":\"enter\",\"mods\":\"shift\",\"text\":\"\",\"unshifted_codepoint\":13}}" | jq -r .handled)
 waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
 waitfor 'said | grep -q "in the background"' 30
 T2=$(threads | grep -vx "$T")
 ok "form: shift+enter in its popup starts the thread in the background, and says so" \
-	"$k|$(windows "$T2")|$(said | grep -o 'weaver: started [^|]*')" "true|02 second thread · repo/main/2|weaver: started 02 second thread · repo/main in the background"
+	"$k|$(windows "$T2")|$(said | grep -o 'weaver: started [^|]*')" "true|02 second thread · repo/main/2|weaver: started 02 second thread · repo/main in the background" ||
+	echo "  as shift+enter was pressed: $SEEN"
 
 # --- a thread's own window closed by hand while a helper runs: the thread
 # is closed as the board's x closes it, its session ending, helpers too
