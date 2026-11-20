@@ -99,6 +99,25 @@ func TestThreadCalled(t *testing.T) {
 	}
 }
 
+// A thread is shown as it is called, else by the first line of what it is
+// about: its task, else its item.
+func TestThreadShown(t *testing.T) {
+	for _, c := range []struct {
+		th         Thread
+		conv, want string
+	}{
+		{Thread{Task: "Say hello\nthen goodbye", Title: "Mine"}, "", "Mine"},
+		{Thread{Task: "Say hello\nthen goodbye"}, "Greeting", "Greeting"},
+		{Thread{Task: "Say hello\nthen goodbye"}, "", "Say hello"},
+		{Thread{Item: &ThreadItem{Ref: "o/r#45", Title: "Add a flag"}}, "", "#45 Add a flag"},
+		{Thread{}, "", ""},
+	} {
+		if got := c.th.Shown(c.conv); got != c.want {
+			t.Errorf("%+v.Shown(%q) = %q, want %q", c.th, c.conv, got, c.want)
+		}
+	}
+}
+
 // A thread's own directory stays its own through what changes its record
 // (a rename, a pane), and is another thread's for another worktree or
 // another start.

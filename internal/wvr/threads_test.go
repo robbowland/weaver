@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // A thread closed before its review panel is recorded as bound: its panel
@@ -230,5 +233,83 @@ func TestLoadAsAChild(t *testing.T) {
 	e := Load()
 	if err := os.WriteFile(out, []byte(e.Session+" "+e.RexID+" "+string(e.MyPane)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A thread whose task has several lines is shown by its first, the same
+// on the board, its window's label and its session's, as it is made and
+// once the labels are pushed again (store.Thread.Shown).
+func TestShownFirstLine(t *testing.T) {
+	e, _ := outside(t)
+	repo, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	t.Chdir(repo)
+	if err := e.New([]string{"--here", "--no-focus", "Say hello to the team\nthen write down what each of them said"}); err != nil {
+		t.Fatal(err)
+	}
+	// Its agent's pane, the one its review panel is bound to, takes its
+	// record as the agent's start would.
+	panels, _ := filepath.Glob(e.StateDir + "/" + e.SKey + "_*.panel")
+	recs := e.openingRecords()
+	if len(panels) != 1 || len(recs) != 1 {
+		t.Fatalf("panels %v, records %v: want one each", panels, recs)
+	}
+	agentPane := mux.PaneID(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(panels[0]), e.SKey+"_"), ".panel"))
+	th, err := store.ReadThread(recs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _ := strconv.Atoi(string(agentPane))
+	pane := jsonx.Int(n)
+	th.Pane = &pane
+	if err := store.Write(e.ThreadFile(agentPane), th); err != nil {
+		t.Fatal(err)
+	}
+	labels := func() (window, sess string) {
+		ps, _ := e.Mux().Panes()
+		p, ok := session.PaneIn(ps, agentPane)
+		if !ok {
+			t.Fatalf("its agent's pane %s is gone", agentPane)
+		}
+		out, err := exec.Command(rex.Bin(), "api", "call", "session.list", "{}").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ls struct {
+			Sessions []struct {
+				ID    string `json:"session_id"`
+				Label string `json:"label"`
+			} `json:"sessions"`
+		}
+		_ = json.Unmarshal(out, &ls)
+		for _, s := range ls.Sessions {
+			if s.ID == p.Session {
+				return p.WindowName, s.Label
+			}
+		}
+		return p.WindowName, ""
+	}
+	first := "Say hello to the team"
+	wantWindow, wantSession := session.ThreadLabel(th.Num, first, repo), session.SessionLabel(th.Num, first)
+	if w, s := labels(); w != wantWindow || s != wantSession {
+		t.Errorf("made: window %q, session %q; want %q, %q", w, s, wantWindow, wantSession)
+	}
+	e.PushStatusAndLabels()
+	if w, s := labels(); w != wantWindow || s != wantSession {
+		t.Errorf("pushed: window %q, session %q; want %q, %q", w, s, wantWindow, wantSession)
+	}
+	rows, _ := e.AgentRows()
+	board := ""
+	for _, r := range rows {
+		if r.Pane == agentPane {
+			board = r.Called()
+		}
+	}
+	if board != first {
+		t.Errorf("on the board: %q, want %q", board, first)
 	}
 }

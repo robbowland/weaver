@@ -50,7 +50,7 @@ type Row struct {
 	Window                                                            mux.WindowID
 	Session                                                           string // the Rex session its pane is in, as Rex lists it
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
-	WindowName, Agent, Bgtasks, Ttask, Tname                          string
+	WindowName, Agent, Bgtasks, Tname                                 string
 	Since                                                             int64 // epoch s
 	Seen                                                              bool
 	Bg, Nsub, Turn                                                    int    // background tasks, subagents
@@ -178,9 +178,9 @@ func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 			r.Waiting = oneline.Line(s.Waiting)
 		}
 		r.Bg = s.Background
-		// The name you gave the thread, else its agent's, else its
-		// conversation's title.
-		r.Title = oneline.Line(t.Called(s.Title))
+		// What its thread is shown as (store.Thread.Shown), its
+		// conversation's title among its names.
+		r.Title = oneline.Line(t.Shown(s.Title))
 		r.Review = t.Mode == agent.ModeReview
 		r.Nsub = len(s.Subagents)
 		r.Pid = oneline.Line(string(s.Pid))
@@ -205,7 +205,7 @@ func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 		r.Bgtasks = oneline.Line(s.BackgroundTasks)
 		r.Doing = oneline.Line(s.Doing)
 		if terr == nil {
-			r.Ttask, r.Tname, r.Tnum = oneline.Line(t.About()), oneline.Line(t.Name), t.Num
+			r.Tname, r.Tnum = oneline.Line(t.Name), t.Num
 		}
 		r.Exited = p.Exited
 		if n, err := strconv.Atoi(r.Pid); err == nil && !r.Exited {
@@ -234,8 +234,8 @@ func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 		}
 		rows = append(rows, Row{Pane: pane, Window: p.Window, Session: p.Session, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
-			WindowName: oneline.Line(p.WindowName), Agent: agent.Claude, Ttask: oneline.Line(t.About()),
-			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Called("")), Review: t.Mode == agent.ModeReview,
+			WindowName: oneline.Line(p.WindowName), Agent: agent.Claude,
+			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Shown("")), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}
 	starts := process.Starts(pids)
@@ -396,8 +396,8 @@ func (e *Env) LostRows() []LostRow {
 		}
 		r := LostRow{File: f, Sid: oneline.Line(st.SessionID), Name: oneline.Line(lo.Thread.Name), Num: num,
 			Dir: oneline.Line(lo.Dir()), Lost: strconv.Itoa(int(lo.Lost)), Skey: oneline.Line(lo.Key()),
-			// Named as it was named, else as asked.
-			Task: oneline.Line(cmp.Or(lo.Thread.Called(""), lo.Task())), Title: oneline.Line(lo.Thread.Called(st.Title)),
+			// Shown as it was shown, else as asked.
+			Task: oneline.Line(lo.Task()), Title: oneline.Line(lo.Thread.Shown(st.Title)),
 			Note: oneline.Line(lo.Note)}
 		if lo.Held > 0 {
 			r.Held = strconv.Itoa(int(lo.Held))

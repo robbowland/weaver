@@ -221,7 +221,9 @@ the agent's other files. Readers ignore fields they don't know.
 | `conv_name` | string | the name weaver started its conversation with (`claude -n`, its `name` then), which Claude Code reports as the conversation's `title`: not a name of its agent's, so never shown; absent in a record from before it was kept |
 
 A thread is a Rex session of its own, labelled `NN name`
-(`session.SessionLabel`: its number and what the board calls it) as it is
+(`session.SessionLabel`: its number and what the board calls it,
+`Thread.Shown`; its first window's label adds where it works,
+`ThreadLabel`) as it is
 made and again as that changes (`threadTabLabels`, through
 `Fleet.LabelSession`); weaver notes the label it gave
 (`$STATE_DIR/rex/slabel/<session>`) and sets it again only when its own
@@ -295,7 +297,10 @@ has a `title` (yours), which it keeps, saying so. A thread's first prompt
 asks for it when it has no `title` (`titleNote`). What a thread is called
 (`Thread.Called`): `title`, else `agent_title`, else its conversation's
 title unless that is `conv_name` (or, in an older record, its `name` or
-`branch`), else its task.
+`branch`). What it is shown as, on the board, its card, its window's and
+its session's labels and rename's prompt, as it is made and after
+(`Thread.Shown`, the one place that decides it): what it is called, else
+the first line of its task (or its item).
 
 `wvr branch [PANE] NAME` renames a thread's branch (PANE as for rename;
 else the agent this pane belongs to): `git branch -m` in its worktree, then

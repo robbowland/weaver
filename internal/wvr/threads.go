@@ -442,10 +442,11 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	pr, isPR := it.(items.PullRequest)
 	ti := threadItem(it)
 	// What names its branch: its task, else (an item's, told nothing) the
-	// item. Its window: its name, else that.
+	// item. Its window and session: what it is shown as, its name else
+	// the first line of that.
 	about := store.Thread{Task: task, Item: ti}.About()
 	title := formName(fm)
-	label := cmp.Or(title, about)
+	label := store.Thread{Task: task, Item: ti, Title: title}.Shown("")
 	var dir, name, branch, base string
 	created, slugged := false, false
 	if fm.Where == WhereHere {
@@ -859,7 +860,7 @@ func (e *Env) threadReopen(tok string, lo store.Lost, nofocus bool) (string, err
 		return "", fmt.Errorf("%s: %v", nm, err)
 	}
 	unlock()
-	t := cmp.Or(oneline.Line(th.Called(st.Title)), oneline.Line(th.About()), nm)
+	t := cmp.Or(oneline.Line(th.Shown(st.Title)), nm)
 	tab, ok := e.threadTab(tok, dir, session.SessionLabel(n, t), session.ThreadLabel(n, t, dir), nofocus)
 	if !ok {
 		return "", fmt.Errorf("%s: Rex could not open its session", nm)

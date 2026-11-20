@@ -83,13 +83,13 @@ func (e *Env) RowOf(p mux.PaneID) (Row, int64, bool) {
 	return Row{}, now, false
 }
 
-// Called is what row r's agent is called everywhere it is shown: the name
-// you gave its thread, else its agent's title, else what its thread is
-// about (its task, or its item), else its prompt.
+// Called is what row r's agent is called everywhere it is shown: what its
+// thread is shown as (Title: store.Thread.Shown), else its prompt.
 func (r Row) Called() string {
-	return cmp.Or(r.Title, r.Ttask, r.Prompt, "new "+cmp.Or(r.Agent, agent.Claude)+" session")
+	return cmp.Or(r.Title, r.Prompt, "new "+cmp.Or(r.Agent, agent.Claude)+" session")
 }
 
-// Called is what lost thread l is called, as it was when live: the name you
-// gave it, else its agent's title, else its task, else its branch.
+// Called is what lost thread l is called, as it was when live: what it
+// was shown as (Title: store.Thread.Shown), else what it was asked, else
+// its branch.
 func (l LostRow) Called() string { return cmp.Or(l.Title, l.Task, l.Name) }

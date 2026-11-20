@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -153,13 +155,8 @@ func (e *Env) threadTabLabels(rows []Row) {
 		if r.Pane == "" || r.Tnum == 0 {
 			continue
 		}
-		l := r.Title
-		if l == "" {
-			l = r.Ttask
-		}
-		if l == "" {
-			l = r.Prompt
-		}
+		// As its thread is shown (store.Thread.Shown), else what it was asked.
+		l := cmp.Or(r.Title, r.Prompt)
 		// Its session, in Rex's sidebar: its number and name.
 		e.Mux().LabelSession(r.Window, SessionLabel(r.Tnum, l))
 		label := ThreadLabel(r.Tnum, l, r.Root)
@@ -171,19 +168,16 @@ func (e *Env) threadTabLabels(rows []Row) {
 }
 
 // SessionLabel is the label of a thread's session, which Rex's sidebar
-// shows: its number and what it is about (the first line, cut to 30
-// columns).
-func SessionLabel(n int, text string) string {
-	if i := strings.IndexByte(text, '\n'); i >= 0 {
-		text = text[:i]
-	}
-	return padNum(n) + " " + strings.TrimRight(ansi.Truncate(text, 30, "…"), " ")
+// shows: its number and what it is shown as (store.Thread.Shown), cut to
+// 30 columns.
+func SessionLabel(n int, shown string) string {
+	return padNum(n) + " " + strings.TrimRight(ansi.Truncate(oneline.Line(shown), 30, "…"), " ")
 }
 
 // ThreadLabel is the label of a thread's first window: its session's
 // label, and where it works.
-func ThreadLabel(n int, text, root string) string {
-	return SessionLabel(n, text) + " · " + git.WhereOf(root).Name()
+func ThreadLabel(n int, shown, root string) string {
+	return SessionLabel(n, shown) + " · " + git.WhereOf(root).Name()
 }
 
 func padNum(n int) string {

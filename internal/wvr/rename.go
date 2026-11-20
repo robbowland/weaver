@@ -143,20 +143,15 @@ func (e *Env) renameBranch(p mux.PaneID, name string) (string, error) {
 
 var errNotThread = errors.New("its agent is no thread: adopt it first (wvr adopt)")
 
-// shownName is what the board calls the thread of the agent in pane p now:
-// your name, its agent's, its conversation's title, else its task (or the
-// item it started from); false when the agent is no thread.
+// shownName is what the board calls the thread of the agent in pane p now
+// (store.Thread.Shown); false when the agent is no thread.
 func (e *Env) shownName(p mux.PaneID) (string, bool) {
 	th, err := store.ReadThread(e.ThreadFile(p))
 	if err != nil {
 		return "", false
 	}
 	st, _ := store.ReadState(e.StateFile(p))
-	cur := th.Called(st.Title)
-	if cur == "" {
-		cur = oneline.Line(strings.SplitN(th.About(), "\n", 2)[0])
-	}
-	return cur, true
+	return oneline.Line(th.Shown(st.Title)), true
 }
 
 // retitle sets the title of the thread whose agent is pane p ("" for none:

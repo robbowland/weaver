@@ -61,6 +61,18 @@ func (t Thread) Called(conv string) string {
 	return cmp.Or(t.Title, t.AgentTitle, conv)
 }
 
+// Shown is what the thread is shown as, everywhere it is (the board, its
+// card, its window's and its session's labels, rename's prompt), conv
+// being its conversation's title: what it is Called, else the first line
+// of what it is About; "" for neither.
+func (t Thread) Shown(conv string) string {
+	if c := t.Called(conv); c != "" {
+		return c
+	}
+	about, _, _ := strings.Cut(t.About(), "\n")
+	return about
+}
+
 // About is what the thread is about, for its label: its task, else (one
 // from an item, told nothing) the item, as "#45 Add a flag" or "ENG-42 Fix
 // it".
