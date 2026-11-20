@@ -242,7 +242,10 @@ Alone, it adopts the agent in its own pane when it has one (so `! wvr
 adopt` inside an agent), else opens the picker. Outside
 weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
 `weaver`), as `wvr resume`, `wvr rename` and `wvr quit` do
-(`toWeaverSession`), and says so when that is not running.
+(`toWeaverSession`), and says so when that is not running. What such a
+wvr starts (`wvr _behind`, `_width`) acts on that session too: it is set
+as the `$REX_SESSION` they inherit, without the `$REX_BLOCK` of the pane
+it ran in.
 
 - **From its pane** (an agent weaver follows, without a thread record):
   refused when its agent has ended, has not said its session id, is in a
@@ -324,9 +327,11 @@ sight.
 An agent runs an older Claude Code than the one installed (`outdated`)
 when its process started (its state's `procStart`, ps's lstart in UTC)
 before the file its command resolves to (`$WEAVER_CLAUDE`, else `claude`
-on `$PATH`, links followed) last changed, to the second. Its row's fact
-starts `update · R` unless it is mid-turn, not reporting or exited (whose
-fact names `R` already); the board stats the file once a render. The home
+on `$PATH`, links followed) last changed, to the second. A thread's row's
+fact starts `update · R` unless it is mid-turn, not reporting or exited
+(whose fact names `R` already); an agent that is no thread (claude started
+by hand, a helper) has no marker, since `R` restarts only a thread's
+(`not a thread (adopt it first)`). The board stats the file once a render. The home
 board's own process tends the threads every minute (`tend`, off the rows
 hooks redraw): each thread's agent behind an update that has rested ten
 minutes (`restartable`: no turn, nothing asked of you, not done unseen, no

@@ -121,7 +121,7 @@ func TestRowSignalsPR(t *testing.T) {
 			t.Errorf("rowSignals(%q, %s, %+v) = %q, want %q", c.fact, c.r.State, c.pr, got, c.want)
 		}
 	}
-	if got := rowSignals("", session.Row{State: agent.StateIdle, Turn: 1}, now, failing, true); got != "checks failing · update · R" {
+	if got := rowSignals("", session.Row{Tnum: 1, State: agent.StateIdle, Turn: 1}, now, failing, true); got != "checks failing · update · R" {
 		t.Errorf("failing and behind: %q", got)
 	}
 }

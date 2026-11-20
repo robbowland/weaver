@@ -1012,9 +1012,10 @@ func rowFact(a session.Row, now int64) string {
 
 // rowSignals is a live row's fact (rowFact) with what matters beyond its
 // agent's turn: its pull request merged (x closes the thread, in place of
-// the rest), its checks failing while it rests, its agent behind an update
-// of Claude Code (behind: R restarts it onto the new one), each first.
-// Mid-turn, the turn's fact stands alone (R would stop the turn).
+// the rest), its checks failing while it rests, a thread's agent behind an
+// update of Claude Code (behind: R restarts it onto the new one; R
+// restarts only a thread's), each first. Mid-turn, the turn's fact stands
+// alone (R would stop the turn).
 func rowSignals(fact string, a session.Row, now int64, pr threadPR, behind bool) string {
 	if a.MidTurn(now) || a.NotReporting(now) {
 		return fact
@@ -1029,7 +1030,7 @@ func rowSignals(fact string, a session.Row, now int64, pr threadPR, behind bool)
 	if pr.State == prOpen && pr.Checks == checksFailing && atRest(a, now) {
 		out = append(out, "checks failing")
 	}
-	if behind {
+	if behind && a.Tnum > 0 {
 		out = append(out, "update · R")
 	}
 	if fact != "" {

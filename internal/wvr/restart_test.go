@@ -165,7 +165,8 @@ func TestLastFocused(t *testing.T) {
 }
 
 // A row says its agent is behind an update (update · R) when R would
-// restart it now: not mid-turn, not exited (whose fact already says R).
+// restart it now: a thread's (R restarts no other), not mid-turn, not
+// exited (whose fact already says R).
 func TestRowSignalsUpdate(t *testing.T) {
 	now := int64(2_000_000_000)
 	for _, c := range []struct {
@@ -173,12 +174,16 @@ func TestRowSignalsUpdate(t *testing.T) {
 		fact string
 		want string
 	}{
-		{session.Row{State: agent.StateIdle, Turn: 1}, "", "update · R"},
-		{session.Row{State: agent.StateDone, Seen: true}, "Tidied.", "update · R · Tidied."},
-		{session.Row{State: agent.StateDone}, "Tidied.", "update · R · Tidied."},
-		{session.Row{State: agent.StateWorking}, "thinking", "thinking"},
-		{session.Row{State: agent.StateNeedsYou}, "input", "input"},
-		{session.Row{State: agent.StateIdle, Exited: true}, "exited · R starts it again, x closes it", "exited · R starts it again, x closes it"},
+		{session.Row{Tnum: 1, State: agent.StateIdle, Turn: 1}, "", "update · R"},
+		{session.Row{Tnum: 1, State: agent.StateDone, Seen: true}, "Tidied.", "update · R · Tidied."},
+		{session.Row{Tnum: 1, State: agent.StateDone}, "Tidied.", "update · R · Tidied."},
+		{session.Row{Tnum: 1, State: agent.StateWorking}, "thinking", "thinking"},
+		{session.Row{Tnum: 1, State: agent.StateNeedsYou}, "input", "input"},
+		{session.Row{Tnum: 1, State: agent.StateIdle, Exited: true}, "exited · R starts it again, x closes it", "exited · R starts it again, x closes it"},
+		// No thread (claude started by hand, a helper): R says "not a
+		// thread", so nothing offers it.
+		{session.Row{State: agent.StateIdle, Turn: 1}, "", ""},
+		{session.Row{Thread: 1, State: agent.StateDone, Seen: true}, "Tidied.", "Tidied."},
 	} {
 		if got := rowSignals(c.fact, c.r, now, threadPR{}, true); got != c.want {
 			t.Errorf("rowSignals(%q, %s) = %q, want %q", c.fact, c.r.State, got, c.want)

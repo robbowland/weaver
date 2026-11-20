@@ -159,8 +159,8 @@ twice. `wvr restart --all` restarts every thread's agent, from any shell. An
 agent that is working, or waiting on you, is left alone, since restarting it
 would stop its turn; `--force` restarts it all the same.
 
-weaver notices the update itself: an agent whose process started before the
-installed `claude` last changed says `update · R` on its row. Once such an
+weaver notices the update itself: a thread's agent whose process started
+before the installed `claude` last changed says `update · R` on its row. Once such an
 agent has rested for ten minutes (idle, nothing asked of you, nothing in the
 background, its helpers at rest too), the home board restarts it onto the
 new version and says so: "weaver: restarted 03 onto Claude Code 2.1.330".
