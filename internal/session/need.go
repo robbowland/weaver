@@ -7,9 +7,11 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 )
 
-// Need is what an agent asks of you, from its row: the board's groups, in
-// this order, and what the status line counts (all but NeedNothing). Every
-// view of an agent takes it from here, so none says otherwise.
+// Need is what an agent asks of you, from its row, most pressing first:
+// the board's NEEDS YOU holds NeedYou then NeedLook (the rest go under
+// their project), its rows go in this order, and the status line counts
+// all but NeedNothing. Every view of an agent takes it from here, so none
+// says otherwise.
 type Need int
 
 const (
