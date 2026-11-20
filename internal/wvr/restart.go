@@ -128,8 +128,10 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 	}
 	label := fmt.Sprintf("%02d", th.Num)
 	// Mid-turn as the board says it; an agent that has exited never is.
-	if r, now, ok := e.RowOf(p); ok && !force && r.MidTurn(now) {
-		return label, errMidTurn
+	if !force {
+		if r, now, ok := e.RowOf(p); ok && r.MidTurn(now) {
+			return label, errMidTurn
+		}
 	}
 	// Its conversation, as its state says, else as its record does; none
 	// known (it never reported): its agent starts afresh.
@@ -146,8 +148,11 @@ func (e *Env) restartAgent(p mux.PaneID, force bool) (string, error) {
 		return label, err
 	}
 	dir := store.Lost{State: st, Thread: th}.Dir()
-	e.Restarting(e.StateFile(p))
+	undo := e.Restarting(e.StateFile(p))
 	if err := e.Mux().Respawn(p, e.agentSpawn(tok, dir)); err != nil {
+		// Its agent runs on as it was: behind an update, its row still
+		// says so, and the tender tries again.
+		undo()
 		os.RemoveAll(d)
 		return label, errors.New("could not restart it in Rex")
 	}

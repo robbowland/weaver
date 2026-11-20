@@ -266,3 +266,27 @@ func TestRestartUpdated(t *testing.T) {
 		t.Errorf("home said %q, want %q", got, want)
 	}
 }
+
+// A restart Rex refuses leaves its agent as it was: still named in its
+// state, so its row still says it is behind an update, and the tender
+// tries again.
+func TestRestartRefusedKeepsAgent(t *testing.T) {
+	e, _, _, _ := closing(t)
+	const p = mux.PaneID("9999") // no pane of Rex's
+	if err := store.Write(e.ThreadFile(p), store.Thread{Num: 2, Name: "gone", SessionID: "conv2", Created: 78}); err != nil {
+		t.Fatal(err)
+	}
+	long := started(time.Now().Add(-time.Hour))
+	if err := store.Write(e.StateFile(p), agent.Record{Agent: agent.Claude, State: agent.StateIdle, SessionID: "conv2",
+		Pid: "4242", ProcStart: long, TS: 5}); err != nil {
+		t.Fatal(err)
+	}
+	// Forced: a look at the rows would take the pane's agent for gone.
+	if _, err := e.restartAgent(p, true); err == nil {
+		t.Fatal("restarted an agent in a pane Rex does not have")
+	}
+	st, _ := store.ReadState(e.StateFile(p))
+	if st.Pid != "4242" || st.ProcStart != long || st.TS != 5 {
+		t.Errorf("after a refused restart: pid %q, start %q, ts %d; want 4242, %q, 5", st.Pid, st.ProcStart, st.TS, long)
+	}
+}

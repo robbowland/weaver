@@ -516,9 +516,21 @@ func (e *Env) Forget(f, pid string) { e.forget(f, pid, nil) }
 // own: a look at the rows would take the old agent's pid, dead in a pane
 // that runs on, for one killed there, its thread closed (retire); and gc
 // would take an agent that ended an hour ago, its pid gone, for one to
-// forget.
-func (e *Env) Restarting(f string) {
-	store.UpdateState(f, func(r *agent.Record) { r.Pid, r.ProcStart, r.TS = "", "", time.Now().Unix() })
+// forget. Undo names its agent again, for a start that did not happen:
+// unless a new agent has written its own since.
+func (e *Env) Restarting(f string) (undo func()) {
+	var was agent.Record
+	store.UpdateState(f, func(r *agent.Record) {
+		was = *r
+		r.Pid, r.ProcStart, r.TS = "", "", time.Now().Unix()
+	})
+	return func() {
+		store.UpdateState(f, func(r *agent.Record) {
+			if r.Pid == "" {
+				r.Pid, r.ProcStart, r.TS = was.Pid, was.ProcStart, was.TS
+			}
+		})
+	}
 }
 
 // Closing takes the agent whose state file is f out of what a look at the

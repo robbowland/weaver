@@ -11,6 +11,7 @@ import (
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/rex/rextest"
+	"github.com/robbowland/weaver/internal/store"
 )
 
 // An agent that last reported before the machine started lost its session,
@@ -129,5 +130,34 @@ func TestRestartingIsNotForgotten(t *testing.T) {
 	e.gcAgents()
 	if !files.Exists(sf) || !files.Exists(tf) {
 		t.Errorf("being started again: state %v, record %v; want both kept", files.Exists(sf), files.Exists(tf))
+	}
+}
+
+// Restarting's undo names the agent again, unless the pane's new agent has
+// written its own.
+func TestRestartingUndo(t *testing.T) {
+	dir := t.TempDir()
+	e := &Env{StateDir: dir, SKey: "rex-s"}
+	sf := e.StateFile("3")
+	write := func() {
+		if err := store.Write(sf, agent.Record{Pid: "11", ProcStart: "then", TS: 5}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write()
+	undo := e.Restarting(sf)
+	if st, _ := store.ReadState(sf); st.Pid != "" || st.ProcStart != "" {
+		t.Fatalf("restarting: pid %q, start %q; want none", st.Pid, st.ProcStart)
+	}
+	undo()
+	if st, _ := store.ReadState(sf); st.Pid != "11" || st.ProcStart != "then" || st.TS != 5 {
+		t.Errorf("undone: pid %q, start %q, ts %d; want 11, then, 5", st.Pid, st.ProcStart, st.TS)
+	}
+	write()
+	undo = e.Restarting(sf)
+	store.UpdateState(sf, func(r *agent.Record) { r.Pid, r.ProcStart = "22", "now" })
+	undo()
+	if st, _ := store.ReadState(sf); st.Pid != "22" || st.ProcStart != "now" {
+		t.Errorf("undone after the new agent wrote: pid %q, start %q; want 22, now", st.Pid, st.ProcStart)
 	}
 }
