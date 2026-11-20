@@ -364,6 +364,15 @@ func (f Fleet) Focus(p mux.PaneID)  { f.of(string(p)).Focus(p) }
 func (f Fleet) Say(ms int, text string)          { f.here().Say(ms, text) }
 func (f Fleet) SayToSession(ms int, text string) { f.Home.Say(ms, text) }
 
+// SayIn is Say in session id when it is the fleet's (home's, or a
+// thread's): where you are, when that is not where wvr runs.
+func (f Fleet) SayIn(id string, ms int, text string) {
+	if f.Has(id) {
+		f.Here = id
+	}
+	f.Say(ms, text)
+}
+
 // Popup is the command that shows argv over where wvr runs, sized by size
 // from the terminal's columns and lines, in dir (empty: Rex's choice); it
 // returns when the popup closes. False when no app shows the session.

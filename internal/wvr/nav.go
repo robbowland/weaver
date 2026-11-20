@@ -573,10 +573,7 @@ func (e *Env) goBackTo(b backPlace, rows []session.Row) bool {
 	m := e.Mux()
 	m.Show(w.ID)
 	// Said where you land, not in the session you left.
-	if m.Has(b.fromSession) {
-		m.Here = b.fromSession
-	}
-	m.Say(2500, "weaver: nothing else needs you: back to "+placeName(w, rows))
+	m.SayIn(b.fromSession, 2500, "weaver: nothing else needs you: back to "+placeName(w, rows))
 	return true
 }
 

@@ -325,10 +325,6 @@ func (e *Env) restartUpdated() {
 		return
 	}
 	sort.Strings(done)
-	m := e.Mux()
-	if m.Has(shown) {
-		m.Here = shown
-	}
-	m.Say(4000, "weaver: restarted "+strings.Join(done, " ")+" onto "+claudeName(path))
+	e.Mux().SayIn(shown, 4000, "weaver: restarted "+strings.Join(done, " ")+" onto "+claudeName(path))
 	e.PushStatus()
 }
