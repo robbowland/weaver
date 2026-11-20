@@ -21,7 +21,6 @@ type Input struct {
 	SessionID  string `json:"session_id"`
 	Transcript string `json:"transcript_path"`
 	Cwd        string `json:"cwd"`
-	NewCwd     string `json:"new_cwd"` // CwdChanged
 	// A subagent's events: which, and what kind.
 	AgentID   string `json:"agent_id"`
 	AgentType string `json:"agent_type"`

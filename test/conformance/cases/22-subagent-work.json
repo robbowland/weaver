@@ -115,7 +115,7 @@
     "hook_event_name": "CwdChanged",
     "old_cwd": "$T/repo",
     "new_cwd": "$T/wt-a/src",
-    "cwd": "$T/wt-a"
+    "cwd": "$T/wt-a/src"
    },
    "expect": {
     "root": "$T/wt-a",

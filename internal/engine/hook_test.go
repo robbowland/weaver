@@ -2,7 +2,10 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
@@ -146,5 +149,84 @@ func TestHookOfAReplacedBlock(t *testing.T) {
 	hookJSON(t, e, "sync", `{"hook_event_name":"UserPromptSubmit","session_id":"old","cwd":"/","prompt":"late"}`)
 	if after, _ := os.ReadFile(e.StateFile("5")); string(after) != string(before) {
 		t.Errorf("a replaced block's hook wrote over the state:\n%s\nwas\n%s", after, before)
+	}
+}
+
+// Where an agent works, its root (which its window's label, its review
+// panel and its Worktrunk marker follow), as its cwd and edits move it. A
+// cd that sticks moves it into another work tree, and back into its own
+// checkout; a cd the harness undid (one outside the working directories:
+// its CwdChanged's cwd is back where it was) moves nothing; an edit puts
+// it in the edited file's work tree, which a cd back about its own
+// checkout leaves; the worktree tools always move it, and where it
+// starts.
+func TestHookRoot(t *testing.T) {
+	td, _ := filepath.EvalSymlinks(t.TempDir())
+	start, other, wt, notes := td+"/repo", td+"/demo", td+"/repo-wt", td+"/notes"
+	for _, d := range []string{start + "/src", other, notes} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{
+		{"init", "-q", start}, {"-C", start, "commit", "-q", "--allow-empty", "-m", "init"},
+		{"init", "-q", other}, {"-C", start, "worktree", "add", "-q", wt},
+	} {
+		if out, err := exec.Command("git", append([]string{"-c", "user.email=t@e", "-c", "user.name=t"}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(wt+"/a.txt", []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	// Events as Claude Code sends them: a Bash command's PostToolUse, then
+	// the CwdChanged of a cd it ran (old_cwd to new_cwd, its cwd where the
+	// agent is now).
+	bash := func(cwd string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}}`, cwd)
+	}
+	cd := func(cwd, from, to string) string {
+		return fmt.Sprintf(`{"hook_event_name":"CwdChanged","session_id":"c","cwd":%q,"old_cwd":%q,"new_cwd":%q}`, cwd, from, to)
+	}
+	edit := func(f string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":"Edit","tool_input":{"file_path":%q},"tool_response":{}}`, start, f)
+	}
+	tool := func(name, cwd string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"tool_response":{}}`, cwd, name)
+	}
+	for _, c := range []struct {
+		name           string
+		events         []string
+		root, startCwd string
+	}{
+		{"a cd the harness undid", []string{bash(start), cd(start, start, other)}, start, start},
+		{"into another repository", []string{bash(other), cd(other, start, other)}, other, start},
+		{"into another repository and back to the start",
+			[]string{bash(other), cd(other, start, other), bash(start), cd(start, other, start)}, start, start},
+		{"an edit in another worktree", []string{edit(wt + "/a.txt"), bash(start)}, wt, start},
+		{"an edit in another worktree, a cd into it and back to the start",
+			[]string{edit(wt + "/a.txt"), bash(wt), cd(wt, start, wt), bash(start), cd(start, wt, start)}, wt, start},
+		{"into another repository, a directory outside any work tree, and back to the start",
+			[]string{bash(other), bash(notes), bash(start)}, start, start},
+		{"EnterWorktree", []string{tool("EnterWorktree", wt)}, wt, wt},
+		{"EnterWorktree, then ExitWorktree", []string{tool("EnterWorktree", wt), tool("ExitWorktree", start)}, start, start},
+		{"a subdirectory of the start worktree", []string{bash(start + "/src"), cd(start+"/src", start, start+"/src")}, start, start},
+		{"a subdirectory of the start worktree, after an edit in another",
+			[]string{edit(wt + "/a.txt"), bash(start + "/src"), cd(start+"/src", start, start+"/src")}, wt, start},
+		{"outside any work tree", []string{bash(notes), cd(notes, start, notes)}, start, start},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := hookEnv(t)
+			hookJSON(t, e, "sync", fmt.Sprintf(`{"hook_event_name":"SessionStart","session_id":"c","cwd":%q,"source":"startup"}`, start))
+			hookJSON(t, e, "sync", fmt.Sprintf(`{"hook_event_name":"UserPromptSubmit","session_id":"c","cwd":%q,"prompt":"go"}`, start))
+			for _, ev := range c.events {
+				hookJSON(t, e, "async", ev)
+			}
+			st, _ := store.ReadState(e.StateFile("5"))
+			if st.Root != c.root || st.StartCwd != c.startCwd {
+				t.Errorf("root %q, start %q; want %q, %q", st.Root, st.StartCwd, c.root, c.startCwd)
+			}
+		})
 	}
 }

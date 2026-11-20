@@ -1,7 +1,7 @@
 #!/bin/bash
 # Subagents and other ways an agent works: subagent edits and their live list,
 # the main agent looking around its own checkout, Bash and MCP edits (not
-# followed), cwd changes, background work, and its task list: the engine's state.
+# followed), background work, and its task list: the engine's state.
 . "$(dirname "$0")/../lib.sh"
 fresh
 
@@ -35,18 +35,6 @@ ok "main agent cd'ing inside its checkout: root stays on the worktree" "$(st 0 r
 ok "a subagent's report is not taken as your prompt" "$(st 0 prompt)|$(st 0 turn)" "implement both features|1"
 ev PostToolUse "$T/repo-wt-b" "$(edit_by sub-b "$T/repo-wt-a/README.md")"
 ok "a subagent's cwd is not the agent's" "$(st 0 cwd)" "$T/repo/src"
-
-# --- CwdChanged moves it for real
-ev CwdChanged "$T/repo-wt-a" ",\"old_cwd\":\"$T/repo\",\"new_cwd\":\"$T/repo-wt-a/src\""
-ok "CwdChanged into a worktree: the root moves there" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/repo-wt-a/src"
-
-# --- a cd outside any work tree is a look in passing: the root stays
-mkdir -p "$T/notes"
-ev CwdChanged "$T/notes" ",\"old_cwd\":\"$T/repo-wt-a/src\",\"new_cwd\":\"$T/notes\""
-ok "CwdChanged outside any work tree: the root stays" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/notes"
-ev CwdChanged "$T/repo-wt-a/src" ",\"old_cwd\":\"$T/notes\",\"new_cwd\":\"$T/repo-wt-a/src\""
-ev PostToolUse "$T/notes" ',"tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}'
-ok "an event's cwd outside any work tree: the root stays" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/notes"
 
 # --- an edit through Bash or an MCP tool is not followed: only Edit and
 # Write name the file they changed

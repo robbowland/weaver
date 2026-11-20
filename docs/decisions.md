@@ -69,6 +69,17 @@ can supersede an earlier one, and says so.
   Claude Code fires CwdChanged on a Bash `cd`, so an agent that went to
   write a memory in `~/.claude` took its window's label (`· memory`) and
   its review panel there with it.
+- 2026-11-20: Every event's own cwd is where the agent is, and CwdChanged's
+  `new_cwd` is no longer read, superseding the entry above on CwdChanged. A
+  cd outside Claude Code's working directories is undone after its
+  command, and Claude Code (2.1.317) then sends CwdChanged with `new_cwd`
+  where the cd went and its `cwd` back where it was; following `new_cwd`
+  put the root in a repository the agent only read (`cd ~/code/demo &&
+  grep …`), with its Worktrunk marker. A cd that sticks is reported first
+  by its command's PostToolUse cwd, so a return to its checkout was judged
+  by the rule for another event's cwd, and the root never came back: a cwd
+  now moves it back into its own checkout unless the root is where its
+  last edit was, which stays as the agent looks about its checkout.
 
 ## Snapshots and reviews
 

@@ -46,7 +46,7 @@ type hk struct {
 	WaitingNew, Key, LastNew, Aid, Atype, BgdescNew string
 	BgNew                                           int
 	Source, TitleNew, PromptID, Transcript          string
-	NewCwd, Err, Cmd, EndNew                        string
+	Err, Cmd, EndNew                                string
 	Interrupt, Rejected                             bool
 	Batch                                           []string `json:"-"`
 
@@ -190,7 +190,6 @@ func (h *hk) parse(in hooks.Input, st []byte) bool {
 	h.TitleNew = oneline.Ctl(oneline.Squash(in.Title, 80))
 	h.PromptID = oneline.Ctl(in.PromptID)
 	h.Transcript = oneline.Ctl(in.Transcript)
-	h.NewCwd = oneline.Ctl(in.NewCwd)
 	h.Rejected = in.Rejected()
 	h.Err = oneline.Ctl(oneline.Squash(string(in.Error), 100))
 	h.ToolUseID = oneline.Ctl(oneline.Squash(in.ToolUseID, 80))
@@ -253,12 +252,12 @@ func (h *hk) run(e *session.Env, me string) {
 		}
 	}
 	// A subagent reports its own cwd: only the main agent's is tracked.
+	// Every event's cwd is where the agent is now: CwdChanged's new_cwd is
+	// where a cd went, which Claude Code undoes for one outside its working
+	// directories, with the event's cwd back where it was.
 	cwd := h.Cwd
 	if h.Aid != "" && h.Old.Cwd != "" {
 		cwd = h.Old.Cwd
-	}
-	if h.Event == "CwdChanged" && h.NewCwd != "" {
-		cwd = h.NewCwd
 	}
 	h.Cwd = cwd
 	h.Start = h.Old.StartCwd
@@ -285,10 +284,11 @@ func (h *hk) run(e *session.Env, me string) {
 			h.Root = t
 		}
 	}
-	// ...else the repo of a new cwd, if it is another repo or worktree: only
-	// a real move counts (the worktree tools, or CwdChanged or a cwd into
-	// a work tree, another than its own for a cwd). A cwd outside any work
-	// tree (a cd to read or write a file there) is a look in passing...
+	// ...else the repo of a new cwd: the worktree tools always move it; a
+	// cwd moves it into another work tree than its own checkout, and back
+	// into its own unless it is where its last edit was (an edit's root
+	// stays while it looks about its checkout). A cwd outside any work tree
+	// (a cd to read or write a file there) is a look in passing...
 	if h.Root == "" {
 		if cwd != h.Old.Cwd {
 			switch h.Tool {
@@ -296,7 +296,8 @@ func (h *hk) run(e *session.Env, me string) {
 				h.Moved, h.Start = true, cwd
 			default:
 				t, ok := git.WorkTree(cwd)
-				h.Moved = ok && (h.Event == "CwdChanged" || cwd != h.Start && t != h.Proj)
+				edited, _ := git.FileWorkTree(h.Old.File)
+				h.Moved = ok && (t != h.Proj || h.Old.Root != edited)
 			}
 		}
 		if h.Moved || h.Old.Root == "" {
