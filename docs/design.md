@@ -238,7 +238,9 @@ thread whose agent's window you closed ends then). A session weaver
 destroys (a quit) leaves Rex's list before its blocks' programs end, and
 its events come once they have: a look then finds it gone and keeps its
 threads as lost. When `rex events` ends it follows again 5 s later,
-pushing then too: Rex replays nothing it missed. Rex's labels are
+pushing then too: Rex replays nothing it missed. It ends with the board,
+its `rex events` killed and waited for, as the board exits or starts
+again in a newer weaver (the same process). Rex's labels are
 anyone's: Rex's SessionStart hook asks every Claude Code agent to name
 the session it is in, and a helper's is its thread's, so a label given
 in Rex gives way to the thread's name (`wvr rename`, the board's `r`,

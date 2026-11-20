@@ -2,6 +2,7 @@ package rex
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"os/exec"
@@ -60,14 +61,16 @@ func (f Fleet) Has(id string) bool {
 // weaver shows of the fleet's sessions (home's, and its threads') changed
 // under it: a session's or window's label, a block closed (a window
 // closed closes its blocks), a session gone. It follows `rex events`
-// until that ends (the server gone, or it failed to start). Rex sends
+// until that ends (the server gone, or it failed to start) or ctx is
+// done, and returns once it has ended and been waited for. Rex sends
 // nothing it missed in between: who follows again reads the state again.
-func (f Fleet) Follow(changed func(session string)) {
+func (f Fleet) Follow(ctx context.Context, changed func(session string)) {
 	c := rexCmd("events", "--json")
 	out, err := c.StdoutPipe()
 	if err != nil || c.Start() != nil {
 		return
 	}
+	defer context.AfterFunc(ctx, func() { _ = c.Process.Kill() })()
 	sc := bufio.NewScanner(out)
 	sc.Buffer(nil, 4<<20) // an event is one message: 1 MiB on Rex's own server
 	for sc.Scan() {

@@ -1,6 +1,7 @@
 package rex
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -386,7 +387,8 @@ func TestFleetLookBlockGone(t *testing.T) {
 
 // What Rex says changed in a thread's session reaches weaver by session:
 // its label given in Rex, a window of it closed. Another session's
-// changes are not weaver's.
+// changes are not weaver's. Following ends with its context, its rex
+// events with it.
 func TestFleetFollow(t *testing.T) {
 	server(t)
 	sleep := []string{"/bin/sleep", "600"}
@@ -410,7 +412,12 @@ func TestFleetFollow(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := make(chan string, 64)
-	go f.Follow(func(s string) { got <- s })
+	ctx, cancel := context.WithCancel(context.Background())
+	ended := make(chan struct{})
+	go func() {
+		f.Follow(ctx, func(s string) { got <- s })
+		close(ended)
+	}()
 	// Following starts behind this: rename both, the other first, till
 	// weaver hears of one.
 	first := ""
@@ -445,6 +452,12 @@ func TestFleetFollow(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("a window of the thread's closed: weaver heard nothing")
+	}
+	cancel()
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Error("its context done, Follow goes on")
 	}
 }
 

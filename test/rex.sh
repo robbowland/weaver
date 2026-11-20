@@ -459,6 +459,19 @@ waitfor '[ -f "$AT/args.${NB#block:}" ]' 50
 ok "restart: the agent again in its pane on its conversation, its thread and session kept through a board's refresh" \
 	"$(grep -c restarted "$AT/restart-agent.out")|$(threads | wc -l | tr -d ' ')|$([ -f "$SD/rex-${S}_$AG.thread" ] && echo thread)|$(tr '\n' ' ' <"$AT/args.${NB#block:}" 2>/dev/null)" \
 	"1|1|thread|--resume conv-restart " || sed 's/^/  restart: /' "$AT/restart-agent.out"
+# --- a newer weaver installed under the home board: it starts again in
+# it, the same process, and follows Rex as before, with one rex events of
+# its own: the old one ended with it, none left running or unreaped
+BP=$(pgrep -f "^$AT/bin/wvr home$")
+touch "$AT/bin/wvr"
+waitfor '[ "$(ps -o command= -p "$BP")" = "$AT/bin/wvr ls" ]' 150
+R session rename "$T" demo-helper >/dev/null
+waitfor '[ "$(label "$T")" = "01 Greeting" ]' 50
+# Its children, as ps lists them (pgrep leaves out the unreaped).
+kids() { ps -A -o ppid=,stat=,command= | awk -v p="$BP" '$1 == p { $1 = ""; print substr($0, 2) }'; }
+ok "a newer weaver: the home board starts again in it, following Rex with one rex events, none left over" \
+	"$(ps -o command= -p "$BP")|$(label "$T")|$(kids | grep -c 'events --json')|$(kids | grep -c '^Z')" "$AT/bin/wvr ls|01 Greeting|1|0" ||
+	kids | sed 's/^/  child: /'
 # --- quit: the sessions end, the threads kept. Two, each with a helper
 # slow to end (one that ignores a hangup), so Rex takes a while to destroy
 # each session, and the home board looks as Rex says each one's blocks
@@ -477,13 +490,19 @@ done
 LOSTBEFORE=$(ls "$SD/lost" 2>/dev/null)
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1
 waitfor '[ -z "$(sid)" ]' 100
-# Kept: its record where it was, for the next start to take for lost, or
-# a lost record the quit wrote, when a look saw its session gone.
+# Kept, by its number: its record where it was, for the next start to
+# take for lost, or a lost record the quit wrote, when a look saw its
+# session gone; or both, the board ended between the two (the next start
+# writes the same lost record, and removes the other).
 kept() {
-	echo $(($(ls "$SD"/rex-"${S}"_*.thread 2>/dev/null | wc -l) + $(ls "$SD/lost" 2>/dev/null | grep -vxF "$LOSTBEFORE" | grep -c "^rex-${S}_")))
+	{
+		cat "$SD"/rex-"${S}"_*.thread 2>/dev/null | jq -r .num
+		ls "$SD/lost" 2>/dev/null | grep -vxF "$LOSTBEFORE" | grep "^rex-${S}_" | while read -r f; do jq -r .thread.num "$SD/lost/$f"; done
+	} | sort -u | wc -l | tr -d ' '
 }
 ok "quit: home and the threads' sessions have gone, both threads kept" \
-	"$([ -z "$(sid)" ] && echo gone)|$(threads | wc -l | tr -d ' ')|$(kept)" "gone|0|2"
+	"$([ -z "$(sid)" ] && echo gone)|$(threads | wc -l | tr -d ' ')|$(kept)" "gone|0|2" ||
+	{ ls "$SD"/rex-"${S}"_*.thread 2>/dev/null; ls "$SD/lost" | grep -vxF "$LOSTBEFORE"; } | sed 's/^/  kept: /'
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

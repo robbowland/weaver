@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,8 +65,13 @@ func (e *Env) Home() error {
 // closed shows on every board at once (a thread whose window you closed
 // ends with it). A change that comes while a push runs makes one more
 // after it. Each time it follows again it pushes too: Rex replays nothing
-// it sent while none followed.
-func (e *Env) follow() {
+// it sent while none followed. unfollow ends it, and returns once its rex
+// events has ended and been waited for: the board calls it before it
+// exits or starts again in a newer weaver, which would otherwise leave
+// that running, or unreaped.
+func (e *Env) follow() (unfollow func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	push := make(chan struct{}, 1)
 	changed := func(string) {
 		select {
@@ -79,12 +85,20 @@ func (e *Env) follow() {
 		}
 	}()
 	go func() {
-		for {
-			e.Mux().Follow(changed)
-			time.Sleep(followAgain)
-			changed("")
+		defer close(done)
+		for ctx.Err() == nil {
+			e.Mux().Follow(ctx, changed)
+			select {
+			case <-ctx.Done():
+			case <-time.After(followAgain):
+				changed("")
+			}
 		}
 	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // followAgain is how long follow waits to follow again once it stopped.
@@ -181,7 +195,12 @@ func (e *Env) ls(peek, at string) (string, error) {
 	}
 	sock := base + ".sock"
 	side := session.BoardFiles(base)
+	unfollow := func() {}
+	if home {
+		unfollow = e.follow()
+	}
 	clean := func() {
+		unfollow()
 		for _, f := range side {
 			os.Remove(f)
 		}
@@ -216,7 +235,6 @@ func (e *Env) ls(peek, at string) (string, error) {
 		e.markBorn(base + ".born")
 		e.watchInstalls(base+".born", sock)
 		e.tend()
-		e.follow()
 		// The windows' labels as this weaver makes them: an install may
 		// have changed that under a running session, whose home board then
 		// starts again in it.
@@ -328,6 +346,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			// A newer weaver is installed (_chrome ended the board for it):
 			// the board starts again in it, whose keys know its rows.
 			if next, ok := e.successor(base + ".born"); ok {
+				unfollow()
 				os.Remove(base + ".born")
 				rex.Close()
 				syscall.Exec(next, []string{next, "ls"}, os.Environ())
