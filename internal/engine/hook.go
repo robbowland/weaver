@@ -284,25 +284,24 @@ func (h *hk) run(e *session.Env, me string) {
 			h.Root = t
 		}
 	}
-	// ...else the repo of a new cwd: the worktree tools always move it; a
-	// cwd moves it into another work tree than its own checkout, and back
-	// home (its start directory, the work tree that is in, which the
-	// worktree tools move, or its own checkout), unless the root is where
-	// the agent last edited, which stays while it looks about home. Any
-	// other cwd outside a work tree (a cd to read or write a file there) is
-	// a look in passing...
+	// ...else the repo of where it is: a worktree tool that worked moves
+	// it there, and where it starts, whether or not the CwdChanged it
+	// caused came first (both hooks are async); a new cwd moves it into
+	// another work tree than its own checkout, and back home (its start
+	// directory, the work tree its start directory is in, or its own
+	// checkout), unless the root is where the agent last edited, which
+	// stays while it looks about home. Any other cwd outside a work tree (a
+	// cd to read or write a file there) is a look in passing...
 	if h.Root == "" {
-		if cwd != h.Old.Cwd {
-			switch h.Tool {
-			case "EnterWorktree", "ExitWorktree":
-				h.Moved, h.Start = true, cwd
-			default:
-				t, ok := git.WorkTree(cwd)
-				edited, _ := git.FileWorkTree(h.Old.File)
-				started, _ := git.WorkTree(h.Start)
-				home := cwd == h.Start || ok && (t == h.Proj || t == started)
-				h.Moved = ok && !home || home && h.Old.Root != edited
-			}
+		switch {
+		case h.Event == "PostToolUse" && (h.Tool == "EnterWorktree" || h.Tool == "ExitWorktree"):
+			h.Moved, h.Start = true, cwd
+		case cwd != h.Old.Cwd:
+			t, ok := git.WorkTree(cwd)
+			edited, _ := git.FileWorkTree(h.Old.File)
+			started, _ := git.WorkTree(h.Start)
+			home := cwd == h.Start || ok && (t == h.Proj || t == started)
+			h.Moved = ok && !home || home && h.Old.Root != edited
 		}
 		if h.Moved || h.Old.Root == "" {
 			if t, ok := git.WorkTree(cwd); ok {

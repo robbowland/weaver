@@ -198,6 +198,9 @@ func TestHookRoot(t *testing.T) {
 	tool := func(name, cwd string) string {
 		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"tool_response":{}}`, cwd, name)
 	}
+	toolFailed := func(name, cwd string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUseFailure","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"error":"failed"}`, cwd, name)
+	}
 	for _, c := range []struct {
 		name, from     string
 		events         []string
@@ -217,6 +220,13 @@ func TestHookRoot(t *testing.T) {
 		{"EnterWorktree", start, []string{tool("EnterWorktree", wt)}, wt, wt},
 		{"EnterWorktree, an edit in another repository, then a subdirectory of the entered worktree", start,
 			[]string{tool("EnterWorktree", wt), edit(wt, other+"/a.txt"), bash(wt + "/src"), cd(wt+"/src", wt, wt+"/src")}, other, wt},
+		{"EnterWorktree, an edit in another repository, then the original checkout", start,
+			[]string{tool("EnterWorktree", wt), edit(wt, other+"/a.txt"), bash(start + "/src"), cd(start+"/src", wt, start+"/src")}, other, wt},
+		{"EnterWorktree, its CwdChanged landing first", start, []string{cd(wt, start, wt), tool("EnterWorktree", wt)}, wt, wt},
+		{"EnterWorktree, an edit in it, then ExitWorktree, its CwdChanged landing first", start,
+			[]string{tool("EnterWorktree", wt), edit(wt, wt+"/a.txt"), cd(start, wt, start), tool("ExitWorktree", start)}, start, start},
+		{"a failed EnterWorktree, after an edit in another repository", start,
+			[]string{edit(start, other+"/a.txt"), toolFailed("EnterWorktree", start)}, other, start},
 		{"EnterWorktree, then ExitWorktree", start, []string{tool("EnterWorktree", wt), tool("ExitWorktree", start)}, start, start},
 		{"a subdirectory of the start worktree", start, []string{bash(start + "/src"), cd(start+"/src", start, start+"/src")}, start, start},
 		{"a subdirectory of the start worktree, after an edit in another", start,

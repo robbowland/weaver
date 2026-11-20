@@ -79,9 +79,13 @@ can supersede an earlier one, and says so.
   by its command's PostToolUse cwd, so a return to its checkout was judged
   by the rule for another event's cwd, and the root never came back: a cwd
   now moves it back home, its start directory (in a work tree or not),
-  the work tree that is in (the one EnterWorktree entered) or its own
-  checkout, unless the root is where its last edit was, which stays as
-  the agent looks about home.
+  the work tree its start directory is in (the one EnterWorktree
+  entered) or its own checkout, unless the root is where its last edit
+  was, which stays as the agent looks about home. Event order decided the
+  worktree tools' move too: it waited for a cwd its PostToolUse had not
+  seen, so a CwdChanged landing first (both are async) left the start
+  where it was. A worktree tool that worked now moves it whatever came
+  first; a failed one moves nothing.
 
 ## Snapshots and reviews
 
