@@ -182,7 +182,9 @@ for a deleted line, the path for a file's, `review` for the review's), its
 type when it has one, and its text, fenced and marked as your review
 comments, as many as fit in 9,000 characters (Claude Code takes 10,000),
 the rest with the next prompt. Those given go in the thread's
-`review-comments` record. Another agent's message carries none, and
+`review-comments` record once the hook's output is written (`reply`):
+a prompt whose output was lost gave none, and they come with the next.
+Another agent's message carries none, and
 neither does a helper's prompt (a pane with no thread record): the helper
 works for the thread's agent. weaver reads tuicr's files, never runs it:
 `reviews/index.json` in tuicr's data directory (`~/Library/Application

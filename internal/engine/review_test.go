@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -47,7 +48,8 @@ func tuicrComment(t *testing.T, dir, id, path, line, text string) {
 
 // A prompt of yours carries your review comments its thread's agent has
 // not been given, once each; another agent's message, and a helper's
-// prompt (a pane with no thread), carry none.
+// prompt (a pane with no thread), carry none. A prompt whose hook output
+// was not written gave none: they come with the next.
 func TestHookPromptCarriesReviewComments(t *testing.T) {
 	e := hookEnv(t)
 	home := t.TempDir()
@@ -69,8 +71,12 @@ func TestHookPromptCarriesReviewComments(t *testing.T) {
 		if pane != "5" {
 			pid = ""
 		}
-		_, notes := Hook(e, js, "sync", mux.PaneID(pane), pid)
-		return notes
+		rc, notes := Hook(e, js, "sync", mux.PaneID(pane), pid)
+		var out bytes.Buffer
+		if err := reply(&out, rc, notes); err != nil {
+			t.Fatal(err)
+		}
+		return notes.Text
 	}
 	Hook(e, []byte(`{"hook_event_name":"SessionStart","session_id":"c","cwd":"`+wt+`","source":"startup"}`), "sync", "5", me)
 	if n := prompt("5", "go"); n != "" {
@@ -82,6 +88,11 @@ func TestHookPromptCarriesReviewComments(t *testing.T) {
 	}
 	if n := prompt("6", "a helper's"); n != "" {
 		t.Errorf("a helper's prompt carried them:\n%s", n)
+	}
+	// Its output not written (Claude Code gone, its pipe closed): not given.
+	js, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "c", "cwd": wt, "prompt": "lost"})
+	if rc, notes := Hook(e, js, "sync", "5", me); notes.Text == "" || reply(failing{}, rc, notes) == nil {
+		t.Errorf("a prompt whose output failed: %q", notes.Text)
 	}
 	n := prompt("5", "read my review")
 	if !strings.Contains(n, "review comments") || !strings.Contains(n, "app.go:12\nName it --who.") {
@@ -95,6 +106,11 @@ func TestHookPromptCarriesReviewComments(t *testing.T) {
 		t.Errorf("a new one, alone:\n%s", n)
 	}
 }
+
+// failing is a hook's stdout that takes nothing.
+type failing struct{}
+
+func (failing) Write([]byte) (int, error) { return 0, os.ErrClosed }
 
 // The hook's output: the bell alone as ever, the notes as the prompt's
 // additionalContext, both in one object.

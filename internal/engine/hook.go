@@ -80,20 +80,20 @@ type hk struct {
 // Hook is `wvr hook [--async]`: returns the bell to ring (10 needs you,
 // 11 done; 0 none), and what the event gives its agent to read (a prompt
 // of yours: your review comments it has not been given, reviewNotes).
-func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, me string) (int, string) {
+func Hook(e *session.Env, in []byte, mode string, pane mux.PaneID, me string) (int, Notes) {
 	var ev hooks.Input
 	if jsonx.Decode(jsonx.First(in), &ev) != nil {
-		return 0, ""
+		return 0, Notes{}
 	}
 	return hook(e, ev, mode, pane, me)
 }
 
 // hook folds event ev into the state of the agent in pane.
-func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me string) (int, string) {
+func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me string) (int, Notes) {
 	h := &hk{Pane: pane, Mode: mode, SKey: e.SKey, Session: e.Session, RexID: e.RexID, RexHere: e.RexHere}
 	me = knownPid(me)
 	if os.MkdirAll(e.StateDir, 0o755) != nil {
-		return 0, ""
+		return 0, Notes{}
 	}
 	h.sf = e.StateFile(pane)
 	pk := session.Peek(h.sf)
@@ -103,7 +103,7 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 	if me != "" && pk.Pid != "" && me != pk.Pid {
 		if process.StillRuns(pk.Pid, pk.Start, nil) {
 			if pk.State != agent.StateEnded {
-				return 0, ""
+				return 0, Notes{}
 			}
 		} else {
 			// The pane's last agent died with a session that is gone, and
@@ -121,25 +121,25 @@ func hook(e *session.Env, ev hooks.Input, mode string, pane mux.PaneID, me strin
 		e.LoseStaleThread(pane)
 	}
 	if mode == "async" && !hooks.AsyncGate(ev, pk.State) {
-		return 0, ""
+		return 0, Notes{}
 	}
 	release := store.Lock(h.sf)
 	// Its pane started another agent since it was told its number (wvr
 	// restart: its block replaced): its state is the new agent's now.
 	if b := os.Getenv("REX_BLOCK"); b != "" && !rex.StillNames(e.RexDir(), pane, b) {
 		release()
-		return 0, ""
+		return 0, Notes{}
 	}
 	st, _ := os.ReadFile(h.sf)
 	if !h.parse(ev, st) || mode == "async" && h.otherConversation(me) {
 		release()
-		return 0, ""
+		return 0, Notes{}
 	}
 	h.run(e, me)
 	writeState(e, h)
 	release()
 	afterWrite(e, h)
-	notes := ""
+	var notes Notes
 	if mode == "sync" && h.Event == "UserPromptSubmit" && ev.Yours() {
 		notes = reviewNotes(e, pane, h.Root)
 	}
@@ -457,16 +457,28 @@ func HookMain(e *session.Env, args []string) {
 	in, _ := io.ReadAll(os.Stdin)
 	rc, notes := Hook(e, in, mode, e.MyPane, os.Getenv("CLAUDE_PID"))
 	if mode == "sync" {
-		bell := os.Getenv("WEAVER_BELL")
-		if bell == "" {
-			bell = "1"
-		}
-		ring := bell == "1" && (rc == 10 || rc == 11) || bell == "needs-you" && rc == 10
-		if out := hookOutput(ring, notes); out != "" {
-			_, err := os.Stdout.WriteString(out + "\n")
-			bestEffort(err) // a bell, or the notes, missed
-		}
+		bestEffort(reply(os.Stdout, rc, notes)) // a bell missed; the notes come again
 	}
+}
+
+// reply writes a sync hook's output to w, which Claude Code reads: the
+// bell for rc, as WEAVER_BELL asks, and notes. Only once it is written are
+// the comments notes carries recorded as given.
+func reply(w io.Writer, rc int, notes Notes) error {
+	bell := os.Getenv("WEAVER_BELL")
+	if bell == "" {
+		bell = "1"
+	}
+	ring := bell == "1" && (rc == 10 || rc == 11) || bell == "needs-you" && rc == 10
+	out := hookOutput(ring, notes.Text)
+	if out == "" {
+		return nil
+	}
+	if _, err := io.WriteString(w, out+"\n"); err != nil {
+		return err
+	}
+	notes.Given()
+	return nil
 }
 
 // hookOutput is a sync hook's output for Claude Code, one JSON object: the
