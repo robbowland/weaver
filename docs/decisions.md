@@ -702,11 +702,22 @@ can supersede an earlier one, and says so.
   __internal session-start`, on with `rex skill setup --session-naming`)
   asks every agent to run `rex session rename "$REX_SESSION"`, and a
   helper, in a window of its thread's session, renamed the whole thread
-  (`demo-helper`); Rex 0.1.0-preview.20 has no switch for one block. The
-  labels now compare with the session's label the rows read, as windows
-  did, and are pushed after any Bash command too; the note of weaver's own
-  label (`slabel/`) goes. A name is given with `wvr rename` or the
-  board's `r`.
+  (`demo-helper`); Rex 0.1.0-preview.20 and .21 have no switch for one
+  block. The labels now compare with the session's label the rows read,
+  as windows did, and the note of weaver's own label (`slabel/`) goes. A
+  name is given with `wvr rename` or the board's `r`.
+- 2026-11-20: The home board follows Rex's events (`rex events --json`),
+  pushing the labels and every board when a label changes, a block closes
+  or a session goes (Rob: "The event stuff seems like a good things to
+  consume"; he chose the rex process over weaver's own connection, which
+  would own pings, reconnect tokens and seq, and dropped relabelling after
+  every agent's Bash command, which this replaces). Before, a window
+  closed by hand showed at the next hook or focus. It pushes once Rex has
+  been quiet 250 ms: a quit destroys each thread's session, whose blocks
+  close before it leaves Rex's list, and a look between took the thread
+  for one closed by hand, its agent gone while its session ran (test/rex.sh
+  caught it). The event names no one who changed a label, so a label you
+  give in Rex's sidebar gives way too.
 
 ## Work items and views
 

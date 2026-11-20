@@ -1,6 +1,8 @@
 package rex
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"os/exec"
 	"slices"
@@ -52,6 +54,54 @@ func (f Fleet) Has(id string) bool {
 	}
 	m, ok := f.Home.ids().session(id)
 	return ok && m.home == f.Home.ID
+}
+
+// Follow calls changed with the session, each time Rex says something
+// weaver shows of the fleet's sessions (home's, and its threads') changed
+// under it: a session's or window's label, a block closed (a window
+// closed closes its blocks), a session gone. It follows `rex events`
+// until that ends (the server gone, or it failed to start). Rex sends
+// nothing it missed in between: who follows again reads the state again.
+func (f Fleet) Follow(changed func(session string)) {
+	c := rexCmd("events", "--json")
+	out, err := c.StdoutPipe()
+	if err != nil || c.Start() != nil {
+		return
+	}
+	sc := bufio.NewScanner(out)
+	sc.Buffer(nil, 4<<20) // an event is one message: 1 MiB on Rex's own server
+	for sc.Scan() {
+		if id, ok := shownChange(sc.Bytes()); ok && f.Has(id) {
+			changed(id)
+		}
+	}
+	// A line too long ends the scan, not rex: it would block writing.
+	_ = c.Process.Kill()
+	_ = c.Wait()
+}
+
+// shownEvents are the events of a session that change what weaver shows
+// of it: its labels, and its blocks.
+var shownEvents = map[string]bool{"session_label_changed": true, "window_label_changed": true, "block_closed": true}
+
+// shownChange is the session a line of `rex events --json` says changed
+// in a way weaver shows (shownEvents, or the session gone); false for any
+// other event: Rex adds events.
+func shownChange(line []byte) (string, bool) {
+	var ev struct {
+		Type    string `json:"type"`
+		Payload struct {
+			Session string `json:"session_id"`
+			Event   struct {
+				Type string `json:"type"`
+			} `json:"event"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(line, &ev) != nil {
+		return "", false
+	}
+	shown := ev.Type == "session_destroyed" || (ev.Type == "session_event" && shownEvents[ev.Payload.Event.Type])
+	return ev.Payload.Session, shown && ev.Payload.Session != ""
 }
 
 // threads are the sessions of the threads that run, as Rex lists them.

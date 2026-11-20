@@ -57,6 +57,52 @@ func (e *Env) Home() error {
 	return e.Ls()
 }
 
+// follow has the home board, from its own process, follow what Rex says
+// changed in weaver's sessions (rex.Fleet.Follow): a label given in Rex
+// (a helper renaming the session its window is in, as Rex's SessionStart
+// hook asks every agent to) is set back, and a window, block or session
+// closed shows on every board at once (a thread whose window you closed
+// ends with it). It pushes once Rex has been quiet followQuiet: a session
+// destroyed (quit) closes its blocks before it goes, and a look between
+// would take a thread's agent gone while its session runs for the thread
+// closed. Each time it follows again it pushes too: Rex replays nothing
+// it sent while none followed.
+func (e *Env) follow() {
+	push := make(chan struct{}, 1)
+	changed := func(string) {
+		select {
+		case push <- struct{}{}:
+		default:
+		}
+	}
+	go func() {
+		for range push {
+			for quiet := false; !quiet; {
+				select {
+				case <-push:
+				case <-time.After(followQuiet):
+					quiet = true
+				}
+			}
+			e.PushStatusAndLabels()
+		}
+	}()
+	go func() {
+		for {
+			e.Mux().Follow(changed)
+			time.Sleep(followAgain)
+			changed("")
+		}
+	}()
+}
+
+// followAgain is how long follow waits to follow again once it stopped,
+// and followQuiet how long Rex is quiet before it pushes.
+const (
+	followAgain = 5 * time.Second
+	followQuiet = 250 * time.Millisecond
+)
+
 // tendEvery is how often the home board tends the threads (tend).
 const tendEvery = time.Minute
 
@@ -183,6 +229,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 		e.markBorn(base + ".born")
 		e.watchInstalls(base+".born", sock)
 		e.tend()
+		e.follow()
 		// The windows' labels as this weaver makes them: an install may
 		// have changed that under a running session, whose home board then
 		// starts again in it.

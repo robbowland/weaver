@@ -18,15 +18,14 @@ func hookBg(e *session.Env) {
 	bestEffort(os.Unsetenv("WEAVER_BG"))
 	h.actOn(e)
 	h.sf = e.StateFile(h.Pane)
-	// A thread's label is its title (else its task or prompt) and branch;
-	// a command may have relabelled its session (Rex's SessionStart hook
-	// asks every agent to name the session it is in, and a helper's is its
-	// thread's), which the labels then set back.
-	switch {
-	case h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root || h.ranCommand():
-		e.PushStatusAndLabels()
-	case h.State != h.Old.State || h.Doing != h.sess().Doing || h.Waiting != h.Old.Waiting:
-		e.PushStatus()
+	if h.State != h.Old.State || h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root ||
+		h.Doing != h.sess().Doing || h.Waiting != h.Old.Waiting {
+		// A thread's label is its title (else its task or prompt) and branch.
+		if h.Event == "UserPromptSubmit" || h.Event == "SessionStart" || h.Title != h.sess().Title || h.Root != h.Old.Root {
+			e.PushStatusAndLabels()
+		} else {
+			e.PushStatus()
+		}
 	}
 	if h.MarkDir != h.Old.MarkedRoot || h.MarkDir != "" && h.Marker != h.Old.Marker {
 		if h.Old.MarkedRoot != "" && h.Old.MarkedRoot != h.MarkDir {
@@ -39,11 +38,6 @@ func hookBg(e *session.Env) {
 	if h.Event == "SessionStart" {
 		e.GC()
 	}
-}
-
-// ranCommand: is the event a Bash command's end?
-func (h *hk) ranCommand() bool {
-	return h.Tool == "Bash" && (h.Event == "PostToolUse" || h.Event == "PostToolUseFailure")
 }
 
 // actOn has e act on the session the hook acted on, not the one its

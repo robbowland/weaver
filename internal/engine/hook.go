@@ -397,7 +397,7 @@ func afterWrite(e *session.Env, h *hk) {
 	if h.State != h.Old.State || h.Root != h.Old.Root ||
 		h.Waiting != h.Old.Waiting ||
 		h.Title != h.sess().Title || h.Marker != h.Old.Marker || h.MarkDir != h.Old.MarkedRoot || h.Doing != h.sess().Doing ||
-		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" || h.ranCommand() {
+		h.Event == "SessionStart" || h.Event == "UserPromptSubmit" {
 		spawnBg(e, h)
 	}
 }

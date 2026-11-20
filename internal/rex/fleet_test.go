@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -381,6 +382,80 @@ func TestFleetLookBlockGone(t *testing.T) {
 	if len(ps) < 2 {
 		t.Errorf("panes: %+v, want home's and the thread's still", ps)
 	}
+}
+
+// What Rex says changed in a thread's session reaches weaver by session:
+// its label given in Rex, a window of it closed. Another session's
+// changes are not weaver's.
+func TestFleetFollow(t *testing.T) {
+	server(t)
+	sleep := []string{"/bin/sleep", "600"}
+	home, err := Start(t.TempDir(), "demo", "/", sleep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := Fleet{Home: home}
+	if _, _, _, err := f.OpenSession("01 fix it", mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "main", Background: true}); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := f.threads()
+	if err != nil || len(ts) != 1 {
+		t.Fatalf("threads: %+v %v", ts, err)
+	}
+	thread := ts[0]
+	var other struct {
+		ID string `json:"session_id"`
+	}
+	if err := call("session.create", map[string]any{"label": "not weaver's"}, &other); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 64)
+	go f.Follow(func(s string) { got <- s })
+	// Following starts behind this: rename both, the other first, till
+	// weaver hears of one.
+	first := ""
+	for i := 0; first == "" && i < 50; i++ {
+		for _, id := range []string{other.ID, thread.ID} {
+			if err := call("session.set_label", map[string]any{"session_id": id, "label": "demo-helper " + strconv.Itoa(i)}, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		select {
+		case first = <-got:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if first != thread.ID {
+		t.Fatalf("heard first of %q, want the thread's session %q", first, thread.ID)
+	}
+	w, _, _, err := thread.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "helper", At: 1, Background: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(got) > 0 {
+		<-got
+	}
+	if err := call("session.close_window", map[string]any{"session_id": thread.ID, "window_id": mustWindow(t, thread, w)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case s := <-got:
+		if s != thread.ID {
+			t.Errorf("a window closed: heard of %q, want %q", s, thread.ID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("a window of the thread's closed: weaver heard nothing")
+	}
+}
+
+// mustWindow is Rex's id for window w of session s.
+func mustWindow(t *testing.T, s Session, w mux.WindowID) string {
+	t.Helper()
+	id, err := s.window(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 // A thread's session takes the label weaver gives it (Rex's sidebar shows
