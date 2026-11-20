@@ -70,7 +70,11 @@ func (f Fleet) Follow(ctx context.Context, changed func(session string)) {
 	if err != nil || c.Start() != nil {
 		return
 	}
-	defer context.AfterFunc(ctx, func() { _ = c.Process.Kill() })()
+	// Its pipe closed too: the scan ends, whatever else holds rex's output.
+	defer context.AfterFunc(ctx, func() {
+		_ = c.Process.Kill()
+		_ = out.Close()
+	})()
 	sc := bufio.NewScanner(out)
 	sc.Buffer(nil, 4<<20) // an event is one message: 1 MiB on Rex's own server
 	for sc.Scan() {

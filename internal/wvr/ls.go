@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -50,13 +51,27 @@ func (e *Env) Home() error {
 			c.Stderr = log
 		}
 		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		boardWork.RLock()
 		if c.Start() == nil {
-			go func() { bestEffort(c.Wait()) }() // what it says is in its log
+			go func() {
+				bestEffort(c.Wait()) // what it says is in its log
+				boardWork.RUnlock()
+			}()
+		} else {
+			boardWork.RUnlock()
 		}
 	}
 	os.Setenv("LS_HOME", "1")
 	return e.Ls()
 }
+
+// boardWork is held, shared, while the home board's process does work
+// beside its rows that may start a process (_boot, a push, a tend round),
+// and taken whole before the board starts again in a newer weaver (the
+// same process): the new one never waits for what the old one started,
+// which would be left unreaped. Work that comes once it is asked for
+// waits, and goes with the old weaver.
+var boardWork sync.RWMutex
 
 // follow has the home board, from its own process, follow what Rex says
 // changed in weaver's sessions (rex.Fleet.Follow): a label given in Rex
@@ -81,7 +96,9 @@ func (e *Env) follow() (unfollow func()) {
 	}
 	go func() {
 		for range push {
+			boardWork.RLock()
 			e.PushStatusAndLabels()
+			boardWork.RUnlock()
 		}
 	}()
 	go func() {
@@ -115,10 +132,14 @@ const tendEvery = time.Minute
 func (e *Env) tend() {
 	go func() {
 		m := newPRMemo()
+		boardWork.RLock()
 		e.notePRs(m)
+		boardWork.RUnlock()
 		for range time.Tick(tendEvery) {
+			boardWork.RLock()
 			e.notePRs(m)
 			e.restartUpdated()
+			boardWork.RUnlock()
 		}
 	}()
 }
@@ -347,6 +368,7 @@ func (e *Env) ls(peek, at string) (string, error) {
 			// the board starts again in it, whose keys know its rows.
 			if next, ok := e.successor(base + ".born"); ok {
 				unfollow()
+				boardWork.Lock()
 				os.Remove(base + ".born")
 				rex.Close()
 				syscall.Exec(next, []string{next, "ls"}, os.Environ())
