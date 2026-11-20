@@ -485,14 +485,19 @@ func TestKeysShiftEnter(t *testing.T) {
 	}
 	rextest.ServerAt(t, Bin(), at)
 	// Programs by fzf's name, as the system names a process (its
-	// executable's file name): dd, reading keys as fzf would; a shell, to
-	// run dd under fzf as fzf runs the form's editor.
+	// executable's file name): copies of this test binary, which TestMain
+	// makes dd, reading keys as fzf would, and a shell, to run dd under fzf
+	// as fzf runs the form's editor.
 	bin := t.TempDir()
-	for from, to := range map[string]string{"/bin/dd": "fzf", "/bin/bash": "sh/fzf"} {
-		b, err := os.ReadFile(from)
-		if err != nil {
-			t.Fatal(err)
-		}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, to := range []string{"fzf", "sh/fzf"} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(bin, to)), 0o755); err != nil {
 			t.Fatal(err)
 		}
