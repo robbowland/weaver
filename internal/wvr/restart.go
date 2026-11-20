@@ -228,8 +228,7 @@ const restIdle = 600
 // you (not even a look) and with nothing under way: no turn, background
 // task or subagent?
 func atRest(r session.Row, now int64) bool {
-	return !r.Exited && r.Need(now) == session.NeedNothing && !r.NotReporting(now) &&
-		r.State != agent.StateStarting && r.Bg == 0 && r.Nsub == 0
+	return !r.Exited && r.Need(now) == session.NeedNothing && r.State != agent.StateStarting && !r.BackgroundWork()
 }
 
 // restartable are the threads' agents among rows, at now, that an update

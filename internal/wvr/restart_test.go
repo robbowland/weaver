@@ -106,7 +106,7 @@ func TestClaudeName(t *testing.T) {
 
 // Of the threads' agents behind an update, those that restart by
 // themselves rest (no turn, nothing asked of you, nothing in the
-// background), have for ten minutes, have no helper at work, and are not
+// background, and reported), have for ten minutes, have no helper at work, and are not
 // in the session you look at.
 func TestRestartable(t *testing.T) {
 	now := int64(2_000_000_000)
@@ -136,6 +136,9 @@ func TestRestartable(t *testing.T) {
 		rest("13", "s13", func(r *session.Row) { r.State = agent.StateInterrupted }),
 		// A helper itself, behind and resting: not a thread's agent.
 		rest("14", "s1", func(r *session.Row) { r.Tnum, r.Thread = 0, 1 }),
+		rest("15", "s15", func(r *session.Row) { r.Nsub = 1 }),
+		// Its agent never reported, long past the time one takes.
+		rest("16", "s16", func(r *session.Row) { r.State = agent.StateStarting }),
 	}
 	got := restartable(rows, now, installed, "shown")
 	if want := []mux.PaneID{"1", "6", "13"}; strings.Join(panes(got), " ") != strings.Join(panes(want), " ") {
