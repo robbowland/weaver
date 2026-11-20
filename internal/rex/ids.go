@@ -282,6 +282,9 @@ func (r ids) prune(live map[string]bool) { r.pruneOn(live, serverPID()) }
 // record of a session another server runs (one sharing weaver's state),
 // which this one's list does not have, while that server lives.
 func (r ids) pruneOn(live map[string]bool, server int) {
+	// slabel/ is where weaver noted the label it gave each session until
+	// it compared Rex's own (threadTabLabels); nothing reads it now.
+	os.RemoveAll(r.path("slabel", ""))
 	before := float64(time.Now().Add(-time.Minute).UnixMilli()) / 1000
 	for _, id := range r.sessionIDs() {
 		m, ok := r.session(id)

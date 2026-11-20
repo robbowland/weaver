@@ -103,11 +103,19 @@ func TestPrune(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// A note an older weaver kept of the label it gave a session, which
+	// nothing reads now.
+	if err := r.note("slabel", "session_live", "01 demo"); err != nil {
+		t.Fatal(err)
+	}
 	r.prune(map[string]bool{"session:live": true})
 	for id, kept := range map[string]bool{"session:live": true, "session:gone": false, "session:thread-gone": false, "session:new": true} {
 		if _, ok := r.session(id); ok != kept {
 			t.Errorf("%s kept %v, want %v", id, ok, kept)
 		}
+	}
+	if _, err := os.Stat(r.path("slabel", "")); !os.IsNotExist(err) {
+		t.Errorf("an older weaver's label notes are still there: %v", err)
 	}
 }
 
