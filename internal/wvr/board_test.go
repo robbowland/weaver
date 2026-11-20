@@ -416,6 +416,26 @@ func TestBoardOneOldThreadUnfolded(t *testing.T) {
 	}
 }
 
+// A fold row's card says what it stands for: a project's threads idle
+// past idleOld, or HELD's.
+func TestFoldRowCard(t *testing.T) {
+	t.Setenv("FZF_SOCK", "")
+	e := &Env{&session.Env{StateDir: t.TempDir()}}
+	for _, c := range []struct{ id, title, want string }{
+		{"mpweaver", "2 older in weaver", "2 older in weaver\n⏎ shows the threads idle for more than a day, or folds them again\n"},
+		{"mheld", "2 more held", "2 more held\n⏎ shows every held thread, or folds them again\n"},
+	} {
+		if got := ansi.Strip(e.Preview([]string{"", c.title, c.id})); got != c.want {
+			t.Errorf("%s's card: %q, want %q", c.id, got, c.want)
+		}
+	}
+	for secs, want := range map[int]string{86400: "a day", 2 * 86400: "2 days", 3600: "an hour", 6 * 3600: "6 hours"} {
+		if got := inWords(secs); got != want {
+			t.Errorf("inWords(%d) = %q, want %q", secs, got, want)
+		}
+	}
+}
+
 // The footer offers tab only where it goes somewhere: not on Alt Y's board
 // of one session (Peek's LS_TABS=0), nor with WEAVER_VIEWS=none; on home
 // beside a view, and in Alt y's popover with one, it does.

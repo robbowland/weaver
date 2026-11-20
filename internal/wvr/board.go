@@ -319,21 +319,33 @@ type section struct {
 	latest          int64
 }
 
-// rank is where section s goes among the board's: what needs you, the
-// projects, then reviews, lost and held.
+// Where a section goes among the board's (section.rank): what needs you,
+// the projects, then reviews, lost and held.
+const (
+	rankNeeds = iota
+	rankProject
+	rankReviews
+	rankLost
+	rankHeld
+)
+
+// rank is where section s goes among the board's.
 func (s *section) rank() int {
 	switch s.key {
 	case secNeeds:
-		return 0
+		return rankNeeds
 	case secReviews:
-		return 2
+		return rankReviews
 	case secLost:
-		return 3
+		return rankLost
 	case secHeld:
-		return 4
+		return rankHeld
 	}
-	return 1
+	return rankProject
 }
+
+// project: is s a repository's section?
+func (s *section) project() bool { return s.rank() == rankProject }
 
 // sections are rows rs (in order) in their sections, in the board's order:
 // what needs you, the projects busiest first (the most at work, then the
@@ -380,7 +392,7 @@ func sections(rs []boardRow, order []int, fold bool) []*section {
 		switch {
 		case s.key == secHeld && len(s.rows) > heldFold:
 			s.fold = heldFold
-		case s.rank() == 1:
+		case s.project():
 			// Its old threads are its last: latest first.
 			n := 0
 			for _, i := range s.rows {
@@ -398,21 +410,57 @@ func sections(rs []boardRow, order []int, fold bool) []*section {
 	return ss
 }
 
+// shown are the rows section s shows, open (unfolded: wvr _fold) or not,
+// and whether its fold row follows them: the rows a fold leaves out stand
+// in that row, unless open.
+func (s *section) shown(open bool) (rows []int, foldRow bool) {
+	switch {
+	case s.fold < 0:
+		return s.rows, false
+	case open:
+		return s.rows, true
+	}
+	return s.rows[:s.fold], true
+}
+
 // foldRow is the row section s folds its rows into: its mark, its text and
 // its card's title, folded or open.
-func (s *section) foldRow(open bool, grey, dim, off string) (mark, text, label string) {
+func (s *section) foldRow(open bool, p palette) (mark, text, label string) {
 	n := strconv.Itoa(len(s.rows) - s.fold)
 	if s.key == secHeld {
 		if open {
-			return "…", dim + "⏎ folds them again" + off, "every held thread"
+			return "…", p.dim + "⏎ folds them again" + p.off, "every held thread"
 		}
-		return "…", grey + n + " more held" + off + dim + " · ⏎ shows them" + off, n + " more held"
+		return "…", p.grey + n + " more held" + p.off + p.dim + " · ⏎ shows them" + p.off, n + " more held"
 	}
 	mark, act := "+", " · ⏎ shows them"
 	if open {
 		mark, act = "-", " · ⏎ folds them again"
 	}
-	return mark, grey + n + " older" + off + dim + act + off, n + " older in " + cmp.Or(s.repo, "/")
+	return mark, p.grey + n + " older" + p.off + p.dim + act + p.off, n + " older in " + cmp.Or(s.repo, "/")
+}
+
+// foldCard is the card of section key's fold row, title its label
+// (foldRow): what it stands for, which enter shows and folds again.
+func foldCard(key, title string) string {
+	what := "the threads idle for more than " + inWords(idleOld)
+	if key == secHeld {
+		what = "every held thread"
+	}
+	return titleLine(title) + CDim + "⏎ shows " + what + ", or folds them again" + COff + "\n"
+}
+
+// inWords is secs, a whole number of days or hours, as a card says it: a
+// day, 2 days, an hour, 6 hours.
+func inWords(secs int) string {
+	n, unit := secs/3600, "hour"
+	if secs%86400 == 0 {
+		n, unit = secs/86400, "day"
+	}
+	if n == 1 {
+		return map[string]string{"day": "a day", "hour": "an hour"}[unit]
+	}
+	return strconv.Itoa(n) + " " + unit + "s"
 }
 
 // foldTo is the board's action (wvr q) that shows the rows of section sec
@@ -688,13 +736,10 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 	secs, open := sections(rs, order, !plain), unfolded(base)
 	listed := 0
 	for _, s := range secs {
-		switch {
-		case s.fold < 0:
-			listed += len(s.rows)
-		case open[s.key]:
-			listed += len(s.rows) + 1
-		default:
-			listed += s.fold + 1
+		rows, foldRow := s.shown(open[s.key])
+		listed += len(rows)
+		if foldRow {
+			listed++
 		}
 	}
 
@@ -847,20 +892,17 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 			t = s.head + " · " + strconv.Itoa(len(s.rows))
 		}
 		ls = append(ls, item{id: "h" + s.key, text: t})
-		rows, folded := s.rows, s.fold >= 0 && !open[s.key]
-		if folded {
-			rows = s.rows[:s.fold]
-			// The threads folded away, for _pos (foldedIn); a 1-9 key's
-			// unfolds them, and the load that shows its thread puts the
-			// cursor there and jumps (Chrome).
-			for _, i := range s.rows[s.fold:] {
-				if rs[i].lost {
-					continue
-				}
-				folds += rs[i].pane + " " + s.key + "\n"
-				if c := rs[i].num; nums && len(c) == 1 && c >= "1" && c <= "9" {
-					keyl[c[0]-'0'] = foldTo(q, s.key, rs[i].pane, true)
-				}
+		rows, foldRow := s.shown(open[s.key])
+		// The threads folded away, for _pos (foldedIn); a 1-9 key's unfolds
+		// them, and the load that shows its thread puts the cursor there and
+		// jumps (Chrome).
+		for _, i := range s.rows[len(rows):] {
+			if rs[i].lost {
+				continue
+			}
+			folds += rs[i].pane + " " + s.key + "\n"
+			if c := rs[i].num; nums && len(c) == 1 && c >= "1" && c <= "9" {
+				keyl[c[0]-'0'] = foldTo(q, s.key, rs[i].pane, true)
 			}
 		}
 		for _, i := range rows {
@@ -918,8 +960,8 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		}
 		// The rows folded away, or unfolded: one row, whose enter folds or
 		// unfolds them (wvr _fold).
-		if s.fold >= 0 {
-			mark, t, label := s.foldRow(!folded, grey, dim, off)
+		if foldRow {
+			mark, t, label := s.foldRow(open[s.key], p)
 			ls = append(ls, item{id: "m" + s.key, text: strings.Repeat(" ", numw) + " " + dim + mark + off + sep + t, label: label, isAgent: true})
 		}
 	}

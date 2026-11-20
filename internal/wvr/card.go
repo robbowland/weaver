@@ -177,17 +177,12 @@ func (e *Env) Preview(args []string) string {
 			view = v
 		}
 	}
-	// The row for a section's rows folded away: HELD's, or a project's
-	// threads idle for more than a day.
-	if strings.HasPrefix(id, "m") {
+	// The row for a section's rows folded away (foldRow).
+	if key, ok := strings.CutPrefix(id, "m"); ok {
 		if view == "help" {
 			return e.boardHelp()
 		}
-		what := "the threads idle for more than a day"
-		if id == "m"+secHeld {
-			what = "every held thread"
-		}
-		return titleLine(title) + CDim + "⏎ shows " + what + ", or folds them again" + COff + "\n"
+		return foldCard(key, title)
 	}
 	// A lost thread (its item's id l…, or without one, its session id).
 	if strings.HasPrefix(id, "l") || id == "" && pane != "" && !cli.Digits(pane) {
