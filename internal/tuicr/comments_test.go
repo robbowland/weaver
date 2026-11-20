@@ -133,7 +133,7 @@ func TestUnreadGive(t *testing.T) {
 	if u := unread(cs, given); len(u) != 2 {
 		t.Fatalf("nothing given yet: %d unread", len(u))
 	}
-	if err := Give(given, cs[:1]); err != nil {
+	if err := give(given, cs[:1]); err != nil {
 		t.Fatal(err)
 	}
 	if u := unread(append(cs, Comment{ID: "c"}), given); len(u) != 2 || u[0].ID != "b" || u[1].ID != "c" {

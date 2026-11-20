@@ -55,7 +55,7 @@ func TestCardReviewComments(t *testing.T) {
 	if c := card(); !strings.Contains(c, "review     2 review comments, with your next prompt") {
 		t.Errorf("two waiting:\n%s", c)
 	}
-	if err := tuicr.Give(tuicr.GivenFile(e.StateDir, th), tuicr.Comments(r, 0, wt)[:1]); err != nil {
+	if err := tuicr.ThreadGive(e.StateDir, th, tuicr.Comments(r, 0, wt)[:1]); err != nil {
 		t.Fatal(err)
 	}
 	if c := card(); !strings.Contains(c, "1 review comment,") {

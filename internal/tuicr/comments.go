@@ -232,8 +232,8 @@ func unread(cs []Comment, given string) []Comment {
 	return out
 }
 
-// Give records cs as given, in the record given.
-func Give(given string, cs []Comment) error {
+// give records cs as given, in the record given.
+func give(given string, cs []Comment) error {
 	if len(cs) == 0 {
 		return nil
 	}
@@ -252,9 +252,9 @@ func Give(given string, cs []Comment) error {
 	return cmp.Or(err, f.Close())
 }
 
-// GivenFile is thread th's record of the comments its agent has been
+// givenFile is thread th's record of the comments its agent has been
 // given, under weaver's state directory stateDir.
-func GivenFile(stateDir string, th store.Thread) string {
+func givenFile(stateDir string, th store.Thread) string {
 	return th.Dir(stateDir) + "/review-comments"
 }
 
@@ -263,11 +263,11 @@ func GivenFile(stateDir string, th store.Thread) string {
 // review panel's), since the thread was made. What a prompt of yours
 // carries next (`wvr hook`), and what its card counts.
 func ThreadUnread(stateDir string, th store.Thread, root string) []Comment {
-	return unread(Comments(Dir(), th.Created, th.Worktree, root), GivenFile(stateDir, th))
+	return unread(Comments(Dir(), th.Created, th.Worktree, root), givenFile(stateDir, th))
 }
 
 // ThreadGive records cs as given to thread th's agent: ThreadUnread holds
 // them no more.
 func ThreadGive(stateDir string, th store.Thread, cs []Comment) error {
-	return Give(GivenFile(stateDir, th), cs)
+	return give(givenFile(stateDir, th), cs)
 }
