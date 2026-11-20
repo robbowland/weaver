@@ -716,8 +716,8 @@ can supersede an earlier one, and says so.
   pushing the labels and every board when a label changes, a block closes
   or a session goes (Rob: "The event stuff seems like a good things to
   consume"; he chose the rex process over weaver's own connection, which
-  would own pings, reconnect tokens and seq, and dropped relabelling after
-  every agent's Bash command, which this replaces). Before, a window
+  would own pings, reconnect tokens and seq, and over relabelling after
+  every agent's Bash command). Before, a window
   closed by hand showed at the next hook or focus. Its looks during a
   quit keep the threads: Rex takes a destroyed session off its list
   before the session's programs end (sampled through a 1 s destroy, its
