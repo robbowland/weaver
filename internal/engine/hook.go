@@ -291,8 +291,8 @@ func (h *hk) run(e *session.Env, me string) {
 	// tree (a cd to read or write a file there) is a look in passing...
 	if h.Root == "" {
 		if cwd != h.Old.Cwd {
-			switch {
-			case h.Tool == "EnterWorktree" || h.Tool == "ExitWorktree":
+			switch h.Tool {
+			case "EnterWorktree", "ExitWorktree":
 				h.Moved, h.Start = true, cwd
 			default:
 				t, ok := git.WorkTree(cwd)
