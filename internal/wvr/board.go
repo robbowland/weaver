@@ -598,31 +598,21 @@ func (e *Env) rows(plain bool) string {
 	return e.board(plain, onBoard(agents, os.Getenv("LS_SESSION")), e.LostRows(), now)
 }
 
-// board is the board's lines (rows) for agents, the agents it lists
-// (onBoard), and lost, the threads lost or held, at now (epoch s).
-func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, now int64) string {
-	var b strings.Builder
-	colour := os.Getenv("COLOR")
-	if _, set := os.LookupEnv("COLOR"); !set && !plain {
-		colour = "1"
-	}
-	red, green, grey, dim, bold, off := "", "", "", "", "", ""
-	if colour == "1" {
-		red, green, grey, dim, bold, off = CRed, CGreen, CGrey, CDim, CBold, COff
-	}
-	p := palette{red, green, grey, dim, off}
-	width := 100
-	if n, ok := cli.EnvInt("COLUMNS"); ok {
-		width = n
-	}
-	if width < 40 {
-		width = 40
-	}
-	jump := lsJump()
-	var rs []boardRow
-	states := [3]int{} // needs you, done and working, read-only threads too: the title's counts
-	wn, wf, ww, numw := 0, 0, 0, 2
-	nums := false
+// boardSet is the board's rows, and what its title and layout need of
+// them: rs[:live] are the live agents', the rest lost or held threads'.
+type boardSet struct {
+	rs         []boardRow
+	live       int
+	states     [3]int // needs you, done and working, read-only threads too: the title's counts
+	wn, wf, ww int    // the widest name, fact and where
+	numw       int    // the threads' numbers' width: 2 at least
+	nums       bool   // whether a live thread has a number
+}
+
+// boardRows are the board's rows (boardSet): agents', then lost's, at now
+// (epoch s), their cells painted with p.
+func (e *Env) boardRows(agents []session.Row, lost []session.LostRow, now int64, p palette) boardSet {
+	bs := boardSet{numw: 2}
 	// When the Claude Code agents start now last changed: an agent started
 	// before runs an older one (outdated). A few stats. And the threads'
 	// pull requests, as the tender last read them (notePRs).
@@ -648,7 +638,7 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		if need == session.NeedNothing {
 			k = 10000000000 - since
 		} else {
-			states[need]++
+			bs.states[need]++
 		}
 		// In a project, its heading names the repository: the branch is
 		// what tells its rows apart.
@@ -666,16 +656,14 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		r.label = name + " · " + w.Name() + " · turn " + strconv.Itoa(a.Turn)
 		if a.Tnum > 0 {
 			r.num = strconv.Itoa(a.Tnum)
-			nums = true
-			if len(r.num) > numw {
-				numw = len(r.num)
-			}
+			bs.nums = true
+			bs.numw = max(bs.numw, len(r.num))
 		}
-		wn = max(wn, ansi.StringWidth(name))
-		wf = max(wf, ansi.StringWidth(fact))
-		rs = append(rs, r)
+		bs.wn = max(bs.wn, ansi.StringWidth(name))
+		bs.wf = max(bs.wf, ansi.StringWidth(fact))
+		bs.rs = append(bs.rs, r)
 	}
-	live := len(rs)
+	bs.live = len(bs.rs)
 	running := map[string]bool{}
 	for _, a := range agents {
 		if a.Pane != "" && a.Sid != "" {
@@ -695,31 +683,26 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 		}
 		// Named as it was when live.
 		name := l.Called()
-		sec, fact, glyph, was := secLost, "its session went · ⏎ resumes", paint(GEnd, grey, dim, off), "lost"
+		sec, fact, glyph, was := secLost, "its session went · ⏎ resumes", paint(GEnd, p.grey, p.dim, p.off), "lost"
 		if l.Held != "" {
 			since, _ = strconv.ParseInt(l.Held, 10, 64)
-			sec, fact, glyph, was = secHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, grey, dim, off), "held"
+			sec, fact, glyph, was = secHeld, cmp.Or(l.Note, "held · ⏎ resumes"), paint(GHeld, p.grey, p.dim, p.off), "held"
 		}
 		where := git.WhereOf(l.Dir).Name()
-		r := boardRow{sec: sec, key: fmt.Sprintf("%011d%08d", 10000000000-since, len(rs)), pane: l.Sid,
+		r := boardRow{sec: sec, key: fmt.Sprintf("%011d%08d", 10000000000-since, len(bs.rs)), pane: l.Sid,
 			glyph: glyph, lost: true, name: name, fact: fact, where: where, since: since,
 			age: age(now - since), root: l.Dir, label: name + " · " + where + " · " + was,
 			stale: sec == secHeld && now-since > heldStale}
-		wn = max(wn, ansi.StringWidth(name))
-		wf = max(wf, ansi.StringWidth(fact))
-		rs = append(rs, r)
+		bs.wn = max(bs.wn, ansi.StringWidth(name))
+		bs.wf = max(bs.wf, ansi.StringWidth(fact))
+		bs.rs = append(bs.rs, r)
 	}
-	n := len(rs)
-	order := make([]int, n)
-	for i := range order {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(i, j int) bool { return rs[order[i]].key < rs[order[j]].key })
 	// Two agents in one worktree: say so (×2).
-	for i := 0; i < n; i++ {
-		if i < live {
+	rs := bs.rs
+	for i := range rs {
+		if i < bs.live {
 			c := 0
-			for j := 0; j < live; j++ {
+			for j := 0; j < bs.live; j++ {
 				if rs[j].root == rs[i].root {
 					c++
 				}
@@ -728,28 +711,43 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 				rs[i].where = strings.TrimPrefix(rs[i].where+" ×"+strconv.Itoa(c), " ")
 			}
 		}
-		ww = max(ww, ansi.StringWidth(rs[i].where))
+		bs.ww = max(bs.ww, ansi.StringWidth(rs[i].where))
 	}
-	// The sections, and the rows the board shows of each: those a fold
-	// leaves out, unless you unfolded them, stand in one row of their own.
-	base := sockBase()
-	secs, open := sections(rs, order, !plain), unfolded(base)
-	listed := 0
-	for _, s := range secs {
-		rows, foldRow := s.shown(open[s.key])
-		listed += len(rows)
-		if foldRow {
-			listed++
-		}
-	}
+	return bs
+}
 
+// ageW is the width of the board's age column.
+const ageW = 3
+
+// boardLayout is how the board lays out its rows: the name, fact and
+// where columns' widths (0: not shown), sep between the glyph and the
+// name, a gap line between sections or not, the rows' width, and the
+// list's columns (lsSize; 0 when plain).
+type boardLayout struct {
+	name, fact, where int
+	sep               string
+	gaps              bool
+	width, cols       int
+}
+
+// layBoard is the board's layout (boardLayout) for rows bs, listed rows
+// shown (their fold rows too) in groups sections, plain or as the list
+// shows them; not plain, it makes the card room (cardRoom).
+func layBoard(bs boardSet, listed, groups int, plain bool) boardLayout {
+	width := 100
+	if n, ok := cli.EnvInt("COLUMNS"); ok {
+		width = n
+	}
+	if width < 40 {
+		width = 40
+	}
+	n, wn, wf, ww := len(bs.rs), bs.wn, bs.wf, bs.ww
 	// Columns: key and glyph, name, fact, where (when there is room), age.
 	// fzf searches only what follows the TAB after the glyph (--nth 2).
-	const ageW = 3
-	pre, sep, cw, groups, gaps := 5, "  ", 0, len(secs), true
+	pre, sep, cw, gaps := 5, "  ", 0, true
 	lsCols, lsLines := 0, 0
 	if !plain {
-		pre, sep = numw+6, " \t"
+		pre, sep = bs.numw+6, " \t"
 		// The layout.
 		nn := min(wn+2, 42)
 		nf, nw := 0, 0
@@ -798,9 +796,15 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 	if wf == 0 {
 		cf = 0
 	}
-	width = pre + cn + cf + cw + ageW
+	return boardLayout{name: cn, fact: cf, where: cw, sep: sep, gaps: gaps, width: pre + cn + cf + cw + ageW, cols: lsCols}
+}
 
-	// The title: the thread count, and the counts (wvr status's) at the right.
+// boardTitle is the board's title: the threads live (against the limit
+// you set, past it) and the counts of states (wvr status's) at the
+// right, painted with p and bold, spread over room columns: by a rule
+// (the list's border label), or plain by spaces.
+func boardTitle(live int, states [3]int, p palette, bold string, plain bool, room int) string {
+	red, green, grey, dim, off := p.red, p.green, p.grey, p.dim, p.off
 	titleL := "[ WEAVER :: THREADS ]"
 	// Past the limit you set yourself: the count against it, a shade
 	// brighter.
@@ -840,17 +844,63 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 	titleR, tc = strings.TrimSuffix(titleR, "  "), strings.TrimSuffix(tc, "  ")
 	gap := ""
 	if !plain {
-		k := max(lsCols-4-ansi.StringWidth(titleL)-ansi.StringWidth(titleR)-4, 1)
+		k := max(room-4-ansi.StringWidth(titleL)-ansi.StringWidth(titleR)-4, 1)
 		if titleR != "" {
 			gap = " " + dim + strings.Repeat("─", k) + off + " "
 		}
 	} else {
-		gap = strings.Repeat(" ", max(width-ansi.StringWidth(titleL)-ansi.StringWidth(titleR), 2))
+		gap = strings.Repeat(" ", max(room-ansi.StringWidth(titleL)-ansi.StringWidth(titleR), 2))
 	}
+	return tl + gap + tc
+}
+
+// board is the board's lines (rows) for agents, the agents it lists
+// (onBoard), and lost, the threads lost or held, at now (epoch s).
+func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, now int64) string {
+	var b strings.Builder
+	colour := os.Getenv("COLOR")
+	if _, set := os.LookupEnv("COLOR"); !set && !plain {
+		colour = "1"
+	}
+	red, green, grey, dim, bold, off := "", "", "", "", "", ""
+	if colour == "1" {
+		red, green, grey, dim, bold, off = CRed, CGreen, CGrey, CDim, CBold, COff
+	}
+	p := palette{red, green, grey, dim, off}
+	jump := lsJump()
+	bs := e.boardRows(agents, lost, now, p)
+	rs, live, numw, nums := bs.rs, bs.live, bs.numw, bs.nums
+	n := len(rs)
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool { return rs[order[i]].key < rs[order[j]].key })
+	// The sections, and the rows the board shows of each: those a fold
+	// leaves out, unless you unfolded them, stand in one row of their own.
+	base := sockBase()
+	secs, open := sections(rs, order, !plain), unfolded(base)
+	listed := 0
+	for _, s := range secs {
+		rows, foldRow := s.shown(open[s.key])
+		listed += len(rows)
+		if foldRow {
+			listed++
+		}
+	}
+
+	lay := layBoard(bs, listed, len(secs), plain)
+	cn, cf, cw, sep, gaps := lay.name, lay.fact, lay.where, lay.sep, lay.gaps
+	// The title: the thread count, and the counts (wvr status's) at the right.
+	room := lay.cols
+	if plain {
+		room = lay.width
+	}
+	title := boardTitle(live, bs.states, p, bold, plain, room)
 	if !plain {
 		// The border's label, and (no agents) what to do, for the header.
 		if base != "" {
-			bestEffort(files.Put(base+".label", " "+tl+gap+tc+" "))
+			bestEffort(files.Put(base+".label", " "+title+" "))
 			out := ""
 			if n == 0 {
 				c, l := lsSize()
@@ -866,7 +916,7 @@ func (e *Env) board(plain bool, agents []session.Row, lost []session.LostRow, no
 			return ""
 		}
 	} else {
-		b.WriteString(tl + gap + tc + "\n\n")
+		b.WriteString(title + "\n\n")
 		if n == 0 {
 			b.WriteString("No agents in session " + e.Session + ".\n")
 			return b.String()
