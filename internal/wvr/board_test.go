@@ -416,6 +416,40 @@ func TestBoardOneOldThreadUnfolded(t *testing.T) {
 	}
 }
 
+// HELD shows its newest three and folds the rest, two or more, as a
+// project folds its old threads: one more shows as it is, since its fold
+// row would take its line.
+func TestBoardHeldFold(t *testing.T) {
+	d := t.TempDir()
+	t.Setenv("FZF_SOCK", d+"/b.sock")
+	t.Setenv("FZF_COLUMNS", "116")
+	t.Setenv("FZF_LINES", "60")
+	t.Setenv("COLOR", "")
+	e, agents, _, now := boardScene(t)
+	held := func(n int) []session.LostRow {
+		var ls []session.LostRow
+		for i := range n {
+			h := strconv.FormatInt(now-int64(3600*(i+1)), 10)
+			ls = append(ls, session.LostRow{Sid: "sid-h" + strconv.Itoa(i), Title: "Held " + strconv.Itoa(i), Dir: d, Held: h})
+		}
+		return ls
+	}
+	for _, c := range []struct {
+		n     int
+		ids   string
+		folds []string
+	}{
+		{3, "hheld lsid-h0 lsid-h1 lsid-h2 gz", nil},
+		{4, "hheld lsid-h0 lsid-h1 lsid-h2 lsid-h3 gz", nil},
+		{5, "hheld lsid-h0 lsid-h1 lsid-h2 mheld gz", []string{"… 2 more held · ⏎ shows them"}},
+	} {
+		ids, folds := boardItems(t, e, agents[2:3], held(c.n), now)
+		if g := strings.Join(ids[slices.Index(ids, "hheld"):], " "); g != c.ids || !slices.Equal(folds, c.folds) {
+			t.Errorf("%d held: %s %q, want %s %q", c.n, g, folds, c.ids, c.folds)
+		}
+	}
+}
+
 // A fold row's card says what it stands for: a project's threads idle
 // past idleOld, or HELD's.
 func TestFoldRowCard(t *testing.T) {
@@ -423,7 +457,7 @@ func TestFoldRowCard(t *testing.T) {
 	e := &Env{&session.Env{StateDir: t.TempDir()}}
 	for _, c := range []struct{ id, title, want string }{
 		{"mpweaver", "2 older in weaver", "2 older in weaver\n⏎ shows the threads idle for more than a day, or folds them again\n"},
-		{"mheld", "2 more held", "2 more held\n⏎ shows every held thread, or folds them again\n"},
+		{"mheld", "2 more held", "2 more held\n⏎ shows the held threads past the newest 3, or folds them again\n"},
 	} {
 		if got := ansi.Strip(e.Preview([]string{"", c.title, c.id})); got != c.want {
 			t.Errorf("%s's card: %q, want %q", c.id, got, c.want)

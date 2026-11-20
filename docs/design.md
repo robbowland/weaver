@@ -425,7 +425,9 @@ branch against what the pull request merges into (its record's `base`).
   started (you are on the new tab unless `--no-focus`; the form's alt+enter
   hands it to `wvr _behind FILE`, a process of its own that makes it with
   `--no-focus`'s behaviour while the form closes, and says how it went,
-  Worktrunk's and git's words going to `$STATE_DIR/behind.log`), 130
+  Worktrunk's and git's words going to `$STATE_DIR/behind.log`; a task it
+  could not make a thread of is kept there whole, with why, and its
+  message names the file), 130
   cancelled (nothing made), 1 error (one line on stderr). `--from` starts in
   that agent's repository. Outside weaver's session it starts the thread in
   weaver's (`toWeaverSession`), from the directory it runs in, as `wvr
@@ -515,9 +517,11 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   before its agent and panel are closed as `wvr close --hold` closes them:
   unasked, its worktree never offered for removal. The board lists it under
   HELD, last, newest first, its note as its fact, its cell `[=]`, and its age
-  a shade brighter after a week. Past three, HELD shows the three newest and
-  one row (id `mheld`) for the rest, `… N more held`, whose `enter` (`wvr _fold
-  mheld`, the board's `<base>.unfolded`) shows them all and then folds them again;
+  a shade brighter after a week. Past three, two or more, HELD shows the
+  three newest (`heldFold`) and one row (id `mheld`) for the rest, `… N more
+  held`, whose `enter` (`wvr _fold mheld`, the board's `<base>.unfolded`) shows
+  them all and then folds them again (four show as they are: a fold row for
+  one would save no line, as a repository's);
   the board as text (`wvr ls | cat`) lists every one. A held thread is hidden while an agent with its
   session id still runs (being closed). Neither the session starting (its
   lost threads brought back) nor `wvr resume --all` takes a held thread;

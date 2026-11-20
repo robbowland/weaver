@@ -350,8 +350,8 @@ func (s *section) project() bool { return s.rank() == rankProject }
 // sections are rows rs (in order) in their sections, in the board's order:
 // what needs you, the projects busiest first (the most at work, then the
 // latest to change), then reviews, lost and held. With fold (the board,
-// not its text), HELD past heldFold and a project's threads idle past
-// idleOld, two or more, fold.
+// not its text), HELD's past its newest heldFold and a project's threads
+// idle past idleOld fold, two or more of them.
 func sections(rs []boardRow, order []int, fold bool) []*section {
 	by := map[string]*section{}
 	var ss []*section
@@ -389,22 +389,22 @@ func sections(rs []boardRow, order []int, fold bool) []*section {
 		return ss
 	}
 	for _, s := range ss {
+		keep := len(s.rows)
 		switch {
-		case s.key == secHeld && len(s.rows) > heldFold:
-			s.fold = heldFold
+		case s.key == secHeld:
+			keep = min(keep, heldFold)
 		case s.project():
 			// Its old threads are its last: latest first.
-			n := 0
 			for _, i := range s.rows {
 				if rs[i].old {
-					n++
+					keep--
 				}
 			}
-			// One old thread shows as it is: its fold row would take
-			// its line.
-			if n > 1 {
-				s.fold = len(s.rows) - n
-			}
+		}
+		// One row left out shows as it is: its fold row would take its
+		// line.
+		if len(s.rows)-keep > 1 {
+			s.fold = keep
 		}
 	}
 	return ss
@@ -445,7 +445,7 @@ func (s *section) foldRow(open bool, p palette) (mark, text, label string) {
 func foldCard(key, title string) string {
 	what := "the threads idle for more than " + inWords(idleOld)
 	if key == secHeld {
-		what = "every held thread"
+		what = "the held threads past the newest " + strconv.Itoa(heldFold)
 	}
 	return titleLine(title) + CDim + "⏎ shows " + what + ", or folds them again" + COff + "\n"
 }
