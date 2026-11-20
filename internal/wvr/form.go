@@ -3,7 +3,6 @@ package wvr
 import (
 	"bufio"
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -853,30 +852,21 @@ func (e *Env) behindLog() string { return e.StateDir + "/behind.log" }
 // own (`wvr _behind`), which outlives the form's popup and says how it
 // went where you are.
 func (e *Env) startBehind(task string, fm form) error {
-	bestEffort(os.MkdirAll(e.StateDir, 0o755))
-	f, err := os.CreateTemp(e.StateDir, "behind.")
-	if err != nil {
-		return err
-	}
-	b, err := json.Marshal(behindJob{Task: task, Form: fm})
-	if err == nil {
-		_, err = f.Write(b)
-	}
-	if err = errors.Join(err, f.Close()); err != nil {
-		os.Remove(f.Name())
+	f := fmt.Sprintf("%s/behind.%d.%d", e.StateDir, os.Getpid(), time.Now().UnixNano())
+	if err := store.Write(f, behindJob{Task: task, Form: fm}); err != nil {
 		return err
 	}
 	lg, err := os.OpenFile(e.behindLog(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		os.Remove(f.Name())
+		os.Remove(f)
 		return err
 	}
 	defer func() { _ = lg.Close() }()
-	c := exec.Command(e.Self, "_behind", f.Name())
+	c := exec.Command(e.Self, "_behind", f)
 	c.Stdout, c.Stderr = lg, lg
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := c.Start(); err != nil {
-		os.Remove(f.Name())
+		os.Remove(f)
 		return err
 	}
 	bestEffort(c.Process.Release())
@@ -888,10 +878,10 @@ func (e *Env) startBehind(task string, fm form) error {
 // where you are: started, or why not.
 func (e *Env) Behind(args []string) error {
 	f := arg(args, 0)
-	b, err := os.ReadFile(f)
-	os.Remove(f)
 	var j behindJob
-	if err != nil || json.Unmarshal(b, &j) != nil {
+	err := store.Read(f, &j)
+	os.Remove(f)
+	if err != nil {
 		e.Mux().Say(6000, "weaver: could not start the thread: its form's fields are gone")
 		return cli.ErrSaid
 	}
