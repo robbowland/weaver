@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -33,30 +34,35 @@ type view struct {
 	dir   string
 }
 
-// viewNames are the session's views, in order: $WEAVER_VIEWS (none, or
-// names), else every view weaver has but those you hid. One not ready yet
+// viewNames are the session's views, in order (views). One not ready yet
 // shows faint in the strip, and going there sets it up.
 func (e *Env) viewNames() []string {
-	want, set := os.LookupEnv("WEAVER_VIEWS")
-	if set {
-		var ns []string
+	shown, _ := e.views()
+	return shown
+}
+
+// views are the session's views, in order, and those hidden: with
+// $WEAVER_VIEWS set, the views it names (none, or names), and none hidden,
+// since it chooses; else every view weaver has but those you hid, and
+// those (in allViews' order).
+func (e *Env) views() (shown, hidden []string) {
+	if want, set := os.LookupEnv("WEAVER_VIEWS"); set {
 		for _, n := range strings.Fields(strings.ReplaceAll(want, ",", " ")) {
-			for _, a := range allViews {
-				if n == a {
-					ns = append(ns, n)
-				}
+			if slices.Contains(allViews, n) {
+				shown = append(shown, n)
 			}
 		}
-		return ns
+		return shown, nil
 	}
-	hidden := e.hiddenViews()
-	var ns []string
+	h := e.hiddenViews()
 	for _, n := range allViews {
-		if !hidden[n] {
-			ns = append(ns, n)
+		if h[n] {
+			hidden = append(hidden, n)
+		} else {
+			shown = append(shown, n)
 		}
 	}
-	return ns
+	return shown, hidden
 }
 
 // allViews are the views weaver has, in order.
