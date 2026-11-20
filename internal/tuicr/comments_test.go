@@ -129,13 +129,13 @@ func TestCommentsUsername(t *testing.T) {
 func TestUnreadGive(t *testing.T) {
 	given := t.TempDir() + "/threads/1-x/review-comments"
 	cs := []Comment{{ID: "a"}, {ID: "b"}}
-	if u := Unread(cs, given); len(u) != 2 {
+	if u := unread(cs, given); len(u) != 2 {
 		t.Fatalf("nothing given yet: %d unread", len(u))
 	}
 	if err := Give(given, cs[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if u := Unread(append(cs, Comment{ID: "c"}), given); len(u) != 2 || u[0].ID != "b" || u[1].ID != "c" {
+	if u := unread(append(cs, Comment{ID: "c"}), given); len(u) != 2 || u[0].ID != "b" || u[1].ID != "c" {
 		t.Errorf("after a given: %+v", u)
 	}
 }
@@ -161,7 +161,7 @@ func TestThreadUnread(t *testing.T) {
 	if len(u) != 4 {
 		t.Fatalf("%d unread, want 4", len(u))
 	}
-	if err := Give(GivenFile(state, th), u[:3]); err != nil {
+	if err := ThreadGive(state, th, u[:3]); err != nil {
 		t.Fatal(err)
 	}
 	if u := ThreadUnread(state, th, wt); len(u) != 1 || u[0].ID != "r1" {

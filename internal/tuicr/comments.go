@@ -211,9 +211,9 @@ func authors() []string {
 	return me
 }
 
-// Unread are the comments of cs that the record given (one id a line)
+// unread are the comments of cs that the record given (one id a line)
 // does not hold: not yet given to the thread's agent.
-func Unread(cs []Comment, given string) []Comment {
+func unread(cs []Comment, given string) []Comment {
 	if len(cs) == 0 {
 		return nil
 	}
@@ -263,5 +263,11 @@ func GivenFile(stateDir string, th store.Thread) string {
 // review panel's), since the thread was made. What a prompt of yours
 // carries next (`wvr hook`), and what its card counts.
 func ThreadUnread(stateDir string, th store.Thread, root string) []Comment {
-	return Unread(Comments(Dir(), th.Created, th.Worktree, root), GivenFile(stateDir, th))
+	return unread(Comments(Dir(), th.Created, th.Worktree, root), GivenFile(stateDir, th))
+}
+
+// ThreadGive records cs as given to thread th's agent: ThreadUnread holds
+// them no more.
+func ThreadGive(stateDir string, th store.Thread, cs []Comment) error {
+	return Give(GivenFile(stateDir, th), cs)
 }

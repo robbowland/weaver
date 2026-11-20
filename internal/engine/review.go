@@ -12,14 +12,15 @@ import (
 // has reached the agent (Given, which reply calls when the hook's output
 // is written): output lost, they come again with the next prompt.
 type Notes struct {
-	Text  string
-	given []tuicr.Comment
-	file  string
+	Text     string
+	given    []tuicr.Comment
+	stateDir string
+	th       store.Thread
 }
 
 // Given records the comments n carries as given to the thread's agent.
 func (n Notes) Given() {
-	bestEffort(tuicr.Give(n.file, n.given)) // unrecorded, they come again: better twice than never
+	bestEffort(tuicr.ThreadGive(n.stateDir, n.th, n.given)) // unrecorded, they come again: better twice than never
 }
 
 // reviewNotes is what a prompt of yours carries to a thread's agent: the
@@ -38,5 +39,5 @@ func reviewNotes(e *session.Env, pane mux.PaneID, root string) Notes {
 	if n == 0 {
 		return Notes{}
 	}
-	return Notes{Text: s, given: cs[:n], file: tuicr.GivenFile(e.StateDir, th)}
+	return Notes{Text: s, given: cs[:n], stateDir: e.StateDir, th: th}
 }
