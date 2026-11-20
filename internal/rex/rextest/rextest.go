@@ -104,9 +104,13 @@ func ServerAt(t testing.TB, bin, dir string) (stop func()) {
 		})
 	}
 	t.Cleanup(stop)
+	// Up once it answers and its runtime file is there, which Rex writes
+	// just after it starts answering (a slow start answered first).
 	for i := 0; ; i++ {
 		if exec.Command(bin, "--autostart=false", "api", "call", "server.status", "{}").Run() == nil {
-			return stop
+			if up, _ := filepath.Glob(filepath.Join(run, "servers", "*", "runtime.json")); len(up) > 0 {
+				return stop
+			}
 		}
 		if i == 50 {
 			t.Fatal("the Rex server did not start")
