@@ -311,8 +311,11 @@ func Output(dir string, env []string, stdin string, args ...string) (string, err
 }
 
 // Where is a work tree as weaver names it: its repository's name, its
-// branch (or short commit), and its git directory.
-type Where struct{ Repo, Branch, GitDir string }
+// branch (or short commit), and its git directory; and Home, the
+// repository's folder, which tells two repositories of one name apart
+// (the checkout its .git is in, a bare repository's own; outside a
+// repository, the work tree itself).
+type Where struct{ Repo, Branch, GitDir, Home string }
 
 // Name is the work tree as a row or a label names it: repo/branch, or the
 // repository alone when it has no branch to name.
@@ -326,7 +329,7 @@ func (w Where) Name() string {
 // WhereOf is the work tree at root, read from its .git without running
 // git.
 func WhereOf(root string) Where {
-	w := Where{Repo: root[strings.LastIndexByte(root, '/')+1:]}
+	w := Where{Repo: root[strings.LastIndexByte(root, '/')+1:], Home: root}
 	gd, common, ok := gitDirs(root)
 	if !ok {
 		return w
@@ -351,10 +354,11 @@ func WhereOf(root string) Where {
 		}
 	}
 	last := common[strings.LastIndexByte(common, '/')+1:]
+	w.Home = common
 	switch {
 	case last == ".git" || last == ".bare":
 		p := common[:max(strings.LastIndexByte(common, '/'), 0)]
-		w.Repo = p[strings.LastIndexByte(p, '/')+1:]
+		w.Repo, w.Home = p[strings.LastIndexByte(p, '/')+1:], p
 	case strings.HasSuffix(last, ".git"):
 		w.Repo = strings.TrimSuffix(last, ".git")
 	}

@@ -322,7 +322,8 @@ Agents are grouped under these headings:
   threads running a turn, longest first, then the rest (idle, interrupted,
   or finished and seen), most recent first. The repository with the most
   threads running comes first, then the one most recently active. A single
-  repository has its heading too;
+  repository has its heading too, and two of one name (`~/code/api`,
+  `~/work/api`) have one each, saying where each is (`API · ~/work`);
 - **REVIEWS**: read-only threads (reviews and investigations) running a
   turn or at rest, since you watch them less closely; one that needs you,
   or has finished and you haven't looked yet, is under NEEDS YOU;

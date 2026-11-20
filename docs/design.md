@@ -627,7 +627,7 @@ to start one, with nothing to select.
 | Section | Who | Order |
 | --- | --- | --- |
 | NEEDS YOU | needs you (`[!]` red), then done and not yet seen (`[x]` green), from every repository, read-only threads too | longest waiting first, finished longest ago first |
-| a repository's, its name in capitals | its threads that work (`[/]` grey; a thread whose agent has not reported, for its first 2 minutes), then the rest: done and seen (`[x]` faint), idle (`[ ]` faint), interrupted (`[-]` grey), exited (its pane kept: R, x), not reporting | longest working first, then most recent first |
+| a repository's, its name in capitals (two of one name, a section each, its folder's parent after the name: `API · ~/work`) | its threads that work (`[/]` grey; a thread whose agent has not reported, for its first 2 minutes), then the rest: done and seen (`[x]` faint), idle (`[ ]` faint), interrupted (`[-]` grey), exited (its pane kept: R, x), not reporting | longest working first, then most recent first |
 | REVIEWS | a read-only thread's agent (`mode` `review`) at work or at rest | as a repository's |
 | LOST, HELD | lost and held threads (Lost threads) | newest first |
 

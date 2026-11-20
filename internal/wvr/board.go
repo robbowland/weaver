@@ -3,7 +3,10 @@ package wvr
 import (
 	"cmp"
 	"fmt"
+	"hash/fnv"
 	"os"
+	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -275,6 +278,14 @@ func projectKey(repo string) string {
 	}, repo)
 }
 
+// pathKey is a short key of path p, for a section's key: its FNV-32a
+// hash.
+func pathKey(p string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(p)) // a hash's Write never fails
+	return fmt.Sprintf("%08x", h.Sum32())
+}
+
 // GHeld is a held thread's cell; heldStale, how long a hold lasts before
 // its age stands out, as a weekly look at what waits would catch it;
 // heldFold, how many held threads show before the rest fold; idleOld, how
@@ -299,9 +310,11 @@ func wipLimit() int {
 // overWIP is whether n threads open is past the limit.
 func overWIP(n int) bool { return wipLimit() > 0 && n > wipLimit() }
 
-// boardRow is a row of the board: in section sec, ordered there by key.
+// boardRow is a row of the board: in section sec, ordered there by key;
+// its repository's name, folder (git.Where.Home), and where that is
+// (place: its parent, tildified) when another repository has its name.
 type boardRow struct {
-	sec, repo                                string
+	sec, repo, home, place                   string
 	key, pane, tab, glyph, name, fact, where string
 	age, label, root, num                    string
 	since                                    int64
@@ -310,13 +323,14 @@ type boardRow struct {
 
 // section is one of the board's sections: its key, heading and rows (as
 // indexes, in order), and its fold, how many of them show before the rest
-// fold into a row of their own (-1: none fold).
+// fold into a row of their own (-1: none fold); a project's, its
+// repository's name, and where it is when another has that name.
 type section struct {
-	key, head, repo string
-	rows            []int
-	fold            int
-	working         int
-	latest          int64
+	key, head, repo, place string
+	rows                   []int
+	fold                   int
+	working                int
+	latest                 int64
 }
 
 // Where a section goes among the board's (section.rank): what needs you,
@@ -362,8 +376,11 @@ func sections(rs []boardRow, order []int, fold bool) []*section {
 			head := map[string]string{secNeeds: "NEEDS YOU", secReviews: "REVIEWS", secLost: "LOST", secHeld: "HELD"}[r.sec]
 			if head == "" {
 				head = strings.ToUpper(cmp.Or(r.repo, "/"))
+				if r.place != "" {
+					head += " · " + r.place
+				}
 			}
-			s = &section{key: r.sec, head: head, repo: r.repo, fold: -1}
+			s = &section{key: r.sec, head: head, repo: r.repo, place: r.place, fold: -1}
 			by[r.sec] = s
 			ss = append(ss, s)
 		}
@@ -437,7 +454,11 @@ func (s *section) foldRow(open bool, p palette) (mark, text, label string) {
 	if open {
 		mark, act = "-", " · ⏎ folds them again"
 	}
-	return mark, p.grey + n + " older" + p.off + p.dim + act + p.off, n + " older in " + cmp.Or(s.repo, "/")
+	in := cmp.Or(s.repo, "/")
+	if s.place != "" {
+		in += " · " + s.place
+	}
+	return mark, p.grey + n + " older" + p.off + p.dim + act + p.off, n + " older in " + in
 }
 
 // foldCard is the card of section key's fold row, title its label
@@ -650,7 +671,7 @@ func (e *Env) boardRows(agents []session.Row, lost []session.LostRow, now int64,
 			sec, where = secReviews, w.Name()
 		}
 		pn, _ := strconv.Atoi(string(a.Pane))
-		r := boardRow{sec: sec, repo: w.Repo, key: fmt.Sprintf("%d%011d%08d", need, k, pn), pane: string(a.Pane), tab: string(a.Window), glyph: glyph,
+		r := boardRow{sec: sec, repo: w.Repo, home: w.Home, key: fmt.Sprintf("%d%011d%08d", need, k, pn), pane: string(a.Pane), tab: string(a.Window), glyph: glyph,
 			name: name, fact: fact, where: where, age: age(now - since), root: a.Root, since: since,
 			working: need == session.NeedWait, old: need == session.NeedNothing && now-since > idleOld}
 		r.label = name + " · " + w.Name() + " · turn " + strconv.Itoa(a.Turn)
@@ -697,8 +718,22 @@ func (e *Env) boardRows(agents []session.Row, lost []session.LostRow, now int64,
 		bs.wf = max(bs.wf, ansi.StringWidth(fact))
 		bs.rs = append(bs.rs, r)
 	}
-	// Two agents in one worktree: say so (×2).
+	// Two repositories of one name (~/code/api, ~/work/api): a section
+	// each, its heading saying where it is.
 	rs := bs.rs
+	homes := map[string][]string{}
+	for _, r := range rs[:bs.live] {
+		if r.sec == projectKey(r.repo) && !slices.Contains(homes[r.sec], r.home) {
+			homes[r.sec] = append(homes[r.sec], r.home)
+		}
+	}
+	for i := range rs[:bs.live] {
+		if r := &rs[i]; len(homes[r.sec]) > 1 {
+			r.sec += "-" + pathKey(r.home)
+			r.place = tildify(filepath.Dir(r.home))
+		}
+	}
+	// Two agents in one worktree: say so (×2).
 	for i := range rs {
 		if i < bs.live {
 			c := 0

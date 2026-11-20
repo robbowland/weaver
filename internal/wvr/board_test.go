@@ -109,13 +109,13 @@ func TestWhereOf(t *testing.T) {
 	must(os.WriteFile(wt+"/.git", []byte("gitdir: "+main+"/.git/worktrees/repo-wt\n"), 0o644))
 	must(os.WriteFile(main+"/.git/worktrees/repo-wt/commondir", []byte("../..\n"), 0o644))
 	must(os.WriteFile(main+"/.git/worktrees/repo-wt/HEAD", []byte("0123456789abcdef\n"), 0o644))
-	if w := git.WhereOf(main); w.Repo != "repo" || w.Branch != "main" {
+	if w := git.WhereOf(main); w.Repo != "repo" || w.Branch != "main" || w.Home != main {
 		t.Errorf("main checkout: %+v", w)
 	}
-	if w := git.WhereOf(wt); w.Repo != "repo" || w.Branch != "0123456" {
+	if w := git.WhereOf(wt); w.Repo != "repo" || w.Branch != "0123456" || w.Home != main {
 		t.Errorf("worktree, detached: %+v", w)
 	}
-	if w := git.WhereOf(filepath.Join(d, "plain")); w.Repo != "plain" || w.Branch != "" || w.GitDir != "" {
+	if w := git.WhereOf(filepath.Join(d, "plain")); w.Repo != "plain" || w.Branch != "" || w.GitDir != "" || w.Home != filepath.Join(d, "plain") {
 		t.Errorf("no repository: %+v", w)
 	}
 }
@@ -536,5 +536,32 @@ func TestBoardHelpHiddenViews(t *testing.T) {
 	t.Setenv("WEAVER_VIEWS", "github")
 	if got := help(); got != Help() {
 		t.Errorf("WEAVER_VIEWS set: %q", got)
+	}
+}
+
+// Two repositories of one name (~/code/api, ~/work/api) are a section
+// each, their headings saying where each is; a name only one has keeps
+// its plain heading.
+func TestBoardSameNameRepos(t *testing.T) {
+	t.Setenv("COLUMNS", "120")
+	t.Setenv("COLOR", "")
+	d, _ := filepath.EvalSymlinks(t.TempDir())
+	t.Setenv("HOME", d)
+	now := int64(2_000_000_000)
+	agents := []session.Row{
+		{Pane: "11", Tnum: 1, Title: "Rate limits", State: agent.StateWorking, Since: now - 60, Doing: "tests", Root: checkout(t, d+"/code", "api", "limits"), Turn: 1},
+		{Pane: "12", Tnum: 2, Title: "Auth tokens", State: agent.StateIdle, Since: now - 600, Root: checkout(t, d+"/work", "api", "main"), Turn: 1},
+		{Pane: "13", Tnum: 3, Title: "Board sections", State: agent.StateIdle, Since: now - 900, Root: checkout(t, d+"/code", "weaver", "main"), Turn: 1},
+	}
+	e := &Env{&session.Env{StateDir: t.TempDir(), SKey: "rex-w", Self: "/bin/wvr", Session: "w"}}
+	_, body, _ := strings.Cut(e.board(true, agents, nil, now), "\n\n")
+	var heads []string
+	for _, l := range strings.Split(body, "\n") {
+		if strings.Contains(l, " · ") && !strings.HasPrefix(l, "[") {
+			heads = append(heads, l)
+		}
+	}
+	if got, want := strings.Join(heads, " | "), "API · ~/code · 1 | API · ~/work · 1 | WEAVER · 1"; got != want {
+		t.Errorf("headings: %s\nwant: %s\nboard:\n%s", got, want, body)
 	}
 }
