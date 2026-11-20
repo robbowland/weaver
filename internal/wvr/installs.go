@@ -4,9 +4,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/robbowland/weaver/internal/files"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 )
 
@@ -18,6 +21,26 @@ import (
 // upgrade, or Homebrew's swapped for install.sh's, either way), or that
 // file changed since. Its born file says when it started (its time) and
 // the file it started as (its real path, in it).
+
+// sideWork is held, shared, while a board or view does work beside its
+// rows, in a goroutine of its own, that may start a process (the home
+// board's _boot, pushes and tending; a view's fetches), and taken whole as
+// it starts again in a newer weaver (startAgainIn): the new weaver never
+// waits for what the old one started, which would be left unreaped. Work
+// that comes once it is asked for waits, and goes with the old weaver.
+var sideWork sync.RWMutex
+
+// startAgainIn starts this process again as weaver next with args (the
+// same process: syscall.Exec), once its side work is done (sideWork) and
+// its Rex connection closed. When that fails, it says why, and the side
+// work goes on.
+func startAgainIn(next string, args ...string) error {
+	sideWork.Lock()
+	rex.Close()
+	err := syscall.Exec(next, append([]string{next}, args...), os.Environ())
+	sideWork.Unlock()
+	return err
+}
 
 // markBorn marks a board or view started now, from this weaver, in born.
 func (e *Env) markBorn(born string) {

@@ -1045,8 +1045,10 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 	}
 	go func() {
 		for range time.Tick(5 * time.Minute) {
+			sideWork.RLock()
 			src.fetch(e)
 			e.refreshItems(src)
+			sideWork.RUnlock()
 		}
 	}()
 	q := session.Quote(e.Self)
@@ -1158,8 +1160,7 @@ func (e *Env) itemsView(src itemSource, peek string) (string, error) {
 		if next, ok := e.successor(sock + ".born"); ok {
 			os.Remove(sock)
 			os.Remove(sock + ".born")
-			rex.Close()
-			return "", syscall.Exec(next, []string{next, "_items", src.name()}, os.Environ())
+			return "", startAgainIn(next, "_items", src.name())
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
