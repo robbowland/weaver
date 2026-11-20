@@ -1454,7 +1454,10 @@ func (e *Env) CloseTail(a []string) error {
 
 // toWeaverSession makes the session acted on, outside one, weaver's
 // ($WEAVER_SESSION, else weaver); inside one it is the one you are in. An
-// error when it is not running.
+// error when it is not running. Outside, what this wvr starts acts on
+// weaver's too (wvr _behind, _width, which take theirs from their
+// environment, session.Load): $REX_SESSION names it, and no pane of the
+// session you are in is theirs ($REX_BLOCK).
 func (e *Env) toWeaverSession() error {
 	if e.Session == "" {
 		name := cmp.Or(os.Getenv("WEAVER_SESSION"), "weaver")
@@ -1464,6 +1467,9 @@ func (e *Env) toWeaverSession() error {
 		}
 		if !running {
 			return errors.New("no Rex session " + name + " of weaver's is running (start it with `wvr`)")
+		}
+		if err := errors.Join(os.Setenv("REX_SESSION", s.ID), os.Unsetenv("REX_BLOCK")); err != nil {
+			return err
 		}
 		e.Session, e.SKey, e.RexID = name, rex.Key(name), s.ID
 		return nil

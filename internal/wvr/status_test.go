@@ -23,6 +23,9 @@ import (
 func outside(t *testing.T) (*Env, rex.Session) {
 	t.Helper()
 	rextest.Server(t, rex.Bin())
+	// Set as wvr acts on demo (toWeaverSession), and put back after.
+	t.Setenv("REX_SESSION", "")
+	_ = os.Unsetenv("REX_SESSION")
 	dir := t.TempDir()
 	se := &session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock",
 		ClaudeDir: dir + "/claude", Self: "/usr/bin/true"}

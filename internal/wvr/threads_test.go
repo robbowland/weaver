@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
 )
 
@@ -178,5 +180,60 @@ func TestNameNote(t *testing.T) {
 		if n != "" && !strings.HasPrefix(n, "\n\nweaver ") {
 			t.Errorf("untitled %v, slugged %v: not its own paragraph: %q", c.untitled, c.slugged, n)
 		}
+	}
+}
+
+// A process a command outside weaver's session starts (wvr _behind, which
+// the form's alt+⏎ starts; wvr _width) acts on the session that command
+// chose: its environment names that session, as a pane of it would, and
+// no pane of the one it was started from.
+func TestChildrenOutsideTheSession(t *testing.T) {
+	rextest.Server(t, rex.Bin())
+	// A shell in another Rex session, weaver's demo running.
+	t.Setenv("REX_SESSION", "")
+	_ = os.Unsetenv("REX_SESSION")
+	t.Setenv("REX_BLOCK", "block:elsewhere")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("WEAVER_SESSION", "demo")
+	e := Load()
+	home, err := rex.Start(e.RexDir(), "demo", "/", []string{"/bin/sleep", "600"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = home.Quit() })
+	// wvr as a stand-in: what a wvr started there would load (Load, as
+	// main does before its session check).
+	d := t.TempDir()
+	t.Setenv("WVR_LOAD_TO", d+"/loaded")
+	e.Self = d + "/wvr"
+	if err := os.WriteFile(e.Self, []byte("#!/bin/sh\nexec "+session.Quote(os.Args[0])+" -test.run='^TestLoadAsAChild$'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.toWeaverSession(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.startBehind("say hello", form{}); err != nil {
+		t.Fatal(err)
+	}
+	var got []byte
+	for i := 0; i < 100 && len(got) == 0; i++ {
+		time.Sleep(50 * time.Millisecond)
+		got, _ = os.ReadFile(d + "/loaded")
+	}
+	if want := "demo " + home.ID + " \n"; string(got) != want {
+		t.Errorf("wvr _behind, started outside, loads %q; want %q (demo, no pane)", got, want)
+	}
+}
+
+// TestLoadAsAChild is no test of its own: TestChildrenOutsideTheSession's
+// stand-in for wvr, which writes the session it loads to $WVR_LOAD_TO.
+func TestLoadAsAChild(t *testing.T) {
+	out := os.Getenv("WVR_LOAD_TO")
+	if out == "" {
+		t.Skip("TestChildrenOutsideTheSession runs it")
+	}
+	e := Load()
+	if err := os.WriteFile(out, []byte(e.Session+" "+e.RexID+" "+string(e.MyPane)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
