@@ -205,7 +205,7 @@ func (e *Env) rexKeysCheck() check {
 // backed up beside it first, as the hooks' is), and Rex, when it answers,
 // told to read its configuration again.
 func (e *Env) loadRexKeys(answers bool) error {
-	_, loads, _, err := e.writeRexKeys()
+	loads, _, err := e.writeRexKeys()
 	if err != nil {
 		return err
 	}

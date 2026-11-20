@@ -101,7 +101,7 @@ func TestRexKeysCheck(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", home+"/data")
 	t.Setenv("REX_CONFIG", init)
 	e := &Env{&session.Env{StateDir: home + "/state", Self: "/usr/bin/true"}}
-	if _, loads, _, err := e.writeRexKeys(); err != nil || loads {
+	if loads, _, err := e.writeRexKeys(); err != nil || loads {
 		t.Fatalf("writing the keys: loads %v, %v", loads, err)
 	}
 	if b, _ := os.ReadFile(init); string(b) != "-- mine" {

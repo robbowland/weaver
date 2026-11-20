@@ -32,7 +32,7 @@ func (e *Env) Start(name string) error {
 		name = "weaver"
 	}
 	e.SelfSetup()
-	_, loads, changed, err := e.writeRexKeys()
+	loads, changed, err := e.writeRexKeys()
 	switch {
 	case err != nil:
 		fmt.Fprintln(os.Stderr, "weaver: could not write weaver's keys for Rex: "+err.Error())
@@ -78,21 +78,21 @@ func (e *Env) Start(name string) error {
 
 // writeRexKeys writes weaver's keys for Rex (config/rex.lua, run by this
 // wvr) to weaver.lua beside the init.lua Rex reads ($REX_CONFIG, else
-// rex/init.lua in the configuration directory): its path, whether init.lua
-// loads it, and whether it was not already as written.
-func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
+// rex/init.lua in the configuration directory): whether init.lua loads
+// it, and whether it was not already as written.
+func (e *Env) writeRexKeys() (loads, changed bool, err error) {
 	dir, err := setup.Runtime()
 	if err != nil {
-		return "", false, false, err
+		return false, false, err
 	}
 	src, err := os.ReadFile(dir + "/config/rex.lua")
 	if err != nil {
-		return "", false, false, err
+		return false, false, err
 	}
 	init := rexInit()
-	f = filepath.Join(filepath.Dir(init), "weaver.lua")
+	f := filepath.Join(filepath.Dir(init), "weaver.lua")
 	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
-		return f, false, false, err
+		return false, false, err
 	}
 	// Inside Lua strings: a path's \ and " escaped.
 	lua := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace
@@ -100,12 +100,12 @@ func (e *Env) writeRexKeys() (f string, loads, changed bool, err error) {
 		"@REXBIN@", lua(rex.BinDir()), "--[[@SETTINGS@]]", luaSettings(lua)).Replace(string(src))
 	if old, err := os.ReadFile(f); err != nil || string(old) != keys {
 		if err := files.WriteAtomic(f, []byte(keys)); err != nil {
-			return f, false, false, err
+			return false, false, err
 		}
 		changed = true
 	}
 	b, _ := os.ReadFile(init)
-	return f, loadsWeaver(string(b)), changed, nil
+	return loadsWeaver(string(b)), changed, nil
 }
 
 // rexInit is the init.lua Rex reads: $REX_CONFIG, else rex/init.lua in
