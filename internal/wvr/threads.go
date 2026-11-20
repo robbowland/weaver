@@ -1179,7 +1179,11 @@ func (e *Env) Close(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr close [--yes] [--remove-worktree] [pane-id]")
 		default:
-			target, _ = mux.ParsePane(a)
+			p, ok := e.parsePane(a)
+			if !ok {
+				return errNoPane(a)
+			}
+			target = p
 		}
 	}
 	panes, ok := e.Panes()

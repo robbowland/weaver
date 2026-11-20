@@ -595,7 +595,11 @@ func (e *Env) New(args []string) error {
 			case "--repo":
 				repoArg = v
 			case "--from":
-				from, _ = mux.ParsePane(v)
+				p, ok := e.parsePane(v)
+				if !ok {
+					return errNoPane(v)
+				}
+				from = p
 			case "--branch", "-b":
 				branch = v
 			case "--base":

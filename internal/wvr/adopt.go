@@ -71,17 +71,28 @@ func (e *Env) Adopt(args []string) error {
 	return nil
 }
 
-// paneArg is which as a pane: a number, or the id of a Rex block weaver
-// numbered ($REX_BLOCK, the one an agent has). Pane numbers have no length
-// (they grow with each Rex block weaver meets), but a number of sidPrefix digits or more could be
-// the start of a session id (adopt's) or a name (rename's): it is a pane
-// only when weaver follows an agent there.
-func (e *Env) paneArg(which string) (mux.PaneID, bool) {
-	if rex.IsBlock(which) {
-		return rex.PaneOf(e.RexDir(), which)
+// parsePane is s as a pane, as every pane argument of a command reads
+// one: a number, or the id of a Rex block weaver numbered ($REX_BLOCK, the
+// one an agent has); false for anything else.
+func (e *Env) parsePane(s string) (mux.PaneID, bool) {
+	if rex.IsBlock(s) {
+		return rex.PaneOf(e.RexDir(), s)
 	}
-	p, ok := mux.ParsePane(which)
-	if !ok || len(p) < sidPrefix {
+	return mux.ParsePane(s)
+}
+
+// errNoPane is a command's pane argument naming no pane, which it refuses
+// rather than act on another.
+func errNoPane(arg string) error { return fmt.Errorf("no pane %s", arg) }
+
+// paneArg is which as a pane (parsePane), where it may be something else
+// too. Pane numbers have no length (they grow with each Rex block weaver
+// meets), but a number of sidPrefix digits or more could be the start of a
+// session id (adopt's) or a name (rename's): it is a pane only when weaver
+// follows an agent there.
+func (e *Env) paneArg(which string) (mux.PaneID, bool) {
+	p, ok := e.parsePane(which)
+	if !ok || rex.IsBlock(which) || len(p) < sidPrefix {
 		return p, ok
 	}
 	return p, e.agentOf(p) == p
@@ -99,7 +110,7 @@ func (e *Env) leadingPane(args []string) (mux.PaneID, []string, error) {
 		return p, args[1:], nil
 	}
 	if rex.IsBlock(args[0]) {
-		return "", nil, fmt.Errorf("weaver follows no agent in %s", args[0])
+		return "", nil, errNoPane(args[0])
 	}
 	return "", args, nil
 }

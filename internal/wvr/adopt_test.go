@@ -67,7 +67,7 @@ func TestLeadingPane(t *testing.T) {
 		{name: "a name only", args: []string{"Greeter", "demo"}, words: "Greeter demo"},
 		{name: "a pane and a name", args: []string{"1234", "Greeter demo"}, pane: "1234", words: "Greeter demo"},
 		{name: "a block id and a name", args: []string{"block:01aa", "Greeter demo"}, pane: "1234", words: "Greeter demo"},
-		{name: "a block id weaver never numbered", args: []string{"block:02bb", "Greeter demo"}, err: "weaver follows no agent in block:02bb"},
+		{name: "a block id weaver never numbered", args: []string{"block:02bb", "Greeter demo"}, err: "no pane block:02bb"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			p, words, err := e.leadingPane(c.args)
@@ -78,6 +78,42 @@ func TestLeadingPane(t *testing.T) {
 				t.Errorf("pane %q, words %q; want %q, %q", p, strings.Join(words, " "), c.pane, c.words)
 			}
 		})
+	}
+}
+
+// Every pane argument a command takes as a pane alone (close's, review's,
+// new's --from) is read as one: a number, or Rex's id for a block weaver
+// numbered; anything else is no pane, which the command refuses rather
+// than act on another (close's focused agent, new's default repository).
+func TestPaneArgsOfCommands(t *testing.T) {
+	dir := t.TempDir()
+	e := &Env{&session.Env{StateDir: dir, SKey: "rex-w"}}
+	if err := os.MkdirAll(e.RexDir()+"/u", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(e.RexDir()+"/u/block_01aa", []byte("1234\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		arg, pane string
+		ok        bool
+	}{{"12", "12", true}, {"1234", "1234", true}, {"block:01aa", "1234", true}, {"block:02bb", "", false}, {"demo", "", false}} {
+		if p, ok := e.parsePane(c.arg); ok != c.ok || ok && string(p) != c.pane {
+			t.Errorf("parsePane(%q) = %q, %v; want %q, %v", c.arg, p, ok, c.pane, c.ok)
+		}
+	}
+	for _, run := range []struct {
+		name string
+		cmd  func([]string) error
+		args []string
+	}{
+		{"close", e.Close, []string{"block:02bb"}},
+		{"review", e.Review, []string{"block:02bb"}},
+		{"new --from", e.New, []string{"--from", "block:02bb", "say hello"}},
+	} {
+		if err := run.cmd(run.args); err == nil || !strings.Contains(err.Error(), "no pane block:02bb") {
+			t.Errorf("%s %q: %v, want it refused: no pane block:02bb", run.name, run.args, err)
+		}
 	}
 }
 

@@ -122,7 +122,11 @@ func (e *Env) Review(args []string) error {
 		case strings.HasPrefix(a, "-"):
 			return errors.New("usage: wvr review [--full] [pane-id]")
 		default:
-			target, _ = mux.ParsePane(a)
+			p, ok := e.parsePane(a)
+			if !ok {
+				return errNoPane(a)
+			}
+			target = p
 		}
 	}
 	release := e.uiLock()

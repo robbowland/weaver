@@ -256,10 +256,12 @@ other run of characters one `-`, at most 48 characters, cut at a `-`.
 `wvr adopt [PANE | SESSION-ID]` makes a conversation weaver did not start a
 thread. PANE is a number (pane numbers have no length: they only grow); one of 4+ digits is a pane only when weaver follows an agent
 there (its state, thread or panel file). It can also be Rex's id for the
-pane's block (`$REX_BLOCK`, `block:…`), the pane weaver numbered it; a
-block id weaver gave no number names no pane, and rename and hold refuse
-it rather than read it as a word. Anything else is a session id or its
-first 4+ characters.
+pane's block (`$REX_BLOCK`, `block:…`), the pane weaver numbered it, as
+every command's pane argument can (`parsePane`: close's, review's, new's
+`--from`); a block id weaver gave no number names no pane, which every
+command refuses (`no pane block:…`) rather than act on another pane or
+read it as a word of a name. Anything else is a session id or its first
+4+ characters.
 Alone, it adopts the agent in its own pane when it has one (so `! wvr
 adopt` inside an agent), else opens the picker. Outside
 weaver's session it acts on the weaver session (`$WEAVER_SESSION`, else
