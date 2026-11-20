@@ -201,6 +201,7 @@ the agent's other files. Readers ignore fields they don't know.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
+| `id` | string | random, set as it is made, which nothing changes: what its own directory is named for (`$STATE_DIR/threads/`, `store.Thread.Dir`); absent in a record from before threads had one |
 | `name` | string | the tab's name as `wvr new` set it: the branch, or the task's slug for a thread in the current checkout |
 | `task` | string | what you asked, in full |
 | `repo` | string | the repository's main checkout; `""` when not in one |
