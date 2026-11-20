@@ -20,6 +20,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -269,7 +270,7 @@ var reLastFocused = regexp.MustCompile(`<key>Workspace\.lastFocusedSession</key>
 func appSession() (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "defaults", "export", "com.superlogical.rex", "-").Output()
+	out, err := rex.AppPrefs(ctx, "export", "-")
 	if err != nil {
 		return "", false
 	}

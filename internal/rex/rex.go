@@ -4,6 +4,7 @@ package rex
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,7 +37,18 @@ func Bin() string {
 }
 
 // appServerRex is where the Rex app keeps its server's rex, under $HOME.
-const appServerRex = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"
+const appServerRex = "Library/Application Support/" + AppID + "/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"
+
+// AppID is the Rex app's bundle identifier: the domain of its
+// preferences, and its directory in Application Support.
+const AppID = "com.superlogical.rex"
+
+// AppPrefs is what macOS's defaults prints of the Rex app's preferences
+// (AppID), run as defaults VERB AppID ARGS...: a setting (read KEY), all
+// of them (export -).
+func AppPrefs(ctx context.Context, verb string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "defaults", append([]string{verb, AppID}, args...)...).Output()
+}
 
 // BinDir is the directory of the rex Bin finds; "" when it finds none.
 func BinDir() string {

@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -230,16 +231,16 @@ func (e *Env) loadRexKeys(answers bool) error {
 	return rex.ReloadConfig()
 }
 
-// rexPrefs is the Rex app's preferences domain, and remoteControlPref its
-// Remote Control setting there.
-const rexPrefs, remoteControlPref = "com.superlogical.rex", "rex.client.remoteControl"
+// remoteControlPref is the Rex app's Remote Control setting, in its
+// preferences (rex.AppPrefs).
+const remoteControlPref = "rex.client.remoteControl"
 
 // remoteControlCheck is the Rex app's Remote Control, without which it
 // shows nothing weaver opens (wvr leaves you to switch to it yourself):
 // its setting, as the app keeps it; not ok when there is none to read (no
 // app here, or one that never set it), as then weaver cannot tell.
 func remoteControlCheck() (check, bool) {
-	out, err := exec.Command("defaults", "read", rexPrefs, remoteControlPref).Output()
+	out, err := rex.AppPrefs(context.Background(), "read", remoteControlPref)
 	if err != nil {
 		return check{}, false
 	}
