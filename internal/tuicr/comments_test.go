@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -189,5 +190,11 @@ func TestContext(t *testing.T) {
 	}
 	if s, n := Context(nil, "/w"); s != "" || n != 0 {
 		t.Errorf("none: %q %d", s, n)
+	}
+	// One comment past the cap is cut short between characters, never in
+	// one: "app.go:1\n" and é's two bytes each put byte 9,000 in an é.
+	long := []Comment{{ID: "a", Location: "app.go:1", Text: strings.Repeat("é", 5000)}}
+	if s, n := Context(long, "/w"); n != 1 || !utf8.ValidString(s) || !strings.Contains(s, "é\n(cut short)") {
+		t.Errorf("cut short: %d given, valid %v:\n…%s", n, utf8.ValidString(s), s[max(len(s)-80, 0):])
 	}
 }

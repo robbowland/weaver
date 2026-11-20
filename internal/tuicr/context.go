@@ -3,6 +3,7 @@ package tuicr
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // contextMax caps the comments one prompt carries: Claude Code takes a
@@ -32,7 +33,12 @@ func Context(cs []Comment, worktree string) (text string, n int) {
 	}
 	s := strings.TrimRight(body.String(), "\n")
 	if len(s) > contextMax {
-		s = s[:contextMax] + "\n(cut short)"
+		// At most contextMax bytes, cut between characters, never in one.
+		cut := contextMax
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut] + "\n(cut short)"
 	}
 	// A fence longer than any run of backticks in the comments.
 	fence := "```"
