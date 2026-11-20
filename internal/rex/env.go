@@ -57,6 +57,19 @@ func FromEnv(dir string) Here {
 	return h
 }
 
+// IsBlock: is id a Rex block's id, as $REX_BLOCK is?
+func IsBlock(id string) bool { return strings.HasPrefix(id, "block:") }
+
+// PaneOf is the pane weaver numbered Rex's block id as (its numbers kept
+// in dir); false when id is no block's, or one weaver gave no number.
+func PaneOf(dir, id string) (mux.PaneID, bool) {
+	if !IsBlock(id) {
+		return "", false
+	}
+	n, ok := ids{dir}.known(id)
+	return mux.PaneID(n), ok
+}
+
 // StillNames: does weaver's number pane still name Rex's block (its
 // numbers kept in dir)? Not once a block took its place (Respawn: an agent
 // started again in its pane), which a late hook of the old one must not

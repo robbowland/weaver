@@ -16,6 +16,7 @@ import (
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/process"
+	"github.com/robbowland/weaver/internal/rex"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -70,16 +71,37 @@ func (e *Env) Adopt(args []string) error {
 	return nil
 }
 
-// paneArg is which as a pane: a number. Pane numbers have no length
+// paneArg is which as a pane: a number, or the id of a Rex block weaver
+// numbered ($REX_BLOCK, the one an agent has). Pane numbers have no length
 // (they grow with each Rex block weaver meets), but a number of sidPrefix digits or more could be
 // the start of a session id (adopt's) or a name (rename's): it is a pane
 // only when weaver follows an agent there.
 func (e *Env) paneArg(which string) (mux.PaneID, bool) {
+	if rex.IsBlock(which) {
+		return rex.PaneOf(e.RexDir(), which)
+	}
 	p, ok := mux.ParsePane(which)
 	if !ok || len(p) < sidPrefix {
 		return p, ok
 	}
 	return p, e.agentOf(p) == p
+}
+
+// leadingPane splits the arguments of `[PANE] [WORDS...]` (rename's name,
+// hold's note): the pane the first one is (paneArg), and the words after
+// it; with none, all of them are words. A block id weaver gave no number
+// is refused: it is never a word.
+func (e *Env) leadingPane(args []string) (mux.PaneID, []string, error) {
+	if len(args) == 0 {
+		return "", args, nil
+	}
+	if p, ok := e.paneArg(args[0]); ok {
+		return p, args[1:], nil
+	}
+	if rex.IsBlock(args[0]) {
+		return "", nil, fmt.Errorf("weaver follows no agent in %s", args[0])
+	}
+	return "", args, nil
 }
 
 // sidPrefix is the fewest characters of a session id that name it.

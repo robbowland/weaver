@@ -52,7 +52,7 @@ func (s Session) callS(method string, in map[string]any, out any) error {
 }
 
 func (s Session) block(p mux.PaneID) (string, error) {
-	if b, ok := s.ids().id(string(p)); ok && strings.HasPrefix(b, "block:") {
+	if b, ok := s.ids().id(string(p)); ok && IsBlock(b) {
 		return b, nil
 	}
 	return "", errors.New("rex: no block is pane " + string(p))

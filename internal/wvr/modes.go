@@ -128,11 +128,9 @@ func (e *Env) Hold(args []string) error {
 	if err := e.toWeaverSession(); err != nil {
 		return err
 	}
-	var p mux.PaneID
-	if len(args) > 0 {
-		if q, ok := e.paneArg(args[0]); ok {
-			p, args = q, args[1:]
-		}
+	p, args, err := e.leadingPane(args)
+	if err != nil {
+		return err
 	}
 	if p == "" && e.MyPane != "" {
 		p = e.agentOf(e.MyPane)
