@@ -78,9 +78,10 @@ can supersede an earlier one, and says so.
   grep …`), with its Worktrunk marker. A cd that sticks is reported first
   by its command's PostToolUse cwd, so a return to its checkout was judged
   by the rule for another event's cwd, and the root never came back: a cwd
-  now moves it back home, its start directory (in a work tree or not) or
-  its own checkout, unless the root is where its last edit was, which
-  stays as the agent looks about home.
+  now moves it back home, its start directory (in a work tree or not),
+  the work tree that is in (the one EnterWorktree entered) or its own
+  checkout, unless the root is where its last edit was, which stays as
+  the agent looks about home.
 
 ## Snapshots and reviews
 

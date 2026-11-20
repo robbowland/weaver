@@ -155,11 +155,11 @@ func TestHookOfAReplacedBlock(t *testing.T) {
 // Where an agent works, its root (which its window's label, its review
 // panel and its Worktrunk marker follow), as its cwd and edits move it. A
 // cd that sticks moves it into another work tree, and back home (its
-// start directory, or its own checkout); a cd the harness undid (one
-// outside the working directories: its CwdChanged's cwd is back where it
-// was) moves nothing; an edit puts it in the edited file's work tree,
-// which a cd back home leaves; the worktree tools always move it, and
-// where it starts.
+// start directory and its work tree, or its own checkout); a cd the
+// harness undid (one outside the working directories: its CwdChanged's
+// cwd is back where it was) moves nothing; an edit puts it in the edited
+// file's work tree, which a cd back home leaves; the worktree tools always
+// move it, and where it starts.
 func TestHookRoot(t *testing.T) {
 	td, _ := filepath.EvalSymlinks(t.TempDir())
 	start, other, wt, notes := td+"/repo", td+"/demo", td+"/repo-wt", td+"/notes"
@@ -176,6 +176,9 @@ func TestHookRoot(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
+	if err := os.MkdirAll(wt+"/src", 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(wt+"/a.txt", []byte("a\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -189,8 +192,8 @@ func TestHookRoot(t *testing.T) {
 	cd := func(cwd, from, to string) string {
 		return fmt.Sprintf(`{"hook_event_name":"CwdChanged","session_id":"c","cwd":%q,"old_cwd":%q,"new_cwd":%q}`, cwd, from, to)
 	}
-	edit := func(f string) string {
-		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":"Edit","tool_input":{"file_path":%q},"tool_response":{}}`, start, f)
+	edit := func(cwd, f string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":"Edit","tool_input":{"file_path":%q},"tool_response":{}}`, cwd, f)
 	}
 	tool := func(name, cwd string) string {
 		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"tool_response":{}}`, cwd, name)
@@ -204,18 +207,20 @@ func TestHookRoot(t *testing.T) {
 		{"into another repository", start, []string{bash(other), cd(other, start, other)}, other, start},
 		{"into another repository and back to the start", start,
 			[]string{bash(other), cd(other, start, other), bash(start), cd(start, other, start)}, start, start},
-		{"an edit in another worktree", start, []string{edit(wt + "/a.txt"), bash(start)}, wt, start},
+		{"an edit in another worktree", start, []string{edit(start, wt+"/a.txt"), bash(start)}, wt, start},
 		{"an edit in another worktree, then into another repository", start,
-			[]string{edit(wt + "/a.txt"), bash(other), cd(other, start, other)}, other, start},
+			[]string{edit(start, wt+"/a.txt"), bash(other), cd(other, start, other)}, other, start},
 		{"an edit in another worktree, a cd into it and back to the start", start,
-			[]string{edit(wt + "/a.txt"), bash(wt), cd(wt, start, wt), bash(start), cd(start, wt, start)}, wt, start},
+			[]string{edit(start, wt+"/a.txt"), bash(wt), cd(wt, start, wt), bash(start), cd(start, wt, start)}, wt, start},
 		{"into another repository, a directory outside any work tree, and back to the start", start,
 			[]string{bash(other), bash(notes), bash(start)}, start, start},
 		{"EnterWorktree", start, []string{tool("EnterWorktree", wt)}, wt, wt},
+		{"EnterWorktree, an edit in another repository, then a subdirectory of the entered worktree", start,
+			[]string{tool("EnterWorktree", wt), edit(wt, other+"/a.txt"), bash(wt + "/src"), cd(wt+"/src", wt, wt+"/src")}, other, wt},
 		{"EnterWorktree, then ExitWorktree", start, []string{tool("EnterWorktree", wt), tool("ExitWorktree", start)}, start, start},
 		{"a subdirectory of the start worktree", start, []string{bash(start + "/src"), cd(start+"/src", start, start+"/src")}, start, start},
 		{"a subdirectory of the start worktree, after an edit in another", start,
-			[]string{edit(wt + "/a.txt"), bash(start + "/src"), cd(start+"/src", start, start+"/src")}, wt, start},
+			[]string{edit(start, wt+"/a.txt"), bash(start + "/src"), cd(start+"/src", start, start+"/src")}, wt, start},
 		{"started outside any work tree, into another repository and back to the start", notes,
 			[]string{bash(other), cd(other, notes, other), bash(notes), cd(notes, other, notes)}, notes, notes},
 		{"outside any work tree", start, []string{bash(notes), cd(notes, start, notes)}, start, start},

@@ -286,10 +286,11 @@ func (h *hk) run(e *session.Env, me string) {
 	}
 	// ...else the repo of a new cwd: the worktree tools always move it; a
 	// cwd moves it into another work tree than its own checkout, and back
-	// home (its start directory, or about its own checkout), unless the
-	// root is where the agent last edited, which stays while it looks
-	// about home. Any other cwd outside a work tree (a cd to read or write
-	// a file there) is a look in passing...
+	// home (its start directory, the work tree that is in, which the
+	// worktree tools move, or its own checkout), unless the root is where
+	// the agent last edited, which stays while it looks about home. Any
+	// other cwd outside a work tree (a cd to read or write a file there) is
+	// a look in passing...
 	if h.Root == "" {
 		if cwd != h.Old.Cwd {
 			switch h.Tool {
@@ -298,7 +299,8 @@ func (h *hk) run(e *session.Env, me string) {
 			default:
 				t, ok := git.WorkTree(cwd)
 				edited, _ := git.FileWorkTree(h.Old.File)
-				home := cwd == h.Start || ok && t == h.Proj
+				started, _ := git.WorkTree(h.Start)
+				home := cwd == h.Start || ok && (t == h.Proj || t == started)
 				h.Moved = ok && !home || home && h.Old.Root != edited
 			}
 		}
