@@ -67,15 +67,9 @@ func isExec(p string) bool {
 // of weaver.lua's bindings in its keymap)? A server that read init.lua
 // before weaver.lua was there has none: init.lua's require of it failed,
 // and Rex reads its configuration again only when told (ReloadConfig).
-// False when Rex does not say (Keys says that apart).
-func KeysLoaded() bool {
-	loaded, _ := Keys()
-	return loaded
-}
-
-// Keys is KeysLoaded, and an error when Rex does not answer (no server
-// running): then it is not known.
-func Keys() (bool, error) {
+// An error when Rex does not answer (no server running): then it is not
+// known.
+func KeysLoaded() (bool, error) {
 	var k struct {
 		Bindings []struct {
 			Source string `json:"source"`

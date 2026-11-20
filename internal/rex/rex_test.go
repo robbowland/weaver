@@ -1148,20 +1148,20 @@ func TestKeysLoaded(t *testing.T) {
 		t.Fatal(err)
 	}
 	rextest.ServerAt(t, Bin(), at)
-	if KeysLoaded() {
-		t.Fatal("keys loaded before weaver.lua was written")
+	if loaded, err := KeysLoaded(); loaded || err != nil {
+		t.Fatalf("before weaver.lua was written: loaded %v (%v), want not, said", loaded, err)
 	}
 	if err := os.WriteFile(filepath.Join(at, "weaver.lua"), []byte("rex.bind(\"alt+y\", function() return true end)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if KeysLoaded() {
-		t.Error("keys loaded without Rex reading its configuration again")
+	if loaded, err := KeysLoaded(); loaded || err != nil {
+		t.Errorf("without Rex reading its configuration again: loaded %v (%v), want not, said", loaded, err)
 	}
 	if err := ReloadConfig(); err != nil {
 		t.Fatal(err)
 	}
-	if !KeysLoaded() {
-		t.Error("keys not loaded after ReloadConfig")
+	if loaded, err := KeysLoaded(); !loaded || err != nil {
+		t.Errorf("after ReloadConfig: loaded %v (%v), want loaded", loaded, err)
 	}
 }
 

@@ -126,8 +126,8 @@ func TestRexKeysCheck(t *testing.T) {
 	if c := e.rexKeysCheck(); !c.ok {
 		t.Errorf("fixed: %+v", c)
 	}
-	if !rex.KeysLoaded() {
-		t.Error("fixed, and Rex binds no weaver key")
+	if loaded, err := rex.KeysLoaded(); !loaded {
+		t.Errorf("fixed, and Rex binds no weaver key (%v)", err)
 	}
 }
 

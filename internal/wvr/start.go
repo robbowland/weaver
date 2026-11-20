@@ -38,9 +38,15 @@ func (e *Env) Start(name string) error {
 		fmt.Fprintln(os.Stderr, "weaver: could not write weaver's keys for Rex: "+err.Error())
 	case !loads:
 		fmt.Fprintf(os.Stderr, "weaver: Rex does not load weaver's keys: wvr doctor --fix adds require(\"weaver\") to %s\n", tildify(rexInit()))
-	case changed || !rex.KeysLoaded():
+	default:
 		// Rex reads its configuration only when told: one read before
-		// weaver.lua was there (or was this) has none of its keys.
+		// weaver.lua was there (or was this) has none of its keys; told
+		// too when Rex does not say.
+		if !changed {
+			if loaded, _ := rex.KeysLoaded(); loaded {
+				break
+			}
+		}
 		if err := rex.ReloadConfig(); err != nil {
 			fmt.Fprintln(os.Stderr, "weaver: Rex did not read weaver's keys: run rex config reload ("+err.Error()+")")
 		}

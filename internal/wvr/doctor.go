@@ -182,7 +182,7 @@ func (e *Env) rexKeysCheck() check {
 		c.found, c.remedy = "cannot read "+tildify(init), byHand{"make " + tildify(init) + " readable"}
 		return c
 	}
-	loaded, err := rex.Keys()
+	loaded, err := rex.KeysLoaded()
 	answers := err == nil
 	fix := func() error { return e.loadRexKeys(answers) }
 	switch {
