@@ -223,15 +223,16 @@ func TestThreadTabLabels(t *testing.T) {
 	if err := store.Write(e.PaneFile(p, "thread"), store.Thread{Num: 3, Task: "say hello", Worktree: dir + "/repo", Pane: &pane, Created: time.Now().Unix()}); err != nil {
 		t.Fatal(err)
 	}
-	label := func() string {
+	labels := func() (string, string) {
 		ps, _ := f.Panes()
 		q, _ := PaneIn(ps, p)
-		return q.WindowName
+		return q.WindowName, q.SessionName
 	}
-	want := ThreadLabel(3, "say hello", dir+"/repo")
+	label := func() string { l, _ := labels(); return l }
+	want, wantSession := ThreadLabel(3, "say hello", dir+"/repo"), SessionLabel(3, "say hello")
 	e.PushStatusAndLabels()
-	if l := label(); l != want {
-		t.Fatalf("label %q, want %q", l, want)
+	if l, s := labels(); l != want || s != wantSession {
+		t.Fatalf("labels %q and %q, want %q and %q", l, s, want, wantSession)
 	}
 	// Right already: left as it is, so a label set behind weaver's back
 	// to the same text is not set again (nothing to tell apart but that
@@ -249,6 +250,15 @@ func TestThreadTabLabels(t *testing.T) {
 	e.PushStatusAndLabels()
 	if l := label(); l != want {
 		t.Errorf("label %q once renamed, want %q again", l, want)
+	}
+	// Its session named by another agent in it (a helper, as Rex's
+	// SessionStart hook asks every agent to): the thread's name again.
+	if out, err := exec.Command(rex.Bin(), "--autostart=false", "session", "rename", rows[0].Session, "demo-helper").CombinedOutput(); err != nil {
+		t.Fatalf("rex session rename: %v %s", err, out)
+	}
+	e.PushStatusAndLabels()
+	if _, s := labels(); s != wantSession {
+		t.Errorf("session label %q once renamed, want %q again", s, wantSession)
 	}
 }
 

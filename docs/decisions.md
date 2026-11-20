@@ -696,6 +696,17 @@ can supersede an earlier one, and says so.
   agent names it the board shows the task. The session's label, set "for
   good" since the move to Rex, now follows the name, as `NN name`: one you
   give in Rex stays until weaver's changes, since weaver notes its own.
+- 2026-11-20: weaver keeps a thread's session label, superseding "one you
+  give in Rex stays" above (Rob chose weaver keeping the name over a skill
+  line or a variable for helper windows). Rex's SessionStart hook (`rex
+  __internal session-start`, on with `rex skill setup --session-naming`)
+  asks every agent to run `rex session rename "$REX_SESSION"`, and a
+  helper, in a window of its thread's session, renamed the whole thread
+  (`demo-helper`); Rex 0.1.0-preview.20 has no switch for one block. The
+  labels now compare with the session's label the rows read, as windows
+  did, and are pushed after any Bash command too; the note of weaver's own
+  label (`slabel/`) goes. A name is given with `wvr rename` or the
+  board's `r`.
 
 ## Work items and views
 

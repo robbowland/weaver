@@ -311,7 +311,6 @@ func (f Fleet) OpenSession(label string, w mux.NewWindow) (mux.WindowID, mux.Pan
 		return "", "", 0, err
 	}
 	_ = s.ids().note("cmd", pn, strings.Join(w.Argv, " "))
-	_ = s.ids().note("slabel", fileName(out.ID), cut(label))
 	if !w.Background {
 		s.show(out.Windows[0].Window)
 	}

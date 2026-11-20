@@ -38,10 +38,13 @@ type Pane struct {
 	Session    string
 	Window     WindowID
 	WindowName string
-	Exited     bool
-	Cmd        string
-	Title      string
-	Cwd        string
+	// SessionName is the label of the session it is in, which Rex's
+	// sidebar shows.
+	SessionName string
+	Exited      bool
+	Cmd         string
+	Title       string
+	Cwd         string
 }
 
 // Window is one window of a session: its place, its name, the view it

@@ -384,8 +384,8 @@ func TestFleetLookBlockGone(t *testing.T) {
 }
 
 // A thread's session takes the label weaver gives it (Rex's sidebar shows
-// it), as its thread's name changes; one you give it in Rex stays until
-// weaver's changes again. Home's is never weaver's to relabel.
+// it), over one anyone gave it in Rex. Home's is never weaver's to
+// relabel.
 func TestFleetLabelSession(t *testing.T) {
 	server(t)
 	dir := t.TempDir()
@@ -425,16 +425,12 @@ func TestFleetLabelSession(t *testing.T) {
 	if got := label(id); got != "01 Flaky test fix" {
 		t.Errorf("labelled %q, want the thread's name", got)
 	}
-	if err := call("session.set_label", map[string]any{"session_id": id, "label": "mine"}, nil); err != nil {
+	if err := call("session.set_label", map[string]any{"session_id": id, "label": "demo-helper"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	f.LabelSession(w, "01 Flaky test fix")
-	if got := label(id); got != "mine" {
-		t.Errorf("your label %q, want it kept while the thread's name is the same", got)
-	}
-	f.LabelSession(w, "01 Flaky test, fixed")
-	if got := label(id); got != "01 Flaky test, fixed" {
-		t.Errorf("labelled %q, want the thread's new name", got)
+	if got := label(id); got != "01 Flaky test fix" {
+		t.Errorf("labelled %q over another's label, want the thread's name", got)
 	}
 	homeWas := label(home.ID)
 	hw, _, _, err := home.OpenWindow(mux.NewWindow{Spawn: mux.Spawn{Argv: sleep}, Label: "w", At: 1, Background: true})

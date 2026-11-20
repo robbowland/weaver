@@ -225,12 +225,14 @@ A thread is a Rex session of its own, labelled `NN name`
 (`session.SessionLabel`: its number and what the board calls it,
 `Thread.Shown`; its first window's label adds where it works,
 `ThreadLabel`) as it is
-made and again as that changes (`threadTabLabels`, through
-`Fleet.LabelSession`); weaver notes the label it gave
-(`$STATE_DIR/rex/slabel/<session>`) and sets it again only when its own
-changes, so a label you give it in Rex stays until then. Rex's labels are
-anyone's (Claude Code's agents rename their sessions), so weaver finds a
-thread by ids alone. Its first
+made and again whenever the labels are pushed and Rex's is another
+(`threadTabLabels`, through `Fleet.LabelSession`, against the label its
+rows read): on a prompt or a session start, a title or root that changed,
+and the end of any agent's Bash command. Rex's labels are anyone's: Rex's
+SessionStart hook asks every Claude Code agent to name the session it is
+in, and a helper's is its thread's, so a label given in Rex gives way to
+the thread's name (`wvr rename`, the board's `r`, name a thread), and
+weaver finds a thread by ids alone. Its first
 window holds its review panel and its agent, labelled by weaver
 (`threadTabLabels`); its helpers' windows beside it are theirs.
 

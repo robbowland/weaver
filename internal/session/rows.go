@@ -50,7 +50,7 @@ type Row struct {
 	Window                                                            mux.WindowID
 	Session                                                           string // the Rex session its pane is in, as Rex lists it
 	Root, Prompt, Waiting, Title, Pid, Pstart, Sfile, Last, File, Sid string
-	WindowName, Agent, Bgtasks, Tname                                 string
+	WindowName, SessionName, Agent, Bgtasks, Tname                    string
 	Since                                                             int64 // epoch s
 	Seen                                                              bool
 	Bg, Nsub, Turn                                                    int    // background tasks, subagents
@@ -200,7 +200,7 @@ func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 			r.File = ""
 		}
 		r.Sid = oneline.Line(s.SessionID)
-		r.WindowName = oneline.Line(p.WindowName)
+		r.WindowName, r.SessionName = oneline.Line(p.WindowName), oneline.Line(p.SessionName)
 		r.Agent = oneline.Line(s.Agent)
 		r.Bgtasks = oneline.Line(s.BackgroundTasks)
 		r.Doing = oneline.Line(s.Doing)
@@ -234,7 +234,7 @@ func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 		}
 		rows = append(rows, Row{Pane: pane, Window: p.Window, Session: p.Session, State: agent.StateStarting,
 			Root: oneline.Line(t.Worktree), Since: since, Prompt: oneline.Line(t.Task), Sfile: f,
-			WindowName: oneline.Line(p.WindowName), Agent: agent.Claude,
+			WindowName: oneline.Line(p.WindowName), SessionName: oneline.Line(p.SessionName), Agent: agent.Claude,
 			Tname: oneline.Line(t.Name), Tnum: t.Num, Title: oneline.Line(t.Shown("")), Review: t.Mode == agent.ModeReview,
 			Exited: p.Exited})
 	}

@@ -278,8 +278,7 @@ k=$(REX_SESSION=$T REX_BLOCK=$AGB wvr title "Something else" 2>&1)
 ok "title: a name you gave stays yours, whatever its agent calls it" \
 	"$(jq -r .title "$SD/rex-${S}_$AG.thread" 2>/dev/null)|$(windows "$T")|$(printf '%s' "$k" | grep -c 'keeps your name')" "Greeting|01 Greeting · repo/main/2|1"
 # Rex's labels are anyone's (Claude Code's agents rename their sessions):
-# weaver goes on finding the thread by id, and leaves the label you gave
-# until its thread's name changes.
+# weaver goes on finding the thread by id.
 R session rename "$T" demo-greet >/dev/null
 ok "a thread's session renamed in Rex: still the thread, its agent still followed" \
 	"$(threads)|$(REX_SESSION=$SID wvr ls 2>/dev/null | grep -c Greeting)" "$T|1"
@@ -292,7 +291,7 @@ printf '{"type":"user","cwd":"%s","gitBranch":"main","message":{"role":"user","c
 HB=$(R window new -s "$T" helper --focus=false -c "$AT/repo" --shell=none --json -- "$AT/bin/claude" "check the tests" | jq -r '.block_ids[0]')
 waitfor '[ -f "$AT/pid.${HB#block:}" ]' 100
 helperj() {
-	printf '%s' "$1" | CLAUDE_PID=$(cat "$AT/pid.${HB#block:}") REX_SESSION=$T REX_BLOCK=$HB wvr hook >/dev/null
+	printf '%s' "$1" | CLAUDE_PID=$(cat "$AT/pid.${HB#block:}") REX_SESSION=$T REX_BLOCK=$HB wvr hook ${2:-} >/dev/null
 }
 hev() { printf '{"session_id":"%s","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"%s"%s}' "$HS" "$AT/repo" "$1" "${2:-}"; }
 helperj "$(hev SessionStart ',"source":"startup"')"
@@ -301,6 +300,17 @@ helperj "$(hev Stop ',"prompt_id":"h1","last_assistant_message":"tests pass"')"
 HP=$(num "$HB")
 ok "helper: a window of the thread's session, weaver following its agent" \
 	"$(windows "$T")|$(jq -r '"\(.state) \(.rex_session)"' "$SD/rex-${S}_$HP.json" 2>/dev/null)" "01 Greeting · repo/main/2 helper/1|done $T"
+# The helper names the session its window is in, as Rex's SessionStart
+# hook tells every agent to: its thread's. weaver names it as the thread
+# again once the command has ended.
+RN=',"tool_name":"Bash","tool_use_id":"h-rn","tool_input":{"command":"rex session rename $REX_SESSION demo-helper"}'
+helperj "$(hev UserPromptSubmit ',"prompt":"name your session"')"
+helperj "$(hev PreToolUse "$RN")" --async
+R session rename "$T" demo-helper >/dev/null
+helperj "$(hev PostToolUse "$RN"',"tool_response":{}')" --async
+waitfor '[ "$(label "$T")" = "01 Greeting" ]' 50
+ok "a helper renaming its thread's session: weaver names it as the thread again" "$(label "$T")" "01 Greeting"
+helperj "$(hev Stop ',"prompt_id":"h0","last_assistant_message":"named"')"
 # The board of every thread lists threads: the helper waiting on a
 # permission makes its thread need you. The thread's own board (alt+Y's)
 # lists its agent and the helper, by its window's label; alt+1 goes to the

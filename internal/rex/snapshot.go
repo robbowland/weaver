@@ -385,7 +385,7 @@ func (s Session) panesOf(sn snapshot) []mux.Pane {
 			}
 			i := sn.Blocks[b.ID]
 			p := mux.Pane{ID: mux.PaneID(n), Session: s.ID, Window: mux.WindowID(wn), WindowName: w.Label,
-				Cmd: s.ids().noted("cmd", n), Title: b.Label, Cwd: cwdOf(i)}
+				SessionName: sn.View.Label, Cmd: s.ids().noted("cmd", n), Title: b.Label, Cwd: cwdOf(i)}
 			if pr := i.Process; pr != nil {
 				p.Exited = pr.Child == nil && len(pr.LastExit) > 0 && string(pr.LastExit) != "null"
 			}
