@@ -94,7 +94,11 @@ func (e *Env) RenameBranch(args []string) error {
 	var p mux.PaneID
 	switch {
 	case len(args) == 2:
-		p, _ = e.paneArg(args[0])
+		q, ok := e.paneArg(args[0])
+		if !ok {
+			return errNoPane(args[0])
+		}
+		p = q
 	case len(args) == 1 && e.MyPane != "":
 		p = e.agentOf(e.MyPane)
 	}
