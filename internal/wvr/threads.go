@@ -523,7 +523,18 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 		about = items.Context(it, fm.Mode, prBase)
 	}
 	if strings.TrimSpace(task) != "" {
-		prompt += nameNote(branch, title == "", slugged)
+		// Its own paragraph after the task: a name to give it, and a
+		// branch to rename, when weaver took either from the task.
+		var notes []string
+		if title == "" {
+			notes = append(notes, titleNote())
+		}
+		if slugged {
+			notes = append(notes, branchNote(branch))
+		}
+		if len(notes) > 0 {
+			prompt += "\n\n" + strings.Join(notes, " ")
+		}
 	}
 	tok := token()
 	d := e.opening(tok)
@@ -568,26 +579,20 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	return wl, nil
 }
 
-// nameNote is what a thread's first prompt ends with when weaver has only
-// the task's first words to call it by: with no name of yours (untitled),
-// its agent names it for the work (wvr title) in its first turn; when
-// weaver named its new branch from those words (slugged), its agent
-// renames the branch (wvr branch) before anything is committed. "" when
-// neither.
-func nameNote(branch string, untitled, slugged bool) string {
-	var n string
-	if untitled {
-		n += " weaver calls this thread by the first words of its task. Early in this first turn, once you know what the work is, " +
-			"name it in 3 to 6 words, in sentence case: `wvr title <name>` (the board, its window and Rex's sidebar show it)."
-	}
-	if slugged {
-		n += " weaver named this thread's branch " + branch + " from the first words of the task. Before your first commit, " +
-			"rename it to a short name for the work that follows this repository's branch conventions: `wvr branch <name>`."
-	}
-	if n == "" {
-		return ""
-	}
-	return "\n\n" + strings.TrimPrefix(n, " ")
+// titleNote is what a thread's first prompt says when you gave it no
+// name, weaver having only the task's first words to call it by: its
+// agent names it for the work (wvr title) in its first turn.
+func titleNote() string {
+	return "weaver calls this thread by the first words of its task. Early in this first turn, once you know what the work is, " +
+		"name it in 3 to 6 words, in sentence case: `wvr title <name>` (the board, its window and Rex's sidebar show it)."
+}
+
+// branchNote is what a thread's first prompt says when weaver named its
+// new branch from the task's first words: its agent renames the branch
+// (wvr branch) before anything is committed.
+func branchNote(branch string) string {
+	return "weaver named this thread's branch " + branch + " from the first words of the task. Before your first commit, " +
+		"rename it to a short name for the work that follows this repository's branch conventions: `wvr branch <name>`."
 }
 
 // agentSpawn is a thread's agent pane (`wvr _agent tok`, in dir),

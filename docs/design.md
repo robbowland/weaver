@@ -292,7 +292,7 @@ without it.
 `wvr title NAME` is the agent's own: run in a thread's agent pane, it sets
 the record's `agent_title` and relabels as rename does, unless the thread
 has a `title` (yours), which it keeps, saying so. A thread's first prompt
-asks for it when it has no `title` (`nameNote`). What a thread is called
+asks for it when it has no `title` (`titleNote`). What a thread is called
 (`Thread.Called`): `title`, else `agent_title`, else its conversation's
 title unless that is `conv_name` (or, in an older record, its `name` or
 `branch`), else its task.

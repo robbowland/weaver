@@ -166,20 +166,15 @@ func TestBaseBranch(t *testing.T) {
 	}
 }
 
-// A thread's first prompt asks its agent to name it only when you did
-// not, and to rename its branch only when weaver named it from the task.
-func TestNameNote(t *testing.T) {
-	for _, c := range []struct {
-		untitled, slugged bool
-		title, branch     bool
-	}{{true, true, true, true}, {true, false, true, false}, {false, true, false, true}, {false, false, false, false}} {
-		n := nameNote("add-a-flag", c.untitled, c.slugged)
-		if strings.Contains(n, "wvr title") != c.title || strings.Contains(n, "wvr branch") != c.branch {
-			t.Errorf("untitled %v, slugged %v: %q", c.untitled, c.slugged, n)
-		}
-		if n != "" && !strings.HasPrefix(n, "\n\nweaver ") {
-			t.Errorf("untitled %v, slugged %v: not its own paragraph: %q", c.untitled, c.slugged, n)
-		}
+// A thread's first prompt asks its agent to name it (when you did not),
+// and to rename its branch, the one weaver named from the task.
+func TestNameNotes(t *testing.T) {
+	if n := titleNote(); !strings.HasPrefix(n, "weaver ") || !strings.Contains(n, "`wvr title <name>`") {
+		t.Errorf("titleNote: %q", n)
+	}
+	if n := branchNote("add-a-flag"); !strings.HasPrefix(n, "weaver ") || !strings.Contains(n, "branch add-a-flag from") ||
+		!strings.Contains(n, "`wvr branch <name>`") {
+		t.Errorf("branchNote: %q", n)
 	}
 }
 
