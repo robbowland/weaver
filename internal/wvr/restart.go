@@ -19,6 +19,7 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/mux"
 	"github.com/robbowland/weaver/internal/oneline"
+	"github.com/robbowland/weaver/internal/process"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -181,11 +182,6 @@ func claudeInstalled() (string, time.Time) {
 	return p, st.ModTime()
 }
 
-// procStartLayout is how a process's start is recorded (process.Starts,
-// and Claude Code's procStart alike): ps's lstart, in UTC, its runs of
-// spaces made one.
-const procStartLayout = "Mon Jan 2 15:04:05 2006"
-
 // outdated: does row r's agent run an older Claude Code than the one
 // installed, which last changed at installed? Its process started before
 // that (to the second its start is recorded to). An agent whose start is
@@ -194,8 +190,8 @@ func outdated(r session.Row, installed time.Time) bool {
 	if installed.IsZero() || r.Exited || r.Pstart == "" {
 		return false
 	}
-	t, err := time.ParseInLocation(procStartLayout, strings.Join(strings.Fields(r.Pstart), " "), time.UTC)
-	return err == nil && t.Before(installed.Truncate(time.Second))
+	t, ok := process.ParseStart(r.Pstart)
+	return ok && t.Before(installed.Truncate(time.Second))
 }
 
 // reClaudeVersion is a version as a native install names its file: 2.1.330.

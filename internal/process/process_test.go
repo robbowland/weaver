@@ -85,3 +85,24 @@ func TestRuns(t *testing.T) {
 		t.Error("a process that does not run there: found")
 	}
 }
+
+// A start reads back as the time it is, as Starts writes it, as ps pads
+// it, or with its spaces made one; anything else is none.
+func TestParseStart(t *testing.T) {
+	at := time.Date(2026, 10, 5, 15, 38, 35, 0, time.UTC)
+	for _, s := range []string{at.Format(startLayout), "Mon Oct  5 15:38:35 2026", "Mon Oct 5 15:38:35 2026", " Mon Oct 5  15:38:35 2026\n"} {
+		if got, ok := ParseStart(s); !ok || !got.Equal(at) {
+			t.Errorf("ParseStart(%q) = %v %v, want %v", s, got, ok, at)
+		}
+	}
+	if me := Starts([]int{os.Getpid()})[os.Getpid()]; me == "" {
+		t.Error("no start of this process")
+	} else if _, ok := ParseStart(me); !ok {
+		t.Errorf("ParseStart(%q): none", me)
+	}
+	for _, s := range []string{"", "garbled", "Mon Oct 5 2026"} {
+		if _, ok := ParseStart(s); ok {
+			t.Errorf("ParseStart(%q): a time", s)
+		}
+	}
+}

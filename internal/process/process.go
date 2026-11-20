@@ -45,8 +45,12 @@ func StillRuns(pid, start string, starts map[int]string) bool {
 	return strings.Join(strings.Fields(now), " ") == strings.Join(strings.Fields(start), " ")
 }
 
-// Starts are processes' start times as ps prints them (TZ=UTC, LC_ALL=C:
-// "Thu Oct 15 15:38:35 2026"), by pid, from the kernel without ps.
+// startLayout is a process's start as ps prints it (lstart, TZ=UTC,
+// LC_ALL=C): "Thu Oct 15 15:38:35 2026", "Thu Oct  5 15:38:35 2026".
+const startLayout = "Mon Jan _2 15:04:05 2006"
+
+// Starts are processes' start times as ps prints them (startLayout), by
+// pid, from the kernel without ps.
 func Starts(pids []int) map[int]string {
 	m := map[int]string{}
 	for _, p := range pids {
@@ -55,9 +59,17 @@ func Starts(pids []int) map[int]string {
 			continue
 		}
 		t := time.Unix(int64(k.Proc.P_starttime.Sec), 0).UTC()
-		m[p] = t.Format("Mon Jan _2 15:04:05 2006")
+		m[p] = t.Format(startLayout)
 	}
 	return m
+}
+
+// ParseStart is the time of a process's start s as weaver records it
+// (Starts, ps, Claude Code's procStart: startLayout in UTC, its runs of
+// spaces any width); false when s is none.
+func ParseStart(s string) (time.Time, bool) {
+	t, err := time.ParseInLocation(startLayout, strings.Join(strings.Fields(s), " "), time.UTC)
+	return t, err == nil
 }
 
 // BootTime is when the machine started (epoch s), from the kernel; 0 when
