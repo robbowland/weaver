@@ -40,6 +40,14 @@ ok "a subagent's cwd is not the agent's" "$(st 0 cwd)" "$T/repo/src"
 ev CwdChanged "$T/repo-wt-a" ",\"old_cwd\":\"$T/repo\",\"new_cwd\":\"$T/repo-wt-a/src\""
 ok "CwdChanged into a worktree: the root moves there" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/repo-wt-a/src"
 
+# --- a cd outside any work tree is a look in passing: the root stays
+mkdir -p "$T/notes"
+ev CwdChanged "$T/notes" ",\"old_cwd\":\"$T/repo-wt-a/src\",\"new_cwd\":\"$T/notes\""
+ok "CwdChanged outside any work tree: the root stays" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/notes"
+ev CwdChanged "$T/repo-wt-a/src" ",\"old_cwd\":\"$T/notes\",\"new_cwd\":\"$T/repo-wt-a/src\""
+ev PostToolUse "$T/notes" ',"tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{}'
+ok "an event's cwd outside any work tree: the root stays" "$(st 0 root)|$(st 0 cwd)" "$T/repo-wt-a|$T/notes"
+
 # --- an edit through Bash or an MCP tool is not followed: only Edit and
 # Write name the file they changed
 sed -i '' 's/line two/line two, by sed/' "$T/repo-wt-b/src/app.txt"

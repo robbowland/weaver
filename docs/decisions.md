@@ -63,6 +63,12 @@ can supersede an earlier one, and says so.
   fed only the board's `editing <file>` and the card's `files`, which Edit
   and Write feed from the hook's input with no machinery, as they feed the
   agent's root. A Bash-made file no longer shows in either.
+- 2026-11-20: A cwd outside any work tree no longer moves an agent's
+  root: CwdChanged moves it only into a work tree, and another event's cwd
+  only into a work tree other than its own; the worktree tools always do.
+  Claude Code fires CwdChanged on a Bash `cd`, so an agent that went to
+  write a memory in `~/.claude` took its window's label (`· memory`) and
+  its review panel there with it.
 
 ## Snapshots and reviews
 

@@ -286,25 +286,17 @@ func (h *hk) run(e *session.Env, me string) {
 		}
 	}
 	// ...else the repo of a new cwd, if it is another repo or worktree: only
-	// a real move counts (the worktree tools, CwdChanged, or a cwd in
-	// another repo)...
+	// a real move counts (the worktree tools, or CwdChanged or a cwd into
+	// a work tree, another than its own for a cwd). A cwd outside any work
+	// tree (a cd to read or write a file there) is a look in passing...
 	if h.Root == "" {
 		if cwd != h.Old.Cwd {
 			switch {
-			case h.Event == "CwdChanged":
-				h.Moved = true
 			case h.Tool == "EnterWorktree" || h.Tool == "ExitWorktree":
 				h.Moved, h.Start = true, cwd
 			default:
-				if cwd != h.Start {
-					d := cwd
-					if t, ok := git.WorkTree(cwd); ok {
-						d = t
-					}
-					if d != h.Proj {
-						h.Moved = true
-					}
-				}
+				t, ok := git.WorkTree(cwd)
+				h.Moved = ok && (h.Event == "CwdChanged" || cwd != h.Start && t != h.Proj)
 			}
 		}
 		if h.Moved || h.Old.Root == "" {
