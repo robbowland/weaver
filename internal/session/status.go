@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/files"
 	"github.com/robbowland/weaver/internal/git"
 	"github.com/robbowland/weaver/internal/mux"
-	"github.com/robbowland/weaver/internal/oneline"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -171,21 +171,19 @@ func (e *Env) threadTabLabels(rows []Row) {
 }
 
 // SessionLabel is the label of a thread's session, which Rex's sidebar
-// shows: its number and what it is about (the first line, fitted).
+// shows: its number and what it is about (the first line, cut to 30
+// columns).
 func SessionLabel(n int, text string) string {
 	if i := strings.IndexByte(text, '\n'); i >= 0 {
 		text = text[:i]
 	}
-	return padNum(n) + " " + strings.TrimRight(oneline.Fit(text, 30), " ")
+	return padNum(n) + " " + strings.TrimRight(ansi.Truncate(text, 30, "…"), " ")
 }
 
-// ThreadLabel is the label of a thread's first window: its number,
-// what it is about (the first line of text, fitted), and where it works.
+// ThreadLabel is the label of a thread's first window: its session's
+// label, and where it works.
 func ThreadLabel(n int, text, root string) string {
-	if i := strings.IndexByte(text, '\n'); i >= 0 {
-		text = text[:i]
-	}
-	return padNum(n) + " " + strings.TrimRight(oneline.Fit(text, 30), " ") + " · " + git.WhereOf(root).Name()
+	return SessionLabel(n, text) + " · " + git.WhereOf(root).Name()
 }
 
 func padNum(n int) string {
