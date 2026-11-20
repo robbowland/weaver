@@ -459,12 +459,31 @@ waitfor '[ -f "$AT/args.${NB#block:}" ]' 50
 ok "restart: the agent again in its pane on its conversation, its thread and session kept through a board's refresh" \
 	"$(grep -c restarted "$AT/restart-agent.out")|$(threads | wc -l | tr -d ' ')|$([ -f "$SD/rex-${S}_$AG.thread" ] && echo thread)|$(tr '\n' ' ' <"$AT/args.${NB#block:}" 2>/dev/null)" \
 	"1|1|thread|--resume conv-restart " || sed 's/^/  restart: /' "$AT/restart-agent.out"
-# --- quit: the sessions end, the thread kept
-T=$(threads)
+# --- quit: the sessions end, the threads kept. Two, each with a helper
+# slow to end (one that ignores a hangup), so Rex takes a while to destroy
+# each session, and the home board looks as Rex says each one's blocks
+# closed: a look that finds a thread's session gone keeps it as lost.
+(cd "$AT/repo" && REX_SESSION=$SID wvr new --here 'second to quit' >"$AT/new-quit.out" 2>&1)
+waitfor '[ "$(threads | wc -l | tr -d " ")" = 2 ]' 100
+for t in $(threads); do
+	b=$(block_at "$t" 1 1)
+	waitfor '[ -f "$AT/pid.${b#block:}" ]' 100
+	# Each its own conversation, as each agent's is: a lost thread is kept
+	# by its conversation's id.
+	printf '{"session_id":"quit-%s","transcript_path":"/dev/null","cwd":"%s","hook_event_name":"SessionStart","source":"startup"}' "${b#block:}" "$AT/repo" |
+		CLAUDE_PID=$(cat "$AT/pid.${b#block:}") REX_SESSION=$t REX_BLOCK=$b wvr hook >/dev/null
+	R window new -s "$t" slow --focus=false --shell=none -- sh -c "trap '' HUP TERM INT; sleep 3" >/dev/null
+done
+LOSTBEFORE=$(ls "$SD/lost" 2>/dev/null)
 REX_SESSION=$SID wvr quit --yes >/dev/null 2>&1
-waitfor '[ -z "$(sid)" ]' 50
-ok "quit: home and the thread's session have gone, the thread kept" \
-	"$([ -z "$(sid)" ] && echo gone)|$(label "$T")|$(ls "$SD"/rex-"${S}"_*.thread 2>/dev/null | wc -l | tr -d ' ')" "gone||1"
+waitfor '[ -z "$(sid)" ]' 100
+# Kept: its record where it was, for the next start to take for lost, or
+# a lost record the quit wrote, when a look saw its session gone.
+kept() {
+	echo $(($(ls "$SD"/rex-"${S}"_*.thread 2>/dev/null | wc -l) + $(ls "$SD/lost" 2>/dev/null | grep -vxF "$LOSTBEFORE" | grep -c "^rex-${S}_")))
+}
+ok "quit: home and the threads' sessions have gone, both threads kept" \
+	"$([ -z "$(sid)" ] && echo gone)|$(threads | wc -l | tr -d ' ')|$(kept)" "gone|0|2"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
