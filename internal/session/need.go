@@ -58,6 +58,11 @@ func (r Row) MidTurn(now int64) bool {
 	return n == NeedYou || n == NeedWait
 }
 
+// BackgroundWork: does row r's agent have background tasks or subagents
+// at work, which run on after its turn (Esc stops a turn, not them), and
+// which its end would end?
+func (r Row) BackgroundWork() bool { return !r.Exited && (r.Bg > 0 || r.Nsub > 0) }
+
 // NotReporting: has row r's thread waited on its agent's first report
 // longer than an agent takes?
 func (r Row) NotReporting(now int64) bool {

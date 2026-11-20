@@ -1512,9 +1512,9 @@ func (e *Env) Quit(args []string) error {
 				threads++
 			}
 		}
-		work, editing := e.quitLoses(rows, now)
+		work, bg, editing := e.quitLoses(rows, now)
 		back := "back when you start weaver"
-		pad := cardPlace(t, 7)
+		pad := cardPlace(t, 8)
 		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and review in it"+COff))
 		if threads > 0 {
 			fmt.Fprint(t, cardRow(pad, "kept", strconv.Itoa(threads)+" thread"+plural(threads)+" "+CDim+"·"+COff+" "+CGrey+back+COff))
@@ -1525,6 +1525,9 @@ func (e *Env) Quit(args []string) error {
 				s = ""
 			}
 			fmt.Fprint(t, cardRow(pad, "", CGrey+strconv.Itoa(work)+" working: the turn"+plural(work)+" stop"+s+COff))
+		}
+		if bg > 0 {
+			fmt.Fprint(t, cardRow(pad, "", CGrey+strconv.Itoa(bg)+" with work in the background: it stops"+COff))
 		}
 		if editing > 0 {
 			fmt.Fprint(t, cardRow(pad, "", CRed+"nvim is open in "+strconv.Itoa(editing)+" review"+plural(editing)+": unsaved edits go"+COff))
@@ -1540,18 +1543,22 @@ func (e *Env) Quit(args []string) error {
 }
 
 // quitLoses is what quitting would stop for good, the threads coming back:
-// turns under way (an agent or a helper working, or waiting on you), and
+// turns under way (an agent or a helper working, or waiting on you), the
+// agents whose background tasks or subagents run on after their turn, and
 // the reviews with nvim open in them, whose unsaved edits go.
-func (e *Env) quitLoses(rows []session.Row, now int64) (work, editing int) {
+func (e *Env) quitLoses(rows []session.Row, now int64) (work, bg, editing int) {
 	for _, r := range rows {
-		if r.MidTurn(now) {
+		switch {
+		case r.MidTurn(now):
 			work++
+		case r.BackgroundWork():
+			bg++
 		}
 		if e.editing(r.Pane) {
 			editing++
 		}
 	}
-	return work, editing
+	return work, bg, editing
 }
 
 // quitNow quits the session, rows its agents as they were when you chose

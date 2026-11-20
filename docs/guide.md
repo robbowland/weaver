@@ -456,11 +456,12 @@ Because threads come back, quitting everything is safe. `ctrl+q`, from any
 pane, quits the session with every agent and review in it, and `wvr` brings
 the threads back next time. It asks first only when quitting would stop
 something, and says what: a turn under way (an agent or a helper working,
-or one waiting on you), or Neovim open in a review, whose unsaved edits
+or one waiting on you), background tasks or subagents an agent left
+running after its turn, or Neovim open in a review, whose unsaved edits
 would go. Otherwise it quits at once.
 
 `wvr quit` asks every time, and says what would stop: turns in progress,
-and the reviews with Neovim open in them. From outside the session it quits
+work in the background, and the reviews with Neovim open in them. From outside the session it quits
 a `weaver` session left running behind a closed terminal.
 
 ### What weaver cleans up

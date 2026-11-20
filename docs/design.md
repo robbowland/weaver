@@ -566,11 +566,13 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   shows its card (`wvr _preview <session id>`).
 - **Quit:** `ctrl+q` kills the session, and the threads come back as above.
   It runs `wvr _popup quit`, which kills it at once when nothing would be
-  lost (`quitLoses`: no row mid-turn, helpers' included, and no review
-  `editing`), and otherwise opens `wvr quit`'s card in a popup.
+  lost (`quitLoses`: no row mid-turn, helpers' included, none whose
+  background tasks or subagents run on after its turn, `BackgroundWork`,
+  and no review `editing`), and otherwise opens `wvr quit`'s card in a popup.
   `wvr quit [--yes]` kills the session you are in (outside it,
   `$WEAVER_SESSION`) after a card, every time: the threads kept,
-  the turns under way, and the reviews where nvim is open (`editing`: an
+  the turns under way, the agents with work in the background, and the
+  reviews where nvim is open (`editing`: an
   nvim among the panel's processes, which tuicr's `e` started, whose
   unsaved edits would go; no nvim weaver could ask has a socket), as `wvr
   close` says of its thread. The footer shows `^q QUIT`.
