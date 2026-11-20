@@ -231,13 +231,14 @@ rows read): on a prompt or a session start, a title or root that changed,
 and whatever Rex says changed in weaver's sessions. The home board's own
 process follows `rex events --json` (`follow`, through `Fleet.Follow`):
 a session's or window's label changed, a block closed (a window closed
-closes its blocks), a session destroyed. Once Rex has been quiet 250 ms
-it pushes the labels and every board, so a label given in Rex is set
-back and a window closed by hand shows at once (a thread whose agent's
-window you closed ends then); the quiet lets a session being destroyed
-go before the look, which would otherwise take its agent gone while it
-runs for the thread closed. When `rex events` ends it follows again 5 s
-later, pushing then too: Rex replays nothing it missed. Rex's labels are
+closes its blocks), a session destroyed. It pushes the labels and every
+board then (one push more for whatever comes while one runs), so a label
+given in Rex is set back and a window closed by hand shows at once (a
+thread whose agent's window you closed ends then). A session weaver
+destroys (a quit) leaves Rex's list before its blocks' programs end, and
+its events come once they have: a look then finds it gone and keeps its
+threads as lost. When `rex events` ends it follows again 5 s later,
+pushing then too: Rex replays nothing it missed. Rex's labels are
 anyone's: Rex's SessionStart hook asks every Claude Code agent to name
 the session it is in, and a helper's is its thread's, so a label given
 in Rex gives way to the thread's name (`wvr rename`, the board's `r`,

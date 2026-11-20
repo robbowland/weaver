@@ -712,12 +712,13 @@ can supersede an earlier one, and says so.
   consume"; he chose the rex process over weaver's own connection, which
   would own pings, reconnect tokens and seq, and dropped relabelling after
   every agent's Bash command, which this replaces). Before, a window
-  closed by hand showed at the next hook or focus. It pushes once Rex has
-  been quiet 250 ms: a quit destroys each thread's session, whose blocks
-  close before it leaves Rex's list, and a look between took the thread
-  for one closed by hand, its agent gone while its session ran (test/rex.sh
-  caught it). The event names no one who changed a label, so a label you
-  give in Rex's sidebar gives way too.
+  closed by hand showed at the next hook or focus. Its looks during a
+  quit keep the threads: Rex takes a destroyed session off its list
+  before the session's programs end (sampled through a 1 s destroy, its
+  agent never dead while it was listed) and sends its events after, so a
+  look finds the session gone and keeps its threads as lost, as the next
+  start would. The event names no one who changed a label, so a label
+  you give in Rex's sidebar gives way too.
 
 ## Work items and views
 
