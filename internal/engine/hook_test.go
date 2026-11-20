@@ -198,6 +198,9 @@ func TestHookRoot(t *testing.T) {
 	tool := func(name, cwd string) string {
 		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"tool_response":{}}`, cwd, name)
 	}
+	subagentTool := func(name, cwd string) string {
+		return fmt.Sprintf(`{"hook_event_name":"PostToolUse","session_id":"c","agent_id":"sub-1","cwd":%q,"tool_name":%q,"tool_input":{},"tool_response":{}}`, cwd, name)
+	}
 	toolFailed := func(name, cwd string) string {
 		return fmt.Sprintf(`{"hook_event_name":"PostToolUseFailure","session_id":"c","cwd":%q,"tool_name":%q,"tool_input":{},"error":"failed"}`, cwd, name)
 	}
@@ -225,6 +228,8 @@ func TestHookRoot(t *testing.T) {
 		{"EnterWorktree, its CwdChanged landing first", start, []string{cd(wt, start, wt), tool("EnterWorktree", wt)}, wt, wt},
 		{"EnterWorktree, an edit in it, then ExitWorktree, its CwdChanged landing first", start,
 			[]string{tool("EnterWorktree", wt), edit(wt, wt+"/a.txt"), cd(start, wt, start), tool("ExitWorktree", start)}, start, start},
+		{"a subagent's EnterWorktree, after an edit in another repository", start,
+			[]string{bash(start + "/src"), edit(start+"/src", other+"/a.txt"), subagentTool("EnterWorktree", wt)}, other, start},
 		{"a failed EnterWorktree, after an edit in another repository", start,
 			[]string{edit(start, other+"/a.txt"), toolFailed("EnterWorktree", start)}, other, start},
 		{"EnterWorktree, then ExitWorktree", start, []string{tool("EnterWorktree", wt), tool("ExitWorktree", start)}, start, start},

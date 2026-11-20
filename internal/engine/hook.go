@@ -284,9 +284,10 @@ func (h *hk) run(e *session.Env, me string) {
 			h.Root = t
 		}
 	}
-	// ...else the repo of where it is: a worktree tool that worked moves
-	// it there, and where it starts, whether or not the CwdChanged it
-	// caused came first (both hooks are async); a new cwd moves it into
+	// ...else the repo of where it is: a worktree tool of its own (not a
+	// subagent's, whose cwd is not tracked) that worked moves it there, and
+	// where it starts, whether or not the CwdChanged it caused came first
+	// (both hooks are async); a new cwd moves it into
 	// another work tree than its own checkout, and back home (its start
 	// directory, the work tree its start directory is in, or its own
 	// checkout), unless the root is where the agent last edited, which
@@ -294,7 +295,7 @@ func (h *hk) run(e *session.Env, me string) {
 	// cd to read or write a file there) is a look in passing...
 	if h.Root == "" {
 		switch {
-		case h.Event == "PostToolUse" && (h.Tool == "EnterWorktree" || h.Tool == "ExitWorktree"):
+		case h.Event == "PostToolUse" && h.Aid == "" && (h.Tool == "EnterWorktree" || h.Tool == "ExitWorktree"):
 			h.Moved, h.Start = true, cwd
 		case cwd != h.Old.Cwd:
 			t, ok := git.WorkTree(cwd)
