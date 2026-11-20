@@ -22,6 +22,9 @@ import (
 // Thread is a thread's record (docs/design.md, Thread record): what `wvr
 // new` made, and where; its agent's pane and conversation once it has them.
 type Thread struct {
+	// ID tells it from every other thread, for its own directory (Dir);
+	// "" on a record from before threads had one.
+	ID              string      `json:"id,omitempty"`
 	Num             int         `json:"num"`
 	Cmd             string      `json:"cmd"`
 	Name            string      `json:"name"`

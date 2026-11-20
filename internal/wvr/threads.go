@@ -552,7 +552,7 @@ func (e *Env) threadCreate(task string, fm form, nofocus bool) (string, error) {
 	n, _ := e.threadNum()
 	// The command its agent runs, from here (the pane will not have this
 	// environment); its mode holds it each time it starts (agent.Command).
-	rec := store.Thread{Num: n, Cmd: agentCmd(), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
+	rec := store.Thread{ID: store.NewThreadID(), Num: n, Cmd: agentCmd(), Name: name, Task: task, Repo: fm.Repo, Branch: branch, Worktree: dir,
 		Here: fm.Where == WhereHere, WorktreeCreated: created, Created: time.Now().Unix(), Base: cmp.Or(prBase, baseBranch(fm.Repo, base)), Title: title,
 		Item: ti, Mode: fm.Mode}
 	if store.Write(d+"/thread.json", rec) != nil {

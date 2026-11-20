@@ -313,3 +313,37 @@ func TestShownFirstLine(t *testing.T) {
 		t.Errorf("on the board: %q, want %q", board, first)
 	}
 }
+
+// Two threads made at once in one checkout each have a directory of their
+// own (store.Thread.Dir): what one's agent is told, and the review
+// comments it was given, are not the other's.
+func TestThreadsAtOnceOwnDirs(t *testing.T) {
+	e, _ := outside(t)
+	repo, _ := filepath.EvalSymlinks(t.TempDir())
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	t.Chdir(repo)
+	for _, task := range []string{"one thing", "another thing"} {
+		if err := e.New([]string{"--here", "--no-focus", task}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recs := e.openingRecords()
+	if len(recs) != 2 {
+		t.Fatalf("records %v: want two", recs)
+	}
+	dirs := map[string]bool{}
+	for _, f := range recs {
+		th, err := store.ReadThread(f)
+		if err != nil || th.ID == "" {
+			t.Fatalf("%s: id %q, %v", f, th.ID, err)
+		}
+		dirs[th.Dir(e.StateDir)] = true
+	}
+	if len(dirs) != 2 {
+		t.Errorf("two threads in one checkout share a directory: %v", dirs)
+	}
+}
