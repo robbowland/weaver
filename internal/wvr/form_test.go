@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/robbowland/weaver/internal/rex/rextest"
 	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
@@ -118,5 +119,35 @@ func TestNewOutsideTheSession(t *testing.T) {
 	e = &Env{&session.Env{StateDir: e.StateDir, SockDir: e.SockDir, ClaudeDir: e.ClaudeDir, Self: e.Self}}
 	if err := e.New([]string{"--here", "--no-focus", "say hello"}); err == nil || !strings.Contains(err.Error(), "no Rex session demo of weaver's is running") {
 		t.Errorf("wvr new with weaver's not running: %v, want it said", err)
+	}
+}
+
+// A thread the form started in the background that could not be made
+// keeps its task, whole, in behind.log with why, and the message names
+// it: the form that had the task has gone, and a message holds a line of
+// it at most.
+func TestBehindKeepsAFailedTask(t *testing.T) {
+	rextest.NoRex(t)
+	dir := t.TempDir()
+	e := &Env{&session.Env{StateDir: dir + "/state", LostDir: dir + "/lost", SockDir: dir + "/sock",
+		ClaudeDir: dir + "/claude", Self: "/usr/bin/true", Session: "demo"}}
+	task := "a task longer than any message has room for, which says what to do\nand goes on to a second line"
+	// Here, in a directory, with no Rex to open its session in.
+	if err := e.startBehind(task, form{Where: WhereHere, Here: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	jobs, _ := filepath.Glob(e.StateDir + "/behind.*.*")
+	if len(jobs) != 1 {
+		t.Fatalf("the job files: %v, want one", jobs)
+	}
+	if err := e.Behind([]string{jobs[0]}); err == nil {
+		t.Fatal("a thread made with no Rex")
+	}
+	b, _ := os.ReadFile(e.behindLog())
+	if !strings.Contains(string(b), task+"\n") || !strings.Contains(string(b), "in Rex") {
+		t.Errorf("behind.log: %q, want the task whole and why", b)
+	}
+	if _, err := os.Stat(jobs[0]); !os.IsNotExist(err) {
+		t.Errorf("the job file, its task kept in the log: %v, want it gone", err)
 	}
 }

@@ -875,28 +875,51 @@ func (e *Env) startBehind(task string, fm form) error {
 
 // Behind is `wvr _behind FILE`: the thread the form started in the
 // background (behindJob), made with --no-focus's behaviour, and said
-// where you are: started, or why not.
+// where you are: started, or why not. A task it could not make a thread
+// of is kept whole in behind.log (else in FILE), which it names: the
+// form that had it has gone.
 func (e *Env) Behind(args []string) error {
 	f := arg(args, 0)
 	var j behindJob
-	err := store.Read(f, &j)
-	os.Remove(f)
-	if err != nil {
+	if err := store.Read(f, &j); err != nil {
+		os.Remove(f)
 		e.Mux().Say(6000, "weaver: could not start the thread: its form's fields are gone")
 		return cli.ErrSaid
 	}
 	label, err := e.threadCreate(j.Task, j.Form, true)
 	if err == nil {
+		os.Remove(f)
 		e.Mux().Say(3000, "weaver: started "+label+" in the background")
 		return nil
+	}
+	kept := f
+	if e.keepBehind(j.Task, err) == nil {
+		os.Remove(f)
+		kept = e.behindLog()
 	}
 	what := oneline.Fit(oneline.Line(strings.SplitN(j.Task, "\n", 2)[0]), 30)
 	why := err.Error()
 	if errors.Is(err, cli.ErrSaid) {
-		why = "see " + tildify(e.behindLog())
+		why = "see there"
 	}
-	e.Mux().Say(8000, "weaver: could not start "+strings.TrimRight(what, " ")+": "+why)
+	e.Mux().Say(8000, "weaver: could not start "+strings.TrimRight(what, " ")+" (kept in "+tildify(kept)+"): "+why)
 	return cli.ErrSaid
+}
+
+// keepBehind writes task, which could not be made a thread for err, whole
+// into behind.log, after what was said making it.
+func (e *Env) keepBehind(task string, err error) error {
+	why := err.Error()
+	if errors.Is(err, cli.ErrSaid) {
+		why = "as said above"
+	}
+	lg, lerr := os.OpenFile(e.behindLog(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if lerr != nil {
+		return lerr
+	}
+	_, lerr = fmt.Fprintf(lg, "%s weaver: could not start the thread (%s); its task, whole:\n%s\n\n",
+		time.Now().Format(time.DateTime), why, strings.TrimRight(task, "\n"))
+	return errors.Join(lerr, lg.Close())
 }
 
 // readKey is one key from the terminal, unechoed.
