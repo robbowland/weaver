@@ -71,7 +71,7 @@ func TestLeadingPane(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			p, words, err := e.leadingPane(c.args)
-			if got := fmt.Sprint(err); c.err != "" && got != c.err || c.err == "" && err != nil {
+			if got := fmt.Sprint(err); (c.err != "" && got != c.err) || (c.err == "" && err != nil) {
 				t.Fatalf("error %v, want %q", err, c.err)
 			}
 			if string(p) != c.pane || strings.Join(words, " ") != c.words {
