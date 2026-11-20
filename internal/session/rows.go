@@ -67,17 +67,25 @@ type Row struct {
 // state files, refined by Claude Code's own session files, and the threads
 // whose agent has not reported yet. Agents gone (their pane closed, or their
 // process dead without a SessionEnd) are retired on the way. Its second
-// value is the time the rows were made (epoch s).
+// value is the time the rows were made (epoch s). None when Rex does not
+// say which panes the session has (AgentRowsKnown says that apart).
 func (e *Env) AgentRows() ([]Row, int64) {
+	rows, now, _ := e.AgentRowsKnown()
+	return rows, now
+}
+
+// AgentRowsKnown is AgentRows, and false when they are not known: Rex did
+// not say which panes the session has, so none were read, whatever runs.
+func (e *Env) AgentRowsKnown() ([]Row, int64, bool) {
 	now := time.Now().Unix()
 	jsons := e.SessionFiles("json")
 	threads := e.SessionFiles("thread")
 	if len(jsons)+len(threads) == 0 {
-		return nil, now
+		return nil, now, true
 	}
 	panes, ok := e.Panes()
 	if !ok {
-		return nil, now
+		return nil, now, false
 	}
 	byID := map[mux.PaneID]*mux.Pane{}
 	trusted := e.MyPane == ""
@@ -252,7 +260,7 @@ func (e *Env) AgentRows() ([]Row, int64) {
 		out = append(out, r)
 	}
 	rollUp(out)
-	return out, now
+	return out, now, true
 }
 
 // rollUp gives each helper its thread, and each thread's agent the helper

@@ -1499,7 +1499,7 @@ func (e *Env) Quit(args []string) error {
 	name := e.Session
 	// The session's threads as they are now: for the card, and for the
 	// ones whose agent you exited to come back with the rest.
-	rows, now := e.AgentRows()
+	rows, now, known := e.AgentRowsKnown()
 	if !yes {
 		t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
@@ -1516,6 +1516,9 @@ func (e *Env) Quit(args []string) error {
 		back := "back when you start weaver"
 		pad := cardPlace(t, 8)
 		fmt.Fprint(t, cardRow(pad, "quit", CBold+name+COff+" "+CDim+"·"+COff+" "+CGrey+"every agent and review in it"+COff))
+		if !known {
+			fmt.Fprint(t, cardRow(pad, "", CRed+"Rex does not say what runs in it: what stops is not known"+COff))
+		}
 		if threads > 0 {
 			fmt.Fprint(t, cardRow(pad, "kept", strconv.Itoa(threads)+" thread"+plural(threads)+" "+CDim+"·"+COff+" "+CGrey+back+COff))
 		}

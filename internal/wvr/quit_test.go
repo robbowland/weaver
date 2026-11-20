@@ -1,6 +1,7 @@
 package wvr
 
 import (
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"github.com/robbowland/weaver/internal/agent"
 	"github.com/robbowland/weaver/internal/jsonx"
 	"github.com/robbowland/weaver/internal/mux"
+	"github.com/robbowland/weaver/internal/rex"
+	"github.com/robbowland/weaver/internal/session"
 	"github.com/robbowland/weaver/internal/store"
 )
 
@@ -54,5 +57,29 @@ func TestCtrlQAsksOnlyMidTurn(t *testing.T) {
 				t.Errorf("Popup quit returned %v, the session running %v; want it running %v", err, running, c.asks)
 			}
 		})
+	}
+}
+
+// Ctrl q when Rex does not say which panes the session has, so what
+// quitting would stop cannot be read, asks in its card; it never quits
+// blind.
+func TestCtrlQAsksWhenRexDoesNotSay(t *testing.T) {
+	e, _, _, _ := closing(t)
+	// A rex that answers all but the looks at the sessions (rex do), with
+	// no control connection to go round it.
+	bin := t.TempDir()
+	stand := "#!/bin/sh\n[ \"$2\" = do ] && { echo 'rex: no answer' >&2; exit 1; }\nexec " + session.Quote(rex.Bin()) + ` "$@"` + "\n"
+	if err := os.WriteFile(bin+"/rex", []byte(stand), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("REX_BIN_DIR", bin)
+	t.Setenv("WEAVER_REX_WIRE", "0")
+	rex.Close()
+	if _, ok := e.Panes(); ok {
+		t.Fatal("the panes listed: the stand-in rex answers")
+	}
+	err := e.Popup([]string{"quit"})
+	if !e.Mux().Running() {
+		t.Errorf("Popup quit returned %v and quit the session; want it asked", err)
 	}
 }

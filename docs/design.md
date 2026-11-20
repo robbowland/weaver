@@ -572,7 +572,9 @@ thread is kept as lost rather than forgotten, so it can be resumed.
   It runs `wvr _popup quit`, which kills it at once when nothing would be
   lost (`quitLoses`: no row mid-turn, helpers' included, none whose
   background tasks or subagents run on after its turn, `BackgroundWork`,
-  and no review `editing`), and otherwise opens `wvr quit`'s card in a popup.
+  and no review `editing`) and that is known (`AgentRowsKnown`: Rex said
+  which panes the session has), and otherwise opens `wvr quit`'s card in a
+  popup, which says so when it is not known.
   `wvr quit [--yes]` kills the session you are in (outside it,
   `$WEAVER_SESSION`) after a card, every time: the threads kept,
   the turns under way, the agents with work in the background, and the

@@ -85,10 +85,12 @@ func (e *Env) Popup(args []string) error {
 		return e.cardPopup(append([]string{"resume", "--forget"}, args[1:]...)...)
 	case "quit":
 		// Ctrl q asks, in the card, only when quitting would cost
-		// something; else it quits at once: the threads come back, and a
-		// question asked every time becomes a reflex (docs/decisions.md).
-		rows, now := e.AgentRows()
-		if work, bg, editing := e.quitLoses(rows, now); work+bg+editing > 0 {
+		// something, or what it would cost cannot be read (Rex does not
+		// say what runs); else it quits at once: the threads come back,
+		// and a question asked every time becomes a reflex
+		// (docs/decisions.md).
+		rows, now, known := e.AgentRowsKnown()
+		if work, bg, editing := e.quitLoses(rows, now); !known || work+bg+editing > 0 {
 			return e.cardPopup("quit")
 		}
 		if err := e.quitNow(rows); err != nil {

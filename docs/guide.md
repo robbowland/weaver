@@ -459,7 +459,8 @@ the threads back next time. It asks first only when quitting would stop
 something, and says what: a turn under way (an agent or a helper working,
 or one waiting on you), background tasks or subagents an agent left
 running after its turn, or Neovim open in a review, whose unsaved edits
-would go. Otherwise it quits at once.
+would go. It asks too when Rex doesn't say what is running. Otherwise it
+quits at once.
 
 `wvr quit` asks every time, and says what would stop: turns in progress,
 work in the background, and the reviews with Neovim open in them. From outside the session it quits
