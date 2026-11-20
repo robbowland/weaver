@@ -29,10 +29,6 @@ import (
 // into the agent's state file. What it needs besides the state (Worktrunk,
 // the counts) runs after it in a detached `wvr hook --bg`.
 
-// bellJSON rings the bell: Claude Code writes terminalSequence to the agent's
-// terminal.
-const bellJSON = `{"terminalSequence":"\u0007"}`
-
 // hk is one hook run: the event's fields, the stored state's (o*), and what
 // it makes of them. Exported fields go to the background run.
 type hk struct {
@@ -486,23 +482,22 @@ func reply(w io.Writer, rc int, notes Notes) error {
 // terminal) when ring, and notes, what a prompt carries to the agent
 // (UserPromptSubmit's additionalContext). "" for neither.
 func hookOutput(ring bool, notes string) string {
-	if !ring && notes == "" {
-		return ""
-	}
-	if notes == "" {
-		return bellJSON
-	}
 	type specific struct {
 		Event   string `json:"hookEventName"`
 		Context string `json:"additionalContext"`
 	}
 	var out struct {
-		Specific specific `json:"hookSpecificOutput"`
-		Bell     string   `json:"terminalSequence,omitempty"`
+		Specific *specific `json:"hookSpecificOutput,omitempty"`
+		Bell     string    `json:"terminalSequence,omitempty"`
 	}
-	out.Specific = specific{"UserPromptSubmit", notes}
+	if notes != "" {
+		out.Specific = &specific{"UserPromptSubmit", notes}
+	}
 	if ring {
 		out.Bell = "\a"
+	}
+	if out.Specific == nil && out.Bell == "" {
+		return ""
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
