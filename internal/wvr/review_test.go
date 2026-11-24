@@ -218,9 +218,13 @@ func TestReviewAgainstThreadBase(t *testing.T) {
 // not, as you choose), then the review goes.
 func TestUntilRewrittenWaitsForNvim(t *testing.T) {
 	d := t.TempDir()
-	// A program the kernel names nvim (a link would be named for what it
-	// points to).
-	b, err := os.ReadFile("/bin/sleep")
+	// A program the kernel names nvim: a copy of this test binary, which
+	// TestMain makes nvim.
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(self)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +232,7 @@ func TestUntilRewrittenWaitsForNvim(t *testing.T) {
 		t.Fatal(err)
 	}
 	// tuicr, with nvim open on top (its e): nvim ends a moment on.
-	c := exec.Command("/bin/sh", "-c", `"$0"/nvim 2.5; exec /bin/sleep 60`, d)
+	c := exec.Command("/bin/sh", "-c", `"$0"/nvim 2.5s; exec /bin/sleep 60`, d)
 	start := time.Now()
 	ended, _ := untilRewritten(c, func() bool { return true })
 	if !ended {
