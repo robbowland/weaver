@@ -28,6 +28,7 @@ func TestSuccessor(t *testing.T) {
 	old := time.Now().Add(-time.Hour)
 	self := put(brew, old)
 	t.Setenv("PATH", local+":"+brew)
+	t.Setenv("WEAVER_WVR", "")
 	e := &Env{&session.Env{Self: self}}
 	born := filepath.Join(t.TempDir(), "view.born")
 	if _, ok := e.successor(born); ok {
